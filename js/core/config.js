@@ -32,7 +32,7 @@ const CFG = {
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
   REVIVE: { range: 70, time: 2, iframe: 1.5 },  // 雙人救援：活著的隊友待在倒下位置 70 內滿 2 秒；救起後無敵 1.5 秒
-  VERSION: 'mp-0.6.2（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
+  VERSION: 'mp-0.6.3（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
