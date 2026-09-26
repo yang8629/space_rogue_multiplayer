@@ -383,7 +383,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: 'mp-0.4（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
+  VERSION: 'mp-0.4.1（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -1944,18 +1944,14 @@ const Game = {
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
   isClient() { return Net.role === 'client' && this.mode === 'coop'; },
-  // 錢：雙人時兩人共用、由房主記帳。隊友花錢要先問房主，房主扣款成功才執行 fn
+  // 錢：雙人時每人各自一個錢包。怪物掉落的晶體兩人都拿（見 Net 的 loot），其他收入、花費都是自己的
   pay(price, fn) {
     if (this.credits < price) return false;
-    if (this.isClient()) return Net.requestSpend(price, fn);
     this.credits -= price;
     fn();
     return true;
   },
-  earn(v) {
-    this.credits += v;  // 隊友這邊先加上，房主之後會同步正確的數字
-    if (this.isClient()) Net.send({ t: 'gain', v });
-  },
+  earn(v) { this.credits += v; },
 
   // ---------- 一局的流程 ----------
   newRun(mode, shipId = this.shipId || 'vanguard', weaponId = this.weapon.id, startChip = null) {
@@ -2122,19 +2118,20 @@ const Game = {
     }
   },
   combatWon() {
-    const client = this.isClient();  // 雙人的隊友：錢由房主加，這裡不重複加
+    const client = this.isClient();  // 雙人的隊友：地上剩下的晶體由房主算好數量傳過來
     this.inArena = false;
-    if (!client) this.credits += this.pickups.length;  // 沒吸完的晶體直接入帳
+    const left = client ? 0 : this.pickups.length;
+    this.credits += left;  // 沒吸完的晶體直接入帳（雙人時兩人都拿）
     this.pickups = [];
     const p = this.player;
-    if (this.mode === 'coop') Net.afterCombat();  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
+    if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
     if (p.ship.ability === 'repair') p.hp = Math.min(p.maxHp, p.hp + 10);  // 先鋒號：戰地維修
     const type = this.node.type;
     if (type === 'boss') {  // 擊敗旗艦：插槽 +1、晶體獎勵，可前往下一星區
       const slot = this.chain.length < CFG.MAX_SLOTS;
       if (slot) this.chain.push(null);
-      if (!client) this.credits += 50;
+      this.credits += 50;  // 雙人：兩人各自拿
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       this.victory = { slot, boss: this.bossId };
@@ -2145,7 +2142,7 @@ const Game = {
     const kind = type === 'elite' ? 'elite' : 'combat';
     this.reward = { kind, options: kind === 'elite' ? pickN(COMPOSITE_IDS, 2) : pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
-    if (!client) this.credits += this.reward.bonus;
+    this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
     Screen.reward();
   },
@@ -2674,10 +2671,13 @@ const Game = {
   updatePickups(dt) {
     for (const c of this.pickups) {
       c.life -= dt;
-      const p = this.nearestPlayer(c.x, c.y), range = CFG.MAGNET_RANGE * (1 + this.passivesOf(p).magnet);  // 晶體飛向最近的玩家（錢兩人共用）
+      const p = this.nearestPlayer(c.x, c.y), range = CFG.MAGNET_RANGE * (1 + this.passivesOf(p).magnet);  // 晶體飛向最近的玩家（雙人：撿到的人和隊友都 +1）
       const d2 = dist2(c.x, c.y, p.x, p.y);
       stepPickup(c, p, range, d2, dt);
-      if (d2 < 20 * 20) { c.life = 0; this.credits++; SFX.play('pickup'); }
+      if (d2 < 20 * 20) {
+        c.life = 0; this.credits++; SFX.play('pickup');
+        if (this.mode === 'coop') Net.lootTotal++;  // 雙人：不管誰撿到，隊友也 +1（透過同步傳過去）
+      }
     }
     this.pickups = this.pickups.filter(c => c.life > 0);
   },
@@ -2743,7 +2743,6 @@ const Net = {
   tick(dt) {
     if (!this.linked) return;
     if (Game.mode === 'coop') {
-      this.syncCredits();
       if (this.role === 'host' && this.voteEnd && performance.now() >= this.voteEnd) this.tryResolve(true);  // 投票時間到
       const vt = document.getElementById('voteTimer'), left = this.voteLeft();
       if (vt) vt.textContent = left != null ? `剩 ${left} 秒` : '';
@@ -2829,7 +2828,7 @@ const Net = {
       : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}</div>
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
       <div class="keys">一人按「開房間」拿到 4 碼房號，另一人輸入房號按「加入房間」。<br>
-        雙人遠征：航圖投票（選不同就抽籤）、錢兩人共用、獎勵各自選、戰鬥中按 Tab 兩人一起暫停。<br>
+        雙人遠征：航圖投票（選不同就抽籤）、錢包各自獨立（怪物掉落的晶體兩人都拿）、獎勵各自選、戰鬥中按 Tab 兩人一起暫停。<br>
         一人被擊墜時另一人繼續，戰鬥結束後以 30% HP 歸隊；兩人都被擊墜才結束。</div>
       <div class="row"><button data-act="title">${this.linked ? '離開房間' : '返回標題'}</button></div>
       <div class="ver">版本 ${CFG.VERSION}</div></div>`);
@@ -2973,16 +2972,14 @@ const Net = {
           this.go(m.node, { h: ok(V.h), c: ok(V.c) }, !!m.drawn && ok(V.h) && ok(V.c));
         }
         break;
-      case 'spend': if (this.role === 'host') this.onSpend(m); break;
-      case 'spent': if (this.role === 'client') this.onSpent(m); break;
-      case 'gain': if (this.role === 'host') { const v = num(m.v); if (v > 0 && v <= 100) Game.credits += v; } break;
-      case 'cr': if (this.role === 'client') { Game.credits = num(m.v, Game.credits); this.showCredits(); } break;
       case 'lo': if (this.role === 'host') this.applyMateLoadout(m); break;
       case 'edit': this.mateEditing = !!m.on && Game.inArena; break;
       case 'won':
         if (this.role === 'client' && Game.inArena && Game.combat) {
           const P = Game.player;
           P.dead = false; P.hp = clamp(num(m.hp, P.hp), 1, P.maxHp);
+          this.applyLoot(m.lt);
+          Game.credits += clamp(num(m.loot), 0, 999);
           Game.combatWon();
         }
         break;
@@ -3083,7 +3080,8 @@ const Net = {
   // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
   resetRun() {
     this.votes = { h: null, c: null }; this.mateAt = null; this.voteEnd = 0;
-    this.mateEditing = false; this.myEditing = false; this.spendQ = null; this.sentCredits = null;
+    this.mateEditing = false; this.myEditing = false;
+    this.lootTotal = 0; this.lastLoot = 0;  // 怪物掉落：房主累計被撿走的數量，隊友照差額加錢
   },
   packMap(map) { return map.map(row => row.map(n => [n.id, n.L, n.k, n.n, n.type, n.next])); },
   unpackMap(raw) {  // 隊友：檢查房主傳來的星圖格式
@@ -3147,31 +3145,6 @@ const Net = {
   },
   voteLeft() { return this.voteEnd ? Math.max(0, Math.ceil((this.voteEnd - performance.now()) / 1000)) : null; },
 
-  // 錢：隊友花錢先問房主
-  requestSpend(price, fn) {
-    if (this.spendQ) return false;  // 上一筆還在等回覆
-    this.spendQ = { id: (this.spendId = (this.spendId || 0) + 1), fn };
-    this.send({ t: 'spend', id: this.spendQ.id, v: price });
-    return true;
-  },
-  onSpend(m) {  // 房主：錢夠就扣
-    const v = num(m.v, -1), ok = v >= 0 && v <= 1000 && Game.credits >= v;
-    if (ok) Game.credits -= v;
-    this.send({ t: 'spent', id: m.id, ok, cr: Game.credits });
-  },
-  onSpent(m) {  // 隊友：房主回覆
-    Game.credits = num(m.cr, Game.credits);
-    const q = this.spendQ;
-    this.spendQ = null;
-    if (q && q.id === m.id && m.ok) q.fn();
-    else Game.restoreScreen();  // 錢不夠（對方剛好花掉了）：重畫目前畫面
-  },
-  syncCredits() {  // 房主：錢有變動就告訴隊友
-    if (this.role !== 'host' || !this.linked || Game.credits === this.sentCredits) return;
-    this.sentCredits = Game.credits;
-    this.send({ t: 'cr', v: Game.credits });
-  },
-  showCredits() { document.querySelectorAll('[data-credits]').forEach(el => { el.textContent = `◆ ${Game.credits}`; }); },
 
   // 配裝：隊友改了電路／倉庫／武器就傳給房主（房主模擬隊友的子彈要用）
   sendLoadout() {
@@ -3222,12 +3195,17 @@ const Net = {
     this.send({ t: 'edit', on: !!on });
   },
   // 戰鬥結束：被擊墜的人以 30% HP 歸隊；房主把隊友的血量傳過去
-  afterCombat() {
+  applyLoot(raw) {  // 隊友：這一局怪物掉落被撿走的總數，比上次多出來的部分加進自己的錢包
+    const lt = num(raw, this.lastLoot);
+    if (lt > this.lastLoot && lt - this.lastLoot < 1000) Game.credits += lt - this.lastLoot;
+    this.lastLoot = Math.max(this.lastLoot, lt);
+  },
+  afterCombat(left = 0) {
     const revive = p => { if (p && p.dead) { p.dead = false; p.hp = Math.max(1, Math.round(p.maxHp * 0.3)); } };
     this.mateEditing = false;
     if (this.role === 'host') {
       revive(Game.player); revive(Game.mate);
-      if (Game.mate) { this.sendDmg(); this.send({ t: 'won', hp: Game.mate.hp }); }
+      if (Game.mate) { this.sendDmg(); this.send({ t: 'won', hp: Game.mate.hp, loot: left, lt: this.lootTotal }); }  // loot：地上沒吸完的晶體，隊友也拿
     }
   },
 
@@ -3312,7 +3290,7 @@ const Net = {
       eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r]),
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       mg: r(CFG.MAGNET_RANGE * (1 + G.passives.magnet)),  // 房主的拾取範圍（隊友那邊模擬晶體飛向房主時用）
-      pal, c: G.credits, w: G.combat ? G.combat.wave : 0, k: G.kills,
+      pal, lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills,
       bn: G.banner ? [G.banner.text, G.banner.sub || '', r2(G.banner.t)] : null,
       fx: this.fxBuf,
     });
@@ -3402,7 +3380,8 @@ const Net = {
       c.life = num(a[3], c.life); c.vacuum = !!a[6];
       return c;
     });
-    G.credits = num(s.c, G.credits); G.kills = num(s.k, G.kills); G.combat.wave = num(s.w, G.combat.wave);
+    this.applyLoot(s.lt);
+    G.kills = num(s.k, G.kills); G.combat.wave = num(s.w, G.combat.wave);
     G.banner = Array.isArray(s.bn) ? { text: String(s.bn[0]), sub: String(s.bn[1] || ''), t: num(s.bn[2], 1) } : null;
     for (const f of arr(s.fx)) {  // 房主那邊發生的特效與音效
       if (!Array.isArray(f)) continue;
@@ -3820,7 +3799,7 @@ const Screen = {
   status() {
     const p = Game.player;
     return `<div class="row"><span class="pill">HP ${Math.ceil(p.hp)} / ${p.maxHp}</span>
-      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd">👥 錢兩人共用</span>' : ''}
+      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體兩人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
       <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
   // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
@@ -4128,7 +4107,7 @@ const Screen = {
     if (Game.mode === 'coop') {
       this.show(`<div class="scr title-wrap">
         <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
-        <div class="sub">倒在 ${Net.whereText()} · 共用晶體 ${Game.credits}${Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}<br>
+        <div class="sub">倒在 ${Net.whereText()} · 剩餘晶體 ${Game.credits}${Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}<br>
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
         ${Net.teamSummaryHtml()}
         ${this.runSummary()}
