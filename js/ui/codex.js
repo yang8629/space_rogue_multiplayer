@@ -136,13 +136,11 @@ const Codex = {
     const trees = Object.keys(WEAPONS).map(id => ({ id, W: WEAPONS[id], t: weaponDpsTree(id) }));
     const maxDps = Math.max(...trees.flatMap(({ t }) => [t.base, ...Object.values(t.paths).flatMap(p => [p.dps, ...p.next])]));
     const rows1 = [];
-    const node = (name, desc, v, base, best) => `<div class="wt-node" title="${name}：${desc.replace(/<[^>]+>/g, '')}">
+    const node = (name, desc, v, base) => `<div class="wt-node" title="${name}：${desc.replace(/<[^>]+>/g, '')}">
         <div class="wt-top"><b class="wt-name">${name}</b><span class="wt-num">${Math.round(v)}<em>${pctUp(v, base)}</em></span></div>
-        ${best ? '<span class="wt-best">這把武器最高</span>' : ''}
         <div class="wt-track"><div style="width:${(v / maxDps * 100).toFixed(1)}%"></div></div>
         <div class="wt-desc">${desc}</div></div>`;
     const cards = trees.map(({ id, W, t }) => {
-      const finals = Object.values(t.paths).flatMap(p => p.next), top = Math.max(...finals);
       rows1.push([`${W.name}・基礎型`, Math.round(t.base), '—']);
       const cols = Object.entries(W.paths).map(([k, P]) => {
         const d = t.paths[k];
@@ -151,7 +149,7 @@ const Codex = {
         return `<div class="wt-path">
           <div class="wt-stage">第一段</div>${node(P.name, P.desc, d.dps, t.base)}
           <div class="wt-stage">第二段：二選一</div>
-          <div class="wt-finals">${P.next.map((n, i) => node(n.name, n.desc, d.next[i], t.base, d.next[i] === top)).join('')}</div></div>`;
+          <div class="wt-finals">${P.next.map((n, i) => node(n.name, n.desc, d.next[i], t.base)).join('')}</div></div>`;
       }).join('');
       return `<div class="wt-card" style="--wc:${W.color}">
         <div class="wt-head"><span><i></i>${W.name}</span><span>基礎型 DPS <b>${Math.round(t.base)}</b></span></div>
@@ -234,13 +232,14 @@ const Codex = {
       ${R('擊退', `每把武器的擊退值不同：${Object.values(WEAPONS).map(W => `${W.name} ${W.base.knock}`).join('、')}（鋼珠、攻城砲 ×2）。巨大化線圈每級擊退 +0.5。<br>
         一般敵人都會被推。旗艦有抗擊退，子彈的擊退值<b>超過</b>抗性才推得動，力道只看超過的部分：${CFG.BOSS_ORDER.map(id => `${ENEMY_TYPES[id].name} ${ENEMY_TYPES[id].knockResist}`).join('、')}。爆炸、震波、電弧不會推王。`)}
       ${R('增幅相加', '倍增器、巨大化、協同處理器、資料鏈結、超載・威力、聚焦透鏡的 +15%、超頻核心的 -15%，這些傷害加成全部<b>相加</b>後才乘上去：兩個倍增器是 +100% +100% = ×3，不是 ×4。分裂（每顆 ×0.4）、子彈上限換算、武器升級、相位超載則照舊相乘。')}
-      ${R('子彈上限', `單次開火最多 ${CFG.MAX_SHOTS_PER_FIRE} 發，超過的數量會換算成傷害，總傷害不會損失。`)}
+      ${R('子彈上限', `<b>每次開火</b>（包含每次命中觸發的回響）最多 ${CFG.MAX_SHOTS_PER_FIRE} 發：超過的數量平均換算成每發的傷害，總傷害不變（例：分裂到 64 發 → 只射 32 發，每發傷害 ×2）。<br>
+        另外有兩個防止卡頓的上限，超過的部分<b>會直接消失</b>：畫面上的玩家子彈最多 ${CFG.MAX_LIVE_BULLETS} 發；同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次命中觸發。平常打不到，只有極端的觸發＋分裂電路才會碰到。`)}
       ${R('強度（等級與共振）', `「強度」是晶片效果的倍率，每種晶片放大的東西不同，例如分裂模組放大分裂數量（3 → 4 → 5 顆）、威力倍增器放大傷害倍率（×2 → ×2.5 → ×3）。各晶片的實際數值寫在「晶片」分頁的卡片上。<br>
         強度的來源有兩個：<br>・<b>晶片等級</b>：再拿到已擁有的同種晶片會自動合成升級，Lv2 強度 ×1.5、Lv3 強度 ×2，倉庫被動也一起放大。<br>
         ・<b>共振器</b>：左右相鄰晶片的強度 +${CFG.RESONANCE * 100}%，兩個共振器夾同一格可以疊加。`)}
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格。部分晶片放在倉庫時提供被動效果；同一個晶片要裝上電路，還是留在倉庫拿被動，需要取捨。不要的晶片可以回收，拿回 40% 售價。`)}
       ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT}）、精英戰獎勵、武器升滿後的軍械台。`)}
-      ${R('黑洞融合', '投入 2 個晶片：50% 融合成奇異點（兩個效果合進一格，再加一個超載詞綴），50% 變成廢鐵（卡住插槽，只能在補給站拆除）。')}
+      ${R('黑洞融合', '投入 2 個晶片：50% 融合成奇異點（兩個效果合進一格，再加一個超載詞綴），50% 變成廢鐵（卡住插槽，只能在維修站拆除）。')}
     </div>`;
   },
 
@@ -266,7 +265,7 @@ const Codex = {
         ${sg.length ? `<div class="cards" style="justify-content:flex-start;margin:0">${sg.map(id => chipCard(id)).join('')}</div>`
           : '<div class="sub">還沒有。在航圖上的「◐ 黑洞」節點融合晶片即可取得。</div>'}</div>
       <div class="codex-sec"><h3 style="color:${TYPE_META.scrap.color}">✖ 廢鐵</h3>
-        <div class="cards" style="justify-content:flex-start;margin:0">${chipCard('scrap', `<div class="ty">拆除費用 ◆${CFG.SCRAP_REMOVE}</div>`)}</div></div>`;
+        <div class="cards" style="justify-content:flex-start;margin:0">${chipCard('scrap', `<div class="ty">維修站拆除費用 ◆${CFG.SCRAP_REMOVE}</div>`)}</div></div>`;
   },
 
   weapons() {

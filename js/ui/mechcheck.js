@@ -236,12 +236,12 @@ const MechCheck = {
       delete CHIPS[sg]; singularityCount--;
       return { ok: ok && Object.keys(CHIPS).length === before, got };
     }],
-    ['構築系統', '廢鐵', '沒有效果、不能移動、補給站可拆除', M => {
+    ['構築系統', '廢鐵', '沒有效果、不能移動、維修站可拆除', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'scrap', null, null]);
       const dmg = Game.stats.dmg;
       Editor.dropOn(Game.chain, 1, { from: 'lib', id: 'amp' });
       const stuck = Game.chain[1] === 'scrap';
-      Game.credits = 100; Game.shop = { items: [], slotBought: false, healed: false };
+      Game.credits = 100; Game.state = 'repair';
       Game.removeScrap();
       return { ok: near1(dmg, 10) && stuck && Game.chain[1] === null && Game.credits === 100 - CFG.SCRAP_REMOVE,
         got: `傷害 ${dmg}、放晶片${stuck ? '被擋下' : '成功（錯誤）'}、拆除後花 ◆${100 - Game.credits}` };

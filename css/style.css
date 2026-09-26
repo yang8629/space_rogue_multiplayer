@@ -253,7 +253,6 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .wt-node { font-size: 12px; min-width: 0; }
 .wt-top { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .wt-name { color: var(--ink); font-size: 12px; }
-.wt-best { display: inline-block; font-size: 10px; color: #0ca30c; border: 1px solid #0ca30c; border-radius: 4px; padding: 0 4px; margin-top: 3px; }
 .wt-num { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wt-num em { font-style: normal; font-weight: 400; color: var(--muted); font-size: 11px; margin-left: 5px; }
 .wt-track { height: 6px; background: #111a3a; border-radius: 0 3px 3px 0; margin-top: 3px; }

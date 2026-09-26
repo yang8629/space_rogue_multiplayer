@@ -84,7 +84,7 @@ const CHIPS = {
 
   // ---------- 黑洞融合相關 ----------
   scrap: { name: '廢鐵', short: '廢鐵', type: 'scrap', cost: 0, locked: true, hidden: true,
-    desc: '融合失敗的殘骸。卡住插槽、沒有任何效果，無法移動或回收，只能在補給站花錢拆除。' },
+    desc: '融合失敗的殘骸。卡住插槽、沒有任何效果，無法移動或回收，只能在維修站花錢拆除。' },
   // 奇異點超載詞綴（隱藏晶片，只會出現在融合結果裡）
   ov_power:  { name: '超載・威力', type: 'amp', cost: 0, hidden: true, desc: '傷害 +50%',
     apply: list => list.map(b => addBonus(b, 0.5)) },

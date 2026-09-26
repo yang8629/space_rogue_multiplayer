@@ -128,7 +128,8 @@ const Game = {
       case 'repair': {
         const p = this.player, heal = Math.round(p.maxHp * CFG.REPAIR_RATIO);
         p.hp = Math.min(p.maxHp, p.hp + heal);
-        this.showMap(`維修完成：HP +${heal}`);
+        if (this.findScrap()) { this.state = 'repair'; this.repairMsg = `維修完成：HP +${heal}`; Screen.repair(); }  // 有廢鐵：留在維修站拆除
+        else this.showMap(`維修完成：HP +${heal}`);
         break;
       }
     }
@@ -460,7 +461,7 @@ const Game = {
     this.pay(price, () => {
       s.arr[s.i] = null;
       this.recalc();
-      Screen.shop();
+      if (this.state === 'repair') Screen.repair('已拆除 1 塊廢鐵。');
     });
   },
 
@@ -529,9 +530,10 @@ const Game = {
       if (this.state === 'map') Screen.map();
       else if (this.state === 'reward') Screen.reward();
       else if (this.state === 'shop') Screen.shop();
+      else if (this.state === 'repair') Screen.repair();
       else if (this.state === 'blackhole') { this.bh.sel = []; Screen.blackhole(); }
       else if (this.state === 'armory') Screen.armory(this.armorySource || 'armory');
-    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'armory'].includes(this.state)) {
+    } else if (['play', 'map', 'reward', 'shop', 'repair', 'blackhole', 'armory'].includes(this.state)) {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
@@ -561,6 +563,7 @@ const Game = {
       case 'map': Screen.map(); break;
       case 'reward': Screen.reward(); break;
       case 'shop': Screen.shop(); break;
+      case 'repair': Screen.repair(); break;
       case 'blackhole': Screen.blackhole(); break;
       case 'armory': Screen.armory(this.armorySource || 'armory'); break;
       case 'victory': Screen.victory(); break;
