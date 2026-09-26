@@ -27,6 +27,11 @@ const Editor = {
       if (!b || !this.sel) return;
       const ref = this.ref(this.sel);
       if (b.dataset.sel === 'move' && ref) { this.sel = null; this.quickMove(ref.arr, ref.i); }
+      if (b.dataset.sel === 'lv' && ref && ref.arr[ref.i]) {  // 沙盒／靶場：改等級，保持選取
+        ref.arr[ref.i] = leveledId(baseOf(ref.arr[ref.i]), +b.dataset.lv);
+        this.showInfo(ref.arr[ref.i]);
+        this.changed();
+      }
       if (b.dataset.sel === 'recycle') this.recycle(this.sel);
       if (b.dataset.sel === 'cancel') { this.sel = null; this.render(); }
     });
@@ -339,8 +344,13 @@ const Editor = {
     if (S && S.from === 'lib') {
       this.selbarEl.innerHTML = `<span class="hint" style="margin:0">已選取「${CHIPS[S.id].name}」：點電路或倉庫的插槽放入</span><button data-sel="cancel">取消</button>`;
     } else if (selId) {
-      const inChain = ref.arr === Game.chain;
+      const inChain = ref.arr === Game.chain, base = baseOf(selId);
+      // 沙盒／靶場：直接切換晶片等級
+      const lvs = Game.freePlay() && NORMAL_IDS.includes(base) && base !== 'mirror'
+        ? '<span class="hint" style="margin:0">等級</span>' + [1, 2, 3].slice(0, CFG.MAX_CHIP_LV).map(l =>
+          `<button data-sel="lv" data-lv="${l}" style="${levelOf(selId) === l ? 'border-color:#9dff6b;color:#9dff6b' : ''}">Lv${l}</button>`).join('') : '';
       this.selbarEl.innerHTML = `<span class="hint" style="margin:0">已選取「${CHIPS[selId].name}」：點其他插槽移動或交換</span>
+        ${lvs}
         <button data-sel="move">${inChain ? '移到倉庫' : '裝上電路'}</button>
         <button data-sel="recycle">${!Game.freePlay() ? `回收 ◆${sellPrice(selId)}` : '移除'}</button>
         <button data-sel="cancel">取消</button>`;
