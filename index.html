@@ -378,7 +378,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: 'mp-0.3（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
+  VERSION: 'mp-0.3.1（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -2741,10 +2741,10 @@ const Net = {
     if (btns && this.linked) btns.innerHTML = '';
     const ping = `<span style="color:${this.pingColor(this.ping)}">連線延遲 ${this.ping == null ? '測量中…' : this.ping + ' ms'}</span>`;
     if (!this.linked) return;
-    const mate = this.mateInRoom ? '<b style="color:#9dff6b">隊友在房間裡</b>' : '<span style="color:#ffd166">隊友還在結算畫面（按開始會把隊友一起拉進來）</span>';
+    const mate = this.mateInRoom ? '<b style="color:#9dff6b">隊友在房間裡</b>' : '<span style="color:#ffd166">等隊友回到房間…</span>';
     this.setMsg(this.role === 'host'
       ? `房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${mate}　·　${ping}
-         <div class="row"><button class="big" data-act="netstart">開始（選擇配裝）</button></div>`
+         <div class="row"><button class="big" data-act="netstart" ${this.mateInRoom ? '' : 'disabled'}>開始（選擇配裝）</button></div>`
       : `房間 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${ping}<br>等待房主按「開始」…`);
   },
 
@@ -2833,7 +2833,7 @@ const Net = {
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
       case 'room': this.mateInRoom = true; this.lobbyStatus(); break;
       case 'full': this.lost('這個房間已經有兩個人了'); break;
-      case 'pick': if (this.role === 'client') this.enterPick(); break;
+      case 'pick': if (this.role === 'client' && Game.state === 'lobby') this.enterPick(); break;
       case 'ready': this.onMateReady(m); break;
       case 'start': if (this.role === 'client') this.startClient(m); break;
       case 'i': if (this.role === 'host') this.applyInput(m); break;
@@ -2862,7 +2862,7 @@ const Net = {
 
   // ---------- 選配裝：房主按開始 → 兩人各自選飛船、武器、起始晶片 → 都選好就開戰 ----------
   beginPick() {
-    if (this.role !== 'host' || !this.linked) return;
+    if (this.role !== 'host' || !this.linked || !this.mateInRoom) return;  // 隊友回到房間才能開始
     this.send({ t: 'pick' });
     this.enterPick();
   },
