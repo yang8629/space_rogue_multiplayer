@@ -627,7 +627,7 @@ const Game = {
     p.hp = 0; p.dead = true;
     burst(p.x, p.y, p.ship.color, 80, 400, 1.2, 3);
     if (this.players().length) {
-      this.banner = { text: `${p === this.player ? '1P' : '2P'} 被擊墜！`, sub: '剩下的隊友撐住', t: 2.5 };
+      this.banner = { text: `${p === this.player ? '1P' : '2P'} 被擊墜！`, sub: `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, t: 2.5 };
       return;
     }
     this.state = 'dead'; Input.down = false;
@@ -636,6 +636,24 @@ const Game = {
     Net.send({ t: 'over', wave: this.combat.wave, cause: this.mate ? this.mate.lastHit || '' : '' });
     this.saveRecord('dead');
     setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
+  },
+  // 雙人救援（房主判定）：倒下的人留在原地，活著的隊友待在範圍內累積秒數，離開就慢慢退回
+  updateRevive(dt) {
+    const R = CFG.REVIVE;
+    for (const [p, q] of [[this.player, this.mate], [this.mate, this.player]]) {
+      if (!p || !q || !p.dead) continue;
+      const near = !q.dead && !q.gone && dist2(p.x, p.y, q.x, q.y) < R.range * R.range;
+      p.reviveT = near ? p.reviveT + dt : Math.max(0, p.reviveT - dt);
+      if (p.reviveT >= R.time) this.revivePlayer(p, q);
+    }
+  },
+  revivePlayer(p, q) {  // 救的人分出自己當前一半的血量
+    const give = q.hp / 2, tag = x => (x === this.player ? '1P' : '2P');  // 只在房主執行：自己是 1P
+    q.hp -= give;
+    p.hp = give; p.dead = false; p.reviveT = 0; p.iframe = CFG.REVIVE.iframe;
+    this.banner = { text: `${tag(p)} 救援成功！`, sub: `${tag(q)} 分出 ${Math.ceil(give)} HP`, t: 2 };
+    burst(p.x, p.y, '#9dff6b', 40, 260, 0.8, 3);
+    SFX.play('clear');
   },
 
   // ---------- 主更新 ----------
@@ -652,6 +670,7 @@ const Game = {
       this.updateBullets(dt);
       this.updateEnemyBullets(dt);
       this.updatePickups(dt);
+      if (this.mate) this.updateRevive(dt);
     }
     if (this.state === 'play' || this.state === 'dead') this.updateFx(dt);
     if (this.inArena && this.state !== 'editor') this.updateCamera(dt);

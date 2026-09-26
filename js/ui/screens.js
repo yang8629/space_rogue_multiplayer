@@ -104,7 +104,7 @@ const Screen = {
         <div class="ds"><b style="color:${S.color}">技能・${S.abilityName}</b><br>${S.abilityDesc}</div>
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
-    this.show(`<div class="scr">
+    this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
         <div class="sub">${{ run: '開始遠征', coop: '雙人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：每艘飛船有不同的船體性能與衝刺技能。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
@@ -125,7 +125,7 @@ const Screen = {
         <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div>
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
-    this.show(`<div class="scr">
+    this.show(`<div class="scr pick">
       <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
         <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，在「⚒ 軍械台」升級兩段：第一段 3 選 1，第二段 2 選 1。</div></div>
         <button data-act="select" data-arg="${mode}" data-back>返回 (Esc)</button></div>
@@ -137,7 +137,7 @@ const Screen = {
     const S = SHIPS[shipId], W = WEAPONS[weaponId];
     const cards = pickN(NORMAL_IDS, 3).map(id =>
       chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
-    this.show(`<div class="scr">
+    this.show(`<div class="scr pick">
       <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>
         <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選好的晶片直接裝在電路第 2 格（武器右邊）。</div></div>
         <button data-act="ship" data-arg="${mode}:${shipId}" data-back>返回 (Esc)</button></div>
