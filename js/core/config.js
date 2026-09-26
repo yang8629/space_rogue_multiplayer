@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · config.js：設定值 CFG 與共用小工具（亂數、距離、角度）
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
@@ -31,7 +31,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: 'mp-0.6（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
+  VERSION: 'mp-0.6.1（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -46,6 +46,10 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
 const angleDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
 const mod = (v, m) => ((v % m) + m) % m;
+// 射擊間隔倍率 → 說明文字：間隔 ×0.7 寫成「射速加快 1.43 倍」（紅），×1.3 寫成「射速變慢 1.3 倍」（綠）
+const rateTxt = (m, pre = '') => m < 1
+  ? `<span style='color:#ff6b6b'>射速${pre}加快 ${+(1 / m).toFixed(2)} 倍</span>`
+  : `<span style='color:#7dff8a'>射速${pre}變慢 ${+m.toFixed(2)} 倍</span>`;
 // 點 (px,py) 到線段 A→B 的最短距離平方：用來判定子彈「整段飛行路徑」有沒有碰到敵人
 function segDist2(ax, ay, bx, by, px, py) {
   const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;

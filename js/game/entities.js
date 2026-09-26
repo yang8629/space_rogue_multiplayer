@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · entities.js：Player、Bullet、敵人種類 ENEMY_TYPES 與 Enemy（含旗艦技能）
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================

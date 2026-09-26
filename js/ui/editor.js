@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · editor.js：電路編輯器（Tab）：拖放、晶片傷害統計分頁
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
@@ -31,7 +31,23 @@ const Editor = {
       if (b.dataset.sel === 'cancel') { this.sel = null; this.render(); }
     });
 
-    this.mainEl = $('edMain'); this.dmgEl = $('edDmg');
+    this.mainEl = $('edMain'); this.dmgEl = $('edDmg'); this.shipEl = $('edShip'); this.shipTabEl = $('edShipTab');
+    this.shipEl.addEventListener('click', e => {  // 靶場：換機體、換武器
+      const b = e.target.closest('[data-pick]');
+      if (!b) return;
+      SFX.play('click');
+      const [kind, id] = b.dataset.pick.split(':');
+      if (kind === 'ship') Game.swapShip(id);
+      else if (kind === 'weapon') { Game.weapon = { id, path: null, final: null }; Game.refreshWeapon(); }
+      else {
+        const [path, final] = id.split('.');
+        Game.weapon.path = path || null;
+        Game.weapon.final = final ? +final : null;
+        Game.refreshWeapon();
+      }
+      this.render();
+      this.renderShip();
+    });
     $('edTabs').addEventListener('click', e => {
       const b = e.target.closest('[data-etab]');
       if (b) { SFX.play('click'); this.setTab(b.dataset.etab); }
@@ -99,9 +115,10 @@ const Editor = {
   open() {
     this.sel = null;
     this.toolsEl.classList.toggle('hidden', !Game.freePlay());
+    this.shipTabEl.classList.toggle('hidden', Game.mode !== 'range');
     this.showDefaultInfo();
     this.render();
-    this.setTab(this.tab);  // 停在上次的分頁；統計分頁每次打開都重算
+    this.setTab(this.tab === 'ship' && Game.mode !== 'range' ? 'main' : this.tab);  // 停在上次的分頁；統計分頁每次打開都重算
     this.el.classList.remove('hidden');
   },
   close() { this.el.classList.add('hidden'); },
@@ -111,7 +128,39 @@ const Editor = {
     document.querySelectorAll('[data-etab]').forEach(b => b.classList.toggle('on', b.dataset.etab === tab));
     this.mainEl.classList.toggle('hidden', tab !== 'main');
     this.dmgEl.classList.toggle('hidden', tab !== 'dmg');
+    this.shipEl.classList.toggle('hidden', tab !== 'ship');
     if (tab === 'dmg') this.renderDmg();
+    if (tab === 'ship') this.renderShip();
+  },
+  // 靶場：切換機體、武器與武器升級（電路與倉庫保留）
+  renderShip() {
+    const on = (yes, col) => yes ? `outline:2px solid ${col};outline-offset:2px` : '';
+    const ships = Object.entries(SHIPS).map(([id, S]) => `<div class="card" style="border-color:${S.color};${on(Game.shipId === id, S.color)}">
+        <div class="ttl" style="color:${S.color}">${S.name}</div>
+        <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒${S.armor ? `　·　受傷 -${S.armor * 100}%` : ''}</div>
+        <div class="ds">${S.desc}<br><b style="color:${S.color}">技能・${S.abilityName}</b>：${S.abilityDesc}</div>
+        <button data-pick="ship:${id}">${Game.shipId === id ? '使用中' : '換成' + S.name}</button></div>`).join('');
+    const weapons = Object.entries(WEAPONS).map(([id, W]) => {
+      const p = weaponParams({ id, path: null, final: null });
+      return `<div class="card" style="border-color:${W.color};${on(Game.weapon.id === id, W.color)}">
+        <div class="ttl" style="color:${W.color}">${W.name}</div>
+        <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次</div>
+        <div class="ds">${W.desc}</div>
+        <button data-pick="weapon:${id}">${Game.weapon.id === id ? '使用中' : '換成' + W.name}</button></div>`;
+    }).join('');
+    const W = WEAPONS[Game.weapon.id], st = Game.weapon;
+    const up = (key, label, cur, desc) => `<button data-pick="up:${key}" title="${desc.replace(/<[^>]+>/g, '')}"
+      style="${cur ? `border-color:${W.color};color:${W.color}` : ''}">${label}</button>`;
+    let ups = up('', '基礎型', !st.path, W.desc);
+    for (const [k, P] of Object.entries(W.paths)) {
+      ups += up(k, P.name, st.path === k && st.final == null, P.desc);
+      P.next.forEach((n, i) => ups += up(`${k}.${i}`, `${P.name}→${n.name}`, st.path === k && st.final === i, n.desc));
+    }
+    this.shipEl.innerHTML = `
+      <h3>機體</h3><div class="cards" style="margin:8px 0">${ships}</div>
+      <h3>武器</h3><div class="cards" style="margin:8px 0">${weapons}</div>
+      <h3>武器升級：<span style="color:${W.color}">${weaponTitle(st)}</span></h3><div class="bar">${ups}</div>
+      <p class="hint">換機體或武器時電路與倉庫都會保留，HP 回滿、靶場數據歸零。</p>`;
   },
   // 晶片傷害統計：本關（目前星區）與整局，依整局傷害排序
   renderDmg() {

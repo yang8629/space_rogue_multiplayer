@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · weapons.js：5 把武器與兩段升級樹、weaponParams / weaponEmit
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
@@ -20,7 +20,7 @@ const WEAPONS = {
       B: { name: '連發', desc: '一次射出 2 道雷射，每道傷害 ×0.75。', apply: p => { p.count = 2; p.spread = 0.08; p.damage *= 0.75; },
         next: [
           { name: '三連發', desc: '一次射出 3 道雷射。', apply: p => { p.count = 3; p.spread = 0.14; } },
-          { name: '高頻', desc: '射擊間隔 ×0.7。', apply: p => { p.rate *= 0.7; } }] },
+          { name: '高頻', desc: rateTxt(0.7) + '。', apply: p => { p.rate *= 0.7; } }] },
       C: { name: '貫穿光束', desc: '穿透 +2，彈速 ×1.3。', apply: p => { p.pierce += 2; p.speed *= 1.3; },
         next: [
           { name: '粒子光束', desc: '穿透再 +4，傷害 ×1.3。', apply: p => { p.pierce += 4; p.damage *= 1.3; } },
@@ -63,11 +63,11 @@ const WEAPONS = {
   railgun: { name: '軌道砲', short: '軌道', color: '#ffd166', desc: '超高速穿甲彈，射速慢但一發貫穿一排。',
     base: { interval: 0.5, count: 1, spread: 0, damage: 34, speed: 1500, radius: 4, pierce: 3, life: 0.7, shape: 'rail', knock: 2 },
     paths: {
-      A: { name: '自動軌道', desc: '射擊間隔 ×0.55，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
+      A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
         next: [
-          { name: '加特林', desc: '射擊間隔再 ×0.7，但會亂飄。', apply: p => { p.rate *= 0.7; p.jitter = 0.08; } },
+          { name: '加特林', desc: rateTxt(0.7, '再') + '，但會亂飄。', apply: p => { p.rate *= 0.7; p.jitter = 0.08; } },
           { name: '雙軌', desc: '一次射出 2 發。', apply: p => { p.count = 2; p.spread = 0.06; } }] },
-      B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，射擊間隔 ×1.3。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
+      B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，' + rateTxt(1.3) + '。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
         next: [
           { name: '衝擊波', desc: '命中時爆炸（半徑 70，70% 傷害）。', apply: p => { p.explode = { r: 70, ratio: 0.7 }; } },
           { name: '無限貫穿', desc: '可以穿透所有敵人。', apply: p => { p.pierce = 99; } }] },
@@ -88,7 +88,7 @@ const WEAPONS = {
       B: { name: '飛刃', desc: '刃片飛得更快更遠，變成中距離武器。', apply: p => { p.speed *= 1.8; p.life *= 2.2; },
         next: [
           { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 4; } },
-          { name: '疾風連斬', desc: '射擊間隔 ×0.7。', apply: p => { p.rate *= 0.7; } }] },
+          { name: '疾風連斬', desc: rateTxt(0.7) + '。', apply: p => { p.rate *= 0.7; } }] },
       C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 10，持續 2 秒）。', apply: p => { p.burn = { dps: 10, t: 2 }; },
         next: [
           { name: '裂隙擴散', desc: '命中時爆炸（半徑 60，60% 傷害）。', apply: p => { p.explode = { r: 60, ratio: 0.6 }; } },

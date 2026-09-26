@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · game.js：Game：一局的流程、戰鬥、獎勵、商店、黑洞、傷害、主更新
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
@@ -318,8 +318,17 @@ const Game = {
     const lines = [W.desc];
     if (st.path) lines.push(`第一段・${W.paths[st.path].name}：${W.paths[st.path].desc}`);
     if (st.final != null) { const n = W.paths[st.path].next[st.final]; lines.push(`第二段・${n.name}：${n.desc}`); }
-    c.desc = lines.join('<br>') + '<br><span style="color:#6a79ad">武器固定在電路第 1 格，這一場不能更換。</span>';
+    c.desc = lines.join('<br>') + (this.mode === 'range' ? '<br><span style="color:#6a79ad">武器固定在電路第 1 格；靶場可在「🚀 機體・武器」分頁更換。</span>'
+      : '<br><span style="color:#6a79ad">武器固定在電路第 1 格，這一場不能更換。</span>');
     if (this.player) this.recalc();
+  },
+  swapShip(id) {  // 靶場：換機體（保留位置、電路與倉庫）
+    const old = this.player;
+    this.shipId = id;
+    this.player = new Player(SHIPS[id]);
+    if (old) { this.player.x = old.x; this.player.y = old.y; }
+    this.recalc();
+    this.player.hp = this.player.maxHp;
   },
   weaponStage() { return this.weapon.final != null ? 2 : this.weapon.path ? 1 : 0; },
   upgradeWeapon(choice) {  // 只在軍械台升級
