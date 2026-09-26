@@ -71,6 +71,10 @@ function dmgKeyName(key) {
   const d = CHIPS[key];
   return d ? d.name : key;
 }
+function dmgKeyColor(key) {
+  return key === 'weapon' ? WEAPONS[Game.weapon.id].color : key === 'ship' ? SHIPS[Game.shipId].color
+    : CHIPS[key] ? TYPE_META[CHIPS[key].type].color : '#8fa3d9';
+}
 
 // 本局傷害統計的來源分類（結算畫面用）
 const DMG_SOURCES = [
@@ -79,5 +83,6 @@ const DMG_SOURCES = [
   ['explode', '爆炸', '#d95926'],
   ['burn', '燃燒', '#c98500'],
   ['shard', '碎片', '#199e70'],
+  ['arc', '電弧', '#5ec8ff'],
   ['shock', '震盪衝撞', '#9085e9'],
 ];

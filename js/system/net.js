@@ -51,6 +51,9 @@ const Net = {
       return;
     }
     if (!this.linked) return;
+    // 暫停中（Tab、切到背景）、不在戰鬥、隊友倒下（倒下時不送操作）：同步間隔不累積，恢復後從下一則訊息重新算
+    if (this.stats && (Game.state !== 'play' || this.pauseReason() || (this.role === 'host' && Game.mate && Game.mate.dead)))
+      this.stats.lastRecv = 0;
     if (Game.mode === 'coop') {
       if (this.role === 'host' && this.voteEnd && performance.now() >= this.voteEnd && !this.pauseReason()) this.tryResolve(true);  // 投票時間到
       const vt = document.getElementById('voteTimer'), left = this.voteLeft();
@@ -64,22 +67,30 @@ const Net = {
     }
   },
   // ---------- 傷害統計：房主記兩人各自的傷害，同步給隊友 ----------
-  dmgPack(R) {
+  // nm：每個晶片的顯示名稱與顏色（用那個人自己的武器、飛船、奇異點算），對方畫面的「隊友傷害」直接用
+  dmgPack(R, L = null) {
     if (!R) return null;
     const rd = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v)]));
-    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit) };
+    const nm = Game.withLoadout(L, () => Object.fromEntries(Object.keys(R.chips).map(k => [k, [dmgKeyName(k), dmgKeyColor(k)]])));
+    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit), nm };
   },
   sendDmg() {
     if (!Game.mate || !Game.mate.L) return;
-    this.team = { h: this.dmgPack(Game.runStats), m: this.dmgPack(Game.mate.L.R) };
+    this.team = { h: this.dmgPack(Game.runStats), m: this.dmgPack(Game.mate.L.R, Game.mate.L) };
     this.send({ t: 'dmg', ...this.team });
   },
   onDmg(m) {  // 隊友：收到兩人的傷害；自己那份寫進自己的 runStats（結算、紀錄都用它）
-    const clean = p => (p && typeof p === 'object' ? {
+    // 房主那邊隊友的奇異點 id 前面多一個 m（msg_1 = 隊友的 sg_1），換回自己的 id 才不會被當成不認得的晶片丟掉
+    const own = k => (k[0] === 'm' && CHIPS[k.slice(1)] && !CHIPS[k] ? k.slice(1) : k);
+    const esc = s => String(s).slice(0, 40).replace(/[<>&"]/g, '');
+    const clean = (p, mine) => (p && typeof p === 'object' ? {
       dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, num(p.dmg && p.dmg[k])])),
-      chips: Object.fromEntries(Object.entries(p.chips || {}).filter(([k, v]) => CHIPS[k] || k === 'weapon' || k === 'ship').map(([k, v]) => [k, num(v)])),
+      chips: Object.fromEntries(Object.entries(p.chips || {}).map(([k, v]) => [mine ? own(k) : String(k).slice(0, 40), num(v)])
+        .filter(([k]) => !mine || CHIPS[k] || k === 'weapon' || k === 'ship')),
+      nm: Object.fromEntries(Object.entries(p.nm && typeof p.nm === 'object' ? p.nm : {}).slice(0, 60)
+        .map(([k, v]) => [String(k).slice(0, 40), Array.isArray(v) ? [esc(v[0]), /^#[0-9a-f]{3,8}$/i.test(v[1]) ? v[1] : '#8fa3d9'] : [esc(k), '#8fa3d9']])),
       kills: num(p.kills), maxHit: num(p.maxHit) } : null);
-    this.team = { h: clean(m.h), m: clean(m.m) };
+    this.team = { h: clean(m.h, false), m: clean(m.m, true) };
     const R = Game.runStats, mine = this.team.m;
     if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit });
   },
@@ -310,7 +321,7 @@ const Net = {
     return {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state,
       you: { pick: this.matePick, weapon: L.weapon, chain: L.chain.map(back), inventory: L.inventory.map(back), sg,
-        hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R) },
+        hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L) },
       map: this.packMap(G.map), sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
       lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
@@ -382,8 +393,10 @@ const Net = {
     if (!m || typeof m !== 'object') return;
     const now = performance.now(), S = this.stats;
     if (S && (m.t === 's' || m.t === 'i')) {  // 同步訊息之間最長隔多久（卡頓的指標；暫停中不算）
-      if (S.lastRecv && Game.state === 'play' && !this.pauseReason()) S.maxGap = Math.max(S.maxGap, now - S.lastRecv);
-      S.lastRecv = now;
+      if (Game.state === 'play' && !this.pauseReason()) {
+        if (S.lastRecv) S.maxGap = Math.max(S.maxGap, now - S.lastRecv);
+        S.lastRecv = now;
+      } else S.lastRecv = 0;
       if (m.t === 's') S.snaps++; else S.inputs++;
     }
     switch (m.t) {
