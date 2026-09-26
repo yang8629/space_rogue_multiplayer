@@ -1451,7 +1451,7 @@ class Player {
         const d = Math.hypot(e.x - this.x, e.y - this.y);
         if (d > 150 + e.r) continue;
         const k = 420 * (14 / e.r) / (d || 1);
-        e.hurt(20, (e.x - this.x) * k, (e.y - this.y) * k, 'shock', { src: 'ship', cr: null });
+        e.hurt(20, (e.x - this.x) * k, (e.y - this.y) * k, 'shock', { src: 'ship', cr: null, owner: Game.shooter || null });
         floatText(e.x, e.y - e.r, 20, S.color);
       }
       for (let i = 0; i < 36 && Game.particles.length < 1500; i++) {
@@ -1550,7 +1550,7 @@ class Bullet {
     this.payload = s.payload; this.depth = depth;
     this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
     this.slow = s.slow; this.knock = s.knock; this.lifesteal = s.lifesteal;
-    this.att = { src: s.src || 'weapon', cr: s.cr };  // 傷害統計歸屬
+    this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
     if (ignoreId != null) this.hitSet.add(ignoreId);
@@ -1661,7 +1661,7 @@ class Enemy {
         Game.recordDamage('burn', Math.min(d, Math.max(0, this.hp)), this.burnAtt);
         this.hp -= d;
         if (Math.random() < 0.4) burst(this.x, this.y, '#ff9f1c', 2, 60, 0.3, 2);
-        if (this.hp <= 0 && !this.dead) { this.dead = true; Game.onEnemyKilled(this); return; }
+        if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = this.burnAtt && this.burnAtt.owner; Game.onEnemyKilled(this); return; }
       }
     }
     if (this.slowT > 0) this.slowT -= dt;
@@ -1899,7 +1899,7 @@ class Enemy {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
       if (over > 0 && l > 0 && this.mode !== 'charge') { this.vx += kx / l * over * CFG.BOSS_KNOCK; this.vy += ky / l * over * CFG.BOSS_KNOCK; }
     } else if (this.mode !== 'charge') { this.vx += kx; this.vy += ky; }
-    if (this.hp <= 0 && !this.dead) { this.dead = true; Game.onEnemyKilled(this); }
+    if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; Game.onEnemyKilled(this); }
   }
 }
 
@@ -2397,12 +2397,14 @@ const Game = {
   },
   shake(v) { this.cam.shake = Math.max(this.cam.shake, v); },
   recordDamage(source, amount, att) {  // 本局傷害統計：依來源分類，並依晶片分攤（見 splitDamage）
-    const R = this.runStats;
+    // 雙人：記在打出這一擊的人身上（owner = 隊友的配裝；null = 房主自己）
+    const owner = att && att.owner !== undefined ? att.owner : this.shooter;
+    const R = owner ? owner.R : this.runStats, stats = owner ? owner.stats : this.stats;
     if (!R || !(amount > 0)) return;
     R.dmg[source] = (R.dmg[source] || 0) + amount;
     if (source !== 'burn') R.maxHit = Math.max(R.maxHit, amount);
-    const parts = splitDamage(amount, att, source === 'shock' ? null : this.stats && this.stats.rateCr);
-    const sec = this.sectorStats && this.sectorStats.chips;
+    const parts = splitDamage(amount, att, source === 'shock' ? null : stats && stats.rateCr);
+    const sec = !owner && this.sectorStats && this.sectorStats.chips;
     for (const k in parts) {
       R.chips[k] = (R.chips[k] || 0) + parts[k];
       if (sec) sec[k] = (sec[k] || 0) + parts[k];
@@ -2425,7 +2427,8 @@ const Game = {
 
   onEnemyKilled(e) {
     this.kills++;
-    if (this.runStats) this.runStats.kills++;
+    const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
+    if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     SFX.play(e.t.boss ? 'bossdeath' : big ? 'bigkill' : 'kill');
@@ -2481,7 +2484,8 @@ const Game = {
       return;
     }
     this.state = 'dead'; Input.down = false;
-    // 結束訊息帶上隊友的最終血量與擊毀原因（最後一次同步可能還沒送到）
+    // 結束訊息帶上隊友的最終血量與擊毀原因（最後一次同步可能還沒送到）；先送最終傷害統計
+    Net.sendDmg();
     Net.send({ t: 'over', wave: this.combat.wave, cause: this.mate ? this.mate.lastHit || '' : '' });
     this.saveRecord('dead');
     setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
@@ -2681,7 +2685,7 @@ const Net = {
   active() { return !!this.role; },
   fx(e) { if (this.conn && this.fxBuf.length < 400) this.fxBuf.push(e); },
   send(msg) { try { if (this.conn && this.conn.open) this.conn.send(msg); } catch (e) {} },
-  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0 }; },
+  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0 }; this.team = null; },
   close() {
     const peer = this.peer, conn = this.conn;
     this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
@@ -2698,7 +2702,57 @@ const Net = {
   tick(dt) {
     if (!this.linked) return;
     this.pingT += dt;
-    if (this.pingT >= 1) { this.pingT = 0; this.send({ t: 'ping', at: performance.now() }); }
+    if (this.pingT >= 1) {
+      this.pingT = 0;
+      this.send({ t: 'ping', at: performance.now() });
+      if (this.role === 'host' && Game.mode === 'coop' && Game.inArena) this.sendDmg();  // 每秒同步一次兩人的傷害統計
+    }
+  },
+  // ---------- 傷害統計：房主記兩人各自的傷害，同步給隊友 ----------
+  dmgPack(R) {
+    if (!R) return null;
+    const rd = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v)]));
+    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit) };
+  },
+  sendDmg() {
+    if (!Game.mate || !Game.mate.L) return;
+    this.team = { h: this.dmgPack(Game.runStats), m: this.dmgPack(Game.mate.L.R) };
+    this.send({ t: 'dmg', ...this.team });
+  },
+  onDmg(m) {  // 隊友：收到兩人的傷害；自己那份寫進自己的 runStats（結算、紀錄都用它）
+    const clean = p => (p && typeof p === 'object' ? {
+      dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, num(p.dmg && p.dmg[k])])),
+      chips: Object.fromEntries(Object.entries(p.chips || {}).filter(([k, v]) => CHIPS[k] || k === 'weapon' || k === 'ship').map(([k, v]) => [k, num(v)])),
+      kills: num(p.kills), maxHit: num(p.maxHit) } : null);
+    this.team = { h: clean(m.h), m: clean(m.m) };
+    const R = Game.runStats, mine = this.team.m;
+    if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit });
+  },
+  // 結算用：1P（房主）與 2P（隊友）的傷害、擊殺
+  teamRows() {
+    const host = this.role === 'host' || !!(Game.mate && Game.mate.L);
+    const total = R => (R ? Object.values(R.dmg).reduce((a, b) => a + b, 0) : 0);
+    const h = host ? Game.runStats : this.team && this.team.h, m = host ? Game.mate && Game.mate.L && Game.mate.L.R : Game.runStats;
+    const mp = this.matePick, myShip = Game.shipId, mateShip = mp ? mp.ship : null;
+    return [
+      { tag: '1P', ship: host ? myShip : mateShip, me: host, dmg: total(h), kills: h ? h.kills : 0, maxHit: h ? h.maxHit : 0 },
+      { tag: '2P', ship: host ? mateShip : myShip, me: !host, dmg: total(m), kills: m ? m.kills : 0, maxHit: m ? m.maxHit : 0 },
+    ];
+  },
+  teamSummaryHtml() {
+    const rows = this.teamRows(), sum = rows.reduce((a, r) => a + r.dmg, 0);
+    const fmt = n => Math.round(n).toLocaleString('zh-TW');
+    const body = rows.map(r => {
+      const S = SHIPS[r.ship] || { name: '？', color: '#8fa3d9' }, pct = sum ? r.dmg / sum * 100 : 0;
+      return `<div class="sum-lab"><i style="background:${S.color}"></i>${r.tag} ${S.name}${r.me ? '（你）' : ''}</div>
+        <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${S.color}"></div></div>
+        <div class="sum-val">${fmt(r.dmg)}<span>${pct.toFixed(0)}%</span></div>`;
+    }).join('');
+    const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
+    return `<div class="summary">
+      <div class="sum-head"><span>雙人傷害結算</span><b>${fmt(sum)}</b></div>
+      <div class="sum-rows">${body}</div>
+      <div class="sum-tiles">${rows.map(r => tile(`${r.tag} 擊殺`, fmt(r.kills)) + tile(`${r.tag} 最高單發`, fmt(r.maxHit))).join('')}</div></div>`;
   },
   pingColor(ms) { return ms == null ? '#8fa3d9' : ms < 80 ? '#9dff6b' : ms < 150 ? '#ffd166' : '#ff4d6d'; },
 
@@ -2848,6 +2902,7 @@ const Net = {
           setTimeout(() => { if (Game.state === 'dead') Screen.dead(); }, 900);
         }
         break;
+      case 'dmg': if (this.role === 'client') this.onDmg(m); break;
       case 'ping': this.send({ t: 'pong', at: m.at }); break;
       case 'pong': {
         const ms = Math.round(now - num(m.at, now));
@@ -2901,7 +2956,8 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null) };
+      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null),
+      R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); });
     return L;
@@ -2939,8 +2995,10 @@ const Net = {
       where: `雙人 · 第 ${G.combat ? G.combat.wave : 0} 波（${host ? '房主 1P' : '隊友 2P'}）`,
       input: Input.touch ? `觸控（自動攻擊${Input.autoFire ? '開' : '關'}）` : '滑鼠鍵盤',
       ship: SHIPS[G.shipId].name, weapon: weaponTitle(G.weapon),
-      time: Math.round(R ? R.time : 0), kills: G.kills || 0, dmg: Math.round(total), maxHit: Math.round(R ? R.maxHit : 0),
-      chain: G.chain.map(name), inv: G.inventory.filter(Boolean).map(name), chipDmg: [],
+      time: Math.round(R ? R.time : 0), kills: R ? R.kills : 0, dmg: Math.round(total), maxHit: Math.round(R ? R.maxHit : 0),
+      dmgBySource: R ? Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])) : {},
+      chain: G.chain.map(name), inv: G.inventory.filter(Boolean).map(name),
+      chipDmg: R ? Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]) : [],
       credits: G.credits, hp: Math.max(0, Math.ceil(G.player.hp)), maxHp: G.player.maxHp,
       cause: G.player.dead ? G.lastHit : '',
       coop: {
@@ -2950,7 +3008,9 @@ const Net = {
         ping: ps.length ? { avg: Math.round(ps.reduce((a, b) => a + b, 0) / ps.length), min: ps[0],
           p90: ps[Math.floor(ps.length * 0.9)], max: ps[ps.length - 1], samples: ps.length } : '沒有量到',
         sync: host ? { inputsReceived: S.inputs, maxGapMs: Math.round(S.maxGap) } : { snapshotsReceived: S.snaps, maxGapMs: Math.round(S.maxGap) },
-        note: host ? '傷害與擊殺是兩人合計（由房主統計）' : '傷害由房主統計，隊友這邊記為 0；擊殺是兩人合計',
+        team: this.teamRows().map(r => ({ who: `${r.tag}${r.me ? '（你）' : ''}`, ship: SHIPS[r.ship] ? SHIPS[r.ship].name : '？',
+          dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit) })),
+        teamKills: G.kills || 0,
       },
     };
   },
@@ -3786,7 +3846,7 @@ const Screen = {
     }).join('');
     const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
     return `<div class="summary">
-      <div class="sum-head"><span>本局傷害總計</span><b>${fmt(total)}</b></div>
+      <div class="sum-head"><span>${Game.mode === 'coop' ? '你的傷害明細' : '本局傷害總計'}</span><b>${fmt(total)}</b></div>
       ${rows ? `<div class="sum-rows">${rows}</div>` : '<div class="sub">這一局還沒有造成傷害。</div>'}
       <div class="sum-tiles">${tile('擊殺', fmt(R.kills))}${tile('最高單發', fmt(R.maxHit))}
         ${tile('戰鬥時間', `${mm}:${String(ss).padStart(2, '0')}`)}${tile('平均 DPS', R.time > 0 ? fmt(total / R.time) : '—')}</div>
@@ -3800,6 +3860,8 @@ const Screen = {
         <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
         <div class="sub">兩人一起撐到第 ${Game.combat.wave} 波 · 共用晶體 ${Game.credits}<br>
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
+        ${Net.teamSummaryHtml()}
+        ${this.runSummary()}
         <div class="row">${Net.linked ? '<button class="big" data-act="netroom">回到房間</button>' : '<span class="sub" style="color:#ff4d6d">隊友已離線</span>'}
           <button data-act="title">離開房間</button></div>
         <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div>
@@ -3856,7 +3918,8 @@ const Screen = {
         ${top ? `<br>傷害前三：${top}` : ''}
         ${r.coop ? `<br><b style="color:#ff9dbd">👥 雙人（${r.coop.role}）</b>　隊友：${r.coop.mate}${r.coop.mateDown ? '（已被擊墜）' : ''}
           <br>延遲：${typeof r.coop.ping === 'object' ? `平均 ${r.coop.ping.avg} ms、最低 ${r.coop.ping.min}、90% 在 ${r.coop.ping.p90} 以內、最高 ${r.coop.ping.max}（${r.coop.ping.samples} 次）` : r.coop.ping}
-          　·　同步最長間隔 ${r.coop.sync.maxGapMs} ms` : ''}<br><span style="color:#6a79ad">電路：${r.chain.map(c => c || '空').join(' → ')}</span>
+          　·　同步最長間隔 ${r.coop.sync.maxGapMs} ms
+          ${r.coop.team ? `<br>傷害：${r.coop.team.map(t => `${t.who} ${t.ship} ${fmt(t.dmg)}（擊殺 ${t.kills}）`).join('　｜　')}` : ''}` : ''}<br><span style="color:#6a79ad">電路：${r.chain.map(c => c || '空').join(' → ')}</span>
         ${detail ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:#8fa3d9">展開細節</summary>${detail}</details>` : ''}
         <div id="copyBox${i}"></div></div>`;
     }).join('');
