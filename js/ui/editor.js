@@ -169,15 +169,19 @@ const Editor = {
   },
   // 晶片傷害統計：本關（目前星區）與整局，依整局傷害排序
   renderDmg() {
-    const R = Game.runStats, S = Game.sectorStats;
+    const R = Game.runStats;
     if (!R) { this.dmgEl.innerHTML = '<div class="sub">還沒有開始遊戲。</div>'; return; }
+    let S = Game.sectorStats;
+    if (Game.isClient()) {  // 隊友：傷害由房主算好傳過來，本關 = 整局 − 這一關開始時
+      const c0 = S.chips0 || {};
+      S = { chips: Object.fromEntries(Object.entries(R.chips).map(([k, v]) => [k, Math.max(0, v - (c0[k] || 0))])) };
+    }
     const keys = [...new Set([...Object.keys(R.chips), ...Object.keys(S.chips)])]
       .sort((a, b) => (R.chips[b] || 0) - (R.chips[a] || 0));
     const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
     const tR = sum(R.chips), tS = sum(S.chips);
     const fmt = n => Math.round(n).toLocaleString('zh-TW');
-    const color = k => k === 'weapon' ? WEAPONS[Game.weapon.id].color : k === 'ship' ? SHIPS[Game.shipId].color
-      : CHIPS[k] ? TYPE_META[CHIPS[k].type].color : '#8fa3d9';
+    const color = dmgKeyColor;
     const cell = (v, t, c) => `<td>${fmt(v || 0)}<span class="pct">${t ? Math.round((v || 0) / t * 100) : 0}%</span>
       <div class="bar"><div style="width:${t ? ((v || 0) / t * 100).toFixed(1) : 0}%;background:${c}"></div></div></td>`;
     const rows = keys.map(k => {
@@ -186,13 +190,38 @@ const Editor = {
       return `<tr><td><b style="color:${color(k)}">${dmgKeyName(k)}</b>${where}</td>${cell(S.chips[k], tS, color(k))}${cell(R.chips[k], tR, color(k))}</tr>`;
     }).join('');
     const label = Game.freePlay() ? (Game.mode === 'range' ? '本次靶場' : '本次沙盒') : Game.isEndless() ? `本關（無盡 · 星區 ${Game.sector}）` : `本關（星區 ${Game.sector}）`;
-    this.dmgEl.innerHTML = `
+    const coop = Game.mode === 'coop' && Game.mate, mate = coop && this.mateDmg();
+    const me = coop ? `<h3>${Net.role === 'host' ? '1P' : '2P'}（你）</h3>` : '';
+    const mateTable = !mate ? '' : `<h3>${mate.tag} 隊友（整局）</h3>
+      <table class="dmg-table"><thead><tr><th>來源</th><th>整局</th></tr></thead>
+        <tbody>${mate.rows.map(([n, c, v]) => `<tr><td><b style="color:${c}">${n}</b></td>${cell(v, mate.total, c)}</tr>`).join('')
+          || '<tr><td colspan="2" class="sub">還沒有造成傷害。</td></tr>'}</tbody>
+        <tfoot><tr><td><b>合計</b></td><td>${fmt(mate.total)}</td></tr></tfoot></table>`;
+    this.dmgEl.innerHTML = `${coop ? Net.teamSummaryHtml() : ''}${me}
       <table class="dmg-table"><thead><tr><th>來源</th><th>${label}</th><th>整局</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="3" class="sub">還沒有造成傷害。</td></tr>'}</tbody>
         <tfoot><tr><td><b>合計</b></td><td>${fmt(tS)}</td><td>${fmt(tR)}</td></tr></tfoot></table>
+      ${mateTable}
       <p class="hint">怎麼算：每顆子彈的基礎傷害算給產生它的來源（武器；鏡像複製出的子彈算鏡像迴路；觸發器的回響算觸發器）。
         加工過子彈的晶片（倍增、分裂、巨大化…）依它讓傷害變成幾倍，按比例分走多出來的傷害；超頻、冷卻管線依射速提升分攤。
-        爆炸、碎片、燃燒跟著原本那顆子彈算。共振器的效果算在被共振的晶片上。</p>`;
+        爆炸、碎片、電弧、燃燒跟著原本那顆子彈算。共振器的效果算在被共振的晶片上。${coop ? '雙人：傷害由房主計算，每秒同步一次。' : ''}</p>`;
+  },
+  // 雙人：隊友的晶片傷害（房主直接讀隊友的配裝；隊友這邊用房主傳來的名稱）
+  mateDmg() {
+    let chips, name;
+    if (Net.role === 'host') {
+      const L = Game.mate.L;
+      if (!L || !L.R) return null;
+      chips = L.R.chips;
+      name = k => Game.withLoadout(L, () => [dmgKeyName(k), dmgKeyColor(k)]);
+    } else {
+      const h = Net.team && Net.team.h;
+      if (!h) return null;
+      chips = h.chips;
+      name = k => (h.nm && h.nm[k]) || [k, '#8fa3d9'];
+    }
+    const rows = Object.entries(chips).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([k, v]) => [...name(k), v]);
+    return { tag: Net.role === 'host' ? '2P' : '1P', rows, total: rows.reduce((a, r) => a + r[2], 0) };
   },
   changed() { Game.recalc(); this.render(); },
   ref(d) {

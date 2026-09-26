@@ -142,6 +142,7 @@ const Game = {
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
     this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = [];
     this.kills = 0; this.banner = null; this.nextId = 1;
+    if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
     // 雙人：房主在左、隊友在右（隊友的位置由隊友自己的電腦決定）
     if (Net.role === 'host') this.player.x -= 50;
@@ -375,7 +376,8 @@ const Game = {
   nextSector() {
     if (this.runStats) this.runStats.sectors.push(this.sectorSummary());
     this.sector++;
-    this.sectorStats = { chips: {}, t0: this.runStats.time, kills0: this.runStats.kills, dmg0: this.totalDmg() };
+    // chips0：這一關開始時的整局晶片傷害（隊友的傷害由房主算，本關 = 整局 − chips0）
+    this.sectorStats = { chips: {}, chips0: { ...this.runStats.chips }, t0: this.runStats.time, kills0: this.runStats.kills, dmg0: this.totalDmg() };
     if (this.isClient()) { this.bossId = Net.nextMap.bossId; this.map = Net.nextMap.map; }  // 隊友：用房主產生的星圖
     else { this.bossId = this.bossFor(this.sector); this.map = genMap(); }
     this.node = null; this.visited = [];
@@ -760,7 +762,7 @@ const Game = {
       const t = near[k] || hit, d = near[k] ? dmg : dmg * 0.5;
       if (t.dead) continue;
       if (b.slow) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, b.slow); t.slowT = 1.5; }
-      t.hurt(d, 0, 0, 'shard', b.att);
+      t.hurt(d, 0, 0, 'arc', b.att);
       floatText(t.x, t.y - t.r, Math.round(d), '#9fe8ff');
       if (this.zaps.length < 60) this.zaps.push({ x1: hit.x, y1: hit.y, x2: t.x + rand(-6, 6), y2: t.y + rand(-6, 6), life: 0.18, max: 0.18 });
       if (Net.role === 'host') Net.fx(['z', Math.round(hit.x), Math.round(hit.y), Math.round(t.x), Math.round(t.y)]);
