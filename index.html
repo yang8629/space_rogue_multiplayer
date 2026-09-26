@@ -36,6 +36,7 @@
   .title-wrap .en { color: #4cc9f0; letter-spacing: 8px; margin: 6px 0 24px; }
   .title-wrap .row { justify-content: center; margin: 26px 0 18px; }
   .keys { font-size: 12px; color: #6a79ad; line-height: 1.9; }
+  .ver { font-size: 11px; color: #4a5886; letter-spacing: .05em; font-variant-numeric: tabular-nums; }
 
   .map { position: relative; width: 100%; height: 440px; margin-top: 14px; background: #070b1a; border-radius: 10px; }
   .map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -377,7 +378,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: '2026-09-26e-mp1',   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
+  VERSION: 'mp-0.3（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -2452,6 +2453,7 @@ const Game = {
     p.hp -= dmg; p.iframe = CFG.IFRAME;
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
+      p.lastHit = cause;
       if (p.hp <= 0) this.playerDown(p);
       return;
     }
@@ -2479,7 +2481,8 @@ const Game = {
       return;
     }
     this.state = 'dead'; Input.down = false;
-    Net.send({ t: 'over', wave: this.combat.wave });
+    // 結束訊息帶上隊友的最終血量與擊毀原因（最後一次同步可能還沒送到）
+    Net.send({ t: 'over', wave: this.combat.wave, cause: this.mate ? this.mate.lastHit || '' : '' });
     this.saveRecord('dead');
     setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
   },
@@ -2668,7 +2671,6 @@ const NET_RATE = 1 / 30;
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
 
-const NET_VER = 2;  // 連線協定版本：兩邊版本不同（有人沒重新整理）就不讓開始
 const Net = {
   role: null,          // null = 單人；'host' = 房主；'client' = 加入的隊友
   peer: null, conn: null, ping: null, code: '',
@@ -2683,7 +2685,7 @@ const Net = {
   close() {
     const peer = this.peer, conn = this.conn;
     this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
-    this.linked = false; this.myPick = this.matePick = null; this.code = '';
+    this.linked = false; this.mateInRoom = false; this.myPick = this.matePick = null; this.code = '';
     try { conn && conn.close(); } catch (e) {}
     try { peer && peer.destroy(); } catch (e) {}
   },
@@ -2704,12 +2706,22 @@ const Net = {
   lobby(msg = '') {
     this.close();
     this.resetStats();
+    this.renderLobby(msg);
+  },
+  // 一局結束後回到同一個房間（連線不斷），房主可以直接再按開始
+  backToRoom() {
+    if (!this.linked) { this.lobby('<span style="color:#ff4d6d">連線已經中斷，請重新開房或加入</span>'); return; }
+    this.myPick = this.matePick = null;
+    this.send({ t: 'room' });
+    this.renderLobby();
+  },
+  renderLobby(msg = '') {
     Game.state = 'lobby'; Game.inArena = false; Game.mate = null;
     const ok = typeof Peer !== 'undefined';
     Screen.show(`<div class="scr title-wrap">
       <h1 style="font-size:42px">👥 雙人連線</h1>
-      <div class="sub">先進同一個房間，兩人到齊後由房主按「開始」，再各自選飛船、武器與起始晶片。</div>
-      <div id="netBtns">${ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
+      <div class="sub">先進同一個房間，兩人到齊後由房主按「開始」，再各自選飛船、武器與起始晶片。每局結束後會回到這個房間。</div>
+      <div id="netBtns">${this.linked ? '' : ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
         <div class="row"><input id="netCode" maxlength="4" placeholder="房號" autocomplete="off" spellcheck="false"
           style="font-size:22px;width:5.5em;text-align:center;letter-spacing:.3em;text-transform:uppercase;background:#0a1030;color:#fff;border:1px solid #4cc9f0;border-radius:6px;padding:8px">
           <button class="big" data-act="netjoin">加入房間</button></div>`
@@ -2717,7 +2729,9 @@ const Net = {
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
       <div class="keys">一人按「開房間」拿到 4 碼房號，另一人輸入房號按「加入房間」。<br>
         測試版：無盡波次、不能編輯電路；一人被擊墜時另一人繼續，兩人都被擊墜才結束。</div>
-      <div class="row"><button data-act="title">返回標題</button></div></div>`);
+      <div class="row"><button data-act="title">${this.linked ? '離開房間' : '返回標題'}</button></div>
+      <div class="ver">版本 ${CFG.VERSION}</div></div>`);
+    if (this.linked) this.lobbyStatus();
   },
   setMsg(html) { const el = document.getElementById('netMsg'); if (el) el.innerHTML = html; },
   // 連上之後的大廳狀態（延遲每秒更新）
@@ -2725,12 +2739,13 @@ const Net = {
     if (Game.state !== 'lobby') return;
     const btns = document.getElementById('netBtns');
     if (btns && this.linked) btns.innerHTML = '';
-    const ping = `<span style="color:${this.pingColor(this.ping)}">延遲 ${this.ping == null ? '測量中…' : this.ping + ' ms'}</span>`;
+    const ping = `<span style="color:${this.pingColor(this.ping)}">連線延遲 ${this.ping == null ? '測量中…' : this.ping + ' ms'}</span>`;
     if (!this.linked) return;
+    const mate = this.mateInRoom ? '<b style="color:#9dff6b">隊友在房間裡</b>' : '<span style="color:#ffd166">隊友還在結算畫面（按開始會把隊友一起拉進來）</span>';
     this.setMsg(this.role === 'host'
-      ? `房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　<b style="color:#9dff6b">隊友已加入</b>　·　${ping}
+      ? `房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${mate}　·　${ping}
          <div class="row"><button class="big" data-act="netstart">開始（選擇配裝）</button></div>`
-      : `已加入房間 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${ping}<br>等待房主按「開始」…`);
+      : `房間 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${ping}<br>等待房主按「開始」…`);
   },
 
   host() {
@@ -2760,7 +2775,7 @@ const Net = {
     peer.on('open', () => {
       const conn = this.conn = peer.connect(NET_PREFIX + code, { reliable: true, serialization: 'json' });
       this.bind(conn);
-      conn.on('open', () => { this.setMsg('已連上，確認版本中…'); this.send({ t: 'hello', v: NET_VER }); });
+      conn.on('open', () => { this.setMsg('已連上，確認版本中…'); this.send({ t: 'hello', v: CFG.VERSION }); });
     });
     peer.on('error', e => this.fail(e));
   },
@@ -2804,13 +2819,19 @@ const Net = {
     switch (m.t) {
       case 'hello':
         if (this.role !== 'host' || this.linked) break;
-        if (m.v !== NET_VER) { this.send({ t: 'ver', v: NET_VER }); this.setMsg('<span style="color:#ff4d6d">隊友的遊戲版本不同，請兩邊都重新整理頁面</span>'); break; }
-        this.linked = true;
-        this.send({ t: 'welcome', v: NET_VER, code: this.code });
+        if (m.v !== CFG.VERSION) {  // 版號不同（有人沒重新整理）：不讓開始
+          const theirs = String(m.v || '舊版').slice(0, 40);
+          this.send({ t: 'ver', v: CFG.VERSION });
+          this.setMsg(`<span style="color:#ff4d6d">隊友的版本不同（你：${CFG.VERSION}／隊友：${theirs}），請兩邊都按 Ctrl+F5 重新整理</span>`);
+          break;
+        }
+        this.linked = true; this.mateInRoom = true;
+        this.send({ t: 'welcome', v: CFG.VERSION, code: this.code });
         this.lobbyStatus();
         break;
       case 'welcome': if (this.role === 'client') { this.linked = true; this.lobbyStatus(); } break;
-      case 'ver': this.lost('你和房主的遊戲版本不同，請兩邊都重新整理頁面'); break;
+      case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
+      case 'room': this.mateInRoom = true; this.lobbyStatus(); break;
       case 'full': this.lost('這個房間已經有兩個人了'); break;
       case 'pick': if (this.role === 'client') this.enterPick(); break;
       case 'ready': this.onMateReady(m); break;
@@ -2820,6 +2841,9 @@ const Net = {
       case 'over':
         if (this.role === 'client' && Game.combat && Game.state === 'play') {
           Game.state = 'dead'; Game.combat.wave = num(m.wave, Game.combat.wave); Input.down = false;
+          const P = Game.player;
+          if (!P.dead) { P.hp = 0; P.dead = true; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); }
+          Game.lastHit = typeof m.cause === 'string' ? m.cause.slice(0, 60) : '';
           Game.saveRecord('dead');
           setTimeout(() => { if (Game.state === 'dead') Screen.dead(); }, 900);
         }
@@ -2843,7 +2867,7 @@ const Net = {
     this.enterPick();
   },
   enterPick() {
-    this.myPick = this.matePick = null;
+    this.myPick = this.matePick = null; this.mateInRoom = false;
     Game.state = 'pick'; Game.inArena = false;
     Screen.select('coop');
   },
@@ -2965,7 +2989,7 @@ const Net = {
       t: 's',
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
         P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy)],
-      me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0] : null,
+      me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || ''] : null,
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0]),
@@ -3035,6 +3059,7 @@ const Net = {
       }
       P.hp = hp; P.maxHp = num(s.me[1], P.maxHp);
       if (s.me[2] > 0) P.iframe = num(s.me[2]);
+      if (typeof s.me[4] === 'string') G.lastHit = s.me[4].slice(0, 60);
       if (s.me[3] && !P.dead) { P.dead = true; Input.down = false; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); G.shake(20); }
     }
     G.enemies = arr(s.e).map(a => {
@@ -3396,7 +3421,7 @@ function drawHUD() {
   ctx.fillText(`擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54);
   if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);
-    ctx.fillText(Net.ping == null ? '延遲 測量中…' : `延遲 ${Net.ping} ms`, VW - 20, 76);
+    ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
 
   // 電路鏈縮圖（觸控時移到上方，避開拇指）
@@ -3508,6 +3533,7 @@ const Screen = {
       case 'nethost': Net.host(); break;
       case 'netjoin': Net.join(document.getElementById('netCode').value); break;
       case 'netstart': Net.beginPick(); break;
+      case 'netroom': Net.backToRoom(); break;
       case 'upg': Game.upgradeWeapon(arg); break;
       case 'armorybonus': Game.armoryBonus(); break;
       case 'slot': Game.expandSlot(arg); break;
@@ -3517,6 +3543,11 @@ const Screen = {
       case 'next': Game.nextSector(); break;
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
+      case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
+      case 'clearrecok':
+        try { localStorage.removeItem('runRecords'); } catch (e) {}
+        Screen.records('已刪除所有紀錄。');
+        break;
       case 'copyrec': Screen.copyRecords(); break;
       case 'copyrun': Screen.copyRun(); break;
       case 'copyone': Screen.copyOne(+arg); break;
@@ -3665,6 +3696,7 @@ const Screen = {
         <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
       <div class="keys">電腦：WASD 移動　·　滑鼠左鍵 射擊　·　Space / 右鍵 衝刺（無敵）　·　Tab 隨時編輯電路（暫停）　·　M 靜音<br>
       手機：自動攻擊時任意位置拖曳移動；關閉自動攻擊後，左半邊移動、右半邊瞄準射擊　·　「衝刺」「電路」「自動」按鈕　·　建議橫向遊玩</div>
+      <div class="ver">版本 ${CFG.VERSION}</div>
     </div>`);
   },
 
@@ -3768,7 +3800,8 @@ const Screen = {
         <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
         <div class="sub">兩人一起撐到第 ${Game.combat.wave} 波 · 共用晶體 ${Game.credits}<br>
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
-        <div class="row"><button class="big" data-act="title">回到標題</button></div>
+        <div class="row">${Net.linked ? '<button class="big" data-act="netroom">回到房間</button>' : '<span class="sub" style="color:#ff4d6d">隊友已離線</span>'}
+          <button data-act="title">離開房間</button></div>
         <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div>
         <div id="copyBox"></div></div>`);
       return;
@@ -3799,7 +3832,7 @@ const Screen = {
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },
 
-  records(msg = '') {
+  records(msg = '', confirmClear = false) {
     const list = Game.loadRecords();
     const RES = { dead: ['飛船已毀', '#ff4d6d'], cleared: ['遠征完成', '#ffd166'], retired: ['中途結束', '#8fa3d9'], disconnect: ['連線中斷', '#ff9f1c'] };
     const fmt = n => Math.round(n).toLocaleString('zh-TW');
@@ -3831,8 +3864,13 @@ const Screen = {
       <div class="between"><div><h2>📜 遊玩紀錄</h2>
         <div class="sub">每一局結束（飛船被擊毀、或選「結束遠征」）時自動存一筆，保留最近 ${CFG.MAX_RECORDS} 筆。紀錄只存在這台裝置的瀏覽器裡。
           每筆右上角可以單獨複製、「展開細節」可以看走過的節點與受傷來源；也可以一次複製全部。複製後把文字貼給開發者就能分析。</div></div>
-        <button data-act="title">返回</button></div>
-      <div class="row" style="justify-content:flex-start"><button data-act="copyrec" ${list.length ? '' : 'disabled'}>📋 複製全部紀錄（${list.length} 筆）</button></div>
+        ${Net.linked ? '<button data-act="netroom">回到房間</button>' : '<button data-act="title">返回</button>'}</div>
+      <div class="row" style="justify-content:flex-start"><button data-act="copyrec" ${list.length ? '' : 'disabled'}>📋 複製全部紀錄（${list.length} 筆）</button>
+        ${confirmClear
+          ? `<span style="color:#ff4d6d">確定刪除全部 ${list.length} 筆紀錄？刪除後無法復原。</span>
+             <button data-act="clearrecok" style="border-color:#ff4d6d;color:#ff4d6d">確定刪除</button><button data-act="records">取消</button>`
+          : `<button data-act="clearrec" ${list.length ? '' : 'disabled'}>🗑 刪除所有紀錄</button>`}</div>
+      ${msg ? `<div class="toast">${msg}</div>` : ''}
       <div id="copyBox"></div>
       <div class="rec-list">${rows || '<div class="sub">還沒有紀錄。玩完一局就會出現在這裡。</div>'}</div></div>`);
   },
