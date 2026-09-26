@@ -44,6 +44,11 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 20px;
     background: #0d1433; border: 2px solid; cursor: default; opacity: .35; padding: 0; }
   .node small { font-size: 9px; margin-top: -2px; }
+  /* 雙人投票標記：1P 左上、2P 右上 */
+  .node .vote { position: absolute; top: -9px; font-style: normal; font-size: 10px; font-weight: 700; line-height: 1;
+    padding: 2px 4px; border-radius: 6px; color: #05060f; pointer-events: none; }
+  .node .vote.v1 { left: -10px; background: #4cc9f0; }
+  .node .vote.v2 { right: -10px; background: #ff9dbd; }
   .node.reach { opacity: 1; cursor: pointer; animation: pulse 1.2s infinite; }
   .node.visited { opacity: .9; background: #1a2550; }
   .node.current { opacity: 1; box-shadow: 0 0 18px currentColor; }
@@ -378,7 +383,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: 'mp-0.3.2（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
+  VERSION: 'mp-0.4（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -1938,6 +1943,19 @@ const Game = {
     }
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
+  isClient() { return Net.role === 'client' && this.mode === 'coop'; },
+  // 錢：雙人時兩人共用、由房主記帳。隊友花錢要先問房主，房主扣款成功才執行 fn
+  pay(price, fn) {
+    if (this.credits < price) return false;
+    if (this.isClient()) return Net.requestSpend(price, fn);
+    this.credits -= price;
+    fn();
+    return true;
+  },
+  earn(v) {
+    this.credits += v;  // 隊友這邊先加上，房主之後會同步正確的數字
+    if (this.isClient()) Net.send({ t: 'gain', v });
+  },
 
   // ---------- 一局的流程 ----------
   newRun(mode, shipId = this.shipId || 'vanguard', weaponId = this.weapon.id, startChip = null) {
@@ -1951,7 +1969,7 @@ const Game = {
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
     this.credits = mode === 'sandbox' ? 999 : 0;
     this.player = new Player(S);
-    this.map = mode === 'run' ? genMap() : null;
+    this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
     this.node = null; this.visited = []; this.sector = 1; this.bossId = this.bossFor(1);
     this.runStats = { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0, time: 0,
       bosses: [], started: Date.now(), recorded: false,
@@ -1999,6 +2017,7 @@ const Game = {
   },
   showMap(toast = '') {
     this.inArena = false; this.state = 'map';
+    if (this.mode === 'coop') Net.atMap();  // 雙人：告訴隊友「我回到航圖了」（隊友這邊順便送出最新配裝）
     Screen.map(toast);
   },
   enterNode(node) {
@@ -2103,17 +2122,19 @@ const Game = {
     }
   },
   combatWon() {
+    const client = this.isClient();  // 雙人的隊友：錢由房主加，這裡不重複加
     this.inArena = false;
-    this.credits += this.pickups.length;  // 沒吸完的晶體直接入帳
+    if (!client) this.credits += this.pickups.length;  // 沒吸完的晶體直接入帳
     this.pickups = [];
     const p = this.player;
+    if (this.mode === 'coop') Net.afterCombat();  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
     if (p.ship.ability === 'repair') p.hp = Math.min(p.maxHp, p.hp + 10);  // 先鋒號：戰地維修
     const type = this.node.type;
     if (type === 'boss') {  // 擊敗旗艦：插槽 +1、晶體獎勵，可前往下一星區
       const slot = this.chain.length < CFG.MAX_SLOTS;
       if (slot) this.chain.push(null);
-      this.credits += 50;
+      if (!client) this.credits += 50;
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       this.victory = { slot, boss: this.bossId };
@@ -2124,7 +2145,7 @@ const Game = {
     const kind = type === 'elite' ? 'elite' : 'combat';
     this.reward = { kind, options: kind === 'elite' ? pickN(COMPOSITE_IDS, 2) : pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
-    this.credits += this.reward.bonus;
+    if (!client) this.credits += this.reward.bonus;
     this.state = 'reward';
     Screen.reward();
   },
@@ -2160,7 +2181,7 @@ const Game = {
       msg = this.acquire(id);
       if (!msg) return;
     } else {
-      this.credits += 10;
+      this.earn(10);
       msg = '跳過獎勵：◆ +10';
     }
     this.showMap(msg);
@@ -2182,15 +2203,16 @@ const Game = {
   shopHeal() {  // 補給站補血：每間限 1 次
     const p = this.player, R = CFG.SHOP_REPAIR;
     if (this.shop.healed || this.credits < R.price || p.hp >= p.maxHp) return;
-    this.credits -= R.price; this.shop.healed = true;
-    p.hp = Math.min(p.maxHp, p.hp + R.hp);
-    Screen.shop(`補血完成：HP +${R.hp}`);
+    this.pay(R.price, () => {
+      this.shop.healed = true;
+      p.hp = Math.min(p.maxHp, p.hp + R.hp);
+      Screen.shop(`補血完成：HP +${R.hp}`);
+    });
   },
   buy(idx) {
     const it = this.shop.items[idx];
     if (!it || it.sold || this.credits < it.price || !this.canAcquire(it.id)) return;
-    this.credits -= it.price; it.sold = true;
-    Screen.shop(this.acquire(it.id));
+    this.pay(it.price, () => { it.sold = true; Screen.shop(this.acquire(it.id)); });
   },
   // ---------- 武器 ----------
   refreshWeapon() {  // 重新計算武器參數，並更新電路第 1 格的顯示
@@ -2219,9 +2241,12 @@ const Game = {
     if (this.chain.length >= CFG.MAX_SLOTS) return;
     if (source === 'shop') {
       if (this.credits < CFG.SHOP_SLOT || this.shop.slotBought) return;
-      this.credits -= CFG.SHOP_SLOT;
-      this.shop.slotBought = true;
+      this.pay(CFG.SHOP_SLOT, () => { this.shop.slotBought = true; this.addSlot(source); });
+      return;
     }
+    this.addSlot(source);
+  },
+  addSlot(source) {
     this.chain.push(null);
     this.recalc();
     SFX.play('upgrade');
@@ -2232,7 +2257,7 @@ const Game = {
   },
   armoryBonus() {
     const B = CFG.ARMORY_BONUS, p = this.player;
-    this.credits += B.credits;
+    this.earn(B.credits);
     p.hp = Math.min(p.maxHp, p.hp + B.hp);
     this.showMap(`武器已升滿：改領 ◆ +${B.credits}、HP +${B.hp}`);
   },
@@ -2245,9 +2270,11 @@ const Game = {
   nextSector() {
     if (this.runStats) this.runStats.sectors.push(this.sectorSummary());
     this.sector++;
-    this.bossId = this.bossFor(this.sector);
     this.sectorStats = { chips: {}, t0: this.runStats.time, kills0: this.runStats.kills, dmg0: this.totalDmg() };
-    this.map = genMap(); this.node = null; this.visited = [];
+    if (this.isClient()) { this.bossId = Net.nextMap.bossId; this.map = Net.nextMap.map; }  // 隊友：用房主產生的星圖
+    else { this.bossId = this.bossFor(this.sector); this.map = genMap(); }
+    this.node = null; this.visited = [];
+    if (this.mode === 'coop' && Net.role === 'host') Net.sendSector();
     const p = this.player;
     p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.3));
     this.showMap(this.sector === CFG.CAMPAIGN_SECTORS + 1
@@ -2257,6 +2284,11 @@ const Game = {
   // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到標題
   finishRun() {
     this.saveRecord(this.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'retired');
+    if (this.mode === 'coop') {  // 雙人：房主決定結束，兩人一起回到房間
+      if (Net.role === 'host') Net.send({ t: 'finish' });
+      Net.backToRoom();
+      return;
+    }
     this.state = 'title'; this.inArena = false;
     Screen.title();
   },
@@ -2321,10 +2353,11 @@ const Game = {
   removeScrap() {
     const s = this.findScrap(), price = CFG.SCRAP_REMOVE;
     if (!s || this.credits < price) return;
-    this.credits -= price;
-    s.arr[s.i] = null;
-    this.recalc();
-    Screen.shop();
+    this.pay(price, () => {
+      s.arr[s.i] = null;
+      this.recalc();
+      Screen.shop();
+    });
   },
 
   // ---------- 黑洞 ----------
@@ -2378,11 +2411,16 @@ const Game = {
     }
   },
   toggleEditor() {
-    if (Net.active()) return;  // 雙人測試版第 1 步：還不能編輯電路（第 2 步加上「全員暫停」）
+    // 雙人：戰鬥中按 Tab → 兩邊一起暫停，關掉編輯器時把新電路傳給房主再繼續
     if (this.state === 'editor') {
       this.state = this.returnState;
       Editor.close();
       this.recalc();
+      if (this.mode === 'coop') {
+        Net.sendLoadout();
+        if (this.state === 'play') Net.setEditing(false);
+        if (this.state === 'map') { Net.checkVoteTimer(); Net.tryResolve(); }  // 時間到的情況由 Net.tick 處理
+      }
       if (this.state === 'map') Screen.map();
       else if (this.state === 'reward') Screen.reward();
       else if (this.state === 'shop') Screen.shop();
@@ -2392,6 +2430,7 @@ const Game = {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
+      if (this.mode === 'coop' && this.returnState === 'play') Net.setEditing(true);
       Editor.open();
     }
   },
@@ -2494,8 +2533,9 @@ const Game = {
   // ---------- 主更新 ----------
   update(dt) {
     if (Net.role === 'client' && this.mode === 'coop') { Net.clientUpdate(dt); return; }
-    if (this.state === 'play' && this.mate) Net.hostUpdateMate(dt);
-    if (this.state === 'play') {
+    const frozen = this.mode === 'coop' && Net.mateEditing;  // 雙人：隊友正在編輯電路 → 全員暫停
+    if (this.state === 'play' && this.mate && !frozen) Net.hostUpdateMate(dt);
+    if (this.state === 'play' && !frozen) {
       this.time += dt;
       if (this.runStats) this.runStats.time += dt;  // 只算實際戰鬥的時間
       if (!this.player.dead) this.player.update(dt);
@@ -2672,6 +2712,7 @@ const LOADOUT_KEYS = ['chain', 'inventory', 'weapon', 'wp', 'stats', 'passives',
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
+const NET_VOTE_TIME = 20;  // 兩人都回到航圖後的投票時間（秒）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -2701,6 +2742,12 @@ const Net = {
   // 每一幀呼叫：連上之後每秒量一次延遲
   tick(dt) {
     if (!this.linked) return;
+    if (Game.mode === 'coop') {
+      this.syncCredits();
+      if (this.role === 'host' && this.voteEnd && performance.now() >= this.voteEnd) this.tryResolve(true);  // 投票時間到
+      const vt = document.getElementById('voteTimer'), left = this.voteLeft();
+      if (vt) vt.textContent = left != null ? `剩 ${left} 秒` : '';
+    }
     this.pingT += dt;
     if (this.pingT >= 1) {
       this.pingT = 0;
@@ -2782,7 +2829,8 @@ const Net = {
       : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}</div>
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
       <div class="keys">一人按「開房間」拿到 4 碼房號，另一人輸入房號按「加入房間」。<br>
-        測試版：無盡波次、不能編輯電路；一人被擊墜時另一人繼續，兩人都被擊墜才結束。</div>
+        雙人遠征：航圖投票（選不同就抽籤）、錢兩人共用、獎勵各自選、戰鬥中按 Tab 兩人一起暫停。<br>
+        一人被擊墜時另一人繼續，戰鬥結束後以 30% HP 歸隊；兩人都被擊墜才結束。</div>
       <div class="row"><button data-act="title">${this.linked ? '離開房間' : '返回標題'}</button></div>
       <div class="ver">版本 ${CFG.VERSION}</div></div>`);
     if (this.linked) this.lobbyStatus();
@@ -2903,6 +2951,50 @@ const Net = {
         }
         break;
       case 'dmg': if (this.role === 'client') this.onDmg(m); break;
+      // ---- 共同闖關 ----
+      case 'at':
+        this.mateAt = m.s === 'map' ? 'map' : null;
+        if (this.role === 'host') this.checkVoteTimer();
+        if (Game.state === 'map') Screen.map();
+        break;
+      case 'vote': {
+        const node = typeof m.node === 'string' && Game.map ? Game.nodeById(m.node) : null;
+        if (!node || !Game.reachable().includes(node)) break;
+        this.votes[this.role === 'host' ? 'c' : 'h'] = m.node;
+        if (Game.state === 'map') Screen.map();
+        if (this.role === 'host') this.tryResolve();
+        break;
+      }
+      case 'vt': if (this.role === 'client') { this.voteEnd = performance.now() + clamp(num(m.s), 0, 60) * 1000; if (Game.state === 'map') Screen.map(); } break;
+      case 'go':
+        if (this.role === 'client' && Game.map && typeof m.node === 'string' && Game.nodeById(m.node)) {
+          if (Game.state === 'editor') { Editor.close(); Game.recalc(); this.sendLoadout(); }
+          const V = m.votes || {}, ok = id => (typeof id === 'string' && Game.nodeById(id) ? id : null);
+          this.go(m.node, { h: ok(V.h), c: ok(V.c) }, !!m.drawn && ok(V.h) && ok(V.c));
+        }
+        break;
+      case 'spend': if (this.role === 'host') this.onSpend(m); break;
+      case 'spent': if (this.role === 'client') this.onSpent(m); break;
+      case 'gain': if (this.role === 'host') { const v = num(m.v); if (v > 0 && v <= 100) Game.credits += v; } break;
+      case 'cr': if (this.role === 'client') { Game.credits = num(m.v, Game.credits); this.showCredits(); } break;
+      case 'lo': if (this.role === 'host') this.applyMateLoadout(m); break;
+      case 'edit': this.mateEditing = !!m.on && Game.inArena; break;
+      case 'won':
+        if (this.role === 'client' && Game.inArena && Game.combat) {
+          const P = Game.player;
+          P.dead = false; P.hp = clamp(num(m.hp, P.hp), 1, P.maxHp);
+          Game.combatWon();
+        }
+        break;
+      case 'sector':
+        if (this.role === 'client' && Game.state === 'victory') {
+          const map = this.unpackMap(m.map);
+          if (!map || !ENEMY_TYPES[m.bossId]) { this.lost('收到的星圖有問題，請兩邊都重新整理'); break; }
+          this.nextMap = { map, bossId: m.bossId };
+          Game.nextSector();
+        }
+        break;
+      case 'finish': if (this.role === 'client' && Game.state === 'victory') Game.finishRun(); break;
       case 'ping': this.send({ t: 'pong', at: m.at }); break;
       case 'pong': {
         const ms = Math.round(now - num(m.at, now));
@@ -2970,20 +3062,181 @@ const Net = {
     mate.L = this.makeLoadout(mp);
     mate.hp = mate.maxHp = SHIPS[mp.ship].hp + mate.L.passives.maxHp;
     mate.dashSeq = 0; mate.wantFire = false;
-    Game.startCombat({ sandbox: true, level: 0 });
-    this.send({ t: 'start', ...me });
+    this.resetRun();
+    this.send({ t: 'start', ...me, map: this.packMap(Game.map), bossId: Game.bossId });
+    Game.showMap('雙人遠征開始！點選下一個節點投票，兩人都選好就出發。');
   },
   startClient(m) {
     if (!this.myPick) return;
+    const map = this.unpackMap(m.map);
+    if (!map || !ENEMY_TYPES[m.bossId]) { this.lost('收到的星圖有問題，請兩邊都重新整理'); return; }
     this.matePick = this.cleanPick(m);
     this.resetStats();
     const me = this.myPick;
     Game.newRun('coop', me.ship, me.weapon, me.chip);
+    Game.map = map; Game.bossId = m.bossId;
     Game.mate = new Player(SHIPS[this.matePick.ship]);
-    Game.startCombat({ sandbox: true, level: 0 });
+    this.resetRun();
+    Game.showMap('雙人遠征開始！點選下一個節點投票，兩人都選好就出發。');
+  },
+
+  // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
+  resetRun() {
+    this.votes = { h: null, c: null }; this.mateAt = null; this.voteEnd = 0;
+    this.mateEditing = false; this.myEditing = false; this.spendQ = null; this.sentCredits = null;
+  },
+  packMap(map) { return map.map(row => row.map(n => [n.id, n.L, n.k, n.n, n.type, n.next])); },
+  unpackMap(raw) {  // 隊友：檢查房主傳來的星圖格式
+    if (!Array.isArray(raw) || raw.length < 2 || raw.length > 12) return null;
+    const ids = new Set();
+    try {
+      const map = raw.map(row => (Array.isArray(row) ? row : []).map(a => {
+        const [id, L, k, n, type, next] = Array.isArray(a) ? a : [];
+        if (typeof id !== 'string' || !NODE_META[type] || !Array.isArray(next)) throw new Error('bad node');
+        ids.add(id);
+        return { id, L: num(L), k: num(k), n: num(n, 1) || 1, type, next: next.filter(x => typeof x === 'string') };
+      }));
+      return map.flat().every(n => n.next.every(id => ids.has(id))) ? map : null;
+    } catch (e) { return null; }
+  },
+  sendSector() { this.send({ t: 'sector', map: this.packMap(Game.map), bossId: Game.bossId }); },
+  // 回到航圖：告訴對方；隊友順便把最新的配裝傳給房主（下一場戰鬥用）
+  atMap() {
+    if (!this.linked) return;
+    if (this.role === 'client') this.sendLoadout();
+    this.send({ t: 'at', s: 'map' });
+    this.checkVoteTimer();
+  },
+  myVoteKey() { return this.role === 'host' ? 'h' : 'c'; },
+  vote(id) {
+    const node = Game.nodeById(id);
+    if (!node || !Game.reachable().includes(node) || Game.state !== 'map') return;
+    if (!this.linked) { Game.enterNode(node); return; }  // 隊友已離線：自己走
+    this.votes[this.myVoteKey()] = id;
+    this.send({ t: 'vote', node: id });
+    Screen.map();
+    if (this.role === 'host') this.tryResolve();
+  },
+  checkVoteTimer() {  // 房主：兩人都在航圖時開始倒數
+    if (this.role !== 'host' || Game.state !== 'map' || this.mateAt !== 'map' || this.voteEnd) return;
+    this.voteEnd = performance.now() + NET_VOTE_TIME * 1000;
+    this.send({ t: 'vt', s: NET_VOTE_TIME });
+    Screen.map();
+  },
+  tryResolve(force = false) {  // 房主：兩人都投了（或時間到）就決定目的地
+    if (this.role !== 'host' || Game.state !== 'map') return;
+    const V = this.votes, reach = Game.reachable();
+    if (!force && !(V.h && V.c)) return;
+    const cand = [V.h, V.c].filter(id => id && reach.some(n => n.id === id));
+    const id = cand.length ? pick(cand) : pick(reach).id;  // 票數比例抽籤（一人一票；都沒投就隨機）
+    const drawn = cand.length === 2 && V.h !== V.c;
+    this.voteEnd = 0;
+    this.send({ t: 'go', node: id, votes: V, drawn });
+    this.go(id, V, drawn);
+  },
+  go(id, votes, drawn) {
+    const node = Game.nodeById(id);
+    if (!node) return;
+    this.mateAt = null; this.voteEnd = 0; this.votes = { h: null, c: null };
+    const label = NODE_META[node.type].label;
+    Game.state = 'going';
+    Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">${drawn ? '🎲 意見分歧，抽籤決定' : '➜ 出發'}</h1>
+      <div class="sub">${drawn ? `1P 投「${NODE_META[Game.nodeById(votes.h).type].label}」、2P 投「${NODE_META[Game.nodeById(votes.c).type].label}」，各 50%。<br>` : ''}
+        目的地：<b style="color:${NODE_META[node.type].color};font-size:22px">${NODE_META[node.type].icon} ${label}</b></div></div>`);
+    setTimeout(() => { if (Game.state === 'going') Game.enterNode(node); }, drawn ? 1800 : 900);
+  },
+  voteLeft() { return this.voteEnd ? Math.max(0, Math.ceil((this.voteEnd - performance.now()) / 1000)) : null; },
+
+  // 錢：隊友花錢先問房主
+  requestSpend(price, fn) {
+    if (this.spendQ) return false;  // 上一筆還在等回覆
+    this.spendQ = { id: (this.spendId = (this.spendId || 0) + 1), fn };
+    this.send({ t: 'spend', id: this.spendQ.id, v: price });
+    return true;
+  },
+  onSpend(m) {  // 房主：錢夠就扣
+    const v = num(m.v, -1), ok = v >= 0 && v <= 1000 && Game.credits >= v;
+    if (ok) Game.credits -= v;
+    this.send({ t: 'spent', id: m.id, ok, cr: Game.credits });
+  },
+  onSpent(m) {  // 隊友：房主回覆
+    Game.credits = num(m.cr, Game.credits);
+    const q = this.spendQ;
+    this.spendQ = null;
+    if (q && q.id === m.id && m.ok) q.fn();
+    else Game.restoreScreen();  // 錢不夠（對方剛好花掉了）：重畫目前畫面
+  },
+  syncCredits() {  // 房主：錢有變動就告訴隊友
+    if (this.role !== 'host' || !this.linked || Game.credits === this.sentCredits) return;
+    this.sentCredits = Game.credits;
+    this.send({ t: 'cr', v: Game.credits });
+  },
+  showCredits() { document.querySelectorAll('[data-credits]').forEach(el => { el.textContent = `◆ ${Game.credits}`; }); },
+
+  // 配裝：隊友改了電路／倉庫／武器就傳給房主（房主模擬隊友的子彈要用）
+  sendLoadout() {
+    if (this.role !== 'client' || !this.linked) return;
+    const G = Game, sg = {};
+    for (const id of [...G.chain, ...G.inventory])
+      if (id && CHIPS[id] && CHIPS[id].type === 'singularity') sg[id] = { name: CHIPS[id].name, cost: CHIPS[id].cost, combo: CHIPS[id].combo };
+    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sg, hp: G.player.hp });
+  },
+  applyMateLoadout(m) {  // 房主：檢查後套用到隊友的配裝
+    const mate = Game.mate;
+    if (!mate || !mate.L) return;
+    const sgMap = {};
+    const fix = (id, depth = 0) => {
+      if (typeof id !== 'string') return null;
+      if (id === 'scrap' || NORMAL_IDS.includes(id) || COMPOSITE_IDS.includes(id) || (depth && OVERLOADS.includes(id))) return id;
+      const lv = /^([a-z_]+)#([23])$/.exec(id);
+      if (lv && NORMAL_IDS.includes(lv[1]) && lv[1] !== 'mirror') return leveledId(lv[1], +lv[2]);
+      if (!depth && /^sg_\d+$/.test(id) && m.sg && m.sg[id]) {  // 奇異點：隊友那邊動態產生的晶片，房主這邊另外登記一份
+        if (sgMap[id]) return sgMap[id];
+        const d = m.sg[id], combo = (Array.isArray(d.combo) ? d.combo : []).slice(0, 8).map(c => fix(c, 1)).filter(Boolean);
+        if (!combo.length) return null;
+        const hid = 'm' + id;
+        CHIPS[hid] = { name: String(d.name || '奇異點').slice(0, 30), short: '奇異', type: 'singularity', cost: clamp(num(d.cost), 0, 20), combo, desc: '' };
+        return (sgMap[id] = hid);
+      }
+      return null;
+    };
+    const chain = (Array.isArray(m.chain) ? m.chain : []).slice(0, CFG.MAX_SLOTS).map((id, i) => (i === 0 ? 'weapon' : fix(id)));
+    while (chain.length < CFG.START_SLOTS) chain.push(null);
+    chain[0] = 'weapon';
+    const inventory = Array.from({ length: CFG.INV_SLOTS }, (_, i) => fix(Array.isArray(m.inventory) ? m.inventory[i] : null));
+    const W = m.weapon && WEAPONS[m.weapon.id] ? m.weapon : null, L = mate.L;
+    if (W && W.id === L.weapon.id) {
+      const path = W.path && WEAPONS[W.id].paths[W.path] ? W.path : null;
+      L.weapon = { id: W.id, path, final: path && (W.final === 0 || W.final === 1) ? W.final : null };
+    }
+    L.chain = chain; L.inventory = inventory; L.wp = weaponParams(L.weapon);
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); });
+    mate.maxHp = mate.ship.hp + L.passives.maxHp;
+    if (!Game.inArena) mate.hp = clamp(num(m.hp, mate.hp), 1, mate.maxHp);  // 戰鬥中的血量以房主為準
+    else mate.hp = Math.min(mate.hp, mate.maxHp);
+  },
+
+  // 戰鬥中按 Tab：兩邊一起暫停
+  setEditing(on) {
+    this.myEditing = on;
+    this.send({ t: 'edit', on: !!on });
+  },
+  // 戰鬥結束：被擊墜的人以 30% HP 歸隊；房主把隊友的血量傳過去
+  afterCombat() {
+    const revive = p => { if (p && p.dead) { p.dead = false; p.hp = Math.max(1, Math.round(p.maxHp * 0.3)); } };
+    this.mateEditing = false;
+    if (this.role === 'host') {
+      revive(Game.player); revive(Game.mate);
+      if (Game.mate) { this.sendDmg(); this.send({ t: 'won', hp: Game.mate.hp }); }
+    }
   },
 
   // ---------- 遊玩紀錄（雙人） ----------
+  whereText() {
+    const G = Game, n = G.node, C = G.combat;
+    const at = n ? `${G.isEndless() ? '無盡 · ' : ''}星區 ${G.sector} 第 ${n.L + 1} 層（${NODE_META[n.type].label}）` : `星區 ${G.sector} 航圖`;
+    return at + (n && C && G.inArena && C.wavesTotal !== Infinity ? ` 第 ${C.wave} / ${C.wavesTotal} 波` : '');
+  },
   buildRecord(result) {
     const G = Game, R = G.runStats, S = this.stats || { pings: [], snaps: 0, inputs: 0, maxGap: 0 };
     const total = R ? Object.values(R.dmg).reduce((a, b) => a + b, 0) : 0;
@@ -2992,7 +3245,8 @@ const Net = {
     const host = this.role === 'host' || (!this.role && G.mate && G.mate.L);
     return {
       v: 2, build: CFG.VERSION, at: new Date().toISOString(), result, mode: 'coop',
-      where: `雙人 · 第 ${G.combat ? G.combat.wave : 0} 波（${host ? '房主 1P' : '隊友 2P'}）`,
+      where: `雙人 · ${this.whereText()}（${host ? '房主 1P' : '隊友 2P'}）`,
+      sector: G.sector, layer: G.node ? G.node.L + 1 : 0, endless: G.isEndless(),
       input: Input.touch ? `觸控（自動攻擊${Input.autoFire ? '開' : '關'}）` : '滑鼠鍵盤',
       ship: SHIPS[G.shipId].name, weapon: weaponTitle(G.weapon),
       time: Math.round(R ? R.time : 0), kills: R ? R.kills : 0, dmg: Math.round(total), maxHit: Math.round(R ? R.maxHit : 0),
@@ -3068,7 +3322,7 @@ const Net = {
   // ---------- 隊友 ----------
   clientUpdate(dt) {
     const G = Game, P = G.player;
-    if (G.state === 'play') {
+    if (G.state === 'play' && !this.mateEditing) {  // 房主正在編輯電路時全員暫停
       G.time += dt;
       if (G.runStats) G.runStats.time += dt;
       if (!P.dead) P.update(dt);
@@ -3524,6 +3778,13 @@ function drawHUD() {
     ctx.fillText(`♛ ${boss.t.name}${boss.enraged ? '（暴走）' : ''}`, VW / 2, by - 6);
   }
 
+  if (Game.mode === 'coop' && Net.mateEditing) {  // 雙人：隊友在編輯電路 → 暫停中
+    ctx.fillStyle = 'rgba(5, 6, 15, 0.55)'; ctx.fillRect(0, 0, VW, VH);
+    ctx.textAlign = 'center'; ctx.font = 'bold 26px Microsoft JhengHei'; ctx.fillStyle = '#ffd166';
+    ctx.fillText('⏸ 隊友正在編輯電路', VW / 2, VH * 0.45);
+    ctx.font = '14px Microsoft JhengHei'; ctx.fillStyle = '#cfe8ff';
+    ctx.fillText(Input.touch ? '暫停中　·　你也可以按「電路」整理自己的電路' : '暫停中　·　你也可以按 Tab 整理自己的電路', VW / 2, VH * 0.45 + 30);
+  }
   if (Game.banner) {
     ctx.globalAlpha = Math.min(1, Game.banner.t);
     ctx.textAlign = 'center'; ctx.font = 'bold 36px Microsoft JhengHei'; ctx.fillStyle = '#4cc9f0';
@@ -3559,7 +3820,8 @@ const Screen = {
   status() {
     const p = Game.player;
     return `<div class="row"><span class="pill">HP ${Math.ceil(p.hp)} / ${p.maxHp}</span>
-      <span class="pill gold">◆ ${Game.credits}</span><button data-act="editor">整理電路 (Tab)</button></div>`;
+      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd">👥 錢兩人共用</span>' : ''}
+      <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
   // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
   act(btn) {
@@ -3575,7 +3837,7 @@ const Screen = {
       case 'reward': Game.takeReward(arg || null); break;
       case 'buy': Game.buy(+arg); break;
       case 'leave': Game.showMap(); break;
-      case 'node': Game.enterNode(Game.nodeById(arg)); break;
+      case 'node': if (Game.mode === 'coop') Net.vote(arg); else Game.enterNode(Game.nodeById(arg)); break;
       case 'title': Net.leave(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
       case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
@@ -3763,6 +4025,8 @@ const Screen = {
   map(toast = '') {
     const layers = Game.map, LN = layers.length, reach = Game.reachable();
     const pos = n => ({ x: 6 + n.L * 88 / (LN - 1), y: (n.k + 1) / (n.n + 1) * 100 });
+    const coop = Game.mode === 'coop' && Net.linked, V = coop ? Net.votes : {};
+    const marks = n => coop ? (V.h === n.id ? '<i class="vote v1">1P</i>' : '') + (V.c === n.id ? '<i class="vote v2">2P</i>' : '') : '';
     let lines = '', nodes = '';
     for (const row of layers) for (const n of row) {
       const a = pos(n);
@@ -3775,7 +4039,7 @@ const Screen = {
       const cls = ['node', reach.includes(n) && 'reach', Game.visited.includes(n.id) && 'visited', Game.node === n && 'current']
         .filter(Boolean).join(' ');
       nodes += `<button class="${cls}" ${reach.includes(n) ? `data-act="node" data-arg="${n.id}"` : ''} style="left:${a.x}%;top:${a.y}%;color:${meta.color};border-color:${meta.color}"
-        title="${meta.label}：${meta.desc()}">${meta.icon}<small>${meta.label}</small></button>`;
+        title="${meta.label}：${meta.desc()}">${meta.icon}<small>${meta.label}</small>${marks(n)}</button>`;
     }
     // 節點介紹：列出這張圖上有出現的節點種類
     const types = Object.keys(NODE_META).filter(t => layers.flat().some(n => n.type === t));
@@ -3784,6 +4048,12 @@ const Screen = {
     this.show(`<div class="scr">
       <div class="between"><div><h2>${Game.isEndless() ? `無盡模式 · 星區 ${Game.sector}` : `星區 ${Game.sector} / ${CFG.CAMPAIGN_SECTORS}`} · 航圖</h2>
         <div class="sub">選擇下一個發光的節點。最右側是守關旗艦：<b style="color:${ENEMY_TYPES[Game.bossId].color}">♛ ${ENEMY_TYPES[Game.bossId].name}</b></div></div>${this.status()}</div>
+      ${coop ? (() => {
+        const me = Net.myVoteKey(), mate = me === 'h' ? 'c' : 'h', left = Net.voteLeft();
+        const mateTxt = Net.mateAt !== 'map' ? '<span style="color:#ffd166">隊友還在處理上一個節點…</span>' : V[mate] ? '<b style="color:#9dff6b">隊友已投票</b>' : '隊友選擇中…';
+        return `<div class="sub" style="color:#ff9dbd">👥 投票（你是 ${me === 'h' ? '1P' : '2P'}）：${V[me] ? '你已投票，可以改投' : '點選一個發光的節點'}　·　${mateTxt}
+          　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　兩人選不同就各 50% 抽籤；時間到沒投的不算</div>`;
+      })() : ''}
       <div class="map"><svg>${lines}</svg>${nodes}</div>
       <div class="toast">${toast}</div>
       <details class="nlegs" open><summary>節點介紹</summary><div class="nleg-grid">${legend}</div></details></div>`);
@@ -3858,7 +4128,7 @@ const Screen = {
     if (Game.mode === 'coop') {
       this.show(`<div class="scr title-wrap">
         <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
-        <div class="sub">兩人一起撐到第 ${Game.combat.wave} 波 · 共用晶體 ${Game.credits}<br>
+        <div class="sub">倒在 ${Net.whereText()} · 共用晶體 ${Game.credits}${Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}<br>
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
         ${Net.teamSummaryHtml()}
         ${this.runSummary()}
@@ -3888,9 +4158,11 @@ const Screen = {
           可以帶著目前的電路繼續挑戰<b style="color:#ff9dbd">無盡模式</b>：敵人持續變強，旗艦隨機出現。選「結束遠征」會存下通關紀錄。</div>`
       : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
     this.show(`<div class="scr title-wrap">${head}
+      ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
+      ${Game.isClient() ? '<div class="sub" style="color:#ff9dbd">👥 等待房主決定：前往下一星區，或結束遠征…</div>' : `
       <div class="row"><button class="big" data-act="next">${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
-        <button class="big" data-act="finish">結束遠征</button></div>
+        <button class="big" data-act="finish">結束遠征</button></div>`}
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },
 
@@ -4046,7 +4318,7 @@ const Editor = {
     const ref = this.ref(d);
     if (!ref || !ref.arr[ref.i]) { this.render(); return; }
     if (CHIPS[ref.arr[ref.i]].locked) return this.lockedMsg(ref.arr[ref.i]);
-    if (Game.mode === 'run') Game.credits += sellPrice(ref.arr[ref.i]);
+    if (Game.mode !== 'sandbox') Game.earn(sellPrice(ref.arr[ref.i]));  // 雙人：回收的錢進共用的錢包
     ref.arr[ref.i] = null;
     this.changed();
   },
@@ -4141,7 +4413,7 @@ const Editor = {
   showInfo(id) {
     const d = CHIPS[id], m = TYPE_META[d.type];
     const ps = d.stored ? `<br><span style="color:#2ee6a6">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</span>` : '';
-    const price = Game.mode === 'run' ? `　回收價 ◆${sellPrice(id)}` : '';
+    const price = Game.mode !== 'sandbox' ? `　回收價 ◆${sellPrice(id)}` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
       `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span><br>${d.desc}` +
       `${!d.lv && LV_INFO[id] ? '<br>' + lvLine(id, 1) : ''}${ps}`;
@@ -4206,8 +4478,8 @@ const Editor = {
 
   render() {
     const chain = Game.chain, info = this.slotInfo(chain);
-    this.creditsEl.textContent = Game.mode === 'run' ? `◆ ${Game.credits}` : '沙盒模式';
-    this.recycleEl.innerHTML = Game.mode === 'run' ? '♻ 回收<br>拖曳到這裡<br>換成晶體' : '✕ 移除<br>拖曳到這裡刪除';
+    this.creditsEl.textContent = Game.mode !== 'sandbox' ? `◆ ${Game.credits}` : '沙盒模式';
+    this.recycleEl.innerHTML = Game.mode !== 'sandbox' ? '♻ 回收<br>拖曳到這裡<br>換成晶體' : '✕ 移除<br>拖曳到這裡刪除';
 
     this.chainEl.innerHTML = '';
     chain.forEach((id, i) => {
@@ -4258,7 +4530,7 @@ const Editor = {
       const inChain = ref.arr === Game.chain;
       this.selbarEl.innerHTML = `<span class="hint" style="margin:0">已選取「${CHIPS[selId].name}」：點其他插槽移動或交換</span>
         <button data-sel="move">${inChain ? '移到倉庫' : '裝上電路'}</button>
-        <button data-sel="recycle">${Game.mode === 'run' ? `回收 ◆${sellPrice(selId)}` : '移除'}</button>
+        <button data-sel="recycle">${Game.mode !== 'sandbox' ? `回收 ◆${sellPrice(selId)}` : '移除'}</button>
         <button data-sel="cancel">取消</button>`;
     } else this.selbarEl.innerHTML = '';
   },
