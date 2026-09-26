@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO、合成升級、黑洞融合、起始電路
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 const CHIPS = {
@@ -47,7 +47,7 @@ const CHIPS = {
     apply: (list, pw) => list.map(b => ({ ...addBonus(b, 0.3 * pw), radius: b.radius * (1 + 0.8 * pw), speed: b.speed * 0.8,
       knock: (b.knock == null ? 1 : b.knock) + 0.5 * pw })) },
   overclock: { name: '超頻核心', short: '超頻', type: 'amp', cost: 0, rate: 0.7, stored: { dashCd: 0.25 },
-    desc: '整條電路射擊間隔 ×0.7（射速約 +43%）；目前子彈傷害 -15%、速度 ×1.2。',
+    desc: `整條電路${rateTxt(0.7)}；目前子彈傷害 -15%、速度 ×1.2。`,
     apply: list => list.map(b => ({ ...addBonus(b, -0.15), speed: b.speed * 1.2 })) },
 
   // ---------- 晶片流：數量越多越強 ----------
@@ -88,7 +88,7 @@ const CHIPS = {
   // 奇異點超載詞綴（隱藏晶片，只會出現在融合結果裡）
   ov_power:  { name: '超載・威力', type: 'amp', cost: 0, hidden: true, desc: '傷害 +50%',
     apply: list => list.map(b => addBonus(b, 0.5)) },
-  ov_rate:   { name: '超載・頻率', type: 'amp', cost: 0, hidden: true, rate: 0.8, desc: '整條電路射擊間隔 ×0.8',
+  ov_rate:   { name: '超載・頻率', type: 'amp', cost: 0, hidden: true, rate: 0.8, desc: '整條電路' + rateTxt(0.8),
     apply: list => list },
   ov_pierce: { name: '超載・貫穿', type: 'mod', cost: 0, hidden: true, desc: '穿透 +1',
     apply: list => list.map(b => ({ ...b, pierce: b.pierce + 1 })) },
@@ -106,7 +106,7 @@ const LV_INFO = {
   ricochet:  ['彈射次數', ['+2', '+3', '+4']],
   amp:       ['傷害加成', ['+100%', '+150%', '+200%']],
   enlarge:   ['體積／傷害加成／擊退', ['×1.8／+30%／+0.5', '×2.2／+45%／+0.75', '×2.6／+60%／+1']],
-  overclock: ['射擊間隔', ['×0.7', '×0.59', '×0.49']],
+  overclock: ['射速', [1, 1.5, 2].map(k => rateTxt(0.7 ** k).replace('射速', ''))],
   synergy:   ['每個其他晶片的傷害加成', ['+12%', '+18%', '+24%']],
   coolant:   ['能量負載', ['-3', '-4.5', '-6']],
   datalink:  ['每個倉庫晶片的傷害加成', ['+10%', '+15%', '+20%']],

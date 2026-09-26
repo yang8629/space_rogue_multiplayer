@@ -25,8 +25,10 @@
     <div id="edTabs" class="etabs">
       <button data-etab="main" class="on">⚡ 電路與倉庫</button>
       <button data-etab="dmg">📊 晶片傷害統計</button>
+      <button data-etab="ship" id="edShipTab" class="hidden">🚀 機體・武器</button>
     </div>
     <div id="edDmg" class="hidden"></div>
+    <div id="edShip" class="hidden"></div>
     <div id="edMain">
     <h3>電路（由左至右執行）</h3>
     <div id="chain" class="chain"></div>
@@ -68,23 +70,23 @@
 <!-- 雙人連線：WebRTC 點對點（PeerJS 只負責配對，資料直接在兩台電腦之間傳） -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <!-- 遊戲程式：依序載入（後面的檔案會用到前面定義的東西）。每個檔案的用途寫在 README 的「檔案結構」 -->
-<script src="js/config.js"></script>
-<script src="js/core.js"></script>
-<script src="js/weapons.js"></script>
-<script src="js/chips.js"></script>
-<script src="js/ships.js"></script>
-<script src="js/pipeline.js"></script>
-<script src="js/map.js"></script>
-<script src="js/input.js"></script>
-<script src="js/effects.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/entities.js"></script>
-<script src="js/game.js"></script>
-<script src="js/range.js"></script>
-<script src="js/net.js"></script>
-<script src="js/render.js"></script>
-<script src="js/screens.js"></script>
-<script src="js/editor.js"></script>
-<script src="js/codex.js"></script>
-<script src="js/mechcheck.js"></script>
-<script src="js/main.js"></script>
+<script src="js/core/config.js"></script>
+<script src="js/core/core.js"></script>
+<script src="js/data/weapons.js"></script>
+<script src="js/data/chips.js"></script>
+<script src="js/data/ships.js"></script>
+<script src="js/core/pipeline.js"></script>
+<script src="js/data/map.js"></script>
+<script src="js/system/input.js"></script>
+<script src="js/game/effects.js"></script>
+<script src="js/system/audio.js"></script>
+<script src="js/game/entities.js"></script>
+<script src="js/game/game.js"></script>
+<script src="js/game/range.js"></script>
+<script src="js/system/net.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/ui/editor.js"></script>
+<script src="js/ui/codex.js"></script>
+<script src="js/ui/mechcheck.js"></script>
+<script src="js/core/main.js"></script>

@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · codex.js：📖 電路總覽：規則、晶片、武器、圖表
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
@@ -136,7 +136,7 @@ const Codex = {
     const trees = Object.keys(WEAPONS).map(id => ({ id, W: WEAPONS[id], t: weaponDpsTree(id) }));
     const maxDps = Math.max(...trees.flatMap(({ t }) => [t.base, ...Object.values(t.paths).flatMap(p => [p.dps, ...p.next])]));
     const rows1 = [];
-    const node = (name, desc, v, base, best) => `<div class="wt-node" title="${name}：${desc}">
+    const node = (name, desc, v, base, best) => `<div class="wt-node" title="${name}：${desc.replace(/<[^>]+>/g, '')}">
         <div class="wt-top"><b class="wt-name">${name}</b><span class="wt-num">${Math.round(v)}<em>${pctUp(v, base)}</em></span></div>
         ${best ? '<span class="wt-best">這把武器最高</span>' : ''}
         <div class="wt-track"><div style="width:${(v / maxDps * 100).toFixed(1)}%"></div></div>

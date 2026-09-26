@@ -1,5 +1,5 @@
 // 星環電路 雙人版 · pipeline.js：電路執行器：compileChain / runOps / analyzeChain、倉庫被動
-// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
