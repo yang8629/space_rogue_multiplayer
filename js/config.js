@@ -1,0 +1,54 @@
+// 星環電路 雙人版 · config.js：設定值 CFG 與共用小工具（亂數、距離、角度）
+// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+'use strict';
+
+// =====================================================================
+// CONFIG
+// =====================================================================
+const CFG = {
+  WORLD_W: 2400, WORLD_H: 1600,
+  IFRAME: 0.7,               // 船體 HP / 速度 / 衝刺冷卻改由 SHIPS 定義
+  DASH_SPEED: 900, DASH_TIME: 0.14,
+  START_SLOTS: 4, MAX_SLOTS: 8, INV_SLOTS: 6,
+  MAX_CHIP_LV: 3,           // 晶片等級上限；每級效果強度 +50%
+  MAX_SHOTS_PER_FIRE: 32,   // 單次開火子彈上限，超過的轉為傷害
+  MAX_TRIGGER_DEPTH: 3,     // 命中觸發巢狀上限
+  MAX_LIVE_BULLETS: 700,
+  MAX_TRIGGERS_PER_FRAME: 80,
+  BASE_INTERVAL: 0.16, MIN_INTERVAL: 0.06,
+  HEAT_RATE: 0.05,          // 能量負載：每 1 點 ⚡ 射速 -5%（所有武器相同）
+  HEAT_RATE_FLOOR: 0.25,    // 射速最多降到 25%（15 點能量以上不再更慢）
+  MAGNET_RANGE: 140,
+  AUTO_RANGE: 560,          // 手機自動攻擊的索敵距離
+  RESONANCE: 0.5,           // 每個相鄰共振器 +50% 效果
+  RICOCHET_RANGE: 420,      // 彈射尋找下一個目標的距離
+  ARC_RANGE: 260,           // 電弧（軌道砲・磁暴線圈）找附近敵人的距離
+  // 刺殼：距離 range 內開始縮球 windup 秒（最後 lock 秒鎖定方向）→ 以 rollSpeed 滾 rollT 秒 → 暈眩 stunT 秒 → 冷卻 cooldown 秒
+  BRUTE: { range: 350, windup: 0.7, lock: 0.3, rollSpeed: 520, rollT: 0.9, stunT: 1, cooldown: 1.5 },
+  BOSS_KNOCK: 30,          // 推王：每超過抗擊退 1 點，每次命中推 30（王會慢慢拉回自己的速度）
+  REPAIR_RATIO: 0.5, SCRAP_REMOVE: 25,  // 維修站修復 50% 最大 HP
+  SHOP_REPAIR: { price: 40, hp: 20 },   // 補給站補血：每間只能補一次
+  SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
+  ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
+  FUSE_SUCCESS: 0.5,
+  VERSION: 'mp-0.6（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
+  CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
+  BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
+  MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
+};
+
+const TAU = Math.PI * 2;
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const pickN = (arr, n) => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
+const angleDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
+const mod = (v, m) => ((v % m) + m) % m;
+// 點 (px,py) 到線段 A→B 的最短距離平方：用來判定子彈「整段飛行路徑」有沒有碰到敵人
+function segDist2(ax, ay, bx, by, px, py) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+  return dist2(ax + dx * t, ay + dy * t, px, py);
+}

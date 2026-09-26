@@ -1,0 +1,500 @@
+// 星環電路 雙人版 · entities.js：Player、Bullet、敵人種類 ENEMY_TYPES 與 Enemy（含旗艦技能）
+// 所有 js/*.js 共用同一個全域範圍，載入順序見 index.html
+'use strict';
+
+// =====================================================================
+// ENTITIES
+// =====================================================================
+class Player {
+  constructor(ship) {
+    this.ship = ship;
+    this.r = ship.radius; this.hp = this.maxHp = ship.hp;
+    this.resetPos();
+  }
+  resetPos() {
+    this.x = CFG.WORLD_W / 2; this.y = CFG.WORLD_H / 2; this.vx = 0; this.vy = 0;
+    this.iframe = 0; this.fireCd = 0; this.aim = 0; this.moving = false;
+    this.dashT = 0; this.dashCd = 0; this.dashA = 0; this.overdrive = 0; this.target = null;
+  }
+  onDash() {  // 角色技能：衝刺觸發
+    const S = this.ship;
+    if (Net.role === 'client') {  // 連線的隊友：震波傷害由房主計算，這裡只畫特效
+      if (S.ability === 'shockwave') {
+        for (let i = 0; i < 36 && Game.particles.length < 1500; i++) {
+          const a = i / 36 * TAU;
+          Game.particles.push({ x: this.x, y: this.y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, life: 0.28, max: 0.28, color: S.color, size: 3 });
+        }
+        Game.shake(6);
+      }
+      if (S.ability === 'phase') this.overdrive = 1.2;
+      return;
+    }
+    if (S.ability === 'shockwave') {
+      for (const e of Game.enemies) {
+        if (e.dead || e.spawnT > 0) continue;
+        const d = Math.hypot(e.x - this.x, e.y - this.y);
+        if (d > 150 + e.r) continue;
+        const k = 420 * (14 / e.r) / (d || 1);
+        e.hurt(20, (e.x - this.x) * k, (e.y - this.y) * k, 'shock', { src: 'ship', cr: null, owner: Game.shooter || null });
+        floatText(e.x, e.y - e.r, 20, S.color);
+      }
+      for (let i = 0; i < 36 && Game.particles.length < 1500; i++) {
+        const a = i / 36 * TAU;
+        Game.particles.push({ x: this.x, y: this.y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, life: 0.28, max: 0.28, color: S.color, size: 3 });
+      }
+      Game.shake(6);
+      SFX.play('shock');
+    }
+    if (S.ability === 'phase') this.overdrive = 1.2;
+  }
+  get invuln() { return this.iframe > 0 || this.dashT > 0; }
+  update(dt) {
+    const K = Input.keys, P = Game.passives;
+    let mx = 0, my = 0;
+    if (K.has('w') || K.has('arrowup')) my -= 1;
+    if (K.has('s') || K.has('arrowdown')) my += 1;
+    if (K.has('a') || K.has('arrowleft')) mx -= 1;
+    if (K.has('d') || K.has('arrowright')) mx += 1;
+    if (Input.joy) { const v = stickVec(Input.joy); mx = v.x; my = v.y; }
+    this.moving = Math.hypot(mx, my) > 0.1;
+    if (Input.touch) {
+      // 右搖桿拖曳 = 手動瞄準；否則鎖定最近敵人（自動攻擊開啟時不用按也會射）
+      const a = Input.aimStick, v = a && stickVec(a);
+      let target = null;
+      if (v && v.len > 14) this.aim = Math.atan2(v.y, v.x);
+      else {
+        // 自動攻擊的索敵距離依武器射程調整（近戰武器只在敵人靠近時攻擊）
+        const wp = Game.wp, reach = clamp(wp.speed * wp.life + 40, 140, CFG.AUTO_RANGE);
+        target = nearestEnemy(this.x, this.y, a ? 900 : reach, null);
+        if (target) this.aim = Math.atan2(target.y - this.y, target.x - this.x);
+      }
+      Input.down = !!a || (Input.autoFire && !!target);
+      this.target = Input.down ? target : null;
+    } else {
+      this.aim = Math.atan2(Input.my / ZOOM + Game.cam.y - this.y, Input.mx / ZOOM + Game.cam.x - this.x);
+    }
+
+    this.dashCd -= dt;
+    if (Input.dash) {
+      Input.dash = false;
+      if (this.dashCd <= 0) {
+        this.dashT = CFG.DASH_TIME;
+        this.dashCd = this.ship.dashCd * (1 - P.dashCd);
+        this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
+        this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
+        burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
+        if (Game.runStats) Game.runStats.dashes++;
+        SFX.play('dash');
+        this.onDash();
+      }
+    }
+    if (this.dashT > 0) {
+      this.dashT -= dt;
+      this.vx = Math.cos(this.dashA) * CFG.DASH_SPEED;
+      this.vy = Math.sin(this.dashA) * CFG.DASH_SPEED;
+      if (Game.particles.length < 1500)
+        Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.ship.color, size: 5 });
+    } else {
+      const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed), k = Math.min(1, dt * 12);
+      this.vx += (mx / l * spd - this.vx) * k;
+      this.vy += (my / l * spd - this.vy) * k;
+    }
+    this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
+    this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+
+    this.iframe -= dt;
+    this.overdrive -= dt;
+    this.fireCd -= dt;
+    this.wantFire = Input.down;
+    if (Net.role === 'client') return;  // 連線的隊友：開火交給房主（子彈、傷害都由房主計算）
+    if (Input.down && this.fireCd <= 0) {
+      this.fire();
+      this.fireCd = Game.stats.interval;
+    }
+  }
+  fire() {
+    const list = runOps(Game.stats.ops, 0);
+    if (!list.length) return;
+    if (this.overdrive > 0) for (const s of list) s.damage *= 1.5;  // 幻影號：相位超載
+    const nx = this.x + Math.cos(this.aim) * 16, ny = this.y + Math.sin(this.aim) * 16;
+    // 子彈從船身中心附近發出：怪物貼臉時也打得到（槍口火光仍在船頭）
+    spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
+    SFX.play('shoot', Game.weapon.id);
+    burst(nx, ny, list[0].color, 3, 120, 0.15, 2);
+  }
+}
+
+class Bullet {
+  constructor(x, y, angle, s, depth, ignoreId) {
+    this.x = x; this.y = y; this.px = x; this.py = y; this.angle = angle;
+    this.sx = x; this.sy = y;  // 發射點：畫尾巴時不超過已飛行的距離（不然剛射出時尾巴會從船屁股露出來）
+    this.speed = s.speed; this.damage = s.damage; this.r = s.radius;
+    this.pierce = s.pierce; this.bounce = s.bounce; this.homing = s.homing;
+    this.life = s.life; this.color = s.color; this.shape = s.shape;
+    this.payload = s.payload; this.depth = depth;
+    this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
+    this.slow = s.slow; this.knock = s.knock; this.lifesteal = s.lifesteal;
+    this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
+    this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
+    this.hitSet = new Set();
+    if (ignoreId != null) this.hitSet.add(ignoreId);
+    this.owner = Game.shooter || null;  // 雙人：這顆子彈是誰的電路射出的（null = 房主自己）
+    this.dead = false;
+  }
+  update(dt) {
+    if (this.homing > 0) {
+      const t = nearestEnemy(this.x, this.y, 450, this.hitSet);
+      if (t) {
+        const turn = this.homing * dt;
+        this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
+      }
+    }
+    this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
+    this.x += Math.cos(this.angle) * this.speed * dt;
+    this.y += Math.sin(this.angle) * this.speed * dt;
+    this.life -= dt;
+    if (this.life <= 0) { this.dead = true; return; }
+    const W = CFG.WORLD_W, H = CFG.WORLD_H;
+    if (this.x < 0 || this.x > W) {
+      if (this.bounce > 0) { this.bounce--; this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
+      else this.dead = true;
+    }
+    if (this.y < 0 || this.y > H) {
+      if (this.bounce > 0) { this.bounce--; this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
+      else this.dead = true;
+    }
+  }
+}
+
+function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
+  const B = Game.bullets;
+  for (const s of list) {
+    if (B.length >= CFG.MAX_LIVE_BULLETS) break;
+    B.push(new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId));
+  }
+}
+
+// 晶體飛行：進入拾取範圍（或波次清空後全場吸取）就被拉向玩家。房主與隊友用同一套算法，隊友畫面才會順
+function stepPickup(c, p, range, d2, dt) {
+  if (c.vacuum || d2 < range * range) {
+    const d = Math.sqrt(d2) || 1, f = c.vacuum ? 3000 : 1400;
+    c.vx += (p.x - c.x) / d * f * dt; c.vy += (p.y - c.y) / d * f * dt;
+  }
+  c.vx *= 0.92; c.vy *= 0.92;
+  c.x += c.vx * dt; c.y += c.vy * dt;
+}
+
+function nearestEnemy(x, y, range, exclude) {
+  let best = null, bd = range * range;
+  for (const e of Game.enemies) {
+    if (e.dead || (exclude && exclude.has(e.id))) continue;
+    const d = dist2(x, y, e.x, e.y);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+const ENEMY_TYPES = {
+  swarmer: { name: '蟲群', hp: 18, speed: 150, radius: 10, dmg: 10, color: '#ff4d6d', credits: 1, shape: 3 },
+  brute:   { name: '刺殼', hp: 130, speed: 65, radius: 22, dmg: 25, color: '#ff9f1c', credits: 4, shape: 6 },  // 靠近時縮成球滾過來（見 updateBrute）
+  spitter: { name: '噴吐者', hp: 40, speed: 110, radius: 13, dmg: 10, color: '#f72585', credits: 2, shape: 4,
+    ranged: { range: 380, cd: 1.8, speed: 260, dmg: 12 } },
+  elite:   { name: '虛空獵手', hp: 520, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
+  // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
+  dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
+  // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
+  boss:    { name: '星噬母艦', hp: 2600, speed: 45, radius: 50, dmg: 35, color: '#ff4d6d', credits: 40, shape: 8, boss: true,
+    knockResist: 1.5, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring'],
+    desc: '螺旋彈幕、扇形齊射、召喚蟲群、環形彈。' },
+  boss2:   { name: '裂界獵艦', hp: 2800, speed: 80, radius: 42, dmg: 35, color: '#b388ff', credits: 40, shape: 3, boss: true,
+    knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy'],
+    desc: '高速衝鋒（有預警線，衝鋒時往兩側灑彈）、旋轉十字彈流、三連狙擊、部署噴吐者。' },
+  boss3:   { name: '終焉核心', hp: 3000, speed: 35, radius: 56, dmg: 40, color: '#2ee6a6', credits: 40, shape: 6, boss: true,
+    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'wall', 'guard'],
+    desc: '連續缺口環形波、雙向螺旋、慢速彈牆、召喚刺殼護衛。' },
+};
+
+class Enemy {
+  constructor(type, x, y, hpScale) {
+    const t = ENEMY_TYPES[type];
+    this.id = Game.nextId++; this.type = type; this.t = t;
+    this.x = x; this.y = y; this.vx = 0; this.vy = 0;
+    this.hp = this.maxHp = t.hp * hpScale; this.r = t.radius;
+    this.flash = 0; this.spawnT = t.boss ? 1.6 : t.elite ? 1.2 : 0.6; this.spawnMax = this.spawnT;
+    this.hpScale = hpScale;
+    // Boss 狀態
+    this.skill = null; this.skillT = 0; this.skillIdx = 0; this.spin = 0; this.fireAcc = 0;
+    this.stream = null; this.volley = null; this.ringQ = []; this.enraged = false;
+    this.rollCd = rand(0.5, 1.5); this.bounced = false;  // 刺殼滾球用
+    this.phase = rand(0, TAU); this.rot = rand(0, TAU);
+    this.cd = t.ranged ? rand(0.8, t.ranged.cd) : 0;
+    this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0;
+    this.mode = 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
+    this.dead = false;
+  }
+  move(dt) {
+    this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
+    this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+  }
+  update(dt, p) {
+    this.flash = Math.max(0, this.flash - dt);
+    if (this.burnT > 0) {  // 燃燒：持續扣血
+      this.burnT -= dt;
+      this.burnAcc += this.burnDps * dt;
+      if (this.burnAcc >= 1) {
+        const d = Math.floor(this.burnAcc);
+        this.burnAcc -= d;
+        Game.recordDamage('burn', Math.min(d, Math.max(0, this.hp)), this.burnAtt);
+        this.hp -= d;
+        if (this.t.dummy) { Range.hit(d, 'burn'); if (this.hp <= 0) this.hp += this.maxHp; }  // 標靶打不死
+        if (Math.random() < 0.4) burst(this.x, this.y, '#ff9f1c', 2, 60, 0.3, 2);
+        if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = this.burnAtt && this.burnAtt.owner; Game.onEnemyKilled(this); return; }
+      }
+    }
+    if (this.slowT > 0) this.slowT -= dt;
+    this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
+    if (this.spawnT > 0) { this.spawnT -= dt; return; }
+    const t = this.t;
+    if (t.dummy) {  // 標靶：被擊退後像彈簧一樣回到原位
+      const k = Math.min(1, dt * 6);
+      this.vx += ((this.hx - this.x) * 8 - this.vx) * k;
+      this.vy += ((this.hy - this.y) * 8 - this.vy) * k;
+      this.move(dt);
+      return;
+    }
+    const dx = p.x - this.x, dy = p.y - this.y, d = Math.hypot(dx, dy) || 1;
+    this.rot += dt * (this.type === 'brute' ? 0.8 : this.type === 'elite' ? 1.5 : this.type === 'boss' ? 0.4 : 0);
+    if (t.boss) { this.updateBoss(dt, dx, dy, d); return; }
+    if (this.type === 'brute' && this.updateBrute(dt, dx, dy, d)) return;
+
+    if (t.elite) {  // 精英：蓄力衝鋒 / 環形彈幕 交替
+      if (this.mode === 'windup') {
+        this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
+        if (this.modeT <= 0) {
+          this.mode = 'charge'; this.modeT = 0.45;
+          this.vx = Math.cos(this.chargeA) * 680; this.vy = Math.sin(this.chargeA) * 680;
+        }
+        return;
+      }
+      if (this.mode === 'charge') {
+        this.modeT -= dt; this.move(dt);
+        if (Game.particles.length < 1500)
+          Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.3, max: 0.3, color: t.color, size: 6 });
+        if (this.modeT <= 0) this.mode = 'chase';
+        return;
+      }
+      this.skillCd -= dt;
+      if (this.skillCd <= 0) {
+        this.skillCd = 3;
+        if (this.nextSkill === 'charge') {
+          this.mode = 'windup'; this.modeT = 0.65; this.chargeA = Math.atan2(dy, dx); this.nextSkill = 'ring';
+        } else {
+          for (let i = 0; i < 14; i++) {
+            const a = i / 14 * TAU + this.rot;
+            Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6, dmg: 14, life: 4, from: t.name });
+          }
+          this.nextSkill = 'charge';
+        }
+      }
+    }
+
+    let mx = dx / d, my = dy / d;
+    if (this.type === 'swarmer') {
+      const w = Math.sin(Game.time * 6 + this.phase) * 0.6;
+      mx += -my * w; my += (dx / d) * w;
+    }
+    if (t.ranged) {
+      const R = t.ranged.range;
+      if (d < R * 0.55) { mx = -mx; my = -my; }
+      else if (d < R * 0.9) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s; my = dx / d * s; }
+      this.cd -= dt;
+      if (this.cd <= 0 && d < R + 120) {
+        this.cd = t.ranged.cd;
+        const a = Math.atan2(dy, dx);
+        Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * t.ranged.speed, vy: Math.sin(a) * t.ranged.speed,
+          r: 5, dmg: t.ranged.dmg, life: 3, from: t.name });
+        SFX.play('eshot');
+      }
+    }
+    const ml = Math.hypot(mx, my) || 1;
+    const k = Math.min(1, dt * 4);
+    this.vx += (mx / ml * t.speed * this.spdMul - this.vx) * k;
+    this.vy += (my / ml * t.speed * this.spdMul - this.vy) * k;
+    this.move(dt);
+  }
+  // ---------- 刺殼：平常慢慢走；靠近時縮成球（有預警線）→ 高速滾向玩家（撞牆反彈一次）→ 暈眩 ----------
+  //   回傳 true 表示這一幀的移動已經處理完（縮球、滾動、暈眩中）；false 則照一般追擊
+  updateBrute(dt, dx, dy, d) {
+    const B = CFG.BRUTE, W = CFG.WORLD_W, H = CFG.WORLD_H;
+    if (this.mode === 'windup') {  // 縮成球：前半段還會跟著玩家轉向，後半段鎖定方向
+      this.modeT -= dt; this.vx *= 0.8; this.vy *= 0.8; this.move(dt);
+      if (this.modeT > B.lock) this.chargeA = Math.atan2(dy, dx);
+      if (this.modeT <= 0) {
+        this.mode = 'charge'; this.modeT = B.rollT; this.bounced = false;
+        const s = B.rollSpeed * this.spdMul;
+        this.vx = Math.cos(this.chargeA) * s; this.vy = Math.sin(this.chargeA) * s;
+      }
+      return true;
+    }
+    if (this.mode === 'charge') {  // 滾動：不吃擊退（hurt 裡處理），撞牆反彈一次，第二次撞牆就停
+      this.modeT -= dt; this.move(dt); this.rot += dt * 14;
+      const hitX = (this.x <= this.r + 0.5 && this.vx < 0) || (this.x >= W - this.r - 0.5 && this.vx > 0);
+      const hitY = (this.y <= this.r + 0.5 && this.vy < 0) || (this.y >= H - this.r - 0.5 && this.vy > 0);
+      if (hitX || hitY) {
+        if (this.bounced) this.modeT = 0;
+        else { this.bounced = true; if (hitX) this.vx = -this.vx; if (hitY) this.vy = -this.vy; this.chargeA = Math.atan2(this.vy, this.vx); Game.shake(3); }
+      }
+      if (Game.particles.length < 1500 && Math.random() < 0.5)
+        Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.t.color, size: 5 });
+      if (this.modeT <= 0) { this.mode = 'stun'; this.modeT = B.stunT; }
+      return true;
+    }
+    if (this.mode === 'stun') {  // 暈眩：滑行停下，這段時間是反擊的機會
+      this.modeT -= dt; this.vx *= 0.88; this.vy *= 0.88; this.move(dt);
+      if (this.modeT <= 0) { this.mode = 'chase'; this.rollCd = B.cooldown; }
+      return true;
+    }
+    this.rollCd -= dt;
+    if (this.rollCd <= 0 && d < B.range) { this.mode = 'windup'; this.modeT = B.windup; this.chargeA = Math.atan2(dy, dx); return true; }
+    return false;
+  }
+  // ---------- 旗艦（三隻共用框架，技能清單寫在 ENEMY_TYPES.skills；半血後暴走） ----------
+  //   星噬母艦：螺旋彈幕 / 扇形齊射 / 召喚蟲群 / 環形彈
+  //   裂界獵艦：預警衝鋒（兩側灑彈）/ 旋轉十字彈流 / 三連狙擊 / 部署噴吐者
+  //   終焉核心：缺口環形波 / 雙向螺旋 / 慢速彈牆 / 刺殼護衛
+  shootAt(a, spd, r = 6, dmg = 14) {
+    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg, life: 10, from: this.t.name });  // 王的子彈存在 10 秒
+  }
+  ring(n, spd, offset, gap = 0) {  // gap：連續空出幾發，讓玩家有縫可鑽
+    const g0 = gap ? randInt(0, n - 1) : -1;
+    for (let i = 0; i < n; i++) if (!gap || mod(i - g0, n) >= gap) this.shootAt(offset + i / n * TAU, spd);
+  }
+  summon(type, n, dist, scale) {
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU + this.rot;
+      Game.enemies.push(new Enemy(type, clamp(this.x + Math.cos(a) * dist, 40, CFG.WORLD_W - 40),
+        clamp(this.y + Math.sin(a) * dist, 40, CFG.WORLD_H - 40), this.hpScale * scale));
+    }
+    burst(this.x, this.y, this.t.color, 24, 200, 0.5, 2);
+  }
+  updateBoss(dt, dx, dy, d) {
+    const t = this.t, rage = this.hp < this.maxHp * 0.5;
+    if (rage && !this.enraged) {
+      this.enraged = true; this.skillCd = Math.min(this.skillCd, 1);
+      Game.banner = { text: t.rage, sub: '攻擊頻率上升', t: 2 };
+      Game.shake(14);
+      burst(this.x, this.y, t.color, 60, 380, 0.8, 3);
+    }
+    if (this.mode === 'windup') {  // 裂界獵艦：蓄力（畫面上有預警線），期間慢慢停下
+      this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
+      if (this.modeT <= 0) {
+        this.mode = 'charge'; this.modeT = 0.6; this.fireAcc = 0;
+        this.vx = Math.cos(this.chargeA) * 760; this.vy = Math.sin(this.chargeA) * 760;
+        Game.shake(6);
+      }
+    } else if (this.mode === 'charge') {  // 衝鋒：往兩側灑出慢速彈，撞牆或時間到就停
+      this.modeT -= dt; this.move(dt); this.fireAcc += dt;
+      while (this.fireAcc >= 0.07) {
+        this.fireAcc -= 0.07;
+        this.shootAt(this.chargeA + Math.PI / 2, 110, 5, 12);
+        this.shootAt(this.chargeA - Math.PI / 2, 110, 5, 12);
+      }
+      if (Game.particles.length < 1500)
+        Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: t.color, size: 8 });
+      const wall = this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1;
+      if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx *= 0.3; this.vy *= 0.3; }
+    } else {
+      // 與玩家保持距離並緩慢繞行（獵艦貼得比較近，核心幾乎不動）
+      const [far, near, orbit] = this.type === 'boss2' ? [300, 180, 60] : this.type === 'boss3' ? [460, 260, 18] : [340, 220, 35];
+      const want = d > far ? 1 : d < near ? -1 : 0;
+      const sp = t.speed * this.spdMul;
+      const tvx = dx / d * sp * want - dy / d * orbit, tvy = dy / d * sp * want + dx / d * orbit;
+      const k = Math.min(1, dt * 2);
+      this.vx += (tvx - this.vx) * k; this.vy += (tvy - this.vy) * k;
+      this.move(dt);
+    }
+
+    const S = this.stream;  // 持續彈流（螺旋 / 十字 / 雙向螺旋）
+    if (S && S.t > 0) {
+      S.t -= dt; this.fireAcc += dt;
+      while (this.fireAcc >= S.every) {
+        this.fireAcc -= S.every; this.spin += S.turn;
+        for (let i = 0; i < S.arms; i++) {
+          this.shootAt(this.spin + i * TAU / S.arms, S.spd, S.r, S.dmg);
+          if (S.twin) this.shootAt(-this.spin + i * TAU / S.arms, S.spd, S.r, S.dmg);
+        }
+      }
+    }
+    const V = this.volley;  // 瞄準玩家的連續齊射
+    if (V && V.n > 0) {
+      V.T -= dt;
+      if (V.T <= 0) {
+        V.T = V.every; V.n--;
+        const a0 = Math.atan2(dy, dx);
+        if (V.kind === 'fan') { const w = rage ? 3 : 2; for (let i = -w; i <= w; i++) this.shootAt(a0 + i * 0.14, 300); }
+        if (V.kind === 'snipe') for (const o of [-0.07, 0, 0.07]) this.shootAt(a0 + o, 440, 5, 16);
+        if (V.kind === 'wall') {  // 15 發慢速彈排成一道牆，每一波錯開半格
+          const shift = (V.n % 2) * 0.5;
+          for (let i = 0; i < 15; i++) this.shootAt(a0 + (i + shift - 7) * 0.1, 140, 7, 15);
+        }
+      }
+    }
+    for (const q of this.ringQ) {  // 延遲發射的環形彈
+      q.t -= dt;
+      if (q.t <= 0) this.ring(q.n, q.spd, q.off, q.gap);
+    }
+    this.ringQ = this.ringQ.filter(q => q.t > 0);
+
+    this.skillCd -= dt;
+    if (this.skillCd > 0 || this.mode !== 'chase') return;
+    this.skill = t.skills[this.skillIdx++ % t.skills.length];
+    switch (this.skill) {
+      // 星噬母艦
+      case 'spiral':
+        this.stream = { t: 3, every: rage ? 0.05 : 0.08, arms: rage ? 3 : 2, turn: 0.33, spd: 190, r: 5, dmg: 12 };
+        this.fireAcc = 0; this.skillCd = rage ? 3.6 : 4.4; break;
+      case 'fan': this.volley = { kind: 'fan', n: rage ? 4 : 3, T: 0, every: 0.35 }; this.skillCd = rage ? 2.4 : 3; break;
+      case 'summon': this.summon('swarmer', rage ? 8 : 5, 80, 0.8); this.skillCd = rage ? 2.6 : 3.2; break;
+      case 'ring':
+        this.ring(24, 170, this.rot);
+        if (rage) this.ringQ.push({ t: 0.45, n: 24, spd: 170, off: this.rot + TAU / 48, gap: 0 });
+        this.skillCd = rage ? 2.2 : 2.8; break;
+      // 裂界獵艦
+      case 'charge':
+        this.mode = 'windup'; this.modeT = rage ? 0.55 : 0.8; this.chargeA = Math.atan2(dy, dx);
+        this.skillCd = rage ? 2.2 : 2.8; break;
+      case 'cross':
+        this.stream = { t: 3, every: rage ? 0.08 : 0.11, arms: rage ? 6 : 4, turn: 0.07, spd: 230, r: 5, dmg: 13 };
+        this.fireAcc = 0; this.skillCd = rage ? 3.4 : 4; break;
+      case 'snipe': this.volley = { kind: 'snipe', n: rage ? 4 : 3, T: 0, every: 0.28 }; this.skillCd = rage ? 2 : 2.6; break;
+      case 'deploy': this.summon('spitter', rage ? 3 : 2, 90, 0.7); this.skillCd = rage ? 2.4 : 3; break;
+      // 終焉核心
+      case 'nova': {
+        const n = rage ? 4 : 3;
+        for (let i = 0; i < n; i++) this.ringQ.push({ t: i * 0.55, n: 32, spd: rage ? 170 : 150, off: rand(0, TAU), gap: 5 });
+        this.skillCd = rage ? 3 : 3.6; break;
+      }
+      case 'twin':
+        this.stream = { t: 3.2, every: rage ? 0.07 : 0.1, arms: 2, turn: 0.22, spd: 170, r: 6, dmg: 13, twin: true };
+        this.fireAcc = 0; this.skillCd = rage ? 3.8 : 4.4; break;
+      case 'wall': this.volley = { kind: 'wall', n: rage ? 3 : 2, T: 0, every: 0.6 }; this.skillCd = rage ? 2.6 : 3.2; break;
+      case 'guard':
+        this.summon('brute', rage ? 2 : 1, 110, 0.6);
+        this.summon('swarmer', rage ? 6 : 4, 80, 0.8);
+        this.skillCd = rage ? 3 : 3.6; break;
+    }
+  }
+  // knock：子彈的擊退值（只有子彈命中會帶）。旗艦只有在擊退值超過自己的抗擊退時才會被推，力道只看超過的部分；
+  // 爆炸、震波、電弧不會推王。衝鋒中的敵人不會被推
+  hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
+    Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
+    if (this.t.dummy) Range.hit(dmg, source);
+    this.hp -= dmg; this.flash = 0.08;
+    if (this.t.dummy && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶打不死
+    if (this.t.boss) {
+      const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
+      if (over > 0 && l > 0 && this.mode !== 'charge') { this.vx += kx / l * over * CFG.BOSS_KNOCK; this.vy += ky / l * over * CFG.BOSS_KNOCK; }
+    } else if (this.mode !== 'charge') { this.vx += kx; this.vy += ky; }
+    if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; Game.onEnemyKilled(this); }
+  }
+}
