@@ -756,6 +756,9 @@ function fuseChips(a, b) {
   return id;
 }
 
+// 開局電路：武器＋三選一的起始晶片（沒選就空著）
+const startChain = chip => ['weapon', NORMAL_IDS.includes(chip) ? chip : null, ...Array(CFG.START_SLOTS - 2).fill(null)];
+
 const PRESETS = {
   basic: ['weapon', 'split', 'amp', null],
   multi: ['weapon', 'mirror', 'split', 'amp'],
@@ -1037,7 +1040,7 @@ addEventListener('keydown', e => {
   if (k === 'escape' && Game.state === 'editor') Game.toggleEditor();
   if (k === 'enter' && Game.state === 'title') Screen.select('run');
   if (k === 'enter' && Game.state === 'lobby' && document.activeElement && document.activeElement.id === 'netCode') Net.join(document.activeElement.value);
-  if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Game.newRun(Game.mode);
+  if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();
 });
 addEventListener('keyup', e => Input.keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => { Input.keys.clear(); Input.down = false; });
@@ -1936,15 +1939,14 @@ const Game = {
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
 
   // ---------- 一局的流程 ----------
-  newRun(mode, shipId = this.shipId || 'vanguard', weaponId = this.weapon.id) {
+  newRun(mode, shipId = this.shipId || 'vanguard', weaponId = this.weapon.id, startChip = null) {
     this.mode = mode;
     this.shipId = shipId;
     this.weapon = { id: weaponId, path: null, final: null };
     const S = SHIPS[shipId];
     // 先換上新的電路、倉庫、飛船，再計算數值（不能拿上一場的電路來算）
-    // 遠征：飛船的起始晶片直接裝在電路上（武器右邊），不放倉庫
-    this.chain = mode === 'sandbox' ? ['weapon', 'split', null, null]
-      : ['weapon', ...S.inv, null, null, null].slice(0, Math.max(CFG.START_SLOTS, S.inv.length + 1));
+    // 遠征／雙人：開局三選一的起始晶片直接裝在電路上（武器右邊）；飛船不再自帶晶片
+    this.chain = mode === 'sandbox' ? ['weapon', 'split', null, null] : startChain(startChip);
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
     this.credits = mode === 'sandbox' ? 999 : 0;
     this.player = new Player(S);
@@ -2264,9 +2266,10 @@ const Game = {
   },
   saveRecord(result) {
     const R = this.runStats;
-    if (this.mode !== 'run' || !R || R.recorded || MechCheck.running) return;  // 機制檢查的模擬局不存
+    if (!['run', 'coop'].includes(this.mode) || !R || R.recorded || MechCheck.running) return;  // 機制檢查的模擬局不存
     R.recorded = true;
-    const list = [this.buildRecord(result), ...this.loadRecords()].slice(0, CFG.MAX_RECORDS);
+    const rec = this.mode === 'coop' ? Net.buildRecord(result) : this.buildRecord(result);
+    const list = [rec, ...this.loadRecords()].slice(0, CFG.MAX_RECORDS);
     try { localStorage.setItem('runRecords', JSON.stringify(list)); } catch (e) {}
   },
   // 目前這一局的紀錄（結算畫面的「複製這局紀錄」也用它，打完 Boss 還沒結束的局也能複製）
@@ -2477,6 +2480,7 @@ const Game = {
     }
     this.state = 'dead'; Input.down = false;
     Net.send({ t: 'over', wave: this.combat.wave });
+    this.saveRecord('dead');
     setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
   },
 
@@ -2664,47 +2668,75 @@ const NET_RATE = 1 / 30;
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
 
+const NET_VER = 2;  // 連線協定版本：兩邊版本不同（有人沒重新整理）就不讓開始
 const Net = {
   role: null,          // null = 單人；'host' = 房主；'client' = 加入的隊友
-  peer: null, conn: null, ping: null,
-  mine: null,          // 自己選的 { ship, weapon }
+  peer: null, conn: null, ping: null, code: '',
+  linked: false,       // 兩邊已經握手成功
+  myPick: null, matePick: null,  // 各自選好的 { ship, weapon, chip }
+  stats: null,         // 這一局的連線數據（寫進遊玩紀錄）
   fxBuf: [], sendAcc: 0, inAcc: 0, pingT: 0,
   active() { return !!this.role; },
   fx(e) { if (this.conn && this.fxBuf.length < 400) this.fxBuf.push(e); },
   send(msg) { try { if (this.conn && this.conn.open) this.conn.send(msg); } catch (e) {} },
+  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0 }; },
   close() {
     const peer = this.peer, conn = this.conn;
     this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
+    this.linked = false; this.myPick = this.matePick = null; this.code = '';
     try { conn && conn.close(); } catch (e) {}
     try { peer && peer.destroy(); } catch (e) {}
   },
-
-  // ---------- 大廳：開房 / 輸入房號加入 ----------
-  lobby(ship, weapon, msg = '') {
+  // 玩家自己離開（回標題）：還在戰鬥中就先存一筆紀錄
+  leave() {
+    if (Game.mode === 'coop' && Game.inArena && Game.state === 'play') Game.saveRecord('retired');
     this.close();
-    this.mine = { ship, weapon };
+  },
+  // 每一幀呼叫：連上之後每秒量一次延遲
+  tick(dt) {
+    if (!this.linked) return;
+    this.pingT += dt;
+    if (this.pingT >= 1) { this.pingT = 0; this.send({ t: 'ping', at: performance.now() }); }
+  },
+  pingColor(ms) { return ms == null ? '#8fa3d9' : ms < 80 ? '#9dff6b' : ms < 150 ? '#ffd166' : '#ff4d6d'; },
+
+  // ---------- 大廳：開房 / 輸入房號加入 → 兩人到齊後房主按「開始」 ----------
+  lobby(msg = '') {
+    this.close();
+    this.resetStats();
     Game.state = 'lobby'; Game.inArena = false; Game.mate = null;
-    const S = SHIPS[ship], W = WEAPONS[weapon], ok = typeof Peer !== 'undefined';
+    const ok = typeof Peer !== 'undefined';
     Screen.show(`<div class="scr title-wrap">
       <h1 style="font-size:42px">👥 雙人連線</h1>
-      <div class="sub">你的配裝：<b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b></div>
-      ${ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
+      <div class="sub">先進同一個房間，兩人到齊後由房主按「開始」，再各自選飛船、武器與起始晶片。</div>
+      <div id="netBtns">${ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
         <div class="row"><input id="netCode" maxlength="4" placeholder="房號" autocomplete="off" spellcheck="false"
           style="font-size:22px;width:5.5em;text-align:center;letter-spacing:.3em;text-transform:uppercase;background:#0a1030;color:#fff;border:1px solid #4cc9f0;border-radius:6px;padding:8px">
           <button class="big" data-act="netjoin">加入房間</button></div>`
-      : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}
+      : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}</div>
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
       <div class="keys">一人按「開房間」拿到 4 碼房號，另一人輸入房號按「加入房間」。<br>
         測試版：無盡波次、不能編輯電路；一人被擊墜時另一人繼續，兩人都被擊墜才結束。</div>
       <div class="row"><button data-act="title">返回標題</button></div></div>`);
   },
   setMsg(html) { const el = document.getElementById('netMsg'); if (el) el.innerHTML = html; },
+  // 連上之後的大廳狀態（延遲每秒更新）
+  lobbyStatus() {
+    if (Game.state !== 'lobby') return;
+    const btns = document.getElementById('netBtns');
+    if (btns && this.linked) btns.innerHTML = '';
+    const ping = `<span style="color:${this.pingColor(this.ping)}">延遲 ${this.ping == null ? '測量中…' : this.ping + ' ms'}</span>`;
+    if (!this.linked) return;
+    this.setMsg(this.role === 'host'
+      ? `房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　<b style="color:#9dff6b">隊友已加入</b>　·　${ping}
+         <div class="row"><button class="big" data-act="netstart">開始（選擇配裝）</button></div>`
+      : `已加入房間 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${ping}<br>等待房主按「開始」…`);
+  },
 
   host() {
-    const mine = this.mine;
-    this.close(); this.mine = mine;
+    this.close();
     this.role = 'host';
-    const code = Array.from({ length: 4 }, () => pick([...NET_CODE_CHARS])).join('');
+    const code = this.code = Array.from({ length: 4 }, () => pick([...NET_CODE_CHARS])).join('');
     this.setMsg('正在建立房間…');
     const peer = this.peer = new Peer(NET_PREFIX + code);
     peer.on('open', () => this.setMsg(`房號 <b style="font-size:34px;letter-spacing:.2em;color:#ffd166">${code}</b><br>把房號告訴隊友，等待加入中…`));
@@ -2721,15 +2753,14 @@ const Net = {
   join(raw) {
     const code = String(raw || '').trim().toUpperCase();
     if (!/^[A-Z0-9]{4}$/.test(code)) { this.setMsg('<span style="color:#ff4d6d">請輸入 4 碼房號</span>'); return; }
-    const mine = this.mine;
-    this.close(); this.mine = mine;
-    this.role = 'client';
+    this.close();
+    this.role = 'client'; this.code = code;
     this.setMsg('連線中…');
     const peer = this.peer = new Peer();
     peer.on('open', () => {
       const conn = this.conn = peer.connect(NET_PREFIX + code, { reliable: true, serialization: 'json' });
       this.bind(conn);
-      conn.on('open', () => { this.setMsg('已連上，等待房主開始…'); this.send({ t: 'hello', ...this.mine }); });
+      conn.on('open', () => { this.setMsg('已連上，確認版本中…'); this.send({ t: 'hello', v: NET_VER }); });
     });
     peer.on('error', e => this.fail(e));
   },
@@ -2751,62 +2782,153 @@ const Net = {
   },
   lost(msg = '隊友已離線') {
     if (!this.role) return;
-    const mine = this.mine;
-    this.close(); this.mine = mine;
-    if (Game.state === 'lobby') { this.setMsg(`<span style="color:#ff4d6d">${msg}</span>`); return; }
-    if (Game.mode !== 'coop' || Game.state === 'title') return;
+    if (Game.mode === 'coop' && Game.inArena && Game.state === 'play') Game.saveRecord('disconnect');  // 戰鬥中斷線也存一筆
+    const inLobby = Game.state === 'lobby';
+    this.close();
+    if (inLobby) { this.lobby(`<span style="color:#ff4d6d">${msg}</span>`); return; }
+    if (Game.state === 'title') return;
     Game.mate = null; Game.state = 'title'; Game.inArena = false;
     Screen.show(`<div class="scr title-wrap"><h1 style="font-size:40px;color:#ff4d6d">連線中斷</h1>
-      <div class="sub">${msg}</div><div class="row"><button class="big" data-act="title">回到標題</button></div></div>`);
+      <div class="sub">${msg}</div>
+      <div class="row"><button class="big" data-act="title">回到標題</button><button data-act="records">📜 遊玩紀錄</button></div></div>`);
   },
 
   onData(m) {
     if (!m || typeof m !== 'object') return;
+    const now = performance.now(), S = this.stats;
+    if (S && (m.t === 's' || m.t === 'i')) {  // 同步訊息之間最長隔多久（卡頓的指標）
+      if (S.lastRecv && Game.state === 'play') S.maxGap = Math.max(S.maxGap, now - S.lastRecv);
+      S.lastRecv = now;
+      if (m.t === 's') S.snaps++; else S.inputs++;
+    }
     switch (m.t) {
-      case 'hello': if (this.role === 'host' && !Game.mate) this.startHost(m); break;
+      case 'hello':
+        if (this.role !== 'host' || this.linked) break;
+        if (m.v !== NET_VER) { this.send({ t: 'ver', v: NET_VER }); this.setMsg('<span style="color:#ff4d6d">隊友的遊戲版本不同，請兩邊都重新整理頁面</span>'); break; }
+        this.linked = true;
+        this.send({ t: 'welcome', v: NET_VER, code: this.code });
+        this.lobbyStatus();
+        break;
+      case 'welcome': if (this.role === 'client') { this.linked = true; this.lobbyStatus(); } break;
+      case 'ver': this.lost('你和房主的遊戲版本不同，請兩邊都重新整理頁面'); break;
       case 'full': this.lost('這個房間已經有兩個人了'); break;
+      case 'pick': if (this.role === 'client') this.enterPick(); break;
+      case 'ready': this.onMateReady(m); break;
       case 'start': if (this.role === 'client') this.startClient(m); break;
       case 'i': if (this.role === 'host') this.applyInput(m); break;
       case 's': if (this.role === 'client') this.applySnap(m); break;
       case 'over':
-        if (this.role === 'client' && Game.combat) {
+        if (this.role === 'client' && Game.combat && Game.state === 'play') {
           Game.state = 'dead'; Game.combat.wave = num(m.wave, Game.combat.wave); Input.down = false;
+          Game.saveRecord('dead');
           setTimeout(() => { if (Game.state === 'dead') Screen.dead(); }, 900);
         }
         break;
       case 'ping': this.send({ t: 'pong', at: m.at }); break;
-      case 'pong': this.ping = Math.round(performance.now() - num(m.at, performance.now())); break;
+      case 'pong': {
+        const ms = Math.round(now - num(m.at, now));
+        if (ms < 0 || ms > 60000) break;
+        this.ping = ms;
+        if (S && Game.state === 'play' && S.pings.length < 3600) S.pings.push(ms);
+        this.lobbyStatus();
+        break;
+      }
     }
   },
-  tickPing(dt) {
-    this.pingT += dt;
-    if (this.pingT >= 1) { this.pingT = 0; this.send({ t: 'ping', at: performance.now() }); }
+
+  // ---------- 選配裝：房主按開始 → 兩人各自選飛船、武器、起始晶片 → 都選好就開戰 ----------
+  beginPick() {
+    if (this.role !== 'host' || !this.linked) return;
+    this.send({ t: 'pick' });
+    this.enterPick();
+  },
+  enterPick() {
+    this.myPick = this.matePick = null;
+    Game.state = 'pick'; Game.inArena = false;
+    Screen.select('coop');
+  },
+  cleanPick(m) {  // 對方傳來的選擇：不認得的就換成預設值
+    return { ship: SHIPS[m.ship] ? m.ship : 'vanguard', weapon: WEAPONS[m.weapon] ? m.weapon : 'laser',
+      chip: NORMAL_IDS.includes(m.chip) ? m.chip : null };
+  },
+  ready(ship, weapon, chip) {
+    if (!this.linked) { this.lost(); return; }
+    this.myPick = this.cleanPick({ ship, weapon, chip });
+    this.send({ t: 'ready', ...this.myPick });
+    if (this.role === 'host' && this.matePick) this.startHost();
+    else this.waitScreen();
+  },
+  onMateReady(m) {
+    if (!['pick', 'wait'].includes(Game.state)) return;
+    this.matePick = this.cleanPick(m);
+    if (this.role === 'host' && this.myPick) this.startHost();
+    else if (Game.state === 'wait') this.waitScreen();
+  },
+  waitScreen() {
+    Game.state = 'wait';
+    const P = this.myPick, M = this.matePick, line = p => p
+      ? `<b style="color:${SHIPS[p.ship].color}">${SHIPS[p.ship].name}</b> ＋ ${WEAPONS[p.weapon].name} ＋ ${p.chip ? CHIPS[p.chip].name : '無起始晶片'}`
+      : '<span style="color:#8fa3d9">選擇中…</span>';
+    Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">等待隊友</h1>
+      <div class="sub">你：${line(P)}<br>隊友：${line(M)}<br><br>${this.role === 'host' ? '兩人都選好就會開始。' : '兩人都選好後，房主那邊會開始戰鬥。'}</div>
+      <div class="row"><button data-act="title">離開房間</button></div></div>`);
   },
 
   // ---------- 開始 ----------
-  makeLoadout(ship, weapon) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
-    const S = SHIPS[ship];
-    const L = { shipId: ship, weapon: { id: weapon, path: null, final: null },
-      chain: ['weapon', ...S.inv, null, null, null].slice(0, Math.max(CFG.START_SLOTS, S.inv.length + 1)),
-      inventory: Array(CFG.INV_SLOTS).fill(null) };
+  makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
+    const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
+      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null) };
     L.wp = weaponParams(L.weapon);
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); });
     return L;
   },
-  startHost(m) {
-    const ship = SHIPS[m.ship] ? m.ship : 'vanguard', weapon = WEAPONS[m.weapon] ? m.weapon : 'laser';
-    Game.newRun('coop', this.mine.ship, this.mine.weapon);
-    const mate = Game.mate = new Player(SHIPS[ship]);
-    mate.L = this.makeLoadout(ship, weapon);
-    mate.hp = mate.maxHp = SHIPS[ship].hp + mate.L.passives.maxHp;
+  startHost() {
+    const me = this.myPick, mp = this.matePick;
+    this.resetStats();
+    Game.newRun('coop', me.ship, me.weapon, me.chip);
+    const mate = Game.mate = new Player(SHIPS[mp.ship]);
+    mate.L = this.makeLoadout(mp);
+    mate.hp = mate.maxHp = SHIPS[mp.ship].hp + mate.L.passives.maxHp;
     mate.dashSeq = 0; mate.wantFire = false;
     Game.startCombat({ sandbox: true, level: 0 });
-    this.send({ t: 'start', ship: this.mine.ship, weapon: this.mine.weapon });
+    this.send({ t: 'start', ...me });
   },
   startClient(m) {
-    Game.newRun('coop', this.mine.ship, this.mine.weapon);
-    Game.mate = new Player(SHIPS[m.ship] || SHIPS.vanguard);
+    if (!this.myPick) return;
+    this.matePick = this.cleanPick(m);
+    this.resetStats();
+    const me = this.myPick;
+    Game.newRun('coop', me.ship, me.weapon, me.chip);
+    Game.mate = new Player(SHIPS[this.matePick.ship]);
     Game.startCombat({ sandbox: true, level: 0 });
+  },
+
+  // ---------- 遊玩紀錄（雙人） ----------
+  buildRecord(result) {
+    const G = Game, R = G.runStats, S = this.stats || { pings: [], snaps: 0, inputs: 0, maxGap: 0 };
+    const total = R ? Object.values(R.dmg).reduce((a, b) => a + b, 0) : 0;
+    const name = id => (id && CHIPS[id] ? CHIPS[id].name : null);
+    const mp = this.matePick, ps = [...S.pings].sort((a, b) => a - b);
+    const host = this.role === 'host' || (!this.role && G.mate && G.mate.L);
+    return {
+      v: 2, build: CFG.VERSION, at: new Date().toISOString(), result, mode: 'coop',
+      where: `雙人 · 第 ${G.combat ? G.combat.wave : 0} 波（${host ? '房主 1P' : '隊友 2P'}）`,
+      input: Input.touch ? `觸控（自動攻擊${Input.autoFire ? '開' : '關'}）` : '滑鼠鍵盤',
+      ship: SHIPS[G.shipId].name, weapon: weaponTitle(G.weapon),
+      time: Math.round(R ? R.time : 0), kills: G.kills || 0, dmg: Math.round(total), maxHit: Math.round(R ? R.maxHit : 0),
+      chain: G.chain.map(name), inv: G.inventory.filter(Boolean).map(name), chipDmg: [],
+      credits: G.credits, hp: Math.max(0, Math.ceil(G.player.hp)), maxHp: G.player.maxHp,
+      cause: G.player.dead ? G.lastHit : '',
+      coop: {
+        role: host ? '房主' : '隊友',
+        mate: mp ? `${SHIPS[mp.ship].name} · ${WEAPONS[mp.weapon].name} · 起始晶片 ${name(mp.chip) || '無'}` : '（不明）',
+        mateDown: !!(G.mate && G.mate.dead),
+        ping: ps.length ? { avg: Math.round(ps.reduce((a, b) => a + b, 0) / ps.length), min: ps[0],
+          p90: ps[Math.floor(ps.length * 0.9)], max: ps[ps.length - 1], samples: ps.length } : '沒有量到',
+        sync: host ? { inputsReceived: S.inputs, maxGapMs: Math.round(S.maxGap) } : { snapshotsReceived: S.snaps, maxGapMs: Math.round(S.maxGap) },
+        note: host ? '傷害與擊殺是兩人合計（由房主統計）' : '傷害由房主統計，隊友這邊記為 0；擊殺是兩人合計',
+      },
+    };
   },
 
   // ---------- 房主 ----------
@@ -2831,9 +2953,8 @@ const Net = {
     }
   },
   hostSend(dt) {
-    this.tickPing(dt);
     this.sendAcc += dt;
-    if (this.sendAcc < NET_RATE || !this.conn || !this.conn.open) return;
+    if (this.sendAcc < NET_RATE || !this.conn || !this.conn.open || !Game.inArena) return;
     this.sendAcc = 0;
     const G = Game, P = G.player, m = G.mate, r = Math.round;
     // 只傳隊友附近的子彈（畫面外的不用畫）
@@ -2863,9 +2984,9 @@ const Net = {
   // ---------- 隊友 ----------
   clientUpdate(dt) {
     const G = Game, P = G.player;
-    this.tickPing(dt);
     if (G.state === 'play') {
       G.time += dt;
+      if (G.runStats) G.runStats.time += dt;
       if (!P.dead) P.update(dt);
       // 兩次戰場狀態之間：照速度往前推，畫面才會滑順
       for (const e of G.enemies) {
@@ -2897,7 +3018,7 @@ const Net = {
   },
   applySnap(s) {
     const G = Game;
-    if (G.mode !== 'coop' || !G.combat || G.state === 'title') return;
+    if (G.mode !== 'coop' || !G.combat || !G.inArena || (G.state !== 'play' && G.state !== 'dead')) return;
     const arr = v => (Array.isArray(v) ? v : []);
     const m = G.mate, p = s.p;
     if (m && Array.isArray(p)) {
@@ -3267,13 +3388,16 @@ function drawHUD() {
     ctx.fillStyle = m.dead ? '#555' : m.ship.color; ctx.fillRect(22, 84, mw * Math.max(0, m.hp) / m.maxHp, 8);
     ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = m.dead ? '#ff4d6d' : '#cfe8ff';
     ctx.fillText(`${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, 93);
-    if (Net.ping != null) { ctx.fillStyle = '#6a79ad'; ctx.fillText(`延遲 ${Net.ping}ms`, 20, 110); }
   }
 
   ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;
   ctx.fillText(C.sandbox ? `${Game.mode === 'coop' ? '雙人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
   ctx.font = '12px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
   ctx.fillText(`擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54);
+  if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
+    ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);
+    ctx.fillText(Net.ping == null ? '延遲 測量中…' : `延遲 ${Net.ping} ms`, VW - 20, 76);
+  }
 
   // 電路鏈縮圖（觸控時移到上方，避開拇指）
   const n = Game.chain.length, w = T ? 40 : 54, gap = T ? 5 : 8, total = n * w + (n - 1) * gap;
@@ -3361,22 +3485,29 @@ const Screen = {
     switch (a) {
       case 'mute': SFX.setMuted(!SFX.muted); break;
       case 'codex': Codex.open('rules'); break;
-      case 'run': Game.newRun(arg); break;
+      case 'run': this.restart(); break;
       case 'editor': Game.toggleEditor(); break;
       case 'reward': Game.takeReward(arg || null); break;
       case 'buy': Game.buy(+arg); break;
       case 'leave': Game.showMap(); break;
       case 'node': Game.enterNode(Game.nodeById(arg)); break;
-      case 'title': Net.close(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
+      case 'title': Net.leave(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
       case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
       case 'weapon': {
         const [mode, ship, wid] = arg.split(':');
-        if (mode === 'coop') Net.lobby(ship, wid); else Game.newRun(mode, ship, wid);
+        if (mode === 'sandbox') Game.newRun(mode, ship, wid); else this.chipPick(mode, ship, wid);
         break;
       }
+      case 'startchip': {  // 開局三選一晶片選好了
+        const [mode, ship, wid, chip] = arg.split(':');
+        if (mode === 'coop') Net.ready(ship, wid, chip); else Game.newRun(mode, ship, wid, chip);
+        break;
+      }
+      case 'coop': Net.lobby(); break;
       case 'nethost': Net.host(); break;
       case 'netjoin': Net.join(document.getElementById('netCode').value); break;
+      case 'netstart': Net.beginPick(); break;
       case 'upg': Game.upgradeWeapon(arg); break;
       case 'armorybonus': Game.armoryBonus(); break;
       case 'slot': Game.expandSlot(arg); break;
@@ -3409,13 +3540,12 @@ const Screen = {
         ${bar(`速度 ${S.speed}`, S.speed, 310, S.color)}
         ${bar(`衝刺冷卻 ${S.dashCd} 秒`, 1.4 - S.dashCd, 0.85, S.color)}
         <div class="ds"><b style="color:${S.color}">技能・${S.abilityName}</b><br>${S.abilityDesc}</div>
-        ${mode !== 'sandbox' ? `<div class="ty">起始晶片（已裝上電路）：${S.inv.map(i => CHIPS[i].name).join('、')}</div>` : ''}
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>1 / 2　選擇飛船</h2>
-        <div class="sub">${mode === 'run' ? '開始遠征' : mode === 'coop' ? '雙人連線' : '沙盒模式'}：每艘飛船有不同的船體性能與衝刺技能。下一步選武器。</div></div>
-        <button data-act="title">返回</button></div>
+      <div class="between"><div><h2>1 / ${mode === 'sandbox' ? 2 : 3}　選擇飛船</h2>
+        <div class="sub">${mode === 'run' ? '開始遠征' : mode === 'coop' ? '雙人連線' : '沙盒模式'}：每艘飛船有不同的船體性能與衝刺技能。下一步選武器${mode === 'sandbox' ? '' : '，最後三選一起始晶片'}。</div></div>
+        <button data-act="title">${mode === 'coop' ? '離開房間' : '返回'}</button></div>
       <div class="cards">${cards}</div></div>`);
   },
 
@@ -3434,10 +3564,27 @@ const Screen = {
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>2 / 2　選擇武器</h2>
+      <div class="between"><div><h2>2 / ${mode === 'sandbox' ? 2 : 3}　選擇武器</h2>
         <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，在「⚒ 軍械台」升級兩段：第一段 3 選 1，第二段 2 選 1。</div></div>
         <button data-act="select" data-arg="${mode}">返回</button></div>
       <div class="cards">${cards}</div></div>`);
+  },
+
+  // 開局三選一起始晶片（遠征與雙人；取代以前飛船自帶的晶片）
+  chipPick(mode, shipId, weaponId) {
+    const S = SHIPS[shipId], W = WEAPONS[weaponId];
+    const cards = pickN(NORMAL_IDS, 3).map(id =>
+      chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>
+        <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選好的晶片直接裝在電路第 2 格（武器右邊）。</div></div>
+        <button data-act="ship" data-arg="${mode}:${shipId}">返回</button></div>
+      <div class="cards">${cards}</div></div>`);
+  },
+  // 死亡畫面的「重新開始」：遠征要重新選起始晶片，沙盒直接開
+  restart() {
+    if (Game.mode === 'run') this.chipPick('run', Game.shipId, Game.weapon.id);
+    else Game.newRun(Game.mode);
   },
 
   // 武器升級只能在軍械台（補給站不賣武器升級）
@@ -3510,7 +3657,7 @@ const Screen = {
       <div class="row">
         <button class="big" data-act="select" data-arg="run">開始遠征</button>
         <button class="big" data-act="select" data-arg="sandbox">沙盒模式</button>
-        <button class="big" data-act="select" data-arg="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 雙人連線（測試）</button>
+        <button class="big" data-act="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 雙人連線（測試）</button>
       </div>
       <div class="row"><button data-act="codex">📖 電路總覽</button>
         <button data-act="records">📜 遊玩紀錄</button>
@@ -3619,8 +3766,11 @@ const Screen = {
     if (Game.mode === 'coop') {
       this.show(`<div class="scr title-wrap">
         <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
-        <div class="sub">兩人一起撐到第 ${Game.combat.wave} 波 · 共用晶體 ${Game.credits}</div>
-        <div class="row"><button class="big" data-act="title">回到標題</button></div></div>`);
+        <div class="sub">兩人一起撐到第 ${Game.combat.wave} 波 · 共用晶體 ${Game.credits}<br>
+          <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
+        <div class="row"><button class="big" data-act="title">回到標題</button></div>
+        <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div>
+        <div id="copyBox"></div></div>`);
       return;
     }
     this.show(`<div class="scr title-wrap">
@@ -3651,7 +3801,7 @@ const Screen = {
 
   records(msg = '') {
     const list = Game.loadRecords();
-    const RES = { dead: ['飛船已毀', '#ff4d6d'], cleared: ['遠征完成', '#ffd166'], retired: ['中途結束', '#8fa3d9'] };
+    const RES = { dead: ['飛船已毀', '#ff4d6d'], cleared: ['遠征完成', '#ffd166'], retired: ['中途結束', '#8fa3d9'], disconnect: ['連線中斷', '#ff9f1c'] };
     const fmt = n => Math.round(n).toLocaleString('zh-TW');
     const list2 = (title, items) => items && items.length ? `<div style="margin-top:6px"><b>${title}</b><br>${items.join('<br>')}</div>` : '';
     const rows = list.map((r, i) => {
@@ -3670,7 +3820,10 @@ const Screen = {
           <button data-act="copyone" data-arg="${i}">📋 複製這筆</button></div>
         ${r.ship} · ${r.weapon}　·　${Math.floor(r.time / 60)} 分 ${r.time % 60} 秒　·　擊殺 ${fmt(r.kills)}　·　總傷害 ${fmt(r.dmg)}
         ${r.cause ? `<br>擊毀原因：${r.cause}` : ''}${r.bosses && r.bosses.length ? `<br>擊沉旗艦：${r.bosses.join('、')}` : ''}
-        ${top ? `<br>傷害前三：${top}` : ''}<br><span style="color:#6a79ad">電路：${r.chain.map(c => c || '空').join(' → ')}</span>
+        ${top ? `<br>傷害前三：${top}` : ''}
+        ${r.coop ? `<br><b style="color:#ff9dbd">👥 雙人（${r.coop.role}）</b>　隊友：${r.coop.mate}${r.coop.mateDown ? '（已被擊墜）' : ''}
+          <br>延遲：${typeof r.coop.ping === 'object' ? `平均 ${r.coop.ping.avg} ms、最低 ${r.coop.ping.min}、90% 在 ${r.coop.ping.p90} 以內、最高 ${r.coop.ping.max}（${r.coop.ping.samples} 次）` : r.coop.ping}
+          　·　同步最長間隔 ${r.coop.sync.maxGapMs} ms` : ''}<br><span style="color:#6a79ad">電路：${r.chain.map(c => c || '空').join(' → ')}</span>
         ${detail ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:#8fa3d9">展開細節</summary>${detail}</details>` : ''}
         <div id="copyBox${i}"></div></div>`;
     }).join('');
@@ -3693,7 +3846,8 @@ const Screen = {
   // 結算畫面：複製這一局目前的紀錄（打完 Boss 還沒結束遠征時也能複製）
   copyRun() {
     const result = Game.state === 'dead' ? 'dead' : Game.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'in_progress';
-    this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: [Game.buildRecord(result)] }));
+    const rec = Game.mode === 'coop' ? Net.buildRecord(result) : Game.buildRecord(result);
+    this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: [rec] }));
   },
   // 複製文字到剪貼簿；被擋時（例如嵌在 iframe 裡）在畫面上的 #copyBox 顯示文字框讓玩家自己全選複製
   copyText(text, boxId = 'copyBox') {
@@ -4770,6 +4924,7 @@ function frame(now) {
   last = now;
   TouchUI.sync();
   Music.update();
+  Net.tick(dt);
   Game.update(dt);
   render();
   requestAnimationFrame(frame);
