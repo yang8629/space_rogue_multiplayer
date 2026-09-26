@@ -235,7 +235,7 @@ const Editor = {
   slotInfo(chain) {
     const info = chain.map(() => ({ seg: 0, idle: false, why: '', trig: false }));
     chain.forEach((id, i) => {
-      if (id === 'scrap') Object.assign(info[i], { idle: true, why: '廢鐵：沒有任何效果，只能在補給站拆除' });
+      if (id === 'scrap') Object.assign(info[i], { idle: true, why: '廢鐵：沒有任何效果，只能在維修站拆除' });
       if (baseOf(id) === 'resonator' && ![i - 1, i + 1].some(j => chain[j] && !['link', 'scrap'].includes(CHIPS[chain[j]].type)))
         Object.assign(info[i], { idle: true, why: '左右沒有可共振的晶片' });
       if (id === 'mirror' && (!chain[i - 1] || CHIPS[chain[i - 1]].type === 'link'))

@@ -190,7 +190,7 @@ const Screen = {
       body = `<div class="result" style="color:${R.ok ? '#e0aaff' : '#8a8f98'}">
           ${R.ok ? '✺ 融合成功！誕生奇異點超載晶片' : '✖ 融合失敗……只剩下一塊廢鐵'}</div>
         <div class="cards">${chipCard(R.id)}</div>
-        <div class="sub" style="text-align:center">結果已放在原本第一個素材的位置（${R.where}）。${R.ok ? '' : '廢鐵會卡住插槽，只能在補給站拆除。'}</div>
+        <div class="sub" style="text-align:center">結果已放在原本第一個素材的位置（${R.where}）。${R.ok ? '' : '廢鐵會卡住插槽，只能在維修站拆除。'}</div>
         <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
     } else {
       const cards = owned.map(o => {
@@ -304,10 +304,20 @@ const Screen = {
       <div class="row" style="justify-content:center">
         ${Game.shop.healed ? '<button disabled>已補血</button>'
           : `<button ${Game.credits >= CFG.SHOP_REPAIR.price && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${CFG.SHOP_REPAIR.hp}（◆ ${CFG.SHOP_REPAIR.price}，限 1 次）</button>`}
-        ${Game.findScrap() ? `<button ${Game.credits >= CFG.SCRAP_REMOVE ? '' : 'disabled'} data-act="scrap">拆除 1 塊廢鐵（◆ ${CFG.SCRAP_REMOVE}）</button>` : ''}
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
           ? `<button ${Game.credits >= CFG.SHOP_SLOT ? '' : 'disabled'} data-act="slot" data-arg="shop">⚡ 電路擴充 插槽 +1（◆ ${CFG.SHOP_SLOT}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>
+      <div class="toast" style="text-align:center">${toast}</div></div>`);
+  },
+
+  // 維修站：修復後，有廢鐵時可以花錢拆除
+  repair(toast = '') {
+    const n = [...Game.chain, ...Game.inventory].filter(id => id === 'scrap').length;
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>✚ 維修站</h2><div class="sub">${Game.repairMsg || ''}。電路或倉庫裡還有 ${n} 塊廢鐵，可以在這裡拆除。</div></div>${this.status()}</div>
+      <div class="row" style="justify-content:center">
+        ${n ? `<button ${Game.credits >= CFG.SCRAP_REMOVE ? '' : 'disabled'} data-act="scrap">拆除 1 塊廢鐵（◆ ${CFG.SCRAP_REMOVE}）</button>` : ''}
+        <button data-act="leave">離開維修站</button></div>
       <div class="toast" style="text-align:center">${toast}</div></div>`);
   },
 
