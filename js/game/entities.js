@@ -15,6 +15,7 @@ class Player {
     this.x = CFG.WORLD_W / 2; this.y = CFG.WORLD_H / 2; this.vx = 0; this.vy = 0;
     this.iframe = 0; this.fireCd = 0; this.aim = 0; this.moving = false;
     this.dashT = 0; this.dashCd = 0; this.dashA = 0; this.overdrive = 0; this.target = null;
+    this.reviveT = 0;  // 雙人：倒下後隊友救援的進度（秒）
   }
   onDash() {  // 角色技能：衝刺觸發
     const S = this.ship;

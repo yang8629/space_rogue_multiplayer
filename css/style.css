@@ -20,6 +20,8 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
   background: rgba(3, 5, 15, .55); }
 .scr { width: 100%; max-width: 1000px; max-height: 94vh; overflow: auto; background: #0b1024; border: 1px solid #2a3a7a;
   border-radius: 12px; padding: 22px 26px; box-shadow: 0 0 40px rgba(76, 201, 240, .15); }
+/* 選飛船／武器／起始晶片：三個畫面同樣大小，換頁時視窗不會忽大忽小 */
+.scr.pick { height: min(860px, 94vh); }
 .scr h1 { font-size: 26px; color: #bdf0ff; letter-spacing: 3px; text-shadow: 0 0 18px #4cc9f0; }
 .scr h2 { font-size: 20px; color: #4cc9f0; letter-spacing: 2px; }
 .scr .sub { color: #8fa3d9; font-size: 13px; margin-top: 6px; line-height: 1.7; }
@@ -156,8 +158,9 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .selbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .selbar:empty { display: none; }
 /* 說明欄貼在面板底部：沙盒／靶場的晶片庫很長，點電路上的晶片時也看得到說明 */
-.infodock { position: sticky; bottom: -1px; z-index: 2; background: #0b1024; padding-bottom: 8px;
-  box-shadow: 0 -10px 14px -6px #0b1024; }
+.infodock { position: sticky; bottom: -1px; z-index: 2; background: #0e1530; margin-top: 12px; padding: 8px;
+  border: 1px solid #4cc9f0; border-radius: 10px; box-shadow: 0 -6px 18px rgba(0, 0, 0, .6), 0 0 12px rgba(76, 201, 240, .25); }
+.infodock .info { margin-top: 0; }
 
 /* ===== 觸控操作 ===== */
 #touchUI { position: fixed; inset: 0; pointer-events: none; z-index: 5; }

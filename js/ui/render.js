@@ -126,6 +126,10 @@ function drawWorld() {
       ctx.beginPath(); ctx.arc(tg.x, tg.y, r, s + i * TAU / 4, s + i * TAU / 4 + 0.6); ctx.stroke();
     }
   }
+  if (Game.mate && Game.state === 'play') {  // 雙人：倒下的人畫在原地，外圈是救援範圍與進度
+    if (Game.mate.dead && !Game.mate.gone) drawDowned(Game.mate, Net.role === 'host' ? '2P' : '1P', !Game.player.dead);
+    if (Game.player.dead) drawDowned(Game.player, Net.role === 'host' ? '1P' : '2P', false);
+  }
   if (Game.mate && !Game.mate.dead && !Game.mate.gone) drawPlayer(Game.mate, Net.role === 'host' ? '2P' : '1P');
   if (Game.state !== 'dead' && !Game.player.dead) drawPlayer(Game.player, Game.mate ? (Net.role === 'host' ? '1P' : '2P') : '');
 
@@ -291,6 +295,29 @@ function drawPlayer(p, tag = '') {
   ctx.globalAlpha = p.iframe > 0 && Math.floor(Game.time * 20) % 2 ? 0.35 : 1;
   ctx.strokeStyle = S.color; ctx.lineWidth = 2; ctx.stroke();
   ctx.restore();
+}
+
+// 雙人：倒下的飛船（灰色殘骸）＋救援範圍虛線圈＋綠色進度弧；mine = 自己是可以去救的那一方
+function drawDowned(p, tag, mine) {
+  const R = CFG.REVIVE, k = Math.min(1, (p.reviveT || 0) / R.time), pulse = 0.5 + 0.5 * Math.sin(Game.time * 4);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.strokeStyle = `rgba(157, 255, 107, ${0.35 + 0.35 * pulse})`; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.arc(0, 0, R.range, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  if (k > 0) {
+    ctx.strokeStyle = '#9dff6b'; ctx.lineWidth = 5; ctx.shadowBlur = 12; ctx.shadowColor = '#9dff6b';
+    ctx.beginPath(); ctx.arc(0, 0, R.range, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.rotate(p.aim);
+  ctx.beginPath();
+  p.ship.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+  ctx.closePath();
+  ctx.globalAlpha = 0.5; ctx.strokeStyle = '#8a8f98'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  ctx.font = 'bold 12px Microsoft JhengHei'; ctx.textAlign = 'center'; ctx.fillStyle = '#9dff6b';
+  ctx.fillText(k > 0 ? `${tag} 救援中 ${Math.round(k * 100)}%` : `${tag} 倒下${mine ? ' · 靠近救援' : ' · 等隊友救援'}`, p.x, p.y - R.range - 8);
 }
 
 // 靶場數據面板（右上）：DPS、總傷害、命中次數、傷害來源、這條電路每發幾顆、觸發層

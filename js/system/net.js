@@ -138,7 +138,7 @@ const Net = {
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
       <div class="keys">一人按「開房間」拿到 4 碼房號，另一人輸入房號按「加入房間」。<br>
         雙人遠征：航圖投票（選不同就抽籤）、錢包各自獨立（怪物掉落的晶體兩人都拿）、獎勵各自選、戰鬥中按 Tab 兩人一起暫停。<br>
-        一人被擊墜時另一人繼續，戰鬥結束後以 30% HP 歸隊；兩人都被擊墜才結束。</div>
+        一人被擊墜時留在原地，隊友靠近 ${CFG.REVIVE.time} 秒就能救起來（救的人分出自己一半的血量）；沒被救起的在戰鬥結束後以 30% HP 歸隊；兩人都被擊墜才結束。</div>
       <div class="row">${this.linked ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回標題 (Esc)</button>'}</div>
       <div class="ver">版本 ${CFG.VERSION}</div></div>`);
     if (this.linked) this.lobbyStatus();
@@ -776,8 +776,8 @@ const Net = {
     this.send({
       t: 's',
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
-        P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy)],
-      me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || ''] : null,
+        P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT)],
+      me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT)] : null,
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0]),
@@ -836,7 +836,7 @@ const Net = {
     if (m && Array.isArray(p)) {
       m.x = num(p[0], m.x); m.y = num(p[1], m.y); m.aim = num(p[2]); m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
       m.dashT = num(p[5]); m.iframe = num(p[6]); m.overdrive = p[7] ? 1 : 0; m.moving = !!p[8]; m.dead = !!p[9];
-      m.vx = num(p[10]); m.vy = num(p[11]);
+      m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
     }
     const P = G.player;
     if (Array.isArray(s.me)) {  // 自己的血量以房主為準
@@ -849,6 +849,8 @@ const Net = {
       if (s.me[2] > 0) P.iframe = num(s.me[2]);
       if (typeof s.me[4] === 'string') G.lastHit = s.me[4].slice(0, 60);
       if (s.me[3] && !P.dead) { P.dead = true; Input.down = false; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); G.shake(20); }
+      else if (!s.me[3] && P.dead && hp > 0) { P.dead = false; P.vx = P.vy = 0; P.iframe = CFG.REVIVE.iframe; }  // 被隊友救起來
+      P.reviveT = num(s.me[5]);
     }
     G.enemies = arr(s.e).map(a => {
       const t = ENEMY_TYPES[a[1]];
