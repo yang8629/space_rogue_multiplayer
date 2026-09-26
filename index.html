@@ -378,7 +378,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: 'mp-0.3.1（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
+  VERSION: 'mp-0.3.2（2026-09-26）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線   // 遊戲版本（寫進遊玩紀錄，分析時才知道是哪一版的規則）
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -2979,7 +2979,7 @@ const Net = {
   hostSend(dt) {
     this.sendAcc += dt;
     if (this.sendAcc < NET_RATE || !this.conn || !this.conn.open || !Game.inArena) return;
-    this.sendAcc = 0;
+    this.sendAcc = Math.min(this.sendAcc - NET_RATE, NET_RATE);  // 保留零頭，才能穩定每秒 30 次
     const G = Game, P = G.player, m = G.mate, r = Math.round;
     // 只傳隊友附近的子彈（畫面外的不用畫）
     const cx = m ? m.x : P.x, cy = m ? m.y : P.y, near = (x, y) => Math.abs(x - cx) < 1300 && Math.abs(y - cy) < 1000;
@@ -3032,7 +3032,7 @@ const Net = {
       if (m && !m.dead) { m.x += m.vx * dt; m.y += m.vy * dt; m.iframe -= dt; m.dashT -= dt; }
       this.inAcc += dt;
       if (this.inAcc >= NET_RATE && !P.dead) {
-        this.inAcc = 0;
+        this.inAcc = Math.min(this.inAcc - NET_RATE, NET_RATE);
         this.send({ t: 'i', x: Math.round(P.x), y: Math.round(P.y), vx: Math.round(P.vx), vy: Math.round(P.vy), a: r2(P.aim),
           mv: P.moving ? 1 : 0, dT: r2(Math.max(0, P.dashT)), ds: P.dashSeq || 0, f: P.wantFire ? 1 : 0 });
       }
