@@ -388,7 +388,7 @@ const CFG = {
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
-  VERSION: 'mp-0.5（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
+  VERSION: 'mp-0.5.1（2026-09-27）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式
   BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 三關依序的旗艦；無盡模式從中隨機抽
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
@@ -1947,7 +1947,7 @@ const Game = {
   mate: null, shooter: null,
 
   // ---------- 雙人共用 ----------
-  players() { return [this.player, this.mate].filter(p => p && !p.dead); },
+  players() { return [this.player, this.mate].filter(p => p && !p.dead && !p.gone); },  // gone：隊友離線，房主一個人繼續
   nearestPlayer(x, y) {
     let best = null, bd = Infinity;
     for (const p of this.players()) { const d = dist2(x, y, p.x, p.y); if (d < bd) { bd = d; best = p; } }
@@ -2114,7 +2114,7 @@ const Game = {
     const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
     const y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : 1 + C.level * 0.15 + (C.wave - 1) * 0.08) *
-      (this.mode === 'coop' ? 1.6 : 1);  // 雙人：敵人血量 ×1.6（暫定，第 3 步再調）
+      (this.mode === 'coop' && this.mate && !this.mate.gone ? 1.6 : 1);  // 雙人：敵人血量 ×1.6（暫定，第 3 步再調）；隊友離線時恢復單人血量
     const e = new Enemy(type, x, y, scale);
     this.enemies.push(e);
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
@@ -2821,7 +2821,7 @@ const Net = {
   // 玩家自己離開（回標題）：還在戰鬥中就先存一筆紀錄
   leave() {
     if (Game.mode === 'coop' && Game.inArena && Game.state === 'play') Game.saveRecord('retired');
-    this.waiting = null; this.rejoin = null; this.rejoining = false; this.runId = null; this.mateAway = false;
+    this.waiting = null; this.solo = false; this.rejoin = null; this.rejoining = false; this.runId = null; this.mateAway = false;
     this.hideOverlay();
     this.close();
   },
@@ -3018,7 +3018,7 @@ const Net = {
   // 房主：隊友斷線 → 遊戲暫停，房間保留 NET_REJOIN_TIME 秒等隊友回來（重新整理後輸入同一個房號也可以）
   waitForMate(msg) {
     const conn = this.conn;
-    this.conn = null; this.linked = false; this.mateEditing = false; this.mateAway = false;
+    this.conn = null; this.linked = false; this.mateEditing = false; this.mateAway = false; this.ping = null;
     try { conn && conn.close(); } catch (e) {}
     this.waiting = { until: performance.now() + NET_REJOIN_TIME * 1000, msg };
     this.mateAt = null; this.voteEnd = 0;
@@ -3031,7 +3031,16 @@ const Net = {
     this.overlay(`<h2 style="color:#ffd166;margin:0">⏸ 隊友斷線了</h2>
       <div class="sub">${W.msg}<br>遊戲暫停中，房間保留 <b id="rejoinLeft">${left}</b> 秒。<br>
         請隊友按「重新連線」；如果他重新整理了頁面，選「雙人連線」後輸入房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b> 就能回到這一局。</div>
-      <div class="row"><button data-act="netgiveup">不等了，結束這一局</button></div>`);
+      <div class="row"><button class="big" data-act="netsolo">自己繼續玩（隊友之後還能回來）</button>
+        <button data-act="netgiveup">結束這一局</button></div>`);
+  },
+  // 房主：不等了，一個人繼續。房間仍然開著，隊友用同一個房號就能回到當下的進度
+  soloContinue() {
+    if (!this.waiting) return;
+    this.waiting = null; this.solo = true;
+    if (Game.mate) Game.mate.gone = true;
+    this.hideOverlay();
+    if (Game.state === 'map') Screen.map(`隊友離線，你一個人繼續（房號 ${this.code}，隊友可以隨時回來）`);
   },
   // 隊友：斷線 → 暫停，可以按「重新連線」回到同一局
   clientLost(msg) {
@@ -3169,8 +3178,12 @@ const Net = {
           this.setMsg(`<span style="color:#ff4d6d">隊友的版本不同（你：${CFG.VERSION}／隊友：${theirs}），請兩邊都按 Ctrl+F5 重新整理</span>`);
           break;
         }
-        if (this.waiting) {  // 斷線的隊友回來了：把這一局的狀態傳給他，等他回覆 back 再繼續
-          this.waiting = null; this.linked = true; this.mateInRoom = true; this.mateAway = true;
+        if (this.waiting || this.solo) {  // 斷線的隊友回來了（房主在等，或已經一個人先玩）：傳這一局的狀態，等他回覆 back 再繼續
+          this.waiting = null; this.solo = false; this.linked = true; this.mateInRoom = true; this.mateAway = true;
+          if (Game.mate) {
+            Game.mate.gone = false;
+            if (Game.inArena && !Game.mate.dead) { Game.mate.x = Game.player.x + 50; Game.mate.y = Game.player.y; }  // 回到房主旁邊
+          }
           this.send(this.resumePayload());
           this.overlay('<h2 style="color:#9dff6b;margin:0">隊友重新連線中…</h2><div class="sub">正在把這一局的狀態傳給隊友。</div>');
           break;
@@ -3340,7 +3353,7 @@ const Net = {
   // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
   resetRun() {
     this.votes = { h: null, c: null }; this.mateAt = null; this.voteEnd = 0;
-    this.mateEditing = false; this.myEditing = false;
+    this.mateEditing = false; this.myEditing = false; this.solo = false;
     this.lootTotal = 0; this.lastLoot = 0;  // 怪物掉落：房主累計被撿走的數量，隊友照差額加錢
   },
   packMap(map) { return map.map(row => row.map(n => [n.id, n.L, n.k, n.n, n.type, n.next])); },
@@ -3525,7 +3538,7 @@ const Net = {
   },
   hostUpdateMate(dt) {
     const m = Game.mate;
-    if (m.dead) return;
+    if (m.dead || m.gone) return;
     m.x = clamp(m.x + m.vx * dt, m.r, CFG.WORLD_W - m.r);  // 兩次輸入之間先照速度往前推
     m.y = clamp(m.y + m.vy * dt, m.r, CFG.WORLD_H - m.r);
     m.iframe -= dt; m.overdrive -= dt; m.fireCd -= dt; m.dashT -= dt;
@@ -3791,7 +3804,7 @@ function drawWorld() {
       ctx.beginPath(); ctx.arc(tg.x, tg.y, r, s + i * TAU / 4, s + i * TAU / 4 + 0.6); ctx.stroke();
     }
   }
-  if (Game.mate && !Game.mate.dead) drawPlayer(Game.mate, Net.role === 'host' ? '2P' : '1P');
+  if (Game.mate && !Game.mate.dead && !Game.mate.gone) drawPlayer(Game.mate, Net.role === 'host' ? '2P' : '1P');
   if (Game.state !== 'dead' && !Game.player.dead) drawPlayer(Game.player, Game.mate ? (Net.role === 'host' ? '1P' : '2P') : '');
 
   ctx.textAlign = 'center';
@@ -4006,7 +4019,8 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 82, mw + 4, 12);
     ctx.fillStyle = m.dead ? '#555' : m.ship.color; ctx.fillRect(22, 84, mw * Math.max(0, m.hp) / m.maxHp, 8);
     ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = m.dead ? '#ff4d6d' : '#cfe8ff';
-    ctx.fillText(`${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, 93);
+    ctx.fillText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
+      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, 93);
   }
 
   ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;
@@ -4140,6 +4154,7 @@ const Screen = {
       case 'netroom': Net.backToRoom(); break;
       case 'netrejoin': Net.tryRejoin(); break;
       case 'netgiveup': Net.giveUp(); break;
+      case 'netsolo': Net.soloContinue(); break;
       case 'upg': Game.upgradeWeapon(arg); break;
       case 'armorybonus': Game.armoryBonus(); break;
       case 'slot': Game.expandSlot(arg); break;
