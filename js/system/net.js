@@ -94,6 +94,23 @@ const Net = {
     const R = Game.runStats, mine = this.team.m;
     if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit });
   },
+  // 隊友的晶片傷害 [名稱, 顏色, 傷害]（房主直接讀隊友的配裝；隊友這邊用房主傳來的名稱）：傷害分頁與遊玩紀錄用
+  mateChipRows() {
+    let chips, name;
+    if (this.role === 'host') {
+      const L = Game.mate && Game.mate.L;
+      if (!L || !L.R) return null;
+      chips = L.R.chips;
+      name = k => Game.withLoadout(L, () => [dmgKeyName(k), dmgKeyColor(k)]);
+    } else {
+      const h = this.team && this.team.h;
+      if (!h) return null;
+      chips = h.chips;
+      name = k => (h.nm && h.nm[k]) || [k, '#8fa3d9'];
+    }
+    const rows = Object.entries(chips).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([k, v]) => [...name(k), v]);
+    return { tag: this.role === 'host' ? '2P' : '1P', rows, total: rows.reduce((a, r) => a + r[2], 0) };
+  },
   // 結算用：1P（房主）與 2P（隊友）的傷害、擊殺
   teamRows() {
     const host = this.role === 'host' || !!(Game.mate && Game.mate.L);
@@ -752,6 +769,7 @@ const Net = {
         sync: host ? { inputsReceived: S.inputs, maxGapMs: Math.round(S.maxGap) } : { snapshotsReceived: S.snaps, maxGapMs: Math.round(S.maxGap) },
         team: this.teamRows().map(r => ({ who: `${r.tag}${r.me ? '（你）' : ''}`, ship: SHIPS[r.ship] ? SHIPS[r.ship].name : '？',
           dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit) })),
+        mateChipDmg: (this.mateChipRows() || { rows: [] }).rows.map(([n, , v]) => [n, Math.round(v)]),  // 隊友的晶片傷害（整局）
       },
     };
   },
