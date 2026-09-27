@@ -88,7 +88,13 @@ function drawWorld() {
   ctx.globalAlpha = 1;
 
   ctx.globalCompositeOperation = 'lighter';
-  for (const b of Game.bullets) drawBullet(b);
+  // 我方子彈在飛船 50px 內變淡（最淡 20%），免得後期彈幕把船蓋住；相位刃本來就只在身邊，不變淡
+  const ships = [Game.player, Game.mate].filter(p => p && !p.dead && !p.gone), FADE = 50;
+  for (const b of Game.bullets) {
+    let fa = 1;
+    if (b.shape !== 'blade') for (const p of ships) fa = Math.min(fa, 0.2 + 0.8 * Math.min(1, Math.hypot(b.x - p.x, b.y - p.y) / FADE));
+    drawBullet(b, fa);
+  }
   for (const z of Game.zaps) {  // 電弧：鋸齒狀的閃電
     ctx.globalAlpha = z.life / z.max;
     ctx.strokeStyle = '#9fe8ff'; ctx.lineWidth = 2;
@@ -213,15 +219,16 @@ function drawEnemy(e) {
 // 子彈尾巴的長度：最長 max，但不超過從發射點飛過的距離
 const tail = (b, max) => Math.min(max, Math.hypot(b.x - b.sx, b.y - b.sy));
 
-function drawBullet(b) {
+function drawBullet(b, fa = 1) {  // fa：整體透明度（飛船附近變淡用）
   const cos = Math.cos(b.angle), sin = Math.sin(b.angle);
   ctx.fillStyle = b.color; ctx.strokeStyle = b.color;
+  ctx.globalAlpha = fa;
   if (b.shape === 'rail') {
     ctx.lineWidth = b.r + 2; ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.35 * fa;
     const t1 = tail(b, 60), t2 = tail(b, 34);
     ctx.beginPath(); ctx.moveTo(b.x - cos * t1, b.y - sin * t1); ctx.lineTo(b.x, b.y); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.lineWidth = b.r * 0.6; ctx.strokeStyle = '#fff6d8';
+    ctx.globalAlpha = fa; ctx.lineWidth = b.r * 0.6; ctx.strokeStyle = '#fff6d8';
     ctx.beginPath(); ctx.moveTo(b.x - cos * t2, b.y - sin * t2); ctx.lineTo(b.x, b.y); ctx.stroke();
   } else if (b.shape === 'blade') {  // 垂直於飛行方向、中間往前凸的弧形刃片
     const w = b.r * 1.6, a0 = Math.min(1, b.life * 6);
@@ -258,9 +265,9 @@ function drawBullet(b) {
     ctx.closePath(); ctx.fill();
   } else {
     if (b.shape === 'orb') {
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = 0.3 * fa;
       ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 1.8, 0, TAU); ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = fa;
     }
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
   }
@@ -268,6 +275,7 @@ function drawBullet(b) {
     ctx.strokeStyle = '#ff6b9d'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 4, 0, TAU); ctx.stroke();
   }
+  ctx.globalAlpha = 1;
 }
 
 function drawPlayer(p, tag = '') {
@@ -284,15 +292,16 @@ function drawPlayer(p, tag = '') {
     ctx.fillStyle = `rgba(255, 159, 28, ${rand(0.5, 0.9)})`;
     ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-6 - rand(8, 14), 0); ctx.lineTo(-6, 4); ctx.fill();
   }
+  // 深色實心船身＋船色粗外框＋白色內框：在後期的亮色彈幕裡形成暗色剪影
   const hot = p.dashT > 0 || p.overdrive > 0;
-  ctx.shadowBlur = hot ? 28 : 16; ctx.shadowColor = S.color;
+  ctx.shadowBlur = hot ? 28 : 14; ctx.shadowColor = S.color;
   ctx.beginPath();
   S.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
   ctx.closePath();
-  ctx.globalAlpha *= hot ? 0.7 : 0.28;
-  ctx.fillStyle = S.color; ctx.fill();
-  ctx.globalAlpha = p.iframe > 0 && Math.floor(Game.time * 20) % 2 ? 0.35 : 1;
-  ctx.strokeStyle = S.color; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = S.color; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#070a16'; ctx.fill();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.restore();
 }
 
