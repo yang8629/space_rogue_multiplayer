@@ -88,12 +88,6 @@ function drawWorld() {
   ctx.globalAlpha = 1;
 
   ctx.globalCompositeOperation = 'lighter';
-  for (const b of Game.eBullets) {
-    ctx.fillStyle = 'rgba(247, 37, 133, 0.3)';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#ff8fc7';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
-  }
   for (const b of Game.bullets) drawBullet(b);
   for (const z of Game.zaps) {  // 電弧：鋸齒狀的閃電
     ctx.globalAlpha = z.life / z.max;
@@ -117,6 +111,17 @@ function drawWorld() {
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
+
+  // 敵方攻擊畫在我方子彈之上、不用 lighter 疊色：紅色實心＋深色外框，才不會被我方彈幕蓋掉
+  for (const e of Game.enemies) drawTelegraph(e);
+  for (const b of Game.eBullets) {
+    ctx.fillStyle = 'rgba(255, 30, 30, 0.35)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = '#2a0000'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffd0d0';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
+  }
 
   const tg = Game.player.target;
   if (Input.touch && tg && !tg.dead) {  // 自動攻擊的鎖定框
@@ -143,34 +148,28 @@ function drawWorld() {
   ctx.globalAlpha = 1;
 }
 
+// 衝鋒／滾球預警線：跟敵方子彈一起畫在我方子彈之上，一律紅色
+function drawTelegraph(e) {
+  if (e.mode !== 'windup') return;
+  let len, alpha, w = e.r * 1.6;
+  if (e.type === 'elite') { len = 320; alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; w = e.r * 1.4; }
+  else if (e.type === 'brute') { len = CFG.BRUTE.rollSpeed * CFG.BRUTE.rollT; alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }  // 最後鎖定方向時變亮
+  else if (e.type === 'boss2') { len = 520; alpha = 0.25 + 0.45 * Math.sin(Game.time * 30) ** 2; }
+  else return;
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(e.chargeA) * len, e.y + Math.sin(e.chargeA) * len); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 function drawEnemy(e) {
   const sp = e.spawnT > 0 ? 1 - e.spawnT / e.spawnMax : 1;
   ctx.globalAlpha = 0.3 + 0.7 * sp;
   const rot = e.type === 'swarmer' ? Math.atan2(e.vy, e.vx)
     : e.type === 'spitter' ? Math.atan2(Game.player.y - e.y, Game.player.x - e.x) : e.rot;
   if (e.type === 'elite') {
-    if (e.mode === 'windup') {  // 衝鋒預警線
-      ctx.strokeStyle = `rgba(255, 212, 0, ${0.3 + 0.5 * Math.sin(Game.time * 30) ** 2})`;
-      ctx.lineWidth = e.r * 1.4;
-      ctx.beginPath(); ctx.moveTo(e.x, e.y);
-      ctx.lineTo(e.x + Math.cos(e.chargeA) * 320, e.y + Math.sin(e.chargeA) * 320); ctx.stroke();
-    }
     ctx.strokeStyle = 'rgba(255, 212, 0, 0.35)'; ctx.lineWidth = 1;
     polygon(e.x, e.y, e.r * 1.5 * sp, 5, -e.rot * 0.7); ctx.stroke();
-  }
-  if (e.type === 'brute' && e.mode === 'windup') {  // 刺殼：滾球預警線（最後鎖定方向時變亮）
-    const len = CFG.BRUTE.rollSpeed * CFG.BRUTE.rollT, locked = e.modeT <= CFG.BRUTE.lock;
-    ctx.globalAlpha = locked ? 0.55 : 0.2;
-    ctx.strokeStyle = e.t.color; ctx.lineWidth = e.r * 1.6;
-    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(e.chargeA) * len, e.y + Math.sin(e.chargeA) * len); ctx.stroke();
-    ctx.globalAlpha = 0.3 + 0.7 * sp;
-  }
-  if (e.type === 'boss2' && e.mode === 'windup') {  // 裂界獵艦：衝鋒預警線
-    ctx.globalAlpha = 0.25 + 0.45 * Math.sin(Game.time * 30) ** 2;
-    ctx.strokeStyle = e.t.color; ctx.lineWidth = e.r * 1.6;
-    ctx.beginPath(); ctx.moveTo(e.x, e.y);
-    ctx.lineTo(e.x + Math.cos(e.chargeA) * 520, e.y + Math.sin(e.chargeA) * 520); ctx.stroke();
-    ctx.globalAlpha = 1;
   }
   // 刺殼縮球／滾動時變小、變成圓一點（12 邊形）；暈眩時閃爍
   const curled = e.type === 'brute' && (e.mode === 'windup' || e.mode === 'charge');
