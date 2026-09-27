@@ -84,9 +84,6 @@ function drawWorld() {
     ctx.fill();
   }
 
-  for (const e of Game.enemies) drawEnemy(e);
-  ctx.globalAlpha = 1;
-
   ctx.globalCompositeOperation = 'lighter';
   // 我方子彈在飛船 50px 內變淡（最淡 20%），免得後期彈幕把船蓋住；相位刃本來就只在身邊，不變淡
   const ships = [Game.player, Game.mate].filter(p => p && !p.dead && !p.gone), FADE = 50;
@@ -117,6 +114,10 @@ function drawWorld() {
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
+
+  // 敵人畫在我方子彈之上，才不會被彈幕蓋住
+  for (const e of Game.enemies) drawEnemy(e);
+  ctx.globalAlpha = 1;
 
   // 敵方攻擊畫在我方子彈之上、不用 lighter 疊色：紅色實心＋深色外框，才不會被我方彈幕蓋掉
   for (const e of Game.enemies) drawTelegraph(e);
