@@ -671,7 +671,7 @@ const Game = {
       p.shellUsed = true; dmg = Math.max(0, p.hp - 1); p.iframe = 2;
       floatText(p.x, p.y - 30, '終焉護殼', '#2ee6a6', true);
     }
-    p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.3 : 0)); p.calm = 0;
+    p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
     this.withLoadout(p.L, () => this.onPlayerHurt(p, sx, sy));
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
@@ -910,6 +910,7 @@ const Game = {
         const rr = b.r + e.r;
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
         if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
+        if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
         // 用量成長：照著晶片的玩法打中敵人
         const own = b.owner;
         if (b.mode === 'return') this.grow(own, 'boomerang');
