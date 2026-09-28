@@ -795,6 +795,7 @@ const Net = {
     p.x = clamp(num(m.x, p.x), p.r, CFG.WORLD_W - p.r); p.y = clamp(num(m.y, p.y), p.r, CFG.WORLD_H - p.r);
     p.vx = num(m.vx); p.vy = num(m.vy); p.aim = num(m.a, p.aim);
     p.moving = !!m.mv; p.dashT = clamp(num(m.dT), 0, CFG.DASH_TIME); p.wantFire = !!m.f;
+    p.aimD = num(m.ad, 300); p.autoMode = !!m.au;  // 準星距離（環繞放出）、手機自動攻擊（蓄滿就射）
     const ds = num(m.ds, p.dashSeq);
     if (ds > p.dashSeq) { p.dashSeq = ds; Game.withLoadout(p.L, () => p.onDash()); }  // 衝刺技能（震波、相位超載）由房主執行
   },
@@ -871,7 +872,8 @@ const Net = {
       if (this.inAcc >= NET_RATE && !P.dead) {
         this.inAcc = Math.min(this.inAcc - NET_RATE, NET_RATE);
         this.send({ t: 'i', x: Math.round(P.x), y: Math.round(P.y), vx: Math.round(P.vx), vy: Math.round(P.vy), a: r2(P.aim),
-          mv: P.moving ? 1 : 0, dT: r2(Math.max(0, P.dashT)), ds: P.dashSeq || 0, f: P.wantFire ? 1 : 0 });
+          mv: P.moving ? 1 : 0, dT: r2(Math.max(0, P.dashT)), ds: P.dashSeq || 0, f: P.wantFire ? 1 : 0,
+          ad: Math.round(P.aimD || 300), au: P.autoMode ? 1 : 0 });
       }
     }
     if (G.state === 'play' || G.state === 'dead') G.updateFx(dt);

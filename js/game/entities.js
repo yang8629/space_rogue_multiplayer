@@ -34,7 +34,7 @@ class Player {
     } else { this.ohT = 0; this.ohLock = 0; }
     if (S.charge) {  // 蓄力：按住累積，放開或蓄滿時射出
       if (want) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
-      if ((this.chargeC >= 1 || (!want && this.chargeC > 0.08)) && this.fireCd <= 0) {
+      if (((this.chargeC >= 1 && this.autoMode) || (!want && this.chargeC > 0.08)) && this.fireCd <= 0) {  // 放開才射（蓄滿就停在蓄滿）
         Game.chargeC = this.chargeC;
         try { this.fire(); } finally { Game.chargeC = null; }
         this.chargeC = 0; this.fireCd = 0.15;
@@ -112,8 +112,13 @@ class Player {
       }
       Input.down = !!a || (Input.autoFire && !!target);
       this.target = Input.down ? target : null;
+      this.autoMode = !a && Input.autoFire;  // 自動攻擊：沒有「放開」，蓄力蓄滿就射、環繞轉滿就放
+      this.aimD = target ? Math.hypot(target.x - this.x, target.y - this.y) : 300;
     } else {
-      this.aim = Math.atan2(Input.my / ZOOM + Game.cam.y - this.y, Input.mx / ZOOM + Game.cam.x - this.x);
+      const wx = Input.mx / ZOOM + Game.cam.x, wy = Input.my / ZOOM + Game.cam.y;
+      this.aim = Math.atan2(wy - this.y, wx - this.x);
+      this.aimD = Math.hypot(wx - this.x, wy - this.y);  // 準星距離：環繞放出時朝滑鼠那一點集中
+      this.autoMode = false;
     }
 
     this.dashCd -= dt;
@@ -246,9 +251,10 @@ class Bullet {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
       const spin = o.orbSpin || 1;
-      if (!o.wantFire) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
-        const k = spin - 1;
-        this.mode = 'fly'; this.angle = o.aim; this.baseSpeed *= 1 + 0.25 * k; this.speed = this.baseSpeed; this.damage *= 1 + 0.5 * k;
+      if (!o.wantFire || (o.autoMode && spin >= 3)) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
+        const k = spin - 1, d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
+        this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
+        this.baseSpeed *= 1 + 0.25 * k; this.speed = this.baseSpeed; this.damage *= 1 + 0.5 * k;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;

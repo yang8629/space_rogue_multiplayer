@@ -52,7 +52,7 @@ const CHIPS = {
     } },
   charge: { name: '蓄力', short: '蓄力', type: 'launch', cost: 0, evo: '過載砲',
     grow: { what: '蓄滿命中', need: [40, 120] },
-    desc: '電路上有蓄力時，改成按住蓄力、放開（或蓄滿）射出一發。蓄滿時左邊的子彈傷害 ×5、體積 ×2.5。',
+    desc: '電路上有蓄力時，改成按住蓄力、放開射出一發。蓄滿時左邊的子彈傷害 ×5、體積 ×2.5。',
     lvs: ['蓄滿要 1 秒', '蓄滿只要 0.6 秒', '進化：蓄滿的一發無限穿透，飛到盡頭爆炸'],
     apply: (list, pw, o) => {
       const c = Game.chargeC == null ? 1 : Game.chargeC, full = c >= 0.999;
