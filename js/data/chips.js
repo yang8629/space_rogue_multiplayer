@@ -88,15 +88,11 @@ const CHIPS = {
     desc: '衝刺結束時，用整條電路朝準星額外開一槍（傷害 ×1.5，不佔射擊冷卻；有停火蓄力時會用掉蓄力）。平常開火不受影響。',
     lvs: ['開 1 槍', '連開 2 槍', '進化：衝刺穿過的敵人受到重擊（武器傷害 ×5）'],
     apply: list => Game.fireMode !== 'dashfire' ? list : list.map(b => ({ ...b, damage: b.damage * 1.5, dashShot: true })) },
-  graze: { name: '擦彈', short: '擦彈', type: 'body', cost: 1, evo: '反射鏡',
-    grow: { what: '擦彈次數', need: [25, 75] },
-    desc: '敵彈從身邊擦過（沒打中）時，用整條電路朝最近的敵人回射（不會用掉停火蓄力）。平常開火不受影響。',
-    lvs: ['擦彈範圍 18，回射 1 份', '擦彈範圍 30，回射 2 份', '進化：擦過的敵彈直接被吸收，回射 3 份'],
-    apply: (list, pw, o) => {
-      if (Game.fireMode !== 'graze' || !list.length) return list;
-      const n = Math.min(3, o.lv);
-      return Array.from({ length: n }, (_, k) => list.map(b => ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.15 }))).flat();
-    } },
+  intercept: { name: '攔截', short: '攔截', type: 'impact', cost: 1, evo: '反射鏡',
+    grow: { what: '打掉敵彈', need: [50, 150] },
+    desc: '子彈碰到敵彈時把它打掉（自己照常飛，不扣穿甲），並從那裡用整條電路朝最近的敵人回射一次（不會用掉停火蓄力）。子彈越多、越大越會攔：散彈、相位刃特別好用。',
+    lvs: ['回射傷害 ×0.5', '回射傷害 ×1', '進化：打掉的敵彈也反彈回去（敵彈傷害 ×2）'],
+    apply: (list, pw, o) => list.map(b => ({ ...b, intercept: o.lv, damage: Game.fireMode === 'intercept' ? b.damage * (o.lv >= 2 ? 1 : 0.5) : b.damage })) },
 
   // ---------- 數值晶片（只能靠合成升級） ----------
   split: { name: '分裂模組', short: '分裂', type: 'mod', cost: 2,

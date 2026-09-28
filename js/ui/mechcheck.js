@@ -277,12 +277,15 @@ const MechCheck = {
       const r = M.run(120);
       return { ok: r.maxDepth === 3 && Game.stats.layers.length === 3, got: `實際最深第 ${r.maxDepth} 層` };
     }],
-    ['電路晶片', '衝刺射擊／擦彈', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；擦彈也用整條電路回射', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'graze', 'split', null]); M.targets([[300, 0]]);
-      const gp = Game.player, gn = runOps(Game.stats.ops, 0).length, eb = { x: gp.x + gp.r + 10, y: gp.y, r: 5 };
-      Game.graze(gp, eb); eb.x += 10; Game.graze(gp, eb);
-      const gOut = Game.bullets.length;
-      if (gOut !== gn) return { ok: false, got: `擦彈回射 ${gOut} 發，整條電路一槍是 ${gn} 發（右邊的分裂沒吃到）` };
+    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈後照常飛，並用整條電路回射', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'intercept', 'split', null]); M.targets([[300, 200]]);
+      const gp = Game.player, gn = runOps(Game.stats.ops, 0).length;
+      spawnShots([shot({ angle: 0, speed: 600, damage: 10, life: 1, intercept: 1 })], gp.x, gp.y, 0, 0, null);
+      const mine = Game.bullets[0];
+      Game.eBullets = [{ x: gp.x + 60, y: gp.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'test' }];
+      for (let f = 0; f < 10 && Game.eBullets.length; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+      const back = Game.bullets.filter(b => b.depth === 1).length;
+      if (Game.eBullets.length || mine.dead || back !== gn) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；回射 ${back} 發（整條電路一槍 ${gn} 發）` };
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
       const p = Game.player, n0 = runOps(Game.stats.ops, 0), d0 = n0[0].damage;
       p.aim = Math.PI / 2; p.dashT = 0.05; p.vx = 900; p.vy = 0;

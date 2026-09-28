@@ -1072,25 +1072,27 @@ const Game = {
     const a0 = rand(0, TAU), list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
     this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
   },
-  // 擦彈：敵彈從身邊擦過（沒打中）時，朝最近的敵人回射；反射鏡（Lv3）直接吸收敵彈
-  graze(p, b) {
-    const lv = Game.stats.graze;
-    if (!lv || (b.grazed && b.grazed.has(p))) return false;
-    const R = p.r + b.r + (lv >= 2 ? 30 : 18), d = dist2(b.x, b.y, p.x, p.y);
-    const near = b.near || (b.near = new Map()), prev = near.get(p);
-    if (d < R * R) near.set(p, d);
-    // 擦過：進入擦彈範圍後開始遠離（最接近的那一刻已經過了）而且沒打中（打中的子彈已經消失）
-    if (prev == null || d <= prev) return false;
-    (b.grazed = b.grazed || new Set()).add(p);
-    const t = nearestEnemy(p.x, p.y, 900, null);  // 用整條電路回射（不會用掉停火蓄力）
-    this.fireMode = 'graze'; this.chargeC = null;
-    let list;
-    try { list = runOps(Game.stats.ops, 0); } finally { this.fireMode = null; }
-    if (list.length) spawnShots(list, p.x, p.y, t ? Math.atan2(t.y - p.y, t.x - p.x) : p.aim, 0, null);
-    this.grow(Game.shooter || null, 'graze');
-    burst(b.x, b.y, '#9dff6b', 5, 120, 0.2, 2);
-    if (lv >= 3) b.life = 0;
-    return true;
+  // 攔截：帶攔截的子彈碰到敵彈就把它打掉（自己照常飛），從那裡用整條電路朝最近的敵人回射；反射鏡（Lv3）把敵彈反彈回去
+  interceptHit(eb, I) {
+    for (const b of I) {
+      if (b.dead) continue;
+      const rr = b.r + eb.r + 2;
+      if (segDist2(b.px, b.py, b.x, b.y, eb.x, eb.y) >= rr * rr) continue;
+      eb.life = 0;
+      burst(eb.x, eb.y, '#9dff6b', 6, 140, 0.25, 2);
+      this.withLoadout(b.owner, () => {
+        const t = nearestEnemy(eb.x, eb.y, 900, null);
+        this.fireMode = 'intercept'; this.chargeC = null;
+        let list;
+        try { list = runOps(this.stats.ops, 0); } finally { this.fireMode = null; }
+        if (list.length) spawnShots(list, eb.x, eb.y, t ? Math.atan2(t.y - eb.y, t.x - eb.x) : b.angle, 1, null);  // 第 1 層：不會進環繞的圈
+        if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
+          life: 2, color: '#9dff6b', src: 'ship' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);
+        this.grow(this.shooter || null, 'intercept');
+      });
+      return true;
+    }
+    return false;
   },
   // 用量成長：owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
   grow(owner, id, n = 1) {
@@ -1157,15 +1159,16 @@ const Game = {
   },
   updateEnemyBullets(dt) {
     const ps = this.players(), W = this.bullets.filter(w => !w.dead && w.mode === 'wait');  // 停滯：停住的子彈擋敵彈
+    const I = this.bullets.filter(b => !b.dead && b.intercept && b.mode !== 'wait');  // 攔截：帶攔截的子彈打掉敵彈
     for (const b of this.eBullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
       if (Objects.eBulletHit(b)) continue;
       if (W.length && this.stasisBlock(b, W)) continue;
+      if (I.length && this.interceptHit(b, I)) continue;
       for (const p of ps) {
         const rr = b.r + p.r;
         if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
-        if (this.withLoadout(p.L, () => this.graze(p, b))) break;
       }
     }
     this.eBullets = this.eBullets.filter(b => b.life > 0);

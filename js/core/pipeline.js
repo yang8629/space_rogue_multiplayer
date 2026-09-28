@@ -123,7 +123,7 @@ function analyzeChain(chain) {
     carrier = sub.find(s => s.payload);
   }
   return { ops, heat, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
-    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), graze: lvOf('graze') };
+    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept') };
 }
 
 function computePassives(inventory) {
