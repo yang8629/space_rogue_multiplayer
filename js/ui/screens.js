@@ -125,17 +125,16 @@ const Screen = {
         <svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
           <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>
         <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
-        <div class="ds brief"><b style="color:${S.color}">${S.abilityName}</b>　${S.desc.split('。')[0]}</div>
-        <div class="det"><div class="ds">${S.desc}</div>
+        <div class="ds brief">${S.desc}</div>
         <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒　·　零件格 ${S.partSlots}</div>
-        <div class="ds"><b style="color:${S.color}">${S.abilityName}</b><br>${S.abilityDesc}</div></div>
+        <div class="det"><div class="ds"><b style="color:${S.color}">${S.abilityName}</b><br>${S.abilityDesc}</div></div>
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
         <div class="sub">${{ run: '開始遠征', coop: '雙人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件，或星門號的傳送門），之後的成長都靠零件和背包模組。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
-      <div class="cards">${cards}</div></div>`);
+      <div class="cards left">${cards}</div></div>`);
   },
 
   weaponSelect(mode, shipId) {
