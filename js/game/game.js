@@ -1080,7 +1080,8 @@ const Game = {
       const rr = b.r + eb.r + 2;
       if (segDist2(b.px, b.py, b.x, b.y, eb.x, eb.y) >= rr * rr) continue;
       eb.life = 0;
-      burst(eb.x, eb.y, '#9dff6b', 6, 140, 0.25, 2);
+      burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
+      if (!b.intercept) return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射
       this.withLoadout(b.owner, () => {
         const t = nearestEnemy(eb.x, eb.y, 900, null);
         this.fireMode = 'intercept'; this.chargeC = null;
@@ -1160,7 +1161,7 @@ const Game = {
   },
   updateEnemyBullets(dt) {
     const ps = this.players(), W = this.bullets.filter(w => !w.dead && w.mode === 'wait');  // 停滯：停住的子彈擋敵彈
-    const I = this.bullets.filter(b => !b.dead && b.intercept && b.mode !== 'wait');  // 攔截：帶攔截的子彈打掉敵彈
+    const I = this.bullets.filter(b => !b.dead && (b.intercept || b.parry) && b.mode !== 'wait');  // 攔截晶片、相位刃的格擋：打掉敵彈
     for (const b of this.eBullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
