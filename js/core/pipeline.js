@@ -7,6 +7,9 @@
 //   compileChain: 插槽 → ops（展開複合、鏡像，計算共振倍率）
 //   runOps      : 執行 ops，產生子彈清單
 // =====================================================================
+// 玩法晶片（彈道／發射／命中／機體）：鏡像不能複製（複製只會疊出 ×25 蓄力、雙倍迴旋懲罰，或完全沒效果）
+const PLAY_TYPES = ['path', 'launch', 'impact', 'body'];
+
 function compileChain(chain) {
   const ops = [], slotOps = [];
   // 協同處理器用：電路中「其他晶片」的數量（不含武器與廢鐵）
@@ -21,7 +24,7 @@ function compileChain(chain) {
     pw *= def.lvMul || 1;  // 晶片等級
     if (id === 'mirror') {
       const src = slotOps[i - 1];
-      if (src) ops.push(...src.map(o => ({ id: o.id, pw: Math.max(pw, o.pw), lv: o.lv, slot: i, n: o.n, key: 'mirror' })));
+      if (src && src.every(o => !PLAY_TYPES.includes(CHIPS[o.id].type))) ops.push(...src.map(o => ({ id: o.id, pw: Math.max(pw, o.pw), lv: o.lv, slot: i, n: o.n, key: 'mirror' })));
       return;
     }
     if (def.type === 'link' || def.type === 'scrap') return;
@@ -121,16 +124,6 @@ function analyzeChain(chain) {
   }
   return { ops, heat, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
     charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), graze: lvOf('graze') };
-}
-
-// 衝刺射擊／擦彈：只執行到那個晶片為止，它把左邊產生的子彈換成自己的發射方式；沒執行到（例如在觸發器右邊）就不發射
-function runSpecial(ops, id) {
-  const i = ops.findIndex(o => baseOf(o.id) === id);
-  if (i < 0) return [];
-  Game.fireMode = id; Game.fireHit = false;
-  let list;
-  try { list = runOps(ops.slice(0, i + 1), 0); } finally { Game.fireMode = null; }
-  return Game.fireHit ? list : [];
 }
 
 function computePassives(inventory) {

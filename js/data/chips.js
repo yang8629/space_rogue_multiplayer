@@ -22,8 +22,8 @@ const CHIPS = {
     apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7, life: b.life * 0.6 })) },
   orbit: { name: '環繞', short: '環繞', type: 'path', cost: 2, evo: '星環',
     grow: { what: '環繞命中', need: [150, 450] },
-    desc: '按住射擊時子彈存在飛船旁邊繞圈（碰到敵人照打，同一隻隔 0.5 秒可再打；每打一次扣一次穿甲，用完消失），越繞越快；放開射擊時全部朝準星射出。繞滿 2 秒：射出的子彈傷害 ×2、速度 ×1.5。右邊晶片的效果從射出後開始。',
-    lvs: ['最多存 12 發', '最多存 20 發', '進化：射出的子彈追蹤敵人'],
+    desc: '按住射擊時子彈存在飛船旁邊繞圈（碰到敵人照打，同一隻隔 0.5 秒可再打；每打一次扣一次穿甲，用完消失），越繞越快；放開射擊時全部從所在位置朝滑鼠那一點射出，轉越快傷害越高（轉速見各等級）。右邊晶片的效果從射出後開始。',
+    lvs: ['最多存 8 發；3 秒轉到 2 倍（放出傷害 ×1.5）', '最多存 20 發；2 秒轉到 3 倍（放出傷害 ×2）', '進化：射出的子彈追蹤敵人'],
     apply: (list, pw, o) => list.map(b => ({ ...b, orbit: o.lv })) },
   stasis: { name: '停滯', short: '停滯', type: 'path', cost: 1, evo: '伏擊網',
     grow: { what: '衝出後命中', need: [100, 300] },
@@ -85,11 +85,10 @@ const CHIPS = {
     apply: list => Game.fireMode !== 'dashfire' ? list : list.map(b => ({ ...b, damage: b.damage * 1.5, dashShot: true })) },
   graze: { name: '擦彈', short: '擦彈', type: 'body', cost: 1, evo: '反射鏡',
     grow: { what: '擦彈次數', need: [30, 90] },
-    desc: '敵彈從身邊擦過（沒打中）時，朝最近的敵人回射（用擦彈左邊的晶片）。平常開火不受影響。',
+    desc: '敵彈從身邊擦過（沒打中）時，用整條電路朝最近的敵人回射（不會用掉停火蓄力）。平常開火不受影響。',
     lvs: ['擦彈範圍 18，回射 1 份', '擦彈範圍 30，回射 2 份', '進化：擦過的敵彈直接被吸收，回射 3 份'],
     apply: (list, pw, o) => {
       if (Game.fireMode !== 'graze' || !list.length) return list;
-      Game.fireHit = true;
       const n = Math.min(3, o.lv);
       return Array.from({ length: n }, (_, k) => list.map(b => ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.15 }))).flat();
     } },
@@ -134,7 +133,7 @@ const CHIPS = {
 
   // ---------- 連結器 ----------
   mirror: { name: '鏡像迴路', short: '鏡像', type: 'link', cost: 2,
-    desc: '複製「左側相鄰」晶片的效果，在這一格再執行一次（放在武器右邊 = 武器多射一次）。' },
+    desc: '複製「左側相鄰」晶片的效果，在這一格再執行一次（放在武器右邊 = 武器多射一次）。只能複製武器和數值晶片；接在玩法晶片（彈道、發射、命中、機體）後面沒有效果。' },
 
   // ---------- 黑洞融合相關 ----------
   scrap: { name: '廢鐵', short: '廢鐵', type: 'scrap', cost: 0, locked: true, hidden: true,
