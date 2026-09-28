@@ -97,8 +97,12 @@ const WEAPONS = {
 };
 
 // 選武器卡片的一行精簡說明
-const WEAPON_BRIEF = { laser: '高射速單發，最好上手', scatter: '近距離 5 發散射', plasma: '慢速大球，會穿透',
-  railgun: '高速穿甲，射速慢、打得動小行星', blade: '近身揮刃，會砍掉敵彈' };
+const WEAPON_BRIEF = {
+  laser: '高速單發雷射，射速快、彈速快，最好上手。',
+  scatter: '一次噴出 5 顆短程彈丸，貼近敵人時爆發最高。',
+  plasma: '慢速的大型電漿球，單發傷害高、可以穿透。',
+  railgun: '超高速穿甲彈，一發貫穿一排；射速慢，打得動小行星。',
+  blade: '向前揮出 3 段能量刃，只打得到身邊；刃片會砍掉敵彈。' };
 
 function weaponParams(state) {
   const W = WEAPONS[state.id];
