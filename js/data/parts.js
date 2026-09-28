@@ -11,8 +11,8 @@ const PARTS = {
   armor:   { name: '重裝甲', color: '#ffd166', up: '最大 HP +20', dn: '移動速度 −4%',
     t2: { id: 'thick', name: '厚甲', desc: '單次受傷最多扣最大 HP 的 20%' },
     t4: { id: 'ram', name: '衝撞', desc: '撞到敵人造成「重裝甲層數 × 20」傷害並撞飛，自己不受碰撞傷害' } },
-  larmor:  { name: '輕裝甲', color: '#9fe8ff', up: '最大 HP +10', dn: '受到的傷害 +3%',
-    t2: { id: 'deflect', name: '偏折', desc: '被打到後的無敵時間 +0.3 秒' },
+  larmor:  { name: '輕裝甲', color: '#9fe8ff', up: '最大 HP +15', dn: '衝刺冷卻 +3%',
+    t2: { id: 'deflect', name: '偏折', desc: '被打到後的無敵時間 +0.8 秒' },
     t4: { id: 'counter', name: '反擊裝甲', desc: '被打到時，朝打你的方向回射 8 發子彈' } },
   booster: { name: '加速器', color: '#4cc9f0', up: '移動速度 +6%', dn: '最大 HP −10',
     t2: { id: 'gale', name: '疾風', desc: '移動中射速 +20%' },
@@ -21,7 +21,7 @@ const PARTS = {
     t2: { id: 'quench', name: '急冷', desc: '衝刺後 2 秒內射速 +30%' },
     t4: { id: 'vent', name: '排熱爆發', desc: '衝刺時朝四周放出 12 發子彈' } },
   sensor:  { name: '感測器', color: '#9dff6b', up: '子彈速度 +8%', dn: '衝刺冷卻 +5%',
-    t2: { id: 'lock', name: '鎖定', desc: '子彈會稍微追蹤敵人' },
+    t2: { id: 'lock', name: '鎖定', desc: '打中敵人後 1 秒內，子彈會追蹤那一隻（第一發要自己打中）' },
     t4: { id: 'mark', name: '弱點標記', desc: '被打中的敵人 3 秒內受到的傷害 +25%；看得到小行星後面的敵人' } },
 };
 const BALANCE = { id: 'balance', name: '均衡', desc: '5 種零件都至少 1 層：每層的好處 +30%' };
@@ -36,7 +36,7 @@ const MODULES = {
   blink:    { name: '相位跳躍', icon: '⤳', eff: '衝刺變成瞬移（距離 150）', cost: '衝刺冷卻 +50%', heavy: '瞬移落地放出震波', light: '沒有冷卻代價' },
   gravity:  { name: '重力井', icon: '◎', eff: '每 6 秒把周圍敵人吸到飛船前方一點', cost: '自己也會被往那一點拉', heavy: '自己不會被拉', light: '吸引範圍變大' },
   drone:    { name: '修復無人機', icon: '✚', eff: '5 秒沒受傷後開始回血（每秒 8）', cost: '最大 HP −20%', heavy: '回血 ×2', light: '3 秒就開始回血' },
-  reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +15%', heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
+  reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
   // 旗艦專屬（擊沉旗艦時可以裝上）
   swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 5 秒朝四周放出 12 發子彈（武器傷害）', cost: '最大 HP −10' },
   thruster:  { name: '裂界推進器', icon: '➹', boss: 'boss2', eff: '衝刺距離 ×2、衝刺冷卻 −30%', cost: '衝刺後 0.5 秒不能射擊' },
@@ -55,7 +55,7 @@ function mechStats(parts, module) {
   const s = { maxHp: 0, hpMul: 1, speed: 1, taken: 1, rate: 1, bspeed: 1, dashCd: 1, dashDist: 1, traits: T,
     heavy: n('armor') >= 2, light: n('booster') >= 2, module: module || null, armor: n('armor') };
   s.maxHp += 20 * k * n('armor'); s.speed *= Math.pow(0.96, n('armor'));
-  s.maxHp += 10 * k * n('larmor'); s.taken *= Math.pow(1.03, n('larmor'));
+  s.maxHp += 15 * k * n('larmor'); s.dashCd *= Math.pow(1.03, n('larmor'));
   s.speed *= 1 + 0.06 * k * n('booster'); s.maxHp -= 10 * n('booster');
   s.rate *= 1 + 0.06 * k * n('sink'); s.taken *= Math.pow(1.04, n('sink'));
   s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashCd *= Math.pow(1.05, n('sensor'));
@@ -63,7 +63,7 @@ function mechStats(parts, module) {
     case 'shield': s.speed *= 0.9; break;
     case 'blink': if (!s.light) s.dashCd *= 1.5; break;
     case 'drone': s.hpMul = 0.8; break;
-    case 'reactive': if (!s.light) s.taken *= 1.15; break;
+    case 'reactive': if (!s.light) s.taken *= 1.05; break;
     case 'swarmcore': s.maxHp -= 10; break;
     case 'thruster': s.dashCd *= 0.7; s.dashDist = 2; break;
     case 'endshell': s.taken *= 1.1; break;

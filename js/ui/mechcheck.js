@@ -405,10 +405,10 @@ const MechCheck = {
       Game.updateEnemies(1 / 60);
       return { ok: near1(hp - e.hp, 80) && p.hp === p.maxHp, got: `敵人受到 ${Math.round(hp - e.hp)}，自己 HP ${p.hp}/${p.maxHp}` };
     }],
-    ['機體', '均衡', '5 種零件各 1 層：好處 +30%（HP 100 + (20+10)×1.3 − 10 = 129）', M => {
+    ['機體', '均衡', '5 種零件各 1 層：好處 +30%（HP 100 + (20+15)×1.3 − 10 = 136）', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       for (const id of PART_IDS) Game.addPart(id);
-      return { ok: Game.mech.traits.balance && Game.player.maxHp === 129, got: `均衡${Game.mech.traits.balance ? '開啟' : '沒開'}，最大 HP ${Game.player.maxHp}` };
+      return { ok: Game.mech.traits.balance && Game.player.maxHp === 136, got: `均衡${Game.mech.traits.balance ? '開啟' : '沒開'}，最大 HP ${Game.player.maxHp}` };
     }],
     ['機體', '改裝廠：換零件', '付 ◆30 把 1 層重裝甲換成加速器', M => {
       M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);

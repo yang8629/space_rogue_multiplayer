@@ -294,7 +294,11 @@ class Bullet {
     if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 2.5 : 1.5; this.speed = 0; return; }
     this.flyAge += dt;
     if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
-    if (this.homing > 0 && this.mode !== 'return') {
+    const o = this.ownerP, L = this.lock && o && o.lockT > Game.time && o.lockE && !o.lockE.dead ? o.lockE : null;
+    if (L && this.mode === 'fly') {  // 鎖定（感測器 2 層）：轉向剛剛打中的那一隻
+      const turn = 2 * dt * Math.max(1, this.speed / 600);
+      this.angle += clamp(angleDiff(this.angle, Math.atan2(L.y - this.y, L.x - this.x)), -turn, turn);
+    } else if (this.homing > 0 && this.mode !== 'return') {
       const t = nearestEnemy(this.x, this.y, 450, this.hitSet);
       if (t) {
         const turn = this.homing * dt * Math.max(1, this.speed / 600);  // 快的子彈轉得跟著快：轉彎半徑跟 600 速度時一樣，不會繞圈追不到
@@ -350,9 +354,10 @@ function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
   curVolley = ++volleySeq;
   for (const s0 of list) {
     if (B.length >= CFG.MAX_LIVE_BULLETS) break;
-    const s = M.bspeed !== 1 || M.traits.lock ? { ...s0, speed: s0.speed * M.bspeed, homing: s0.homing + (M.traits.lock ? 0.6 : 0) } : s0;
+    const s = M.bspeed !== 1 ? { ...s0, speed: s0.speed * M.bspeed } : s0;
     const b = new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId);
     if (M.traits.mark) b.mark = true;
+    if (M.traits.lock) b.lock = true;  // 鎖定：打中後 1 秒內追蹤那一隻（見 Bullet.update）
     B.push(b);
   }
 }
