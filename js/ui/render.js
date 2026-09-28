@@ -352,6 +352,10 @@ function drawPlayer(p, tag = '') {
     ctx.strokeStyle = 'rgba(76, 201, 240, 0.85)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(0, 0, 26 + i * 5, 0, TAU); ctx.stroke();
   }
+  if (p.gravField) {  // 重力井：減速場範圍
+    ctx.strokeStyle = 'rgba(179, 136, 255, 0.35)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 8]);
+    ctx.beginPath(); ctx.arc(0, 0, p.gravField.R, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
   if (own && Game.stats && Game.stats.charge && (p.chargeC || 0) > 0.02) {  // 停火蓄力：船身外圈的蓄力環（蓄滿時變白、閃動）
     const k = Math.min(1, p.chargeC), full = k >= 1;
     ctx.globalAlpha = 1;

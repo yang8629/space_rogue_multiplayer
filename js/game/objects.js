@@ -176,7 +176,6 @@ const Objects = {
         return false;
       }
       b.x = o.x + nx * (o.r + b.r); b.y = o.y + ny * (o.r + b.r);
-      if (b.boom && b.mode === 'fly') { b.startReturn(); return true; }
       if (b.endBoom) G.explode(b.x, b.y, 90, b.damage, b.color, null, b.att);
       b.dead = true;
       return true;
@@ -218,8 +217,10 @@ const Objects = {
     const W = CFG.WORLD_W, H = CFG.WORLD_H, side = randInt(0, 3);
     const edge = [[rand(200, W - 200), -40], [W + 40, rand(200, H - 200)], [rand(200, W - 200), H + 40], [-40, rand(200, H - 200)]][side];
     const tx = rand(W * 0.3, W * 0.7), ty = rand(H * 0.3, H * 0.7), a = Math.atan2(ty - edge[1], tx - edge[0]);
-    Game.objs.push({ type: 'comet', id: Game.nextId++, x: edge[0], y: edge[1], vx: Math.cos(a) * OBJ.COMET_SPEED, vy: Math.sin(a) * OBJ.COMET_SPEED,
-      r: 18, hp: OBJ.COMET_HP, warn: OBJ.COMET_WARN, hits: new Set(), age: 0 });
+    // 大小隨機：越大飛越慢、越耐打、爆炸越大（半徑 12～30；速度 520～230）
+    const r = randInt(12, 30), k = r / 18, spd = OBJ.COMET_SPEED / k;
+    Game.objs.push({ type: 'comet', id: Game.nextId++, x: edge[0], y: edge[1], vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+      r, hp: Math.round(OBJ.COMET_HP * k), maxHp: Math.round(OBJ.COMET_HP * k), warn: OBJ.COMET_WARN, hits: new Set(), age: 0 });
     SFX.play('boss');
   },
   updateComet(o, dt) {
@@ -232,6 +233,7 @@ const Objects = {
     for (const h of G.objs) {
       if (h.type === 'hole' && dist2(o.x, o.y, h.x, h.y) < (h.r + o.r) ** 2) { this.cometBoom(o, 120, 60); return; }  // 被黑洞吞掉時爆炸
       if (h.type === 'planet' && dist2(o.x, o.y, h.x, h.y) < (h.r + o.r) ** 2) { this.cometBoom(o, 100, 40); return; }
+      if (h.type === 'rock' && !h.dead && dist2(o.x, o.y, h.x, h.y) < (h.r + o.r) ** 2) { this.cometBoom(o, 100, 40); return; }  // 撞上小行星帶：爆炸也會打碎附近的小行星
     }
     for (const e of G.enemies) {
       if (e.dead || e.spawnT > 0 || o.hits.has(e.id) || dist2(o.x, o.y, e.x, e.y) > (o.r + e.r) ** 2) continue;
@@ -257,9 +259,10 @@ const Objects = {
     burst(o.x, o.y, '#bfe9ff', 30, 260, 0.6, 3);
     SFX.play('explode');
   },
-  cometBoom(o, r, dmg) {
+  cometBoom(o, r, dmg) {  // 爆炸範圍、傷害照彗星大小（範圍最大 180，不會炸到整個畫面）
     o.dead = true;
-    Game.explode(o.x, o.y, r, dmg, '#bfe9ff', null, o.lastAtt || null);
+    const k = o.r / 18;
+    Game.explode(o.x, o.y, Math.min(180, r * k), dmg * k, '#bfe9ff', null, o.lastAtt || null);
   },
 
   // ---------- 飛船（自己的電腦）：黑洞拉扯與核心、行星和小行星擋住 ----------
@@ -326,7 +329,7 @@ const Objects = {
       vx += ax * dt * OBJ.COMET_GRAV; vy += ay * dt * OBJ.COMET_GRAV; x += vx * dt; y += vy * dt;
       pts.push([x, y]);
       if (x < -100 || y < -100 || x > CFG.WORLD_W + 100 || y > CFG.WORLD_H + 100) break;
-      if (Game.objs.some(h => (h.type === 'planet' || h.type === 'hole') && dist2(x, y, h.x, h.y) < (h.r + o.r) ** 2)) break;
+      if (Game.objs.some(h => (h.type === 'planet' || h.type === 'hole' || (h.type === 'rock' && !h.dead)) && dist2(x, y, h.x, h.y) < (h.r + o.r) ** 2)) break;
     }
     return pts;
   },
@@ -387,9 +390,21 @@ const Objects = {
         if (o.warn > 0) {  // 預警線：藍白色（敵人的預警線是紅色）
           ctx.globalAlpha = 0.25 + 0.4 * Math.sin(G.time * 25) ** 2;
           ctx.strokeStyle = '#bfe9ff'; ctx.lineWidth = o.r * 2;
-          ctx.lineJoin = 'round'; ctx.beginPath();
-          this.cometPath(o).forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
-          ctx.stroke();
+          // 沿著之後的路線跑動的箭頭（箭頭大小 = 彗星大小；越大越慢，箭頭也跑得越慢）
+          const pts = this.cometPath(o), gap = 70, off = (G.time * s * 0.8) % gap;
+          ctx.lineWidth = Math.max(2, o.r * 0.25); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          let acc = 0, next = off;
+          for (let i = 1; i < pts.length && next < 2400; i++) {
+            const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], seg = Math.hypot(x1 - x0, y1 - y0);
+            while (next <= acc + seg) {
+              const t = (next - acc) / (seg || 1), px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t, dx = (x1 - x0) / (seg || 1), dy = (y1 - y0) / (seg || 1), w = o.r;
+              ctx.beginPath(); ctx.moveTo(px - dx * w * 0.7 - dy * w, py - dy * w * 0.7 + dx * w); ctx.lineTo(px, py);
+              ctx.lineTo(px - dx * w * 0.7 + dy * w, py - dy * w * 0.7 - dx * w); ctx.stroke();
+              next += gap;
+            }
+            acc += seg;
+          }
+          ctx.lineCap = 'butt';
           ctx.globalAlpha = 1;
           continue;
         }

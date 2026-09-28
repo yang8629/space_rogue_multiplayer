@@ -34,7 +34,7 @@ const PART_SWAP_PRICE = 30;  // 改裝廠：把 1 層零件換成另一種
 const MODULES = {
   shield:   { name: '護盾產生器', icon: '⛨', eff: '擋下一次傷害，8 秒回復', cost: '移動速度 −10%', heavy: '2 層護盾', light: '4 秒回復' },
   blink:    { name: '相位跳躍', icon: '⤳', eff: '衝刺變成瞬移（距離 150）', cost: '衝刺冷卻 +50%', heavy: '瞬移落地放出震波', light: '沒有冷卻代價' },
-  gravity:  { name: '重力井', icon: '◎', eff: '每 6 秒把周圍敵人吸到飛船前方一點', cost: '自己也會被往那一點拉', heavy: '自己不會被拉', light: '吸引範圍變大' },
+  gravity:  { name: '重力井', icon: '◎', eff: '身邊 150 內的敵人和敵彈速度 −40%', cost: '射速 −10%', heavy: '減速 −60%', light: '範圍 220' },
   drone:    { name: '修復無人機', icon: '✚', eff: '5 秒沒受傷後開始回血（每秒 8）', cost: '最大 HP −20%', heavy: '回血 ×2', light: '3 秒就開始回血' },
   reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
   // 旗艦專屬（擊沉旗艦時可以裝上）
@@ -65,6 +65,7 @@ function mechStats(parts, module) {
     case 'drone': s.hpMul = 0.8; break;
     case 'reactive': if (!s.light) s.taken *= 1.05; break;
     case 'swarmcore': s.maxHp -= 10; break;
+    case 'gravity': s.rate *= 0.9; break;
     case 'thruster': s.dashCd *= 0.7; s.dashDist = 2; break;
     case 'endshell': s.taken *= 1.1; break;
   }

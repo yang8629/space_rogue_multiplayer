@@ -793,16 +793,14 @@ const Game = {
       else p.shieldT = 0;
     } else p.shield = 0;
     if (mod === 'drone' && p.calm >= (M.light ? 3 : 5)) p.hp = Math.min(p.maxHp, p.hp + (M.heavy ? 16 : 8) * dt);
-    if (mod === 'gravity' && (p.gravT -= dt) <= 0) {  // 每 6 秒把周圍敵人吸到飛船前方
-      p.gravT = 6;
-      const px = clamp(p.x + Math.cos(p.aim) * 150, 0, CFG.WORLD_W), py = clamp(p.y + Math.sin(p.aim) * 150, 0, CFG.WORLD_H), R = M.light ? 320 : 220;
+    // 重力井：身邊的減速場，敵人移動 −40%（重裝甲加成 −60%），敵彈在場內也變慢（見 updateEnemyBullets）
+    p.gravField = mod === 'gravity' ? { R: M.light ? 220 : 150, slow: M.heavy ? 0.6 : 0.4 } : null;
+    if (p.gravField) {
+      const F = p.gravField;
       for (const e of this.enemies) {
-        if (e.dead || e.t.boss || e.spawnT > 0 || dist2(e.x, e.y, p.x, p.y) > R * R) continue;
-        const d = Math.hypot(px - e.x, py - e.y) || 1;
-        e.vx += (px - e.x) / d * Math.min(900, d * 5); e.vy += (py - e.y) / d * Math.min(900, d * 5);
+        if (e.dead || e.spawnT > 0 || dist2(e.x, e.y, p.x, p.y) > F.R * F.R) continue;
+        e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, F.slow); e.slowT = Math.max(e.slowT, 0.1);
       }
-      if (this.rings.length < 40) this.rings.push({ x: px, y: py, r: R, life: 0.5, max: 0.5, color: '#b388ff' });
-      if (Net.role === 'host') Net.fx(['r', Math.round(px), Math.round(py), R, '#b388ff']);
     }
     if (mod === 'swarmcore' && (p.coreT -= dt) <= 0) {  // 每 5 秒朝四周放出 12 發
       p.coreT = 5;
@@ -1191,8 +1189,11 @@ const Game = {
   updateEnemyBullets(dt) {
     const ps = this.players();
     const I = this.bullets.filter(b => !b.dead && (b.intercept || b.parry) && b.mode !== 'wait');  // 攔截晶片、相位刃的格擋：打掉敵彈
+    const fields = ps.filter(p => p.gravField);  // 重力井：場內的敵彈變慢
     for (const b of this.eBullets) {
-      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      let k = 1;
+      for (const p of fields) if (dist2(b.x, b.y, p.x, p.y) < p.gravField.R ** 2) k = Math.min(k, 1 - p.gravField.slow);
+      b.x += b.vx * dt * k; b.y += b.vy * dt * k; b.life -= dt;
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
       if (Objects.eBulletHit(b)) continue;
       if (I.length && this.interceptHit(b, I)) continue;

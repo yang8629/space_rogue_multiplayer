@@ -154,16 +154,17 @@ const MechCheck = {
       const d = M.firstHit();
       return { ok: near1(d, 20), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
     }],
-    ['電路晶片', '迴旋', '子彈飛到盡頭後飛回飛船；打中敵人時穿過去折返，回程再打牠一次', M => {
+    ['電路晶片', '迴旋', '沒打中就飛到盡頭消失；打中敵人時穿過去折返，回程再打牠一次，飛回飛船', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); M.targets([]);
       M.run(1); const b = Game.bullets[0];
       let back = false;
       for (let f = 0; f < 120 && b && !b.dead; f++) { Game.updateBullets(1 / 60); if (b.mode === 'return') back = true; }
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); const e = M.targets([[150, 0]])[0];
       M.run(1); const c = Game.bullets[0];
-      for (let f = 0; f < 120 && c && !c.dead; f++) Game.updateBullets(1 / 60);
+      for (let f = 0; f < 300 && c && !c.dead; f++) Game.updateBullets(1 / 60);
       const dmg = e.maxHp - e.hp;
-      return { ok: back && b.dead && near1(dmg, 14), got: (back ? `折返後回到飛船${b.dead ? '（消失）' : '（還在飛）'}` : '沒有折返') + `；單發打一隻：${Math.round(dmg)}（應為 7 + 7）` };
+      const home = c.dead && Math.hypot(c.x - Game.player.x, c.y - Game.player.y) < 40;
+      return { ok: !back && b.dead && near1(dmg, 14) && home, got: (back ? '沒打中也折返了' : '沒打中：飛到盡頭消失') + `；單發打一隻：${Math.round(dmg)}（應為 7 + 7）${home ? '，回到飛船' : '，沒回到飛船'}` };
     }],
     ['電路晶片', '超頻模組', '同樣時間內開火次數變多', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
@@ -517,7 +518,7 @@ const MechCheck = {
       return { ok: warned && Game.bullets.length === 10, got: `預警${warned ? '有' : '沒有'}，碎片 ${Game.bullets.length} 發` };
     }],
 
-    ['敵人', '精英：衝鋒與環形彈幕', '會蓄力衝鋒，也會放 14 發環形彈', M => {
+    ['敵人', '精英：衝鋒與環形彈幕', '會蓄力衝鋒，也會連放兩圈 20 發環形彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const e = M.targets([[400, 0]], 'elite', false, 1)[0]; e.t = { ...e.t, dmg: 0 };
       let charged = false, maxShots = 0;
@@ -526,7 +527,7 @@ const MechCheck = {
         if (e.mode === 'charge') charged = true;
         maxShots = Math.max(maxShots, Game.eBullets.length);
       }
-      return { ok: charged && maxShots >= 14, got: `衝鋒${charged ? '有' : '沒有'}發生，彈幕最多 ${maxShots} 發` };
+      return { ok: charged && maxShots >= 40, got: `衝鋒${charged ? '有' : '沒有'}發生，彈幕最多 ${maxShots} 發` };
     }],
     ['敵人', '裂界獵艦：衝鋒與狙擊', '會預警後衝鋒並灑彈，暴走後會部署噴吐者', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
