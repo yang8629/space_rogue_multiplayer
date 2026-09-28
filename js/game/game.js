@@ -648,8 +648,9 @@ const Game = {
       this.eBullets = [];
       this.banner = { text: '旗艦擊沉！', t: 2 };
     }
-    let n = e.t.credits;
-    for (let i = 0; i < e.t.credits; i++) if (Math.random() < this.passives.greed) n++;
+    const base = e.summoned ? 0 : e.t.credits;  // 旗艦叫出來的小怪不掉晶體
+    let n = base;
+    for (let i = 0; i < base; i++) if (Math.random() < this.passives.greed) n++;
     for (let i = 0; i < n; i++)
       this.pickups.push({ id: this.nextId++, x: e.x + rand(-8, 8), y: e.y + rand(-8, 8), vx: rand(-80, 80), vy: rand(-80, 80), life: 14 });
     if (e.type === 'elite' && this.combat.sandbox && COMPOSITE_IDS.length) {
