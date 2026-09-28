@@ -404,6 +404,11 @@ const ENEMY_TYPES = {
     desc: '連續缺口環形波、雙向螺旋、慢速彈牆、召喚刺殼護衛。' },
 };
 
+// 無盡模式：每過一個星區，敵人攻擊頻率 ×1.1、移動速度 ×1.05（乘算；攻擊力另外在受傷時 ×1.25）
+const endlessK = () => Game.mode === 'run' || Game.mode === 'coop' ? Math.max(0, Game.sector - CFG.CAMPAIGN_SECTORS) : 0;
+const endlessAtk = () => Math.pow(CFG.ENDLESS_ATK, endlessK());
+const endlessSpd = () => Math.pow(CFG.ENDLESS_SPD, endlessK());
+
 class Enemy {
   constructor(type, x, y, hpScale) {
     const t = ENEMY_TYPES[type];
@@ -474,7 +479,7 @@ class Enemy {
         if (this.modeT <= 0) this.mode = 'chase';
         return;
       }
-      this.skillCd -= dt;
+      this.skillCd -= dt * endlessAtk();
       if (this.skillCd <= 0) {
         this.skillCd = 3;
         if (this.nextSkill === 'charge') {
@@ -498,7 +503,7 @@ class Enemy {
       const R = t.ranged.range;
       if (d < R * 0.55) { mx = -mx; my = -my; }
       else if (d < R * 0.9) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s; my = dx / d * s; }
-      this.cd -= dt;
+      this.cd -= dt * endlessAtk();
       if (this.cd <= 0 && d < R + 120) {
         this.cd = t.ranged.cd;
         const a = Math.atan2(dy, dx);
@@ -510,8 +515,8 @@ class Enemy {
     if (Game.objs.length) [mx, my] = Objects.steer(this, mx, my);  // 繞開黑洞
     const ml = Math.hypot(mx, my) || 1;
     const k = Math.min(1, dt * 4);
-    this.vx += (mx / ml * t.speed * this.spdMul - this.vx) * k;
-    this.vy += (my / ml * t.speed * this.spdMul - this.vy) * k;
+    this.vx += (mx / ml * t.speed * this.spdMul * endlessSpd() - this.vx) * k;
+    this.vy += (my / ml * t.speed * this.spdMul * endlessSpd() - this.vy) * k;
     this.move(dt);
   }
   // ---------- 刺殼：平常慢慢走；靠近時縮成球（有預警線）→ 高速滾向玩家（撞牆反彈一次）→ 暈眩 ----------
@@ -546,7 +551,7 @@ class Enemy {
       if (this.modeT <= 0) { this.mode = 'chase'; this.rollCd = B.cooldown; }
       return true;
     }
-    this.rollCd -= dt;
+    this.rollCd -= dt * endlessAtk();
     if (this.rollCd <= 0 && d < B.range) { this.mode = 'windup'; this.modeT = B.windup; this.chargeA = Math.atan2(dy, dx); return true; }
     return false;
   }
@@ -601,7 +606,7 @@ class Enemy {
       // 與玩家保持距離並緩慢繞行（獵艦貼得比較近，核心幾乎不動）
       const [far, near, orbit] = this.type === 'boss2' ? [300, 180, 60] : this.type === 'boss3' ? [460, 260, 18] : [340, 220, 35];
       const want = d > far ? 1 : d < near ? -1 : 0;
-      const sp = t.speed * this.spdMul;
+      const sp = t.speed * this.spdMul * endlessSpd();
       const tvx = dx / d * sp * want - dy / d * orbit, tvy = dy / d * sp * want + dx / d * orbit;
       const k = Math.min(1, dt * 2);
       this.vx += (tvx - this.vx) * k; this.vy += (tvy - this.vy) * k;
@@ -639,7 +644,7 @@ class Enemy {
     }
     this.ringQ = this.ringQ.filter(q => q.t > 0);
 
-    this.skillCd -= dt;
+    this.skillCd -= dt * endlessAtk();
     if (this.skillCd > 0 || this.mode !== 'chase') return;
     this.skill = t.skills[this.skillIdx++ % t.skills.length];
     switch (this.skill) {

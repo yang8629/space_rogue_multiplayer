@@ -196,7 +196,8 @@ const Game = {
     const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
     const y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : 1 + C.level * 0.15 + (C.wave - 1) * 0.08) *
-      (this.mode === 'coop' && this.mate && !this.mate.gone ? 1.8 : 1);  // 雙人：敵人血量 ×1.8（雙人整局模擬調到通關率約 40%）；隊友離線時恢復單人血量
+      (this.mode === 'coop' && this.mate && !this.mate.gone ? 1.8 : 1) *  // 雙人：敵人血量 ×1.8（雙人整局模擬調到通關率約 40%）；隊友離線時恢復單人血量
+      (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）
     const e = new Enemy(type, x, y, scale);
     this.enemies.push(e);
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
@@ -351,8 +352,15 @@ const Game = {
       this.earn(10);
       msg = '跳過獎勵：◆ +10';
     }
+    // 電路有空格就直接裝上；只有放進倉庫（電路滿了）才打開電路編輯器
+    let toInv = false;
+    if (id && !this.mergeTarget(id)) {
+      const j = this.inventory.lastIndexOf(id), slot = this.chain.indexOf(null, 1);
+      if (j >= 0 && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
+      else toInv = j >= 0;
+    }
     this.showMap(msg);
-    if (id) this.openEditorWith(msg);  // 拿到晶片後直接打開電路編輯器，方便馬上裝上
+    if (toInv) this.openEditorWith(msg);
   },
   openEditorWith(msg) {
     this.toggleEditor();
@@ -699,6 +707,7 @@ const Game = {
       return;
     }
     dmg *= (1 - Math.min(0.6, this.passivesOf(p).armor)) * M.taken;
+    if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - CFG.CAMPAIGN_SECTORS);  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
     if (M.module === 'endshell' && !p.shellUsed && p.hp - dmg <= 0) {  // 終焉護殼：留 1 HP
       p.shellUsed = true; dmg = Math.max(0, p.hp - 1); p.iframe = 2;
@@ -1114,6 +1123,7 @@ const Game = {
       if (segDist2(b.px, b.py, b.x, b.y, eb.x, eb.y) >= rr * rr) continue;
       eb.life = 0;
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
+      if (b.mode === 'orbit' && (b.orbBlock = (b.orbBlock || 0) + 1) >= 3) b.dead = true;  // 繞圈中的子彈最多擋 3 發敵彈（割怪不受影響）
       if (!b.intercept) return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射
       this.withLoadout(b.owner, () => {
         const t = nearestEnemy(eb.x, eb.y, 900, null);
