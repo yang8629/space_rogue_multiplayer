@@ -1138,20 +1138,6 @@ const Game = {
     if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
     SFX.play('explode');
   },
-  // 停滯：停住的子彈擋下碰到的敵彈；每擋一發扣一次穿甲，用完就消失
-  stasisBlock(b, W) {
-    for (const w of W) {
-      if (w.dead) continue;
-      const rr = w.r + b.r + 4;
-      if (dist2(b.x, b.y, w.x, w.y) >= rr * rr) continue;
-      b.life = 0;
-      if (w.pierce > 0) w.pierce--; else w.dead = true;
-      this.grow(w.owner, 'stasis');
-      burst(b.x, b.y, w.color, 5, 120, 0.2, 2);
-      return true;
-    }
-    return false;
-  },
   healPlayer(v, p = this.player) {  // 吸血：每秒最多回復 4 HP（每位玩家各自計算）
     if (!p || p.dead) return;
     if (this.time - (p.healWin || 0) > 1) { p.healWin = this.time; p.healed = 0; }
@@ -1161,13 +1147,12 @@ const Game = {
     p.hp = Math.min(p.maxHp, p.hp + add);
   },
   updateEnemyBullets(dt) {
-    const ps = this.players(), W = this.bullets.filter(w => !w.dead && w.mode === 'wait');  // 停滯：停住的子彈擋敵彈
+    const ps = this.players();
     const I = this.bullets.filter(b => !b.dead && (b.intercept || b.parry) && b.mode !== 'wait');  // 攔截晶片、相位刃的格擋：打掉敵彈
     for (const b of this.eBullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
       if (Objects.eBulletHit(b)) continue;
-      if (W.length && this.stasisBlock(b, W)) continue;
       if (I.length && this.interceptHit(b, I)) continue;
       for (const p of ps) {
         const rr = b.r + p.r;

@@ -21,7 +21,8 @@ const NODE_META = {
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）
 //   精英、黑洞、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
 //   每個精英、黑洞的下一步至少有一條路通維修站（黑洞融合失敗的廢鐵要能拆）；
-//   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）
+//   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
+//   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站
 const NEED_REPAIR_AFTER = ['elite', 'blackhole'];
 // 從 n 往後走得到的所有節點（不含 n 自己）
 function descendants(n, byId) {
@@ -38,7 +39,11 @@ function mapOk(m) {
   const has = (from, to, type) => m.slice(from, to).flat().some(n => n.type === type);
   const all = m.flat(), byId = id => all.find(n => n.id === id);
   const armories = all.filter(n => n.type === 'armory'), holes = all.filter(n => n.type === 'blackhole');
-  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && has(1, 5, 'workshop') && m[m.length - 2].every(n => n.type === 'shop') &&
+  const pre = m[m.length - 2], memo = {};
+  const minFights = n => n.type === 'boss' ? 0 : memo[n.id] != null ? memo[n.id]
+    : (memo[n.id] = (['combat', 'elite'].includes(n.type) ? 1 : 0) + Math.min(...n.next.map(id => minFights(byId(id)))));
+  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && has(1, 5, 'workshop') &&
+    pre.some(n => n.type === 'shop') && pre.some(n => n.type === 'repair') && m[0].every(n => minFights(n) >= 3) &&
     armories.length === 1 && armories[0].L >= 1 && armories[0].L <= 4 &&
     all.filter(n => NEED_REPAIR_AFTER.includes(n.type)).every(n => n.next.some(id => byId(id).type === 'repair')) &&
     holes.every(h => !descendants(h, byId).some(d => d.type === 'blackhole')) &&
@@ -46,7 +51,7 @@ function mapOk(m) {
 }
 function genMap() {
   let m;
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {  // 保底規則多，單次生成符合的機率低（約 2%），多試幾次
     m = genMapOnce();
     if (mapOk(m)) break;
   }
@@ -63,7 +68,7 @@ function genMapOnce() {
   for (let L = 2; L < LAYERS - 2; L++) for (const nd of layers[L]) {
     const r = Math.random();
     nd.type = r < 0.2 ? 'elite' : r < 0.3 ? 'shop' : r < 0.38 ? 'repair' : r < 0.48 ? 'blackhole' : r < 0.58 ? 'workshop' : 'combat';
-    // 精英、黑洞只放第 3～4 層：後面要接維修站，而第 6 層（王前）全部是補給站
+    // 精英、黑洞只放第 3～4 層：後面要接維修站
     if (NEED_REPAIR_AFTER.includes(nd.type) && L > 3) nd.type = 'combat';
   }
   if (Math.random() < 0.5) pick(layers[1]).type = 'shop';
@@ -80,7 +85,7 @@ function genMapOnce() {
   // 軍械台整張圖只有一個，隨機放在第 2～5 層的戰鬥節點上
   const armCands = layers.slice(1, 5).flat().filter(n => n.type === 'combat');
   if (armCands.length) pick(armCands).type = 'armory';
-  layers[LAYERS - 2].forEach(nd => nd.type = 'shop');  // 王關前一層全部是補給站
+  layers[LAYERS - 2].forEach(nd => nd.type = 'combat');  // 王關前一層：先全部當戰鬥，最後再放一個補給站、一個維修站
   layers[LAYERS - 1][0].type = 'boss';
 
   const rel = n => (n.k + 0.5) / n.n;
@@ -123,6 +128,31 @@ function genMapOnce() {
   // 補給站也不連著出現：「補給站 → 補給站」時把前面那一個改成戰鬥（第 6 層的補給站保留）
   for (const a of layers.flat()) {
     if (a.type === 'shop' && a.next.some(id => byId(id).type === 'shop')) a.type = 'combat';
+  }
+  // 王關前一層：一個補給站、一個維修站（挑前一層沒有同類的位置，避免連著出現），其他是戰鬥
+  const parentsOf = n => layers.flat().filter(p => p.next.includes(n.id));
+  const pre = [...layers[LAYERS - 2]].sort(() => Math.random() - 0.5);
+  for (const type of ['shop', 'repair']) {
+    const c = pre.find(n => n.type === 'combat' && !parentsOf(n).some(p => p.type === type));
+    if (c) c.type = type;
+  }
+  // 每條路線至少 3 場戰鬥：找出戰鬥最少的那條路，把路上可以改的節點改成戰鬥
+  //   （改裝廠、補給站、黑洞要留至少一個；精英、黑洞後面必要的維修站不改）
+  const count = (type, from, to) => layers.slice(from, to).flat().filter(n => n.type === type).length;
+  const spare = x => x.type === 'workshop' ? count('workshop', 1, 5) > 1 : x.type === 'shop' ? count('shop', 1, 5) > 1
+    : x.type === 'blackhole' ? count('blackhole', 2, 4) > 1 : x.type === 'repair' ? !needed(x) : false;
+  for (let tries = 0; tries < 6; tries++) {
+    const memo = {};
+    const mf = n => n.type === 'boss' ? 0 : memo[n.id] != null ? memo[n.id]
+      : (memo[n.id] = (['combat', 'elite'].includes(n.type) ? 1 : 0) + Math.min(...n.next.map(id => mf(byId(id)))));
+    const low = (a, b) => mf(a) <= mf(b) ? a : b;
+    let n = layers[0].reduce(low);
+    if (mf(n) >= 3) break;
+    const path = [];
+    while (n.type !== 'boss') { path.push(n); n = n.next.map(byId).reduce(low); }
+    const c = path.find(x => x.L >= 1 && x.L <= LAYERS - 3 && spare(x));
+    if (!c) break;
+    c.type = 'combat';
   }
   return layers;
 }

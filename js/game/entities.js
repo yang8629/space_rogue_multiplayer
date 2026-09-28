@@ -282,16 +282,18 @@ class Bullet {
       this.angle = this.phase + Math.PI / 2; this.speed = this.orbR * 5 * spin;  // 沿著圓周的方向（隊友那邊畫面推算用）
       return;
     }
-    if (this.mode === 'wait') {  // 停滯：停住，時間到衝向附近的敵人
+    if (this.mode === 'wait') {  // 佈雷：停住當地雷，敵人靠近就朝牠衝出去（×1.2）；時間到還沒被觸發就消失
       this.waitT -= dt; this.speed = 0;
-      if (this.waitT <= 0) {
-        const t = nearestEnemy(this.x, this.y, this.stasis >= 2 ? 220 : 150, null);
-        if (t) this.angle = Math.atan2(t.y - this.y, t.x - this.x);
+      const near = nearestEnemy(this.x, this.y, this.stasis >= 2 ? 70 : 50, null);
+      if (!near && this.waitT <= 0) { this.dead = true; burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
+      if (near) {
+        this.angle = Math.atan2(near.y - this.y, near.x - this.x);
+        this.damage *= 1.2; Game.grow(this.owner, 'stasis');
         this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1; this.flyDist = 0;
       }
       return;
     }
-    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 2.5 : 1.5; this.speed = 0; return; }
+    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return; }
     this.flyAge += dt;
     if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
     const o = this.ownerP, L = this.lock && o && o.lockT > Game.time && o.lockE && !o.lockE.dead ? o.lockE : null;
