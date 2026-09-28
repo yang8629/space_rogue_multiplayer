@@ -13,7 +13,7 @@
 const OBJ = {
   PLANET_GM: 1.2e7, HOLE_GM: 2.4e7,  // 引力強度（加速度 = GM / 距離²）
   HOLE_R: 280, HOLE_CORE: 34,
-  ROCK_MIN_DMG: 30, ROCK_GROW: 8,     // 小行星：單發至少 30 才打得動；打爆時電路上每個會成長的晶片 +8
+  ROCK_MIN_DMG: 30, ROCK_GROW: 0.05,  // 小行星：單發至少 30 才打得動；打爆時電路上每個會成長的晶片 + Lv2 門檻的 5%
   COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60,
 };
 const Objects = {
@@ -193,7 +193,7 @@ const Objects = {
     }
     return false;
   },
-  // 小行星受傷：單發至少 30 才算；打爆時打的人電路上每個會成長的晶片 +8
+  // 小行星受傷：單發至少 30 才算；打爆時打的人電路上每個會成長的晶片 + 它 Lv2 門檻的 5%（每個晶片一樣值錢）
   hitRock(o, dmg, owner, x, y) {
     if (dmg < OBJ.ROCK_MIN_DMG || o.dead) { if (Math.random() < 0.3) burst(x, y, '#8a8f98', 2, 80, 0.2, 2); return; }
     o.hp -= dmg;
@@ -203,9 +203,9 @@ const Objects = {
     burst(o.x, o.y, '#c9b79c', 24, 220, 0.6, 3);
     SFX.play('bigkill');
     const G = Game, chain = owner ? owner.chain : G.chain, bases = new Set(chain.filter(Boolean).map(baseOf).filter(b => CHIPS[b] && CHIPS[b].grow));
-    for (const b of bases) G.grow(owner, b, OBJ.ROCK_GROW);
-    floatText(o.x, o.y - o.r, bases.size ? `晶片成長 +${OBJ.ROCK_GROW}` : '小行星碎裂', '#9dff6b', true);
-    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r), bases.size ? `晶片成長 +${OBJ.ROCK_GROW}` : '小行星碎裂', '#9dff6b', 1]);
+    for (const b of bases) G.grow(owner, b, Math.max(1, Math.round(CHIPS[b].grow.need[0] * OBJ.ROCK_GROW)));
+    floatText(o.x, o.y - o.r, bases.size ? '晶片成長 +5%' : '小行星碎裂', '#9dff6b', true);
+    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r), bases.size ? '晶片成長 +5%' : '小行星碎裂', '#9dff6b', 1]);
   },
   // 爆炸波及小行星
   explodeRocks(x, y, r, dmg, att) {

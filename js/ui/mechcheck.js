@@ -302,10 +302,10 @@ const MechCheck = {
       Game.acquire('split');
       return { ok: Game.chain[1] === leveledId('split', 2) && Game.stats.count === 4, got: `${CHIPS[Game.chain[1]].name}，每次 ${Game.stats.count} 發` };
     }],
-    ['構築系統', '用量成長', '迴旋回程命中 120 次 → Lv2，360 次 → 進化「迴旋風暴」', M => {
+    ['構築系統', '用量成長', '迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
-      Game.grow(null, 'boomerang', 120); const a = Game.chain[1];
-      Game.grow(null, 'boomerang', 240); const b = Game.chain[1];
+      Game.grow(null, 'boomerang', 180); const a = Game.chain[1];
+      Game.grow(null, 'boomerang', 360); const b = Game.chain[1];
       return { ok: a === leveledId('boomerang', 2) && b === leveledId('boomerang', 3), got: `${CHIPS[a].name} → ${CHIPS[b].name}` };
     }],
     ['構築系統', '晶片傷害統計', '武器＋倍增器（×2）：兩者各分到一半，合計等於總傷害', M => {
@@ -451,13 +451,13 @@ const MechCheck = {
       return { ok: hit.dead && hit.x < p.x + 300 && Math.abs(pass.angle) > 0.05,
         got: `正對的子彈${hit.dead ? '被擋下' : '穿過去了'}；旁邊的子彈轉了 ${(pass.angle * 180 / Math.PI).toFixed(1)}°` };
     }],
-    ['地圖物件', '小行星：重武器才打得動', '10 傷害打不動；打爆時電路上的晶片成長 +8', M => {
+    ['地圖物件', '小行星：重武器才打得動', '10 傷害打不動；打爆時電路上的晶片成長 + Lv2 門檻的 5%', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
       const o = { type: 'rock', x: 0, y: 0, r: 20, hp: 80, maxHp: 80 };
       Game.objs = [o];
       Objects.hitRock(o, 10, null, 0, 0); const hp1 = o.hp;
       Objects.hitRock(o, 100, null, 0, 0);
-      return { ok: hp1 === 80 && o.dead && Game.growth.boomerang === 8, got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，迴旋成長 ${Game.growth.boomerang || 0}` };
+      return { ok: hp1 === 80 && o.dead && Game.growth.boomerang === Math.round(CHIPS.boomerang.grow.need[0] * 0.05), got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，迴旋成長 ${Game.growth.boomerang || 0}` };
     }],
     ['地圖物件', '小行星：擋住視野', '小行星後面的敵人看不到；感測器 4 層看得到', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
