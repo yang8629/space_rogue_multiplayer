@@ -11,6 +11,10 @@ const Input = { keys: new Set(), mx: 0, my: 0, down: false, dash: false,
   joy: null, aimStick: null };     // { id, bx, by, x, y }
 
 addEventListener('keydown', e => {
+  if (e.key === 'Shift' || e.key === 'Alt') {  // 按住 Shift／Alt：卡片展開詳細說明
+    if (e.key === 'Alt') e.preventDefault();  // 不要讓瀏覽器跳到選單列
+    document.body.classList.add('detail');
+  }
   const k = e.key.toLowerCase();
   if (Codex.isOpen) {  // 總覽開著時：Esc 關閉，其他按鍵不影響遊戲
     if (k === 'escape') Codex.close();
@@ -30,8 +34,11 @@ addEventListener('keydown', e => {
   if (k === 'enter' && Game.state === 'lobby' && document.activeElement && document.activeElement.id === 'netCode') Net.join(document.activeElement.value);
   if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();
 });
-addEventListener('keyup', e => Input.keys.delete(e.key.toLowerCase()));
-addEventListener('blur', () => { Input.keys.clear(); Input.down = false; });
+addEventListener('keyup', e => {
+  Input.keys.delete(e.key.toLowerCase());
+  if (e.key === 'Shift' || e.key === 'Alt') document.body.classList.remove('detail');
+});
+addEventListener('blur', () => { Input.keys.clear(); Input.down = false; document.body.classList.remove('detail'); });
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
