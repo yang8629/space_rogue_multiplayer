@@ -196,7 +196,7 @@ const Game = {
     const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
     const y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : 1 + C.level * 0.15 + (C.wave - 1) * 0.08) *
-      (this.mode === 'coop' && this.mate && !this.mate.gone ? 1.6 : 1);  // 雙人：敵人血量 ×1.6（暫定，第 3 步再調）；隊友離線時恢復單人血量
+      (this.mode === 'coop' && this.mate && !this.mate.gone ? 1.8 : 1);  // 雙人：敵人血量 ×1.8（雙人整局模擬調到通關率約 40%）；隊友離線時恢復單人血量
     const e = new Enemy(type, x, y, scale);
     this.enemies.push(e);
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
