@@ -704,12 +704,14 @@ const Game = {
     for (const q of this.portals) q.t -= dt;
     this.portals = this.portals.filter(q => q.t > 0 && !q.owner.dead);
   },
-  // 物體（子彈、敵彈、飛船）碰到門：從另一個門出來，放在門的前方（照移動方向）免得馬上又碰到；cd 秒內不能再走
-  portalHop(o, r, cdKey, cd, dirA = null) {
+  // 物體（子彈、敵彈、飛船）從門外走進門：從另一個門出來，放在門的前方（照移動方向）免得馬上又碰到；cd 秒內不能再走
+  // (x0, y0) = 這一幀移動前的位置；本來就在門裡（例如門開在飛船身上）不算走進去，要先離開再走回來
+  portalHop(o, r, cdKey, cd, dirA, x0, y0) {
     if (!this.portals.length || this.time < (o[cdKey] || 0)) return false;
     for (const q of this.portals) {
       for (const [x1, y1, x2, y2] of [[q.ax, q.ay, q.bx, q.by], [q.bx, q.by, q.ax, q.ay]]) {
-        if (dist2(o.x, o.y, x1, y1) > (22 + r) ** 2) continue;
+        const rr = (22 + r) ** 2;
+        if (dist2(o.x, o.y, x1, y1) > rr || dist2(x0, y0, x1, y1) <= rr) continue;
         const a = dirA != null ? dirA : Math.atan2(o.vy || 0, o.vx || 0), k = 22 + r + 2;
         o.x = x2 + Math.cos(a) * k; o.y = y2 + Math.sin(a) * k;
         o[cdKey] = this.time + cd;
@@ -719,7 +721,7 @@ const Game = {
     }
     return false;
   },
-  portalShip(p) { if (this.portalHop(p, p.r, 'portalT', 0.6)) { p.px = p.x; p.py = p.y; } },
+  portalShip(p, x0, y0) { if (this.portalHop(p, p.r, 'portalT', 0.6, null, x0, y0)) { p.px = p.x; p.py = p.y; } },
 
   // ---------- 機體成長線（零件、背包模組）：房主執行，隊友的飛船用隊友的配裝 ----------
   maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
@@ -885,11 +887,16 @@ const Game = {
   },
   updateBullets(dt) {
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
+    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（2 秒內 1 → 3 倍）；orbN 由存著的子彈每幀重新數
+      p.orbSpin = 1 + 2 * Math.min(1, (p.orbT || 0) / 2);
+      p.orbT = p.orbN && p.wantFire && !(p.dashT > 0) ? (p.orbT || 0) + dt : 0;
+      p.orbN = 0;
+    }
     for (const b of B) {
       if (b.dead) continue;
       b.update(dt);
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
-      if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle)) { b.px = b.x; b.py = b.y; }
+      if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
       const orbit = b.mode === 'orbit';
       for (const e of E) {
@@ -1129,7 +1136,7 @@ const Game = {
     const ps = this.players();
     for (const b of this.eBullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-      this.portalHop(b, b.r, 'portalT', 0.3);  // 敵彈也會穿門
+      this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
       if (Objects.eBulletHit(b)) continue;
       for (const p of ps) {
         const rr = b.r + p.r;

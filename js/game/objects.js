@@ -5,7 +5,7 @@
 // =====================================================================
 // 地圖物件：場上固定存在、會改變走位和子彈路線（不是可以撿的東西）
 //   行星  planet：實心大球，擋所有子彈；靠近的子彈被引力彎過去（越慢彎越多）
-//   黑洞  hole  ：把附近所有東西往中心拉；核心吞掉子彈，敵人和飛船受傷
+//   黑洞  hole  ：把附近所有東西往中心拉；核心吞掉子彈，敵人和飛船受傷（敵人走路會繞開，被打進去才會受傷）
 //   彗星  comet ：定時沿直線橫越（先有預警線）。撞到敵人、飛船都受傷；打爆後碎片往前炸（只傷敵人）
 //   小行星 rock ：一整條小行星帶，擋所有子彈；擋住視野；只有單發 ≥ 30 的傷害打得動，打爆給電路上的晶片成長
 //   雙人：房主模擬，隊友只收同步（Game.objs）；飛船被拉、被擋由各自的電腦算
@@ -91,6 +91,22 @@ const Objects = {
       }
     }
     G.objs = G.objs.filter(o => !o.dead);
+  },
+  // 敵人繞開黑洞：(mx, my) 是敵人想走的方向；在引力範圍（外加 30）內時，拿掉朝核心的分量改往旁邊繞，再加上往外的力（越近越強）
+  // 只影響敵人自己走路：被擊退、被減速、精英衝鋒時還是可能被吸進核心
+  steer(e, mx, my) {
+    for (const o of Game.objs) {
+      if (o.type !== 'hole') continue;
+      const dx = e.x - o.x, dy = e.y - o.y, d = Math.hypot(dx, dy), zone = o.R + 30;
+      if (d > zone || d < 1) { if (e.holeSide && d > zone + 40) e.holeSide = 0; continue; }
+      const nx = dx / d, ny = dy / d, inward = -(mx * nx + my * ny);
+      if (!e.holeSide) e.holeSide = -ny * mx + nx * my < 0 ? -1 : 1;  // 進入範圍時決定往哪邊繞，之後不換（蟲群左右擺動也不會卡住）
+      const tx = -ny * e.holeSide, ty = nx * e.holeSide;
+      if (inward > 0) { mx += (nx + tx) * inward; my += (ny + ty) * inward; }
+      const w = 2.5 * (1 - d / zone);
+      mx += nx * w; my += ny * w;
+    }
+    return [mx, my];
   },
   // 圓形物體 a 被推出圓 o 外面；回傳有沒有碰到
   pushOut(a, o, r) {

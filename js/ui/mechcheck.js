@@ -176,11 +176,17 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '子彈繞著飛船轉，碰到敵人不會消失', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打；放開後全部朝準星射出，繞滿 2 秒傷害 ×2', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([[50, 0]]);
-      M.run(90);
-      const p = Game.player, near = Game.bullets.filter(b => b.mode === 'orbit' && Math.hypot(b.x - p.x, b.y - p.y) < 60).length;
-      return { ok: near > 0 && Game.enemies[0].hp < Game.enemies[0].maxHp, got: `飛船旁有 ${near} 發在繞，敵人被打 ${Math.round(Game.enemies[0].maxHp - Game.enemies[0].hp)}` };
+      const p = Game.player; p.wantFire = true;
+      M.run(180);
+      const orb = Game.bullets.filter(b => b.mode === 'orbit' && Math.hypot(b.x - p.x, b.y - p.y) < 70), d0 = orb.length && orb[0].damage;
+      const hit = Game.enemies[0].hp < Game.enemies[0].maxHp;
+      p.wantFire = false; p.aim = Math.PI / 2; Game.enemies = [];
+      Game.updateBullets(1 / 60);
+      const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.PI / 2)) < 0.01).length;
+      return { ok: orb.length === 12 && hit && out === 12 && near1(orb[0].damage, d0 * 2),
+        got: `存了 ${orb.length} 發${hit ? '，繞圈有打到敵人' : '，繞圈沒打到敵人'}；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
@@ -345,13 +351,18 @@ const MechCheck = {
       Game.hurtPlayer(30);
       return { ok: got1 === 1 && p.hp === p.maxHp && p.shield === 0, got: `護盾 ${got1} 層，被打後 HP ${p.hp}/${p.maxHp}` };
     }],
-    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來', M => {
+    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送，走出去再走回來才會', M => {
       M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, x0 = p.x;
       p.dashT = 0.1; p.vx = 900; p.tickDash();
       p.x += 200; p.dashT = 0; p.tickDash();
       const q = Game.portals[0];
       if (!q) return { ok: false, got: '沒有開門' };
+      Game.portalShip(p, p.x, p.y);  // 站在剛開的門上
+      const stay = !p.portalT && p.x === q.bx;
+      Game.portalShip(p, p.x + 80, p.y);  // 從門外走進來
+      const hop = !!p.portalT && Math.abs(p.x - q.ax) < 60;
+      if (!stay || !hop) return { ok: false, got: stay ? '從門外走進門沒有傳送' : '門一開在飛船身上就被傳走了' };
       spawnShots([shot({ angle: 0, speed: 300, damage: 10, life: 2 })], q.bx - 30, q.by, 0, 0, null);
       const b = Game.bullets[Game.bullets.length - 1];
       let at = null;
@@ -386,7 +397,7 @@ const MechCheck = {
       const seen = !Objects.blocker(p, e);
       return { ok: hidden && seen, got: `一般${hidden ? '看不到' : '看得到'}，感測器 4 層${seen ? '看得到' : '看不到'}` };
     }],
-    ['地圖物件', '黑洞', '把附近的敵人往中心拉，核心吞掉子彈', M => {
+    ['地圖物件', '黑洞', '把附近的敵人往中心拉（不能動的靶被拉過去），核心吞掉子彈；會走路的敵人繞開黑洞追過來', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, e = M.targets([[400, 150]], 'brute', true, 60)[0];
       Game.objs = [{ type: 'hole', x: p.x + 400, y: p.y, r: 34, R: 280, tick: 0 }];
@@ -396,7 +407,16 @@ const MechCheck = {
       const b = Game.bullets[0];
       for (let i = 0; i < 30; i++) Game.updateBullets(1 / 60);
       const d1 = Math.hypot(e.x - (p.x + 400), e.y - p.y);
-      return { ok: d1 < d0 - 20 && b.dead, got: `敵人離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}` };
+      // 黑洞正後方的蟲群追玩家：要繞過去，不能掉進核心
+      const hx = p.x + 400, w = new Enemy('swarmer', p.x + 800, p.y, 1);
+      w.spawnT = 0; Game.enemies = [w]; p.hp = p.maxHp = 1e6;
+      let near = Infinity, t = 0;
+      for (; t < 60 * 12 && Math.hypot(w.x - p.x, w.y - p.y) > 120 && !w.dead; t++) {
+        Game.time += 1 / 60; Objects.update(1 / 60); Game.updateEnemies(1 / 60);
+        near = Math.min(near, Math.hypot(w.x - hx, w.y - p.y));
+      }
+      const around = !w.dead && Math.hypot(w.x - p.x, w.y - p.y) <= 120 && near > 34 + w.r + 20;
+      return { ok: d1 < d0 - 20 && b.dead && around, got: `靶離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}；蟲群最靠近核心 ${Math.round(near)}，${around ? `${(t / 60).toFixed(1)} 秒繞到玩家身邊` : '沒繞過來'}` };
     }],
     ['地圖物件', '彗星', '有預警線；打爆後碎片往前炸出 10 發', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);

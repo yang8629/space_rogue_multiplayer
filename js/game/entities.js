@@ -151,11 +151,12 @@ class Player {
       this.vx += (mx / l * spd - this.vx) * k;
       this.vy += (my / l * spd - this.vy) * k;
     }
+    const x0 = this.x, y0 = this.y;
     this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
     this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
     this.moduleMove(dt);
     Objects.moveShip(this, dt);  // 地圖物件：黑洞拉扯、行星與小行星擋住
-    Game.portalShip(this, dt);   // 星門：走進門從另一個門出來
+    Game.portalShip(this, x0, y0);   // 星門：走進門從另一個門出來
 
     this.iframe -= dt;
     this.overdrive -= dt;
@@ -214,9 +215,13 @@ class Bullet {
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;
     if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
-    if (this.orbit) {
-      this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = this.orbit >= 2 ? 70 : 50;
-      this.life = this.orbit >= 2 ? 3.5 : 2.5; this.orbitCd = new Map();
+    if (this.orbit) {  // 環繞：存在飛船旁邊（最多 12 發，Lv2 20 發；存滿之後照常射出）
+      const o = this.ownerP;
+      if (o && (o.orbN || 0) < (this.orbit >= 2 ? 20 : 12)) {
+        o.orbN = (o.orbN || 0) + 1;
+        this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = 60;
+        this.life0 = this.life; this.life = 99; this.orbitCd = new Map();
+      } else this.orbit = 0;
     }
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
@@ -238,19 +243,22 @@ class Bullet {
   }
   update(dt) {
     this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
-    if (this.mode === 'orbit') {  // 環繞：繞著飛船轉
+    if (this.mode === 'orbit') {  // 環繞：按住射擊時繞著飛船轉，越轉越快；放開射擊或衝刺時朝準星射出
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
-      this.orbR = Math.min(this.R, this.orbR + dt * 260); this.phase += dt * 5;
-      this.x = o.x + Math.cos(this.phase) * this.orbR; this.y = o.y + Math.sin(this.phase) * this.orbR;
-      this.angle = this.phase + Math.PI / 2; this.speed = this.orbR * 5;  // 沿著圓周的方向（隊友那邊畫面推算用）
-      this.life -= dt;
-      if (this.life <= 0) {
-        if (this.orbit >= 3) {  // 星環：整圈向外射出
-          this.orbit = 0; this.mode = 'fly'; this.angle = this.phase; this.speed = this.baseSpeed = 700;
-          this.life = 0.6; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
-        } else this.dead = true;
+      const spin = o.orbSpin || 1;
+      if (!o.wantFire || o.dashT > 0) {  // 放出：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
+        const k = spin - 1;
+        this.mode = 'fly'; this.angle = o.aim; this.baseSpeed *= 1 + 0.25 * k; this.speed = this.baseSpeed; this.damage *= 1 + 0.5 * k;
+        this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
+        if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人
+        this.orbit = 0;
+        return;
       }
+      o.orbN = (o.orbN || 0) + 1;
+      this.orbR = Math.min(this.R, this.orbR + dt * 260); this.phase += dt * 5 * spin;
+      this.x = o.x + Math.cos(this.phase) * this.orbR; this.y = o.y + Math.sin(this.phase) * this.orbR;
+      this.angle = this.phase + Math.PI / 2; this.speed = this.orbR * 5 * spin;  // 沿著圓周的方向（隊友那邊畫面推算用）
       return;
     }
     if (this.mode === 'wait') {  // 停滯：停住，時間到衝向附近的敵人
@@ -464,6 +472,7 @@ class Enemy {
         SFX.play('eshot');
       }
     }
+    if (Game.objs.length) [mx, my] = Objects.steer(this, mx, my);  // 繞開黑洞
     const ml = Math.hypot(mx, my) || 1;
     const k = Math.min(1, dt * 4);
     this.vx += (mx / ml * t.speed * this.spdMul - this.vx) * k;
