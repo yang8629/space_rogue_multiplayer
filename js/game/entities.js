@@ -224,7 +224,7 @@ class Bullet {
     this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
-    this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;
+    this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時傷害 × 這個倍率，最多 4）
     if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
     if (this.orbit && depth > 0) this.orbit = 0;  // 觸發射出的子彈不進圈（不會瞬移回飛船）
     if (this.orbit) {  // 環繞：存在飛船旁邊（Lv1 8 發，Lv2 20 發；存滿了多的丟掉）
@@ -247,7 +247,7 @@ class Bullet {
   // 迴旋：打中敵人（穿甲用完，先穿過去再折返，回程會再打牠一次）或飛到盡頭後折返，追著飛船飛回來
   startReturn() {
     const o = this.ownerP;
-    this.mode = 'return'; this.life = 1; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed; this.overT = 0;
+    this.mode = 'return'; this.life = 1; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed * this.accelMul; this.overT = 0;
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
     if (this.boom >= 2) this.damage *= 1.5;
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
@@ -258,12 +258,12 @@ class Bullet {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
       const spin = orbSpinOf(this.orbit, o.orbHeld || 0);
-      if (!o.wantFire || (o.autoMode && spin >= orbSpinMax(this.orbit))) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
-        const k = spin - 1, d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
+      if (!o.wantFire || (o.autoMode && spin >= orbSpinMax(this.orbit))) {  // 放開射擊才放出（衝刺不會）；右邊晶片的效果（迴旋、加速……）從這裡開始
+        const d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
-        if (this.accel) this.accel0 = spin;  // 有加速：轉速直接算進加速倍率（從轉速開始繼續加速，最多 ×4）
-        else this.baseSpeed *= 1 + 0.25 * k;
-        this.speed = this.baseSpeed * (this.accel ? spin : 1); this.damage *= 1 + 0.5 * k;
+        // 速度倍率 = 傷害倍率：轉速 1～3 倍 → 放出時速度倍率 1～2（Lv1 最多 1.5）；有加速時從這裡繼續加上去（不相乘）
+        this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1);
+        this.speed = this.baseSpeed * this.accelMul;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;
@@ -290,7 +290,7 @@ class Bullet {
     if (this.homing > 0 && this.mode !== 'return') {
       const t = nearestEnemy(this.x, this.y, 450, this.hitSet);
       if (t) {
-        const turn = this.homing * dt;
+        const turn = this.homing * dt * Math.max(1, this.speed / 600);  // 快的子彈轉得跟著快：轉彎半徑跟 600 速度時一樣，不會繞圈追不到
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }

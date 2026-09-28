@@ -111,10 +111,14 @@ const MechCheck = {
       const n = M.trackOne();
       return { ok: n >= 4, got: `1 發打中 ${n} 隻（穿透 3）` };
     }],
-    ['武器命中效果', '追蹤（相位刃・飛刃・追蹤飛刃）', '子彈轉向打中偏離準心的敵人', M => {
+    ['武器命中效果', '追蹤（相位刃・飛刃・追蹤飛刃）', '子彈轉向打中偏離準心的敵人；很快的子彈也追得到（不會繞圈）', M => {
       M.setup('sandbox', 'vanguard', 'blade', 'B', 0, ['weapon', null, null, null]); M.targets([[220, 110]]);
       const n = M.trackOne();
-      return { ok: n === 1, got: n ? '偏離準心 27° 的敵人被打中' : '沒有打中' };
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); const e = M.targets([[150, 150]])[0];
+      spawnShots([shot({ angle: 0, speed: 2400, damage: 10, life: 1, homing: 4 })], Game.player.x, Game.player.y, 0, 0, null);
+      for (let f = 0; f < 60 && Game.bullets.length && !Game.bullets[0].dead; f++) Game.updateBullets(1 / 60);
+      const fast = e.hp < e.maxHp;
+      return { ok: n === 1 && fast, got: (n ? '偏離準心 27° 的敵人被打中' : '沒有打中') + `；2400 速度的追蹤彈打偏離 45° 的敵人：${fast ? '打中' : '繞過去沒打中'}` };
     }],
     ['武器命中效果', '擊退（軌道砲・攻城砲）', '被打中的敵人往後退', M => {
       M.setup('sandbox', 'vanguard', 'railgun', 'B', null, ['weapon', null, null, null]);
@@ -180,7 +184,7 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 8 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒傷害 ×1.5；搭加速時從轉速倍率開始加速', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 8 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒速度與傷害 ×1.5；搭加速時從 1.5 往上加（不相乘）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -193,14 +197,14 @@ const MechCheck = {
       p.wantFire = false; p.aim = Math.PI / 2; p.aimD = 300; Game.enemies = [];
       Game.updateBullets(1 / 60);
       const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.atan2(p.y + 300 - b.y, p.x - b.x))) < 0.01).length;
-      const dmgOk = orb.length > 0 && near1(orb[0].damage, d0 * 1.5);
+      const dmgOk = orb.length > 0 && near1(orb[0].damage, d0) && Math.abs(orb[0].accelMul - 1.5) < 0.02;
       // 搭加速：放出時從轉速的倍率開始加速
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'accel', null]); M.targets([]);
       const p2 = Game.player; p2.wantFire = true; M.run(200); const a = Game.bullets.find(b => b.mode === 'orbit');
       p2.wantFire = false; Game.updateBullets(1 / 60); Game.updateBullets(1 / 60);
       const am = a ? a.accelMul : 0;
-      return { ok: kept && stored === 8 && hit > 0 && orb.length < 8 && out === orb.length && out > 0 && dmgOk && am > 1.9,
-        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，傷害 ${d0} → ${orb.length && orb[0].damage}；搭加速放出時 ${am.toFixed(2)} 倍速` };
+      return { ok: kept && stored === 8 && hit > 0 && orb.length < 8 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
+        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
