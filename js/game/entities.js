@@ -188,7 +188,7 @@ class Player {
   fire() {
     const list = runOps(Game.stats.ops, 0);
     if (!list.length) return;
-    if (list.every(s => s.orbit) && (this.orbN || 0) >= orbCap(list[0].orbit)) return;  // 環繞存滿：按住也不再射
+    if (list.every(s => s.orbit) && (this.orbV ? this.orbV.size : 0) >= orbCap(list[0].orbit)) return;  // 環繞存滿：按住也不再射
     const nx = this.x + Math.cos(this.aim) * 16, ny = this.y + Math.sin(this.aim) * 16;
     // 子彈從船身中心附近發出：怪物貼臉時也打得到（槍口火光仍在船頭）
     spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
@@ -197,8 +197,9 @@ class Player {
   }
 }
 
-// 環繞：Lv1 最多存 8 發、3 秒轉到 2 倍；Lv2 起 20 發、2 秒轉到 3 倍（放出時傷害 ×轉速的一半加成）
-const orbCap = lv => lv >= 2 ? 20 : 8;
+// 環繞：Lv1 最多存 10 發、3 秒轉到 2 倍；Lv2 起 20 發、2 秒轉到 3 倍。「一發」= 一次開火（散彈一次的 5 顆算同一發）
+const orbCap = lv => lv >= 2 ? 20 : 10;
+let volleySeq = 0, curVolley = 0;  // 每次 spawnShots 算一發（環繞用來數存了幾發）
 const orbSpinOf = (lv, held) => lv >= 2 ? 1 + 2 * Math.min(1, held / 2) : 1 + Math.min(1, held / 3);
 const orbSpinMax = lv => lv >= 2 ? 3 : 2;
 
@@ -227,10 +228,11 @@ class Bullet {
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時傷害 × 這個倍率，最多 4）
     if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
     if (this.orbit && depth > 0) this.orbit = 0;  // 觸發射出的子彈不進圈（不會瞬移回飛船）
-    if (this.orbit) {  // 環繞：存在飛船旁邊（Lv1 8 發，Lv2 20 發；存滿了多的丟掉）
-      const o = this.ownerP;
-      if (o && (o.orbN || 0) < orbCap(this.orbit)) {
-        o.orbN = (o.orbN || 0) + 1;
+    this.vid = curVolley;
+    if (this.orbit) {  // 環繞：存在飛船旁邊（Lv1 10 發，Lv2 20 發；同一次開火的子彈算一發；存滿了多的丟掉）
+      const o = this.ownerP, V = o && (o.orbV || (o.orbV = new Set()));
+      if (o && (V.has(this.vid) || V.size < orbCap(this.orbit))) {
+        V.add(this.vid);
         this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = 60;
         this.life0 = this.life; this.life = 99;
       } else this.dead = true;  // 存滿了：多的子彈不射出去
@@ -269,7 +271,7 @@ class Bullet {
         this.orbit = 0;
         return;
       }
-      o.orbN = (o.orbN || 0) + 1;
+      (o.orbV || (o.orbV = new Set())).add(this.vid);
       this.orbR = Math.min(this.R, this.orbR + dt * 260); this.phase += dt * 5 * spin;
       this.x = o.x + Math.cos(this.phase) * this.orbR; this.y = o.y + Math.sin(this.phase) * this.orbR;
       this.angle = this.phase + Math.PI / 2; this.speed = this.orbR * 5 * spin;  // 沿著圓周的方向（隊友那邊畫面推算用）
@@ -335,6 +337,7 @@ class Bullet {
 
 function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
   const B = Game.bullets, M = Game.mech;  // 射出這些子彈的人的機體：感測器（子彈速度、鎖定、弱點標記）
+  curVolley = ++volleySeq;
   for (const s0 of list) {
     if (B.length >= CFG.MAX_LIVE_BULLETS) break;
     const s = M.bspeed !== 1 || M.traits.lock ? { ...s0, speed: s0.speed * M.bspeed, homing: s0.homing + (M.traits.lock ? 1.5 : 0) } : s0;
