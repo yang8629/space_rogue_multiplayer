@@ -898,13 +898,13 @@ const Game = {
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
-      const orbit = b.mode === 'orbit';
+      const orbit = b.mode === 'orbit';  // 環繞：繞圈時打到敵人照穿甲規則消失（存著的子彈擋一次就少一發）
       for (const e of E) {
         if (e.dead) continue;
-        if (orbit ? this.time < (b.orbitCd.get(e.id) || 0) : b.hitSet.has(e.id)) continue;  // 環繞：同一隻每 0.3 秒最多打一次
+        if (b.hitSet.has(e.id)) continue;
         const rr = b.r + e.r;
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
-        if (orbit) b.orbitCd.set(e.id, this.time + 0.3); else b.hitSet.add(e.id);
+        b.hitSet.add(e.id);
         // 用量成長：照著晶片的玩法打中敵人
         const own = b.owner;
         if (b.mode === 'return') this.grow(own, 'boomerang');
@@ -938,7 +938,7 @@ const Game = {
         if (b.payload && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner });
         if (b.sticky) b.dead = true;  // 黏上去了
-        else if (b.infPierce) { /* 環繞、迴旋的回程、超音速：不會消失 */ }
+        else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
         else if (b.boom && b.mode === 'fly') b.startReturn(e.id);  // 迴旋：去程穿甲用完就折返
         else b.dead = true;

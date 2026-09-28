@@ -176,17 +176,19 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打；放開後全部朝準星射出，繞滿 2 秒傷害 ×2', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([[50, 0]]);
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打、打到就消失；放開後全部朝準星射出，繞滿 2 秒傷害 ×2', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
-      const orb = Game.bullets.filter(b => b.mode === 'orbit' && Math.hypot(b.x - p.x, b.y - p.y) < 70), d0 = orb.length && orb[0].damage;
-      const hit = Game.enemies[0].hp < Game.enemies[0].maxHp;
+      const stored = Game.bullets.filter(b => b.mode === 'orbit').length;
+      const e = M.targets([[60, 0]])[0];
+      M.run(8, { fire: false });  // 還按著但不再射：繞圈打到敵人的子彈消失
+      const orb = Game.bullets.filter(b => b.mode === 'orbit'), d0 = orb.length && orb[0].damage, hit = e.maxHp - e.hp;
       p.wantFire = false; p.aim = Math.PI / 2; Game.enemies = [];
       Game.updateBullets(1 / 60);
       const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.PI / 2)) < 0.01).length;
-      return { ok: orb.length === 12 && hit && out === 12 && near1(orb[0].damage, d0 * 2),
-        got: `存了 ${orb.length} 發${hit ? '，繞圈有打到敵人' : '，繞圈沒打到敵人'}；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
+      return { ok: stored === 12 && hit > 0 && orb.length > 0 && orb.length < 12 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 2),
+        got: `存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];

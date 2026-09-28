@@ -220,7 +220,7 @@ class Bullet {
       if (o && (o.orbN || 0) < (this.orbit >= 2 ? 20 : 12)) {
         o.orbN = (o.orbN || 0) + 1;
         this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = 60;
-        this.life0 = this.life; this.life = 99; this.orbitCd = new Map();
+        this.life0 = this.life; this.life = 99;
       } else this.orbit = 0;
     }
   }
@@ -314,8 +314,8 @@ class Bullet {
       }
     }
   }
-  // 無限穿透：環繞、迴旋的回程、超音速（加速 Lv3 且 2 倍速以上）
-  get infPierce() { return this.mode === 'orbit' || (!!this.boom && this.mode === 'return') || (this.accel >= 3 && this.accelMul >= 2); }
+  // 無限穿透：迴旋的回程、超音速（加速 Lv3 且 2 倍速以上）
+  get infPierce() { return (!!this.boom && this.mode === 'return') || (this.accel >= 3 && this.accelMul >= 2); }
 }
 
 function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
