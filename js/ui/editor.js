@@ -63,6 +63,12 @@ const Editor = {
       if (b) { SFX.play('click'); this.setTab(b.dataset.etab); }
     });
     $('btnClose').onclick = () => Game.toggleEditor();
+    this.quitEl = $('btnQuit');
+    this.quitEl.onclick = () => {  // 靶場、沙盒：沒有結算畫面，從這裡離開
+      Game.toggleEditor();
+      if (Net.linked) { Net.backToRoom(); return; }
+      Game.state = 'title'; Game.inArena = false; Screen.title();
+    };
     $('btnMute').onclick = () => { SFX.init(); SFX.setMuted(!SFX.muted); };
     $('btnCodex').onclick = () => Codex.open(Game.player ? 'current' : 'rules');
     $('btnAdd').onclick = () => { if (Game.chain.length < CFG.MAX_SLOTS) { Game.chain.push(null); this.changed(); } };
@@ -125,6 +131,7 @@ const Editor = {
   open() {
     this.sel = null;
     this.toolsEl.classList.toggle('hidden', !Game.freePlay());
+    this.quitEl.classList.toggle('hidden', !Game.freePlay());
     this.showDefaultInfo();
     this.render();
     this.setTab(this.tab);  // 停在上次的分頁；統計分頁每次打開都重算

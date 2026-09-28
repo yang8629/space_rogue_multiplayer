@@ -915,6 +915,7 @@ const Game = {
         if (b.mode === 'return') this.grow(own, 'boomerang');
         if (orbit || b.orbShot) this.grow(own, 'orbit');
         if (b.accel && b.accelMul >= 1.5) this.grow(own, 'accel');
+        if (b.quick && b.accelMul >= 1.5) this.grow(own, 'quick');
         if (b.full) this.grow(own, 'charge');
         if (b.rear) this.grow(own, 'rear');
         if (b.dashShot) this.grow(own, 'dashfire');
@@ -926,8 +927,9 @@ const Game = {
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
         }
-        const kb = Math.min(220, dmg * 5) * (14 / e.r) * b.knock;
-        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', b.att, b.knock);
+        const knock = b.knock * (b.quick >= 3 && b.accelMul >= 2 ? 3 : 1);  // 衝擊（疾射 Lv3）：2 倍速以上打中強力擊退
+        const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', b.att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
