@@ -180,7 +180,7 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打、打到就消失；放開後全部朝準星射出，繞滿 2 秒傷害 ×2', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部朝準星射出，繞滿 2 秒傷害 ×2', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -188,11 +188,13 @@ const MechCheck = {
       const e = M.targets([[60, 0]])[0];
       M.run(8, { fire: false });  // 還按著但不再射：繞圈打到敵人的子彈消失
       const orb = Game.bullets.filter(b => b.mode === 'orbit'), d0 = orb.length && orb[0].damage, hit = e.maxHp - e.hp;
+      p.dashT = 0.2; Game.updateBullets(1 / 60); p.dashT = 0;  // 衝刺不會放出
+      const kept = orb.every(b => b.mode === 'orbit');
       p.wantFire = false; p.aim = Math.PI / 2; Game.enemies = [];
       Game.updateBullets(1 / 60);
       const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.PI / 2)) < 0.01).length;
-      return { ok: stored === 12 && hit > 0 && orb.length > 0 && orb.length < 12 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 2),
-        got: `存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
+      return { ok: kept && stored === 12 && hit > 0 && orb.length > 0 && orb.length < 12 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 2),
+        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
