@@ -80,14 +80,9 @@ const CHIPS = {
   // ---------- 跟機體連動 ----------
   dashfire: { name: '衝刺射擊', short: '衝射', type: 'body', cost: 1, evo: '流星',
     grow: { what: '衝刺子彈命中', need: [100, 300] },
-    desc: '衝刺結束時，從落點朝衝刺方向噴出一排子彈（用衝刺射擊左邊的晶片）。平常開火不受影響。',
-    lvs: ['6 發', '10 發', '進化：衝刺穿過的敵人受到重擊（武器傷害 ×5）'],
-    apply: (list, pw, o) => {
-      if (Game.fireMode !== 'dashfire' || !list.length) return list;
-      Game.fireHit = true;
-      const n = o.lv >= 2 ? 10 : 6, t = list[0];
-      return Array.from({ length: n }, (_, k) => ({ ...t, angle: (k / (n - 1) - 0.5) * 0.5, speed: t.speed * 1.1, dashShot: true }));
-    } },
+    desc: '衝刺結束時，用整條電路朝準星額外開一槍（傷害 ×1.5，不佔射擊冷卻；有停火蓄力時會用掉蓄力）。平常開火不受影響。',
+    lvs: ['開 1 槍', '連開 2 槍', '進化：衝刺穿過的敵人受到重擊（武器傷害 ×5）'],
+    apply: list => Game.fireMode !== 'dashfire' ? list : list.map(b => ({ ...b, damage: b.damage * 1.5, dashShot: true })) },
   graze: { name: '擦彈', short: '擦彈', type: 'body', cost: 1, evo: '反射鏡',
     grow: { what: '擦彈次數', need: [30, 90] },
     desc: '敵彈從身邊擦過（沒打中）時，朝最近的敵人回射（用擦彈左邊的晶片）。平常開火不受影響。',

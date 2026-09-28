@@ -232,11 +232,14 @@ const MechCheck = {
       const r = M.run(120);
       return { ok: r.maxDepth === 3 && Game.stats.layers.length === 3, got: `實際最深第 ${r.maxDepth} 層` };
     }],
-    ['電路晶片', '衝刺射擊', '衝刺結束時從落點噴出 6 發', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
-      const p = Game.player; p.dashT = 0.05; p.vx = 900; p.vy = 0;
+    ['電路晶片', '衝刺射擊', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射', M => {
+      M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
+      const p = Game.player, n0 = runOps(Game.stats.ops, 0), d0 = n0[0].damage;
+      p.aim = Math.PI / 2; p.dashT = 0.05; p.vx = 900; p.vy = 0;
       p.tickDash(); p.dashT = 0; p.tickDash();
-      return { ok: Game.bullets.length === 6 && Game.bullets.every(b => b.dashShot), got: `射出 ${Game.bullets.length} 發` };
+      const B = Game.bullets, aimOk = B.length && Math.abs(angleDiff(B.reduce((a, b) => a + b.angle, 0) / B.length, Math.PI / 2)) < 0.05;
+      return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
+        got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
     ['電路晶片', '鏡像迴路', '放在武器右邊 = 武器多射一次', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'mirror', null, null]); M.targets([]);
