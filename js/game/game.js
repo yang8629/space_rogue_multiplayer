@@ -903,13 +903,13 @@ const Game = {
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
       if (b.overT > 0) continue;  // 迴旋：正在穿過打中的敵人，準備折返
-      const orbit = b.mode === 'orbit';  // 環繞：繞圈時打到敵人照穿甲規則消失（存著的子彈擋一次就少一發）
+      const orbit = b.mode === 'orbit';  // 環繞：繞圈時每碰到一次都算命中、照穿甲規則扣（同一隻隔 0.5 秒），穿甲用完就消失
       for (const e of E) {
         if (e.dead) continue;
-        if (b.hitSet.has(e.id)) continue;
+        if (orbit ? this.time < ((b.orbitCd && b.orbitCd.get(e.id)) || 0) : b.hitSet.has(e.id)) continue;
         const rr = b.r + e.r;
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
-        b.hitSet.add(e.id);
+        if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
         // 用量成長：照著晶片的玩法打中敵人
         const own = b.owner;
         if (b.mode === 'return') this.grow(own, 'boomerang');
