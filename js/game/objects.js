@@ -148,7 +148,7 @@ const Objects = {
         if (o.warn > 0 || b.hitSet.has('c' + o.id)) continue;
         if (segDist2(b.px, b.py, b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
         b.hitSet.add('c' + o.id);
-        const dmg = b.damage * (b.accelMul || 1);
+        const dmg = hitDamage(b);
         o.hp -= dmg; o.lastAtt = b.att;
         floatText(o.x, o.y - o.r, Math.round(dmg), '#bfe9ff');
         if (o.hp <= 0) this.breakComet(o);
@@ -161,7 +161,7 @@ const Objects = {
       }
       if (o.type !== 'planet' && o.type !== 'rock') continue;
       if (segDist2(b.px, b.py, b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
-      if (o.type === 'rock') this.hitRock(o, b.damage * (b.accelMul || 1), b.owner, b.x, b.y);
+      if (o.type === 'rock') this.hitRock(o, hitDamage(b), b.owner, b.x, b.y);
       // 撞上去：牆反彈的子彈照法線反彈，迴旋折返，其他消失（過載砲在這裡爆炸）
       const d = Math.hypot(b.x - o.x, b.y - o.y) || 1, nx = (b.x - o.x) / d, ny = (b.y - o.y) / d;
       if (b.bounce > 0) {

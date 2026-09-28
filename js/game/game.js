@@ -248,11 +248,22 @@ const Game = {
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : pickN(this.chipOffers(), 3), bonus: kind === 'elite' ? 15 : 0,
+    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : this.rewardOptions(), bonus: kind === 'elite' ? 15 : 0, reroll: 15,
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
     Screen.reward();
+  },
+  // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
+  rewardOptions() {
+    const chips = pickN(this.chipOffers(), 3), parts = pickN(PART_IDS, 3);
+    return [0, 1, 2].map(i => Math.random() < 0.3 ? 'part:' + parts[i] : chips[i]);
+  },
+  // 花晶體刷新三選一（第一次 ◆15，之後每次多 ◆10）
+  rerollReward() {
+    const R = this.reward;
+    if (!R || R.kind === 'elite' || this.credits < R.reroll) return;
+    this.pay(R.reroll, () => { R.reroll += 10; R.options = this.rewardOptions(); Screen.reward(); });
   },
   // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
   chipOffers() {
@@ -261,14 +272,17 @@ const Game = {
   },
   // ---------- 取得晶片：已擁有同種晶片（且未滿級）就合成升級，否則放進倉庫 ----------
   mergeTarget(id) {
-    if (!canLevelUp(id) || CHIPS[baseOf(id)].grow) return null;  // 改玩法的晶片只能靠用量成長升級，拿到重複的不會合成
+    if (!CHIPS[id] || !canLevelUp(id) || CHIPS[baseOf(id)].grow) return null;  // 改玩法的晶片只能靠用量成長升級，拿到重複的不會合成
     const b = baseOf(id);
     for (const arr of [this.chain, this.inventory])
       for (let i = 0; i < arr.length; i++)
         if (arr[i] && baseOf(arr[i]) === b && levelOf(arr[i]) < CFG.MAX_CHIP_LV) return { arr, i };
     return null;
   },
-  canAcquire(id) { return !!this.mergeTarget(id) || this.inventory.includes(null); },
+  canAcquire(id) {
+    if (String(id).startsWith('part:')) return partsUsed(this.parts) < this.partSlots;  // 零件：要有空的零件格
+    return !!this.mergeTarget(id) || this.inventory.includes(null);
+  },
   acquire(id) {
     if (this.runStats) this.runStats.got.push(`${this.here()} ${CHIPS[id].name}`);
     const t = this.mergeTarget(id);
@@ -323,6 +337,13 @@ const Game = {
   },
   takeReward(id) {
     let msg;
+    if (id && id.startsWith('part:')) {  // 零件
+      const k = id.slice(5);
+      if (!this.addPart(k)) return;
+      SFX.play('upgrade');
+      this.showMap(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）`);
+      return;
+    }
     if (id) {
       msg = this.acquire(id);
       if (!msg) return;
@@ -934,7 +955,7 @@ const Game = {
         if (b.dashShot) this.grow(own, 'dashfire');
         if (b.infGen > 0) this.grow(own, 'infect');
         if (b.pull) this.pullAt(b);
-        let dmg = b.damage * (b.accelMul || 1);  // 速度倍率 = 傷害倍率（加速、環繞放出）
+        let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸
           (e.stuck = e.stuck || []).push({ dmg, att: b.att, lv: b.sticky, owner: own });
           if (!(e.stickT > 0)) e.stickT = 2;

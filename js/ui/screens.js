@@ -63,6 +63,7 @@ const Screen = {
       case 'run': this.restart(); break;
       case 'editor': Game.toggleEditor(); break;
       case 'reward': Game.takeReward(arg || null); break;
+      case 'reroll': Game.rerollReward(); break;
       case 'buy': Game.buy(+arg); break;
       case 'leave': Game.showMap(); break;
       case 'node': if (Game.mode === 'coop') Net.vote(arg); else Game.enterNode(Game.nodeById(arg)); break;
@@ -325,16 +326,21 @@ const Screen = {
     const cards = R.kind === 'elite'
       ? R.options.map(id => moduleCard(id, `<button data-act="module" data-arg="${id}">裝上${Game.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>`)).join('') + (R.slot ? slotCard() : '')
       : R.options.map(id => {
+      if (id.startsWith('part:')) {
+        const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
+        return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`);
+      }
       const t = Game.mergeTarget(id), ok = Game.canAcquire(id);
       const label = t ? `選擇（合成 Lv${levelOf(t.arr[t.i]) + 1}）` : ok ? '選擇' : '倉庫已滿';
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
     }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：背包模組' : '⚔ 戰鬥勝利：選擇 1 個晶片'}</h2>
+      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：背包模組' : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
         <div class="sub">${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}${R.kind === 'elite' ? '背包模組只有 1 格，換上新的舊的就沒了。重裝甲、加速器 ≥ 2 層時模組有額外加成。' : '獲得的晶片會放入倉庫，按 Tab 裝上電路。'}</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
+        ${R.kind === 'elite' ? '' : `<button data-act="reroll" ${Game.credits < R.reroll ? 'disabled' : ''}>刷新（◆ ${R.reroll}）</button>`}
         <button data-act="reward" data-arg="">跳過（◆ +10）</button></div></div>`);
   },
 

@@ -32,7 +32,7 @@ const CHIPS = {
     apply: (list, pw, o) => list.map(b => ({ ...b, stasis: o.lv })) },
   accel: { name: '加速', short: '加速', type: 'path', cost: 1, evo: '超音速',
     grow: { what: '1.5 倍速以上命中', need: [120, 360] },
-    desc: '子彈出手只有 0.5 倍速，越飛越快。速度倍率就是傷害倍率（最多 ×4），所以近距離很虧、遠距離很痛。搭環繞：從放出時的速度倍率繼續加上去，不相乘。',
+    desc: '子彈出手只有 0.5 倍速，越飛越快。速度倍率加進傷害加成（0.5 倍速 = −50%，4 倍速 = +300%，和倍增器等加成相加），所以近距離很虧、遠距離很痛。搭環繞：從放出時的速度倍率繼續加上去，不相乘。',
     lvs: ['從 0.5 倍開始，每秒 +3 倍速', '從 0.5 倍開始，每秒 +4.5 倍速', '進化：速度超過 2 倍時無限穿透'],
     apply: (list, pw, o) => list.map(b => ({ ...b, accel: o.lv })) },
   quick: { name: '疾射', short: '疾射', type: 'path', cost: 1, evo: '衝擊',
@@ -56,12 +56,12 @@ const CHIPS = {
       return [...list, ...offs.flatMap(d => list.map(b => ({ ...b, angle: b.angle + d, rear: true })))];
     } },
   charge: { name: '蓄力', short: '蓄力', type: 'launch', cost: 0, evo: '過載砲',
-    grow: { what: '蓄滿命中', need: [30, 90] },
-    desc: '停止射擊時開始蓄力；再按下射擊的第一發依蓄力程度變強（蓄滿：左邊的子彈傷害 ×5、體積 ×2.5），之後照常連射。',
+    grow: { what: '蓄滿命中', need: [90, 270] },
+    desc: '停止射擊時開始蓄力；再按下射擊的第一發依蓄力程度變強（蓄滿：左邊的子彈傷害 +400%、體積 +150%；和倍增器等加成相加），之後照常連射。',
     lvs: ['蓄滿要 2 秒', '蓄滿只要 1.5 秒', '進化：蓄滿的一發無限穿透，飛到盡頭爆炸'],
     apply: (list, pw, o) => {
       const c = Game.chargeC || 0, full = c >= 0.999;  // 只有玩家開火的第一發帶蓄力（觸發、衝刺射擊、擦彈都是 0）
-      return list.map(b => ({ ...b, damage: b.damage * (1 + 4 * c), ...sizeUp(b, 1.5 * c), speed: b.speed * (1 - 0.2 * c),
+      return list.map(b => ({ ...(c > 0 ? addBonus(b, 4 * c) : b), ...sizeUp(b, 1.5 * c), speed: b.speed * (1 - 0.2 * c),  // 蓄滿 +400%（加進加成池，跟倍增相加）
         full: full ? o.lv : 0, pierce: full && o.lv >= 3 ? 99 : b.pierce, endBoom: full && o.lv >= 3, color: full ? '#ffffff' : b.color }));
     } },
 
