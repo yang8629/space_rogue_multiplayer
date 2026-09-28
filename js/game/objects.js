@@ -136,7 +136,11 @@ const Objects = {
         o.hp -= dmg; o.lastAtt = b.att;
         floatText(o.x, o.y - o.r, Math.round(dmg), '#bfe9ff');
         if (o.hp <= 0) this.breakComet(o);
-        if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else { b.dead = true; return true; } }
+        if (!b.infPierce) {
+          if (b.pierce > 0) b.pierce--;
+          else if (b.boom && b.mode === 'fly') b.startReturn();
+          else { b.dead = true; return true; }
+        }
         continue;
       }
       if (o.type !== 'planet' && o.type !== 'rock') continue;

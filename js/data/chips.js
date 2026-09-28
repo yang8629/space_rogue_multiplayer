@@ -17,9 +17,9 @@ const CHIPS = {
   // ---------- 彈道：子彈怎麼飛 ----------
   boomerang: { name: '迴旋', short: '迴旋', type: 'path', cost: 2, evo: '迴旋風暴',
     grow: { what: '回程命中', need: [120, 360] },
-    desc: '子彈會穿透，飛到盡頭（或碰到場地邊緣）後飛回飛船。傷害 ×0.7。',
+    desc: '去程打中敵人就折返（有穿甲時穿甲用完才折返），沒打中就飛到 60% 射程折返；回程飛回飛船，一路無限穿透（最多 1 秒）。傷害 ×0.7。',
     lvs: ['回程傷害 ×1', '回程傷害 ×1.5', '進化：折返時分裂成 3 發'],
-    apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7 })) },
+    apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7, life: b.life * 0.6 })) },
   orbit: { name: '環繞', short: '環繞', type: 'path', cost: 2, evo: '星環',
     grow: { what: '環繞命中', need: [150, 450] },
     desc: '子彈繞著飛船轉，碰到敵人不會消失（同一隻敵人每 0.3 秒最多打一次）。',
