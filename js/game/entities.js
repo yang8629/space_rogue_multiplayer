@@ -552,8 +552,8 @@ class Enemy {
   //   星噬母艦：螺旋彈幕 / 扇形齊射 / 召喚蟲群 / 環形彈
   //   裂界獵艦：預警衝鋒（兩側灑彈）/ 旋轉十字彈流 / 三連狙擊 / 部署噴吐者
   //   終焉核心：缺口環形波 / 雙向螺旋 / 慢速彈牆 / 刺殼護衛
-  shootAt(a, spd, r = 6, dmg = 14) {  // 旗艦的子彈傷害 ×0.85（整局模擬：第一星區旗艦是斷層）
-    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.t.boss ? 0.85 : 1), life: 10, from: this.t.name });  // 王的子彈存在 10 秒
+  shootAt(a, spd, r = 6, dmg = 14) {  // 旗艦子彈傷害（整局模擬調的）：前兩隻 ×0.85（第一星區旗艦原本是斷層）、終焉核心 ×1.15（第三星區原本太簡單）
+    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.type === 'boss3' ? 1.15 : this.t.boss ? 0.85 : 1), life: 10, from: this.t.name });  // 王的子彈存在 10 秒
   }
   ring(n, spd, offset, gap = 0) {  // gap：連續空出幾發，讓玩家有縫可鑽
     const g0 = gap ? randInt(0, n - 1) : -1;
@@ -562,8 +562,10 @@ class Enemy {
   summon(type, n, dist, scale) {
     for (let i = 0; i < n; i++) {
       const a = i / n * TAU + this.rot;
-      Game.enemies.push(new Enemy(type, clamp(this.x + Math.cos(a) * dist, 40, CFG.WORLD_W - 40),
-        clamp(this.y + Math.sin(a) * dist, 40, CFG.WORLD_H - 40), this.hpScale * scale));
+      const e = new Enemy(type, clamp(this.x + Math.cos(a) * dist, 40, CFG.WORLD_W - 40),
+        clamp(this.y + Math.sin(a) * dist, 40, CFG.WORLD_H - 40), this.hpScale * scale);
+      e.summoned = true;  // 旗艦叫出來的小怪不掉晶體
+      Game.enemies.push(e);
     }
     burst(this.x, this.y, this.t.color, 24, 200, 0.5, 2);
   }
