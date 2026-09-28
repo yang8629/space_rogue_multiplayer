@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（53 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（55 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -207,6 +207,25 @@ const MechCheck = {
       const p3 = Game.player; p3.wantFire = true; M.run(400); const sc = Game.bullets.filter(b => b.mode === 'orbit').length;
       return { ok: sc === 50 && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
         got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發（散彈存了 ${sc} 顆 = 10 發）；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
+    }],
+    ['電路晶片', '停滯', '子彈停住後擋下敵彈（沒穿甲擋一發就消失），時間到衝向附近的敵人', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'stasis', null, null]); M.targets([]);
+      const p = Game.player; M.run(1); const b = Game.bullets[0];
+      for (let f = 0; f < 20 && b.mode !== 'wait'; f++) Game.updateBullets(1 / 60);
+      const stopped = b.mode === 'wait';
+      Game.eBullets = [{ x: b.x + 40, y: b.y, vx: -600, vy: 0, r: 5, dmg: 10, life: 2, from: 'test' }];
+      for (let f = 0; f < 10; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+      const blocked = Game.eBullets.length === 0 && b.dead;
+      M.run(1); const c = Game.bullets[Game.bullets.length - 1]; const e = M.targets([[300, 60]])[0];
+      for (let f = 0; f < 200 && !c.dead; f++) Game.updateBullets(1 / 60);
+      return { ok: stopped && blocked && e.hp < e.maxHp, got: `${stopped ? '停住' : '沒停住'}；${blocked ? '擋下敵彈後消失' : '沒擋下敵彈'}；時間到${e.hp < e.maxHp ? '衝向敵人打中' : '沒打中敵人'}` };
+    }],
+    ['電路晶片', '加速', '出手 0.5 倍速，越飛越快；打中時傷害 × 速度倍率（最多 ×4）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'accel', null, null]); M.targets([]);
+      M.run(1); const b = Game.bullets[0], m0 = b.accelMul;
+      for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+      const m1 = b.accelMul;
+      return { ok: m0 >= 0.5 && m0 < 0.6 && near1(m1 - m0, 1.5), got: `出手 ${m0.toFixed(2)} 倍，0.5 秒後 ${m1.toFixed(2)} 倍` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
