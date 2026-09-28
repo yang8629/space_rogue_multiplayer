@@ -713,6 +713,7 @@ const Game = {
       p.shellUsed = true; dmg = Math.max(0, p.hp - 1); p.iframe = 2;
       floatText(p.x, p.y - 30, '終焉護殼', '#2ee6a6', true);
     }
+    if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
     this.withLoadout(p.L, () => this.onPlayerHurt(p, sx, sy));
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);

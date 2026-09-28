@@ -402,7 +402,7 @@ function drawRangePanel() {
     ...src.map(t => [t, '#8fa3d9']),
     [`開火：每發 ${s.count} 顆、共 ${fmt(s.dmg)} 傷害　·　每秒 ${s.rps.toFixed(2)} 發`, '#ffd166'],
     ...s.layers.map((l, i) => [`◎ 命中第 ${i + 1} 層：每次命中展開 ${l.count} 顆 / ${fmt(l.dmg)} 傷害`, '#ff9dbd']),
-    [Input.touch ? '「電路」改電路（改完數據歸零）' : '1 單一　2 一排　3 密集　4 散開　·　R 清除數據　·　T 慢動作　·　Tab 改電路（改完數據歸零）', '#6a79ad'],
+    [Input.touch ? '「電路」改電路（改完數據歸零）' : '1 單一　2 一排　3 密集　4 散開　5 實戰　·　R 清除數據　·　T 慢動作　·　Tab 改電路（改完數據歸零）', '#6a79ad'],
     ['粉紅外圈 = 帶「命中觸發」的子彈（命中時才展開觸發器右邊的晶片）', '#6a79ad'],
   ];
   const w = Math.min(470, VW - 40), x = VW - 20 - w;
@@ -454,10 +454,10 @@ function drawHUD() {
   }
 
   ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;
-  ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '雙人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
+  ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '雙人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
   ctx.font = '12px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
   ctx.fillText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54);
-  if (C.range) drawRangePanel();
+  if (Game.mode === 'range') drawRangePanel();
   if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);

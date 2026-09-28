@@ -3,24 +3,25 @@
 'use strict';
 
 // =====================================================================
-// RANGE — 靶場：固定標靶＋DPS 計算＋慢動作，用來確認晶片機制
+// RANGE — 靶場：固定標靶＋DPS 計算＋慢動作，用來確認晶片機制；按 5 切換「實戰」（原本的沙盒：一波波真的敵人，無限波次）
 // =====================================================================
 const Range = {
-  layout: 'single', slow: false, log: [], total: 0, hits: 0, maxHit: 0, bySrc: {}, t0: 0,
+  layout: 'single', slow: false, live: false, log: [], total: 0, hits: 0, maxHit: 0, bySrc: {}, t0: 0,
   LAYOUTS: { single: '單一標靶', line: '一排（看穿透）', pack: '密集群（看爆炸、分裂）', wide: '散開（看彈射、追蹤、電弧）' },
   KEYS: ['single', 'line', 'pack', 'wide'],
   SLOW: 0.25,
   reset(layout = this.layout) {
-    this.layout = layout;
+    this.layout = layout; this.live = false;
     const G = Game, p = G.player;
+    G.combat.range = true;
     G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; G.texts = []; G.nextId = 1;
     p.x = CFG.WORLD_W / 2 - 300; p.y = CFG.WORLD_H / 2; p.vx = p.vy = 0;
     const cx = p.x + 400, cy = p.y;
     const pts = {
       single: [[0, 0]],
-      line: [0, 1, 2, 3, 4].map(i => [i * 70, 0]),
-      pack: [[0, 0], [42, -36], [42, 36], [-42, -36], [-42, 36], [84, 0], [-84, 0], [0, -72], [0, 72]],
-      wide: [[0, -280], [140, -150], [200, 0], [140, 150], [0, 280], [-40, 0]],
+      line: [0, 1, 2, 3, 4, 5, 6, 7].map(i => [i * 60, 0]),
+      pack: [0, 1, 2, 3, 4].flatMap(r => [-2, -1, 0, 1, 2].slice(r % 2, 5).map(c => [c * 44 + (r % 2) * 22 - 22, (r - 2) * 38])).slice(0, 18),
+      wide: [[0, -300], [120, -220], [200, -110], [230, 0], [200, 110], [120, 220], [0, 300], [-60, -120], [-60, 120], [60, 0]],
     }[layout];
     for (const [dx, dy] of pts) {
       const e = new Enemy('dummy', cx + dx, cy + dy, 1);
@@ -49,9 +50,19 @@ const Range = {
     for (const [a, d] of this.log) if (t - a < win) s += d;
     return s / Math.min(win, Math.max(0.25, t - this.t0));
   },
-  key(k) {  // 靶場快捷鍵：1～4 換標靶、R 清除數據、T 慢動作
+  // 實戰（原本的沙盒）：清掉標靶，改成一波波真的敵人（無限波次、越來越強；飛船不會死）
+  goLive() {
+    const G = Game, C = G.combat;
+    this.live = true;
+    Object.assign(C, { range: false, wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false });
+    G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; G.texts = []; G.kills = 0;
+    G.player.hp = G.player.maxHp;
+    this.clearStats();
+  },
+  key(k) {  // 靶場快捷鍵：1～4 換標靶、5 實戰、R 清除數據、T 慢動作
     const i = '1234'.indexOf(k);
     if (i >= 0) { this.reset(this.KEYS[i]); return true; }
+    if (k === '5') { if (!this.live) this.goLive(); return true; }
     if (k === 'r') { this.clearStats(); return true; }
     if (k === 't') { this.slow = !this.slow; return true; }
     return false;
