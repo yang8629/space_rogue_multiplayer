@@ -1,0 +1,464 @@
+// 星環電路 雙人版 · screens.js：DOM 畫面：標題、選飛船／武器／晶片、航圖、獎勵、商店、結算、紀錄
+// 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
+'use strict';
+
+// =====================================================================
+// SCREENS — DOM 畫面（標題 / 航圖 / 獎勵 / 商店 / 結算）
+// =====================================================================
+function chipCard(id, footer = '') {
+  const d = CHIPS[id], m = TYPE_META[d.type];
+  const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
+  const lv = !d.lv && LV_INFO[id] ? `<div class="ty" style="line-height:1.6">${lvLine(id, 1)}</div>` : '';  // Lv2+ 的說明已寫在 desc 裡
+  return `<div class="card t-${d.type}">
+    <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
+    <div class="ttl">${d.name}</div>
+    <div class="ds">${d.desc}</div>${lv}${ps}${footer}</div>`;
+}
+
+const Screen = {
+  el: document.getElementById('screen'),
+  show(html) { this.el.innerHTML = html; this.el.classList.remove('hidden'); },
+  hide() {
+    this.el.classList.add('hidden');
+    if (document.activeElement) document.activeElement.blur();  // 避免 Space/Enter 再次觸發按鈕
+  },
+  status() {
+    const p = Game.player;
+    return `<div class="row"><span class="pill">HP ${Math.ceil(p.hp)} / ${p.maxHp}</span>
+      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體兩人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
+      <button data-act="editor">整理電路 (Tab)</button></div>`;
+  },
+  // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
+  act(btn) {
+    const a = btn.dataset.act, arg = btn.dataset.arg;
+    if (btn.disabled) return;
+    SFX.init();
+    SFX.play('click');
+    switch (a) {
+      case 'mute': SFX.setMuted(!SFX.muted); break;
+      case 'codex': Codex.open('rules'); break;
+      case 'run': this.restart(); break;
+      case 'editor': Game.toggleEditor(); break;
+      case 'reward': Game.takeReward(arg || null); break;
+      case 'buy': Game.buy(+arg); break;
+      case 'leave': Game.showMap(); break;
+      case 'node': if (Game.mode === 'coop') Net.vote(arg); else Game.enterNode(Game.nodeById(arg)); break;
+      case 'title': Net.leave(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
+      case 'select': Screen.select(arg); break;
+      case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
+      case 'weapon': {
+        const [mode, ship, wid] = arg.split(':');
+        if (mode === 'sandbox' || mode === 'range') Game.newRun(mode, ship, wid); else this.chipPick(mode, ship, wid);
+        break;
+      }
+      case 'startchip': {  // 開局三選一晶片選好了
+        const [mode, ship, wid, chip] = arg.split(':');
+        if (mode === 'coop') Net.ready(ship, wid, chip); else Game.newRun(mode, ship, wid, chip);
+        break;
+      }
+      case 'coop': Net.lobby(); break;
+      case 'nethost': Net.host(); break;
+      case 'netjoin': Net.join(document.getElementById('netCode').value); break;
+      case 'netstart': Net.beginPick(); break;
+      case 'netroom': Net.backToRoom(); break;
+      case 'netrejoin': Net.tryRejoin(); break;
+      case 'netgiveup': Net.giveUp(); break;
+      case 'netsolo': Net.soloContinue(); break;
+      case 'upg': Game.upgradeWeapon(arg); break;
+      case 'armorybonus': Game.armoryBonus(); break;
+      case 'slot': Game.expandSlot(arg); break;
+      case 'bhpick': Game.bhToggle(arg); break;
+      case 'bhfuse': Game.bhFuse(); break;
+      case 'scrap': Game.removeScrap(); break;
+      case 'next': Game.nextSector(); break;
+      case 'finish': Game.finishRun(); break;
+      case 'records': Screen.records(); break;
+      case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
+      case 'clearrecok':
+        try { localStorage.removeItem('runRecords'); } catch (e) {}
+        Screen.records('已刪除所有紀錄。');
+        break;
+      case 'copyrec': Screen.copyRecords(); break;
+      case 'copyrun': Screen.copyRun(); break;
+      case 'copyone': Screen.copyOne(+arg); break;
+      case 'heal': Game.shopHeal(); break;
+      case 'music': Music.toggle(); Screen.title(); break;
+    }
+  },
+
+  select(mode) {
+    const free = mode === 'sandbox' || mode === 'range';
+    const bar =(label, v, max, col) => `<div class="ty">${label}
+      <div style="height:6px;background:#141c3a;border-radius:3px;margin-top:3px">
+      <div style="height:6px;width:${Math.round(v / max * 100)}%;background:${col};border-radius:3px"></div></div></div>`;
+    const cards = Object.entries(SHIPS).map(([id, S]) => {
+      const pts = S.hull.map(([x, y]) => `${x},${y}`).join(' ');
+      return `<div class="card" style="border-color:${S.color}">
+        <svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
+          <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>
+        <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
+        <div class="ds">${S.desc}</div>
+        ${bar(`船體 ${S.hp}`, S.hp, 150, S.color)}
+        ${bar(`速度 ${S.speed}`, S.speed, 310, S.color)}
+        ${bar(`衝刺冷卻 ${S.dashCd} 秒`, 1.4 - S.dashCd, 0.85, S.color)}
+        <div class="ds"><b style="color:${S.color}">技能・${S.abilityName}</b><br>${S.abilityDesc}</div>
+        <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
+    }).join('');
+    this.show(`<div class="scr pick">
+      <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
+        <div class="sub">${{ run: '開始遠征', coop: '雙人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：每艘飛船有不同的船體性能與衝刺技能。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
+        ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
+      <div class="cards">${cards}</div></div>`);
+  },
+
+  weaponSelect(mode, shipId) {
+    const S = SHIPS[shipId];
+    const cards = Object.entries(WEAPONS).map(([id, W]) => {
+      const p = weaponParams({ id, path: null, final: null });
+      const dps = p.damage * p.count / p.interval;
+      const paths = Object.values(W.paths).map(P =>
+        `<div><b style="color:${W.color}">${P.name}</b>：${P.desc}<br><span style="color:#6a79ad">→ ${P.next.map(n => n.name).join(' ／ ')}</span></div>`).join('');
+      return `<div class="card" style="border-color:${W.color}">
+        <div class="ttl" style="color:${W.color}">${W.name}</div>
+        <div class="ds">${W.desc}</div>
+        <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
+        <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div>
+        <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
+    }).join('');
+    this.show(`<div class="scr pick">
+      <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
+        <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，在「⚒ 軍械台」升級兩段：第一段 3 選 1，第二段 2 選 1。</div></div>
+        <button data-act="select" data-arg="${mode}" data-back>返回 (Esc)</button></div>
+      <div class="cards">${cards}</div></div>`);
+  },
+
+  // 開局三選一起始晶片（遠征與雙人；取代以前飛船自帶的晶片）
+  chipPick(mode, shipId, weaponId) {
+    const S = SHIPS[shipId], W = WEAPONS[weaponId];
+    const cards = pickN(NORMAL_IDS, 3).map(id =>
+      chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
+    this.show(`<div class="scr pick">
+      <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>
+        <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選好的晶片直接裝在電路第 2 格（武器右邊）。</div></div>
+        <button data-act="ship" data-arg="${mode}:${shipId}" data-back>返回 (Esc)</button></div>
+      <div class="cards">${cards}</div></div>`);
+  },
+  // 死亡畫面的「重新開始」：遠征要重新選起始晶片，沙盒直接開
+  restart() {
+    if (Game.mode === 'run') this.chipPick('run', Game.shipId, Game.weapon.id);
+    else Game.newRun(Game.mode);
+  },
+
+  // 武器升級只能在軍械台（補給站不賣武器升級）
+  armory() {
+    const W = WEAPONS[Game.weapon.id], st = Game.weapon, stage = Game.weaponStage();
+    let body;
+    const card = (key, n, color) => `<div class="card" style="border-color:${color}">
+      <div class="ttl" style="color:${color}">${n.name}</div><div class="ds">${n.desc}</div>
+      ${n.next ? `<div class="ty">第二段可選：${n.next.map(x => x.name).join(' ／ ')}</div>` : ''}
+      <button data-act="upg" data-arg="${key}">選擇</button></div>`;
+    // 軍械台一律給武器升級；只有武器升滿之後，才可以改選「電路擴充」
+    const canSlot = stage === 2 && Game.chain.length < CFG.MAX_SLOTS;
+    const slotCard = canSlot ? `<div class="card" style="border-color:#2ee6a6">
+      <div class="ttl" style="color:#2ee6a6">⚡ 電路擴充</div>
+      <div class="ds">武器已升滿，改成電路插槽 +1（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。</div>
+      <button data-act="slot" data-arg="armory">選擇</button></div>` : '';
+    if (stage === 2) {
+      body = `<div class="sub" style="text-align:center;margin:20px 0">武器已經升滿兩段。</div>
+        <div class="cards">${slotCard}</div>
+        <div class="row" style="justify-content:center">
+          <button class="big" data-act="armorybonus">改領 ◆ +${CFG.ARMORY_BONUS.credits}、HP +${CFG.ARMORY_BONUS.hp}</button></div>`;
+    } else {
+      const opts = stage === 0
+        ? Object.entries(W.paths).map(([k, P]) => card(k, P, W.color)).join('')
+        : W.paths[st.path].next.map((n, i) => card(i, n, W.color)).join('');
+      body = `<div class="cards">${opts}</div>`;
+    }
+    this.show(`<div class="scr">
+      <div class="between"><div><h2 style="color:#ff9f1c">⚒ 軍械台　${stage < 2 ? `第 ${stage + 1} 段升級` : ''}</h2>
+        <div class="sub">目前武器：<b style="color:${W.color}">${weaponTitle(st)}</b></div></div>
+        ${this.status()}</div>${body}</div>`);
+  },
+
+  blackhole() {
+    const B = Game.bh, owned = Game.ownedFusable();
+    let body;
+    if (B.result && B.fusing) {
+      body = `<div class="bh-core fusing"></div><div class="result" style="color:#b388ff">晶片正在被吞噬……</div>`;
+    } else if (B.result) {
+      const R = B.result;
+      body = `<div class="result" style="color:${R.ok ? '#e0aaff' : '#8a8f98'}">
+          ${R.ok ? '✺ 融合成功！誕生奇異點超載晶片' : '✖ 融合失敗……只剩下一塊廢鐵'}</div>
+        <div class="cards">${chipCard(R.id)}</div>
+        <div class="sub" style="text-align:center">結果已放在原本第一個素材的位置（${R.where}）。${R.ok ? '' : '廢鐵會卡住插槽，只能在維修站拆除。'}</div>
+        <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
+    } else {
+      const cards = owned.map(o => {
+        const on = B.sel.includes(o.key);
+        return chipCard(o.id, `<div class="ty">位置：${o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}</div>
+          <button data-act="bhpick" data-arg="${o.key}" ${!on && B.sel.length >= 2 ? 'disabled' : ''}>${on ? '已選取（點擊取消）' : '選為素材'}</button>`)
+          .replace('class="card', `class="card${on ? ' picked' : ''}`);
+      }).join('');
+      body = `<div class="bh-core"></div>
+        <div class="sub" style="text-align:center">選 2 個晶片投入黑洞：<b style="color:#e0aaff">50% 融合成奇異點</b>（兩個效果合進一格，再加一個超載詞綴），
+          <b style="color:#8a8f98">50% 變成廢鐵</b>卡住插槽。連結器與廢鐵不能投入。</div>
+        <div class="cards">${cards || '<div class="sub">目前沒有可投入的晶片。</div>'}</div>
+        <div class="row" style="justify-content:center">
+          <button class="big" data-act="bhfuse" ${B.sel.length === 2 ? '' : 'disabled'}>投入黑洞（${B.sel.length} / 2）</button>
+          <button data-act="leave">不冒險，離開</button></div>`;
+    }
+    this.show(`<div class="scr">
+      <div class="between"><div><h2 style="color:#b388ff">◐ 黑洞事件</h2>
+        <div class="sub">高風險、高回報的晶片融合。</div></div>${this.status()}</div>${body}</div>`);
+  },
+
+  title() {
+    this.show(`<div class="scr title-wrap">
+      <h1>星環電路</h1><div class="en">CIRCUIT ROGUE</div>
+      <div class="sub">5 把武器 × 各 6 種最終型態 · 3 艘飛船 · 電路構築 · 黑洞融合 · 三星區遠征＋無盡模式</div>
+      <div class="row">
+        <button class="big" data-act="select" data-arg="run">開始遠征</button>
+        <button class="big" data-act="select" data-arg="sandbox">沙盒模式</button>
+        <button class="big" data-act="select" data-arg="range">🎯 靶場</button>
+        <button class="big" data-act="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 雙人連線（測試）</button>
+      </div>
+      <div class="row"><button data-act="codex">📖 電路總覽</button>
+        <button data-act="records">📜 遊玩紀錄</button>
+        <button data-act="music">${Music.on ? '🎵 音樂開' : '🎵 音樂關'}</button>
+        <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
+      <div class="keys">電腦：WASD 移動　·　滑鼠左鍵 射擊　·　Space / 右鍵 衝刺（無敵）　·　Tab 隨時編輯電路（暫停）　·　M 靜音<br>
+      手機：自動攻擊時任意位置拖曳移動；關閉自動攻擊後，左半邊移動、右半邊瞄準射擊　·　「衝刺」「電路」「自動」按鈕　·　建議橫向遊玩</div>
+      <div class="ver">版本 ${CFG.VERSION}</div>
+    </div>`);
+  },
+
+  map(toast = '') {
+    const layers = Game.map, LN = layers.length, reach = Game.reachable();
+    const pos = n => ({ x: 6 + n.L * 88 / (LN - 1), y: (n.k + 1) / (n.n + 1) * 100 });
+    const coop = Game.mode === 'coop' && Net.linked, V = coop ? Net.votes : {};
+    const marks = n => coop ? (V.h === n.id ? '<i class="vote v1">1P</i>' : '') + (V.c === n.id ? '<i class="vote v2">2P</i>' : '') : '';
+    let lines = '', nodes = '';
+    for (const row of layers) for (const n of row) {
+      const a = pos(n);
+      for (const id of n.next) {
+        const m = Game.nodeById(id), b = pos(m);
+        const walked = Game.visited.includes(n.id) && Game.visited.includes(m.id);
+        lines += `<line x1="${a.x}%" y1="${a.y}%" x2="${b.x}%" y2="${b.y}%" stroke="${walked ? '#4cc9f0' : '#26336a'}" stroke-width="${walked ? 3 : 2}"/>`;
+      }
+      const meta = NODE_META[n.type];
+      const cls = ['node', reach.includes(n) && 'reach', Game.visited.includes(n.id) && 'visited', Game.node === n && 'current']
+        .filter(Boolean).join(' ');
+      nodes += `<button class="${cls}" ${reach.includes(n) ? `data-act="node" data-arg="${n.id}"` : ''} style="left:${a.x}%;top:${a.y}%;color:${meta.color};border-color:${meta.color}"
+        title="${meta.label}：${meta.desc()}">${meta.icon}<small>${meta.label}</small>${marks(n)}</button>`;
+    }
+    // 節點介紹：列出這張圖上有出現的節點種類
+    const types = Object.keys(NODE_META).filter(t => layers.flat().some(n => n.type === t));
+    const legend = types.map(t => { const M = NODE_META[t];
+      return `<div class="nleg"><span class="nleg-ic" style="color:${M.color};border-color:${M.color}">${M.icon}</span><div><b style="color:${M.color}">${M.label}</b>　${M.desc()}</div></div>`; }).join('');
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>${Game.isEndless() ? `無盡模式 · 星區 ${Game.sector}` : `星區 ${Game.sector} / ${CFG.CAMPAIGN_SECTORS}`} · 航圖</h2>
+        <div class="sub">選擇下一個發光的節點。最右側是守關旗艦：<b style="color:${ENEMY_TYPES[Game.bossId].color}">♛ ${ENEMY_TYPES[Game.bossId].name}</b></div></div>${this.status()}</div>
+      ${coop ? (() => {
+        const me = Net.myVoteKey(), mate = me === 'h' ? 'c' : 'h', left = Net.voteLeft();
+        const mateTxt = Net.mateAt !== 'map' ? '<span style="color:#ffd166">隊友還在處理上一個節點…</span>' : V[mate] ? '<b style="color:#9dff6b">隊友已投票</b>' : '隊友選擇中…';
+        return `<div class="sub" style="color:#ff9dbd">👥 投票（你是 ${me === 'h' ? '1P' : '2P'}）：${V[me] ? '你已投票，可以改投' : '點選一個發光的節點'}　·　${mateTxt}
+          　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　兩人選不同就各 50% 抽籤；時間到沒投的不算</div>`;
+      })() : ''}
+      <div class="map"><svg>${lines}</svg>${nodes}</div>
+      <div class="toast">${toast}</div>
+      <details class="nlegs" open><summary>節點介紹</summary><div class="nleg-grid">${legend}</div></details></div>`);
+  },
+
+  reward() {
+    const R = Game.reward, full = !Game.inventory.includes(null);
+    const cards = R.options.map(id => {
+      const t = Game.mergeTarget(id), ok = Game.canAcquire(id);
+      const label = t ? `選擇（合成 Lv${levelOf(t.arr[t.i]) + 1}）` : ok ? '選擇' : '倉庫已滿';
+      return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
+    }).join('') + (R.slot ? `<div class="card" style="border-color:#2ee6a6">
+      <div class="ty" style="color:#2ee6a6">⚡ 電路擴充</div><div class="ttl">插槽 +1</div>
+      <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
+      <button data-act="slot" data-arg="reward">選擇</button></div>` : '');
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：軍規複合晶片' : '⚔ 戰鬥勝利：選擇 1 個晶片'}</h2>
+        <div class="sub">${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
+      <div class="cards">${cards}</div>
+      <div class="row" style="justify-content:center">
+        ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
+        <button data-act="reward" data-arg="">跳過（◆ +10）</button></div></div>`);
+  },
+
+  shop(toast = '') {
+    const full = !Game.inventory.includes(null);  // 補給站不賣武器升級；補血每間限 1 次
+    const cards = Game.shop.items.map((it, i) => {
+      const t = !it.sold && Game.mergeTarget(it.id), can = Game.canAcquire(it.id);
+      const ok = !it.sold && Game.credits >= it.price && can;
+      const label = it.sold ? '已售出' : !can ? '倉庫已滿'
+        : `購買 ◆ ${it.price}${t ? `（合成 Lv${levelOf(t.arr[t.i]) + 1}）` : ''}`;
+      return chipCard(it.id, `<button ${ok ? '' : 'disabled'} data-act="buy" data-arg="${i}">${label}</button>`)
+        .replace('class="card', `class="card${it.sold ? ' sold' : ''}`);
+    }).join('');
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>◆ 補給站</h2><div class="sub">晶片會放入倉庫。不要的晶片可在電路編輯器拖到「回收」換成晶體。</div></div>${this.status()}</div>
+      <div class="cards">${cards}</div>
+      <div class="row" style="justify-content:center">
+        ${Game.shop.healed ? '<button disabled>已補血</button>'
+          : `<button ${Game.credits >= CFG.SHOP_REPAIR.price && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${CFG.SHOP_REPAIR.hp}（◆ ${CFG.SHOP_REPAIR.price}，限 1 次）</button>`}
+        ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
+          ? `<button ${Game.credits >= CFG.SHOP_SLOT ? '' : 'disabled'} data-act="slot" data-arg="shop">⚡ 電路擴充 插槽 +1（◆ ${CFG.SHOP_SLOT}，每間限 1 次）</button>` : ''}
+        <button data-act="leave">離開補給站</button></div>
+      <div class="toast" style="text-align:center">${toast}</div></div>`);
+  },
+
+  // 維修站：修復後，有廢鐵時可以花錢拆除
+  repair(toast = '') {
+    const n = [...Game.chain, ...Game.inventory].filter(id => id === 'scrap').length;
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>✚ 維修站</h2><div class="sub">${Game.repairMsg || ''}。電路或倉庫裡還有 ${n} 塊廢鐵，可以在這裡拆除。</div></div>${this.status()}</div>
+      <div class="row" style="justify-content:center">
+        ${n ? `<button ${Game.credits >= CFG.SCRAP_REMOVE ? '' : 'disabled'} data-act="scrap">拆除 1 塊廢鐵（◆ ${CFG.SCRAP_REMOVE}）</button>` : ''}
+        <button data-act="leave">離開維修站</button></div>
+      <div class="toast" style="text-align:center">${toast}</div></div>`);
+  },
+
+  // 結算：本局傷害總計（依來源拆開）＋ 擊殺、最高單發、戰鬥時間、平均 DPS
+  runSummary() {
+    const R = Game.runStats;
+    if (!R) return '';
+    const total = Object.values(R.dmg).reduce((a, b) => a + b, 0);
+    const fmt = n => Math.round(n).toLocaleString('zh-TW');
+    const mm = Math.floor(R.time / 60), ss = Math.floor(R.time % 60);
+    const rows = DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).sort((a, b) => R.dmg[b[0]] - R.dmg[a[0]]).map(([k, label, color]) => {
+      const pct = total ? R.dmg[k] / total * 100 : 0;
+      return `<div class="sum-lab"><i style="background:${color}"></i>${label}</div>
+        <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
+        <div class="sum-val">${fmt(R.dmg[k])}<span>${pct.toFixed(0)}%</span></div>`;
+    }).join('');
+    const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
+    return `<div class="summary">
+      <div class="sum-head"><span>${Game.mode === 'coop' ? '你的傷害明細' : '本局傷害總計'}</span><b>${fmt(total)}</b></div>
+      ${rows ? `<div class="sum-rows">${rows}</div>` : '<div class="sub">這一局還沒有造成傷害。</div>'}
+      <div class="sum-tiles">${tile('擊殺', fmt(R.kills))}${tile('最高單發', fmt(R.maxHit))}
+        ${tile('戰鬥時間', `${mm}:${String(ss).padStart(2, '0')}`)}${tile('平均 DPS', R.time > 0 ? fmt(total / R.time) : '—')}</div>
+      <div class="sum-note">武器：${weaponTitle(Game.weapon)}　·　飛船：${SHIPS[Game.shipId].name}</div></div>`;
+  },
+
+  dead() {
+    const run = Game.mode === 'run';
+    if (Game.mode === 'coop') {
+      this.show(`<div class="scr title-wrap">
+        <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
+        <div class="sub">倒在 ${Net.whereText()} · 剩餘晶體 ${Game.credits}${Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}<br>
+          <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
+        ${Net.teamSummaryHtml()}
+        ${this.runSummary()}
+        <div class="row">${Net.linked ? '<button class="big" data-act="netroom">回到房間</button>' : '<span class="sub" style="color:#ff4d6d">隊友已離線</span>'}
+          <button data-act="title">離開房間</button></div>
+        <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div>
+        <div id="copyBox"></div></div>`);
+      return;
+    }
+    this.show(`<div class="scr title-wrap">
+      <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">飛船已毀</h1>
+      <div class="sub">${run ? Game.buildRecord('dead').where : `抵達第 ${Game.combat.wave} 波`} · 剩餘晶體 ${Game.credits}
+        ${run && Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}${run ? '<br><span style="color:#6a79ad">這一局已存入「遊玩紀錄」</span>' : ''}</div>
+      ${this.runSummary()}
+      <div class="row"><button class="big" data-act="run" data-arg="${Game.mode}">重新開始 (R)</button>
+      <button class="big" data-act="title">回到標題</button></div>
+      ${run ? '<div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div><div id="copyBox"></div>' : ''}</div>`);
+  },
+
+  victory() {
+    const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
+    const cleared = Game.sector === CFG.CAMPAIGN_SECTORS;  // 剛打完第三關：遠征完成
+    const reward = `獎勵：◆ +50　${V.slot ? '· <b style="color:#4cc9f0">電路插槽 +1</b>' : '· 插槽已達上限'}`;
+    const head = cleared
+      ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">遠征完成！</h1>
+        <div class="sub">${boss.name}已被擊沉，${CFG.CAMPAIGN_SECTORS} 個星區全部突破。<br>${reward}<br>
+          可以帶著目前的電路繼續挑戰<b style="color:#ff9dbd">無盡模式</b>：敵人持續變強，旗艦隨機出現。選「結束遠征」會存下通關紀錄。</div>`
+      : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
+    this.show(`<div class="scr title-wrap">${head}
+      ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
+      ${this.runSummary()}
+      ${Game.isClient() ? '<div class="sub" style="color:#ff9dbd">👥 等待房主決定：前往下一星區，或結束遠征…</div>' : `
+      <div class="row"><button class="big" data-act="next">${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
+        <button class="big" data-act="finish">結束遠征</button></div>`}
+      <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
+  },
+
+  records(msg = '', confirmClear = false) {
+    const list = Game.loadRecords();
+    const RES = { dead: ['飛船已毀', '#ff4d6d'], cleared: ['遠征完成', '#ffd166'], retired: ['中途結束', '#8fa3d9'], disconnect: ['連線中斷', '#ff9f1c'] };
+    const fmt = n => Math.round(n).toLocaleString('zh-TW');
+    const list2 = (title, items) => items && items.length ? `<div style="margin-top:6px"><b>${title}</b><br>${items.join('<br>')}</div>` : '';
+    const rows = list.map((r, i) => {
+      const [label, color] = RES[r.result] || [r.result, '#8fa3d9'];
+      const top = (r.chipDmg || []).slice(0, 3).map(([n, v]) => `${n} ${r.dmg ? Math.round(v / r.dmg * 100) : 0}%`).join('、');
+      const when = new Date(r.at).toLocaleString('zh-TW', { hour12: false });
+      // 展開看細節：第 2 版紀錄才有的欄位（舊紀錄沒有就不顯示）
+      const S = r.stats;
+      const detail = [
+        S ? `<div><b>最後的電路數值</b><br>插槽 ${S.slots}、能量 ⚡${S.heat}（射速 ${S.rateCut}）、每秒 ${S.rps} 發、每發 ${S.perFire} 顆共 ${S.fireDmg} 傷害、估算 DPS ${S.estDps}、擊退 ${S.knock}${S.passives.length ? `<br>倉庫被動：${S.passives.join('、')}` : ''}</div>` : '',
+        list2('各晶片傷害', (r.chipDmg || []).map(([n, v]) => `${n}　${fmt(v)}（${r.dmg ? Math.round(v / r.dmg * 100) : 0}%）`)),
+        r.coop && r.coop.mateChipDmg ? (() => {
+          const t = r.coop.mateChipDmg.reduce((a, [, v]) => a + v, 0);
+          return list2('隊友的各晶片傷害', r.coop.mateChipDmg.map(([n, v]) => `${n}　${fmt(v)}（${t ? Math.round(v / t * 100) : 0}%）`));
+        })() : '',
+        r.taken ? list2(`受到的傷害（被打 ${r.hits} 下、衝刺 ${r.dashes} 次）`, Object.entries(r.taken).map(([k, v]) => `${k}　${fmt(v)}`)) : '',
+        list2('各關摘要', r.sectors), list2('走過的節點', r.path), list2('武器升級', r.upgrades), list2('取得的晶片', r.got),
+      ].join('');
+      return `<div class="rec"><div class="between"><span><b style="color:${color}">${label}</b>　${r.where || `${r.endless ? '無盡 · ' : ''}星區 ${r.sector} 第 ${r.layer} 層`}　·　${when}</span>
+          <button data-act="copyone" data-arg="${i}">📋 複製這筆</button></div>
+        ${r.ship} · ${r.weapon}　·　${Math.floor(r.time / 60)} 分 ${r.time % 60} 秒　·　擊殺 ${fmt(r.kills)}　·　總傷害 ${fmt(r.dmg)}
+        ${r.cause ? `<br>擊毀原因：${r.cause}` : ''}${r.bosses && r.bosses.length ? `<br>擊沉旗艦：${r.bosses.join('、')}` : ''}
+        ${top ? `<br>傷害前三：${top}` : ''}
+        ${r.coop ? `<br><b style="color:#ff9dbd">👥 雙人（${r.coop.role}）</b>　隊友：${r.coop.mate}${r.coop.mateDown ? '（已被擊墜）' : ''}
+          <br>延遲：${typeof r.coop.ping === 'object' ? `平均 ${r.coop.ping.avg} ms、最低 ${r.coop.ping.min}、90% 在 ${r.coop.ping.p90} 以內、最高 ${r.coop.ping.max}（${r.coop.ping.samples} 次）` : r.coop.ping}
+          　·　同步最長間隔 ${r.coop.sync.maxGapMs} ms
+          ${r.coop.team ? `<br>傷害：${r.coop.team.map(t => `${t.who} ${t.ship} ${fmt(t.dmg)}（擊殺 ${t.kills}）`).join('　｜　')}` : ''}` : ''}<br><span style="color:#6a79ad">電路：${r.chain.map(c => c || '空').join(' → ')}</span>
+        ${detail ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:#8fa3d9">展開細節</summary>${detail}</details>` : ''}
+        <div id="copyBox${i}"></div></div>`;
+    }).join('');
+    this.show(`<div class="scr">
+      <div class="between"><div><h2>📜 遊玩紀錄</h2>
+        <div class="sub">每一局結束（飛船被擊毀、或選「結束遠征」）時自動存一筆，保留最近 ${CFG.MAX_RECORDS} 筆。紀錄只存在這台裝置的瀏覽器裡。
+          每筆右上角可以單獨複製、「展開細節」可以看走過的節點與受傷來源；也可以一次複製全部。複製後把文字貼給開發者就能分析。</div></div>
+        ${Net.linked ? '<button data-act="netroom" data-back>回到房間 (Esc)</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
+      <div class="row" style="justify-content:flex-start"><button data-act="copyrec" ${list.length ? '' : 'disabled'}>📋 複製全部紀錄（${list.length} 筆）</button>
+        ${confirmClear
+          ? `<span style="color:#ff4d6d">確定刪除全部 ${list.length} 筆紀錄？刪除後無法復原。</span>
+             <button data-act="clearrecok" style="border-color:#ff4d6d;color:#ff4d6d">確定刪除</button><button data-act="records">取消</button>`
+          : `<button data-act="clearrec" ${list.length ? '' : 'disabled'}>🗑 刪除所有紀錄</button>`}</div>
+      ${msg ? `<div class="toast">${msg}</div>` : ''}
+      <div id="copyBox"></div>
+      <div class="rec-list">${rows || '<div class="sub">還沒有紀錄。玩完一局就會出現在這裡。</div>'}</div></div>`);
+  },
+  copyRecords() {
+    this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: Game.loadRecords() }));
+  },
+  copyOne(i) {  // 紀錄頁：只複製其中一筆（提示顯示在那一筆的下面）
+    const r = Game.loadRecords()[i];
+    if (r) this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: [r] }), 'copyBox' + i);
+  },
+  // 結算畫面：複製這一局目前的紀錄（打完 Boss 還沒結束遠征時也能複製）
+  copyRun() {
+    const result = Game.state === 'dead' ? 'dead' : Game.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'in_progress';
+    const rec = Game.mode === 'coop' ? Net.buildRecord(result) : Game.buildRecord(result);
+    this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: [rec] }));
+  },
+  // 複製文字到剪貼簿；被擋時（例如嵌在 iframe 裡）在畫面上的 #copyBox 顯示文字框讓玩家自己全選複製
+  copyText(text, boxId = 'copyBox') {
+    const box = document.getElementById(boxId);
+    const done = () => { if (box) box.innerHTML = '<div class="toast">已複製到剪貼簿，可以直接貼上。</div>'; };
+    const fallback = () => {
+      if (!box) return;
+      box.innerHTML = '<div class="toast" style="color:#ffd166">無法自動複製，請全選下面的文字（Ctrl+A）後手動複製（Ctrl+C）。</div><textarea class="rec-copy" readonly></textarea>';
+      const ta = box.querySelector('textarea');
+      ta.value = text; ta.focus(); ta.select();
+      try { if (document.execCommand('copy')) done(); } catch (e) {}
+    };
+    try {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } catch (e) { fallback(); }
+  },
+};

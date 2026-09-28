@@ -1,0 +1,94 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>星環電路 雙人版</title>
+<link rel="stylesheet" href="css/style.css">
+<canvas id="game"></canvas>
+<div id="screen"></div>
+<div id="codex" class="hidden"><div class="panel" id="codexBody"></div></div>
+<div id="touchUI" class="hidden">
+  <button id="tEdit" type="button">電路</button>
+  <button id="tAuto" type="button">自動<br>開</button>
+  <button id="tDash" type="button">衝刺</button>
+</div>
+
+<div id="editor" class="hidden">
+  <div class="panel">
+    <div class="between">
+      <h2>⚡ 能量傳輸電路鏈</h2>
+      <div class="row">
+        <span class="pill gold" id="edCredits"></span>
+        <button id="btnCodex">📖 電路總覽</button>
+        <button id="btnMute" data-act="mute">🔊 音效開</button>
+        <button id="btnClose">返回 (Tab)</button>
+      </div>
+    </div>
+    <div id="edTabs" class="etabs">
+      <button data-etab="main" class="on">⚡ 電路與倉庫</button>
+      <button data-etab="dmg">📊 晶片傷害統計</button>
+      <button data-etab="ship" id="edShipTab" class="hidden">🚀 機體・武器</button>
+    </div>
+    <div id="edDmg" class="hidden"></div>
+    <div id="edShip" class="hidden"></div>
+    <div id="edMain">
+    <h3>電路（由左至右執行）</h3>
+    <div id="chain" class="chain"></div>
+    <div id="stats" class="stats"></div>
+    <div id="layers" class="layers"></div>
+    <div class="dock">
+      <div style="flex:1">
+        <h3 style="margin-top:0">倉庫（放在這裡的晶片提供被動效果）</h3>
+        <div id="inv" class="inv"></div>
+        <div id="passives" class="passives"></div>
+      </div>
+      <div id="recycle" class="recycle"></div>
+    </div>
+    <div id="sandboxTools">
+      <div class="bar">
+        <span>插槽（沙盒）</span>
+        <button id="btnAdd">＋ 插槽</button>
+        <button id="btnRemove">－ 插槽</button>
+        <button id="btnClear">清空電路</button>
+        <span style="margin-left:14px">範例電路</span>
+        <button data-preset="basic">基礎倍增</button>
+        <button data-preset="multi">鏡像雙發</button>
+        <button data-preset="focus">聚焦砲</button>
+        <button data-preset="chain">命中連鎖</button>
+        <button data-preset="reso">共振鏡像</button>
+      </div>
+      <h3>武器升級（沙盒測試）</h3>
+      <div id="wpnTools" class="bar" style="margin-top:0"></div>
+      <h3>晶片庫（沙盒：無限供應，點選後再點插槽放入；點電路上的晶片可切換 Lv1～Lv3）</h3>
+      <div id="library" class="library"></div>
+    </div>
+    <div class="infodock">
+      <div id="info" class="info"></div>
+      <div id="selbar" class="selbar"></div>
+    </div>
+    <p class="hint">點一下晶片選取，再點目標插槽即可移動或交換（電腦也可拖曳）· 右鍵：電路 ⇄ 倉庫快速移動 · 灰色晶片表示目前不會生效</p>
+    </div>
+  </div>
+</div>
+
+<!-- 雙人連線：WebRTC 點對點（PeerJS 只負責配對，資料直接在兩台電腦之間傳） -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<!-- 遊戲程式：依序載入（後面的檔案會用到前面定義的東西）。每個檔案的用途寫在 README 的「檔案結構」 -->
+<script src="js/core/config.js"></script>
+<script src="js/core/core.js"></script>
+<script src="js/data/weapons.js"></script>
+<script src="js/data/chips.js"></script>
+<script src="js/data/ships.js"></script>
+<script src="js/core/pipeline.js"></script>
+<script src="js/data/map.js"></script>
+<script src="js/system/input.js"></script>
+<script src="js/game/effects.js"></script>
+<script src="js/system/audio.js"></script>
+<script src="js/game/entities.js"></script>
+<script src="js/game/game.js"></script>
+<script src="js/game/range.js"></script>
+<script src="js/system/net.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/ui/editor.js"></script>
+<script src="js/ui/codex.js"></script>
+<script src="js/ui/mechcheck.js"></script>
+<script src="js/core/main.js"></script>
