@@ -28,6 +28,7 @@ function frame(now) {
   Music.update();
   Net.tick(dt);
   Game.update(Game.mode === 'range' && Range.slow ? dt * Range.SLOW : dt);  // 靶場慢動作
+  Range.syncBar();  // 靶場按鈕列（只在靶場戰鬥中顯示）
   render();
   requestAnimationFrame(frame);
 }

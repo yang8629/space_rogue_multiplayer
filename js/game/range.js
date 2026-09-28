@@ -20,7 +20,8 @@ const Range = {
     const pts = {
       single: [[0, 0]],
       line: [0, 1, 2, 3, 4, 5, 6, 7].map(i => [i * 60, 0]),
-      pack: [0, 1, 2, 3, 4].flatMap(r => [-2, -1, 0, 1, 2].slice(r % 2, 5).map(c => [c * 44 + (r % 2) * 22 - 22, (r - 2) * 38])).slice(0, 18),
+      pack: [[0, 0], ...[0, 1, 2, 3, 4, 5].map(k => [Math.cos(k * Math.PI / 3) * 66, Math.sin(k * Math.PI / 3) * 66]),  // 同心排列：中間 1、內圈 6、外圈 12
+        ...Array.from({ length: 12 }, (_, k) => [Math.cos(k * Math.PI / 6) * 132, Math.sin(k * Math.PI / 6) * 132])],
       wide: [[0, -300], [120, -220], [200, -110], [230, 0], [200, 110], [120, 220], [0, 300], [-60, -120], [-60, 120], [60, 0]],
     }[layout];
     for (const [dx, dy] of pts) {
@@ -58,6 +59,25 @@ const Range = {
     G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; G.texts = []; G.kills = 0;
     G.player.hp = G.player.maxHp;
     this.clearStats();
+  },
+  // 畫面上的按鈕（1～5、R、T）：只在靶場戰鬥中顯示，目前的排列／實戰／慢動作亮起來
+  bar: null,
+  syncBar() {
+    if (!this.bar) {
+      this.bar = document.getElementById('rangeBar');
+      if (!this.bar) return;
+      this.bar.addEventListener('click', ev => {
+        const b = ev.target.closest('[data-rk]');
+        if (!b) return;
+        this.key(b.dataset.rk); b.blur();
+      });
+    }
+    const show = Game.mode === 'range' && Game.state === 'play';
+    this.bar.classList.toggle('hidden', !show);
+    if (!show) return;
+    const cur = this.live ? '5' : String(this.KEYS.indexOf(this.layout) + 1);
+    for (const b of this.bar.querySelectorAll('[data-rk]'))
+      b.classList.toggle('on', b.dataset.rk === cur || (b.dataset.rk === 't' && this.slow));
   },
   key(k) {  // 靶場快捷鍵：1～4 換標靶、5 實戰、R 清除數據、T 慢動作
     const i = '1234'.indexOf(k);
