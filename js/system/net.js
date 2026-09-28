@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'inventory', 'weapon', 'wp', 'stats', 'passives', 'shipId'];
+const LOADOUT_KEYS = ['chain', 'inventory', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -563,7 +563,7 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null),
+      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null), growth: {}, pullHits: 0,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); });
@@ -789,11 +789,8 @@ const Net = {
     if (m.dead || m.gone) return;
     m.x = clamp(m.x + m.vx * dt, m.r, CFG.WORLD_W - m.r);  // 兩次輸入之間先照速度往前推
     m.y = clamp(m.y + m.vy * dt, m.r, CFG.WORLD_H - m.r);
-    m.iframe -= dt; m.overdrive -= dt; m.fireCd -= dt; m.dashT -= dt;
-    if (m.wantFire && m.fireCd <= 0) {
-      Game.withLoadout(m.L, () => m.fire());
-      m.fireCd = m.L.stats.interval;
-    }
+    m.iframe -= dt; m.overdrive -= dt; m.dashT -= dt;
+    Game.withLoadout(m.L, () => { m.tickDash(); m.tickFire(dt, m.wantFire); });  // 開火（蓄力、過熱）與衝刺相關的晶片
   },
   hostSend(dt) {
     this.sendAcc += dt;
@@ -808,10 +805,12 @@ const Net = {
       t: 's',
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
         P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT)],
-      me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT)] : null,
+      me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock))] : null,
+      gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
-        e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0]),
+        e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0]),
       b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
         ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
       eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r]),
@@ -882,13 +881,19 @@ const Net = {
       if (s.me[3] && !P.dead) { P.dead = true; Input.down = false; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); G.shake(20); }
       else if (!s.me[3] && P.dead && hp > 0) { P.dead = false; P.vx = P.vy = 0; P.iframe = CFG.REVIVE.iframe; }  // 被隊友救起來
       P.reviveT = num(s.me[5]);
+      P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]);
+    }
+    if (s.gr && typeof s.gr === 'object') {  // 用量成長：房主算好的累積量，這邊只增不減，到了就升級
+      let up = false;
+      for (const k in s.gr) if (CHIPS[k] && CHIPS[k].grow && num(s.gr[k]) > (G.growth[k] || 0)) { G.growth[k] = num(s.gr[k]); up = true; }
+      if (up) G.checkGrowth();
     }
     G.enemies = arr(s.e).map(a => {
       const t = ENEMY_TYPES[a[1]];
       if (!t) return null;
       return { id: a[0], type: a[1], t, r: t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
         hp: num(a[6]), maxHp: num(a[7], 1), rot: num(a[8]), flash: a[9] ? 0.08 : 0, spawnT: num(a[10]), spawnMax: num(a[11], 1) || 1,
-        mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], dead: false };
+        mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]), dead: false };
     }).filter(Boolean);
     const pal = arr(s.pal);
     G.bullets = arr(s.b).map(a => {

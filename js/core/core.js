@@ -14,6 +14,10 @@
 // =====================================================================
 const TYPE_META = {
   source:    { label: '發射源', icon: '◉', color: '#4cc9f0' },
+  path:      { label: '彈道', icon: '➰', color: '#5ef2d0' },
+  launch:    { label: '發射', icon: '✧', color: '#ffb347' },
+  impact:    { label: '命中', icon: '✷', color: '#f78cff' },
+  body:      { label: '機體', icon: '⬢', color: '#9dff6b' },
   mod:       { label: '變形器', icon: '◇', color: '#b388ff' },
   amp:       { label: '增幅器', icon: '▲', color: '#ffd166' },
   trigger:   { label: '觸發器', icon: '◎', color: '#ff6b9d' },
@@ -35,7 +39,10 @@ const PASSIVE_LABEL = {
 function shot(o) {
   return Object.assign({ angle: 0, speed: 600, damage: 10, radius: 4, pierce: 0, bounce: 0,
     homing: 0, life: 1, color: '#fff', shape: 'dot', payload: null,
-    explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, shard: false, src: 'weapon', cr: null }, o);
+    explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, shard: false, src: 'weapon', cr: null,
+    // V2 改玩法的晶片（見 chips.js）：各自的等級，0 = 沒有
+    boom: 0, orbit: 0, stasis: 0, accel: 0, prism: false, rear: false, full: 0, endBoom: false, sticky: 0, infect: 0, pull: 0,
+    dashShot: false, infGen: 0 }, o);
 }
 
 // ---------- 增幅相加：每顆子彈記住累積的加成 bonus，傷害 ＝ 基礎 ×（1 ＋ 所有加成的總和） ----------

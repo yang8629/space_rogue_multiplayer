@@ -17,6 +17,8 @@ const Game = {
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mate: null, shooter: null,
+  // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
+  growth: {}, fireMode: null, fireHit: false, chargeC: null, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
   players() { return [this.player, this.mate].filter(p => p && !p.dead && !p.gone); },  // gone：隊友離線，房主一個人繼續
@@ -59,6 +61,7 @@ const Game = {
     this.chain = mode === 'sandbox' ? ['weapon', 'split', null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
+    this.growth = {}; this.pullHits = 0;
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
@@ -140,7 +143,7 @@ const Game = {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
-    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = [];
+    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = [];
     this.kills = 0; this.banner = null; this.nextId = 1;
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
@@ -240,7 +243,7 @@ const Game = {
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: kind === 'elite' ? pickN(COMPOSITE_IDS, 2) : pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
+    this.reward = { kind, options: pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
@@ -292,7 +295,7 @@ const Game = {
   // ---------- 商店 ----------
   openShop() {
     const items = pickN(NORMAL_IDS, 4).map(id => ({ id, price: chipPrice(id), sold: false }));
-    if (Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: chipPrice(id), sold: false }); }
+    if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: chipPrice(id), sold: false }); }
     this.shop = { items, slotBought: false, healed: false };
     this.state = 'shop';
     Screen.shop();
@@ -579,6 +582,7 @@ const Game = {
     const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
     if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
+    if (!this.isClient()) this.infectBurst(e);
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     SFX.play(e.t.boss ? 'bossdeath' : big ? 'bigkill' : 'kill');
     if (big) this.shake(e.type === 'elite' ? 14 : 6);
@@ -594,7 +598,7 @@ const Game = {
     for (let i = 0; i < e.t.credits; i++) if (Math.random() < this.passives.greed) n++;
     for (let i = 0; i < n; i++)
       this.pickups.push({ id: this.nextId++, x: e.x + rand(-8, 8), y: e.y + rand(-8, 8), vx: rand(-80, 80), vy: rand(-80, 80), life: 14 });
-    if (e.type === 'elite' && this.combat.sandbox) {
+    if (e.type === 'elite' && this.combat.sandbox && COMPOSITE_IDS.length) {
       const i = this.inventory.indexOf(null), id = pick(COMPOSITE_IDS);
       if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
     }
@@ -682,6 +686,8 @@ const Game = {
   updateEnemies(dt) {
     const E = this.enemies;
     for (const e of E) {
+      if (e.stickT > 0 && (e.stickT -= dt) <= 0) this.detonate(e);  // 黏著的子彈時間到一起爆炸
+      if (e.dead) continue;
       e.update(dt, this.nearestPlayer(e.x, e.y));  // 雙人：追最近的玩家
       if (e.spawnT <= 0) for (const p of this.players()) {
         const rr = e.r + p.r;
@@ -705,15 +711,34 @@ const Game = {
     for (const b of B) {
       if (b.dead) continue;
       b.update(dt);
-      if (b.dead) continue;
+      if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
+      const orbit = b.mode === 'orbit';
       for (const e of E) {
-        if (e.dead || b.hitSet.has(e.id)) continue;
+        if (e.dead) continue;
+        if (orbit ? this.time < (b.orbitCd.get(e.id) || 0) : b.hitSet.has(e.id)) continue;  // 環繞：同一隻每 0.3 秒最多打一次
         const rr = b.r + e.r;
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
-        b.hitSet.add(e.id);
-        const kb = Math.min(220, b.damage * 5) * (14 / e.r) * b.knock;
-        e.hurt(b.damage, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', b.att, b.knock);
-        floatText(e.x, e.y - e.r, Math.round(b.damage), b.depth > 0 ? '#ff9dbd' : '#ffffff', b.damage >= 40);
+        if (orbit) b.orbitCd.set(e.id, this.time + 0.3); else b.hitSet.add(e.id);
+        // 用量成長：照著晶片的玩法打中敵人
+        const own = b.owner;
+        if (b.mode === 'return') this.grow(own, 'boomerang');
+        if (orbit) this.grow(own, 'orbit');
+        if (b.dashed) this.grow(own, 'stasis');
+        if (b.accel && b.accelMul >= 1.5) this.grow(own, 'accel');
+        if (b.full) this.grow(own, 'charge');
+        if (b.rear) this.grow(own, 'rear');
+        if (b.dashShot) this.grow(own, 'dashfire');
+        if (b.infGen > 0) this.grow(own, 'infect');
+        if (b.pull) this.pullAt(b);
+        let dmg = b.damage * (b.accel ? b.accelMul : 1);
+        if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸
+          (e.stuck = e.stuck || []).push({ dmg, att: b.att, lv: b.sticky, owner: own });
+          if (!(e.stickT > 0)) e.stickT = 2;
+          dmg *= 0.3;
+        }
+        const kb = Math.min(220, dmg * 5) * (14 / e.r) * b.knock;
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', b.att, b.knock);
+        floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
         SFX.play('hit');
         // 武器升級帶來的命中效果
@@ -725,20 +750,15 @@ const Game = {
         if (b.arcs) this.arc(e, b);
         if (b.payload && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner });
-        // 彈射優先於穿透：還有彈射次數就轉向附近下一隻敵人；沒有目標或次數用完才看穿透
-        const next = b.bounce > 0 && nearestEnemy(b.x, b.y, CFG.RICOCHET_RANGE, b.hitSet);
-        if (next) {
-          b.bounce--;
-          b.angle = Math.atan2(next.y - b.y, next.x - b.x);
-          const need = Math.hypot(next.x - b.x, next.y - b.y) / b.speed + 0.15;
-          b.life = Math.max(b.life, need);  // 確保飛得到下一個目標
-          burst(b.x, b.y, '#9dff6b', 5, 180, 0.2, 2);
-          SFX.play('ricochet');
-        } else if (b.pierce > 0) b.pierce--;
+        if (b.sticky) b.dead = true;  // 黏上去了
+        else if (b.infPierce) { /* 環繞、迴旋、超音速：不會消失 */ }
+        else if (b.pierce > 0) b.pierce--;
         else b.dead = true;
         break;
       }
     }
+    this.updateVortices(dt);
+    this.updateStasisArcs(dt);
     for (const t of Q) {  // 命中觸發：從命中點展開子管線（用射出這顆子彈的人的武器與電路）
       this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, t.angle, t.depth, t.ignore));
       burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
@@ -768,6 +788,140 @@ const Game = {
       if (Net.role === 'host') Net.fx(['z', Math.round(hit.x), Math.round(hit.y), Math.round(t.x), Math.round(t.y)]);
     }
   },
+  // ---------- V2 改玩法的晶片（房主執行） ----------
+  // 吸引：命中時把附近的敵人往命中點拉（旗艦不會被拉）；引力漩渦：每命中 8 次生成一個
+  pullAt(b) {
+    const R = b.pull >= 2 ? 130 : 90;
+    let n = 0;
+    for (const o of this.enemies) {
+      if (o.dead || o.t.boss || o.spawnT > 0) continue;
+      const d = Math.hypot(o.x - b.x, o.y - b.y);
+      if (d > R + o.r || d < 1) continue;
+      o.vx += (b.x - o.x) / d * 380; o.vy += (b.y - o.y) / d * 380;
+      n++;
+    }
+    this.grow(b.owner, 'pull', n);
+    if (b.pull >= 3) {
+      const L = b.owner || this;
+      L.pullHits = (L.pullHits || 0) + 1;
+      if (L.pullHits % 8 === 0 && this.vortices.length < 12) this.vortices.push({ x: b.x, y: b.y, t: 1.5, r: 140, fx: 0, owner: b.owner });
+    }
+  },
+  updateVortices(dt) {
+    for (const v of this.vortices) {
+      v.t -= dt; v.fx -= dt;
+      for (const o of this.enemies) {
+        if (o.dead || o.t.boss || o.spawnT > 0) continue;
+        const d = Math.hypot(o.x - v.x, o.y - v.y);
+        if (d > v.r || d < 4) continue;
+        o.vx += (v.x - o.x) / d * 1600 * dt; o.vy += (v.y - o.y) / d * 1600 * dt;
+        if (Math.random() < dt * 2) this.grow(v.owner, 'pull');
+      }
+      if (v.fx <= 0) {
+        v.fx = 0.3;
+        if (this.rings.length < 40) this.rings.push({ x: v.x, y: v.y, r: v.r, life: 0.3, max: 0.3, color: '#f78cff' });
+        if (Net.role === 'host') Net.fx(['r', Math.round(v.x), Math.round(v.y), v.r, '#f78cff']);
+      }
+    }
+    this.vortices = this.vortices.filter(v => v.t > 0);
+  },
+  // 伏擊網（停滯 Lv3）：停住的子彈之間拉出電弧，每 0.2 秒傷害碰到的敵人
+  updateStasisArcs(dt) {
+    this.arcT -= dt;
+    if (this.arcT > 0) return;
+    this.arcT = 0.2;
+    const W = this.bullets.filter(b => !b.dead && b.mode === 'wait' && b.stasis >= 3).slice(0, 120);
+    for (let i = 0; i < W.length; i++) for (let j = i + 1; j < W.length; j++) {
+      const p = W[i], q = W[j];
+      if (dist2(p.x, p.y, q.x, q.y) > 110 * 110) continue;
+      if (this.zaps.length < 60) {
+        this.zaps.push({ x1: p.x, y1: p.y, x2: q.x, y2: q.y, life: 0.18, max: 0.18 });
+        if (Net.role === 'host') Net.fx(['z', Math.round(p.x), Math.round(p.y), Math.round(q.x), Math.round(q.y)]);
+      }
+      for (const e of this.enemies) {
+        if (e.dead || e.spawnT > 0) continue;
+        if (segDist2(p.x, p.y, q.x, q.y, e.x, e.y) < (e.r + 5) ** 2) e.hurt(p.damage * 0.4, 0, 0, 'arc', p.att);
+      }
+    }
+  },
+  // 黏著：時間到，黏在身上的子彈一起爆炸
+  detonate(e) {
+    const S = e.stuck || [], n = S.length;
+    e.stuck = []; e.stickT = 0;
+    if (!n || e.dead) return;
+    const lv = S[0].lv, total = S.reduce((a, q) => a + q.dmg, 0) * (lv >= 2 ? 3 : 2), att = S[0].att, x = e.x, y = e.y;
+    if (n >= 5) this.grow(S[0].owner, 'sticky');
+    const ring = (r, c) => {
+      if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color: c });
+      if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), c]);
+    };
+    ring(e.r + 20 + n * 3, '#f78cff');
+    e.hurt(total, 0, 0, 'explode', att);
+    floatText(x, y - e.r, Math.round(total), '#f78cff', true);
+    SFX.play('explode');
+    if (lv >= 3) {  // 連鎖引爆：波及周圍，並立刻引爆鄰近敵人身上的子彈
+      for (const o of this.enemies) {
+        if (o === e || o.dead || o.spawnT > 0 || dist2(x, y, o.x, o.y) > 90 * 90) continue;
+        o.hurt(total * 0.5, 0, 0, 'explode', att);
+        if (o.stuck && o.stuck.length) o.stickT = 0.05;
+      }
+      ring(90, '#f78cff');
+    }
+  },
+  // 感染：被帶感染的子彈（或它造成的燃燒）擊殺的敵人爆出子彈
+  infectBurst(e) {
+    const A = e.killAtt, inf = A && A.inf;
+    if (!inf) return;
+    const n = inf.lv >= 2 ? 5 : 3, gen = inf.gen + 1, base = inf.tpl.infBase || inf.tpl.damage;
+    const tpl = { ...inf.tpl, damage: base * 1.5, infBase: base, orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
+      infect: inf.lv >= 3 && gen <= 2 ? inf.lv : 0, infGen: gen, color: '#c6ff8a' };
+    const a0 = rand(0, TAU), list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
+    this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
+  },
+  // 擦彈：敵彈從身邊擦過（沒打中）時，朝最近的敵人回射；反射鏡（Lv3）直接吸收敵彈
+  graze(p, b) {
+    const lv = Game.stats.graze;
+    if (!lv || (b.grazed && b.grazed.has(p))) return false;
+    const R = p.r + b.r + (lv >= 2 ? 30 : 18), d = dist2(b.x, b.y, p.x, p.y);
+    const near = b.near || (b.near = new Map()), prev = near.get(p);
+    if (d < R * R) near.set(p, d);
+    // 擦過：進入擦彈範圍後開始遠離（最接近的那一刻已經過了）而且沒打中（打中的子彈已經消失）
+    if (prev == null || d <= prev) return false;
+    (b.grazed = b.grazed || new Set()).add(p);
+    const t = nearestEnemy(p.x, p.y, 900, null), list = runSpecial(Game.stats.ops, 'graze');
+    if (list.length) spawnShots(list, p.x, p.y, t ? Math.atan2(t.y - p.y, t.x - p.x) : p.aim, 0, null);
+    this.grow(Game.shooter || null, 'graze');
+    burst(b.x, b.y, '#9dff6b', 5, 120, 0.2, 2);
+    if (lv >= 3) b.life = 0;
+    return true;
+  },
+  // 用量成長：owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
+  grow(owner, id, n = 1) {
+    const g = owner ? owner.growth : this.growth;
+    if (!g || !(n > 0)) return;
+    g[id] = (g[id] || 0) + n;
+    if (!owner) this.checkGrowth();
+  },
+  // 電路上的晶片累積用量到了就升級（Lv3 進化）。雙人的隊友：房主把累積量傳過來，隊友升級後把新電路傳回去
+  checkGrowth() {
+    const msgs = [];
+    this.chain.forEach((id, i) => {
+      const base = baseOf(id), g = id && CHIPS[base] && CHIPS[base].grow;
+      if (!g || CHIPS[id].type === 'singularity') return;
+      let lv = levelOf(id);
+      while (lv < CFG.MAX_CHIP_LV && (this.growth[base] || 0) >= g.need[lv - 1]) lv++;
+      if (lv <= levelOf(id)) return;
+      this.chain[i] = leveledId(base, lv);
+      msgs.push(lv >= CFG.MAX_CHIP_LV ? `${CHIPS[base].name} 進化 → ${CHIPS[base].evo}！` : `${CHIPS[base].name} 升到 Lv${lv}`);
+    });
+    if (!msgs.length) return;
+    this.recalc();
+    const p = this.player;
+    for (const [k, m] of msgs.entries()) floatText(p.x, p.y - 40 - k * 20, m, '#ffd166', true);
+    SFX.play('upgrade');
+    if (this.runStats) for (const m of msgs) this.runStats.got.push(`${this.here()} ${m}（用量成長）`);
+    if (this.isClient()) Net.sendLoadout();
+  },
   explode(x, y, r, dmg, color, skipId, att = null) {
     for (const e of this.enemies) {
       if (e.dead || e.id === skipId) continue;
@@ -796,6 +950,7 @@ const Game = {
       for (const p of ps) {
         const rr = b.r + p.r;
         if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p); break; }
+        if (this.withLoadout(p.L, () => this.graze(p, b))) break;
       }
     }
     this.eBullets = this.eBullets.filter(b => b.life > 0);

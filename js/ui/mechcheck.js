@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（42 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（45 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -133,51 +133,74 @@ const MechCheck = {
       const r = M.run(60);
       return { ok: r.created === r.fired * 3, got: `開火 ${r.fired} 次，射出 ${r.created} 發` };
     }],
-    ['電路晶片', '聚焦透鏡', '散彈 5 發合成 1 發，傷害加總後 +15%', M => {
-      M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'focus', null, null]);
-      const list = runOps(Game.stats.ops, 0);
-      return { ok: list.length === 1 && near1(list[0].damage, 30 * 1.15), got: `${list.length} 發，傷害 ${list[0].damage.toFixed(1)}` };
+    ['電路晶片', '巨彈', '散彈 5 發兩兩合併成 3 發，總傷害 +30%', M => {
+      M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'bigshot', null, null]);
+      const list = runOps(Game.stats.ops, 0), sum = list.reduce((a, b) => a + b.damage, 0);
+      return { ok: list.length === 3 && near1(sum, 30 * 1.3), got: `${list.length} 發，總傷害 ${sum.toFixed(1)}` };
     }],
-    ['電路晶片', '彈射模組', '1 發子彈轉向打中 3 隻', M => {
-      M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', 'ricochet', null, null]); M.targets(M.cone);
-      const n = M.trackOne();
-      return { ok: n >= 3, got: `1 發打中 ${n} 隻` };
+    ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
+      Game.player.x = CFG.WORLD_W - 40;
+      M.run(40);
+      const back = Game.bullets.some(b => Math.cos(b.angle) < 0);
+      return { ok: (Game.growth.wallbounce || 0) > 0 && back, got: `反彈 ${Game.growth.wallbounce || 0} 次${back ? '，子彈往回飛' : ''}` };
     }],
     ['電路晶片', '威力倍增器', '實際命中傷害 ×2', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null]);
       const d = M.firstHit();
       return { ok: near1(d, 20), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
     }],
-    ['電路晶片', '巨大化線圈', '子彈體積 ×1.8', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'enlarge', null, null]); M.targets([]);
-      M.run(2);
-      const r = Game.bullets[0] ? Game.bullets[0].r : 0;
-      return { ok: near1(r, 3 * 1.8), got: `子彈半徑 ${r.toFixed(1)}（基礎 3）` };
+    ['電路晶片', '迴旋', '子彈飛到盡頭後飛回飛船', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); M.targets([]);
+      M.run(1); const b = Game.bullets[0];
+      let back = false;
+      for (let f = 0; f < 120 && b && !b.dead; f++) { Game.updateBullets(1 / 60); if (b.mode === 'return') back = true; }
+      return { ok: back && b.dead, got: back ? `折返後回到飛船${b.dead ? '（消失）' : '（還在飛）'}` : '沒有折返' };
     }],
-    ['電路晶片', '超頻核心', '同樣時間內開火次數變多', M => {
+    ['電路晶片', '超頻模組', '同樣時間內開火次數變多', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
       const a = M.run(180).fired;
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', 'overclock', null, null]); M.targets([]);
       const b = M.run(180).fired;
       return { ok: b > a, got: `3 秒開火 ${a} → ${b} 次` };
     }],
-    ['電路晶片', '協同處理器', '電路有 2 個其他晶片時傷害 ×1.24', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pierce', 'ricochet', 'synergy']);
-      const a = Game.stats.dmg;
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pierce', 'ricochet', null]);
-      return { ok: near1(a / Game.stats.dmg, 1.24), got: `傷害 ×${(a / Game.stats.dmg).toFixed(2)}` };
+    ['電路晶片', '超頻模組・過熱', '連續射擊 3 秒後過熱，停火 1.5 秒', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'overclock', null, null]); M.targets([]);
+      const p = Game.player;
+      let n = 0, lockAt = null;
+      for (let f = 0; f < 60 * 4; f++) {
+        const before = Game.bullets.length;
+        p.tickFire(1 / 60, true); if (Game.bullets.length > before) n++;
+        if (p.ohLock > 0 && lockAt == null) lockAt = f / 60;
+      }
+      return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
+        got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '冷卻管線', '能量負載 -3，射速變快', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'split', 'amp', 'coolant']);
-      const a = Game.stats;
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'split', 'amp', null]);
-      const b = Game.stats;
-      return { ok: a.heat === b.heat - 3 && a.rps > b.rps, got: `能量 ${b.heat} → ${a.heat}，射速 ${b.rps.toFixed(2)} → ${a.rps.toFixed(2)}` };
+    ['電路晶片', '環繞', '子彈繞著飛船轉，碰到敵人不會消失', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([[50, 0]]);
+      M.run(90);
+      const p = Game.player, near = Game.bullets.filter(b => b.mode === 'orbit' && Math.hypot(b.x - p.x, b.y - p.y) < 60).length;
+      return { ok: near > 0 && Game.enemies[0].hp < Game.enemies[0].maxHp, got: `飛船旁有 ${near} 發在繞，敵人被打 ${Math.round(Game.enemies[0].maxHp - Game.enemies[0].hp)}` };
     }],
-    ['電路晶片', '資料鏈結', '倉庫 3 個晶片時傷害 ×1.3', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'datalink', null, null], ['split', 'amp', 'focus']);
-      const d = M.firstHit();
-      return { ok: near1(d, 13), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
+    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
+      M.run(20); const n = e.stuck ? e.stuck.length : 0, hp = e.hp; Game.bullets = [];
+      for (let f = 0; f < 150; f++) { Game.time += 1 / 60; Game.updateEnemies(1 / 60); }
+      return { ok: n > 0 && near1(hp - e.hp, n * 10 * 2), got: `黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${n * 20}）` };
+    }],
+    ['電路晶片', '感染', '被擊殺的敵人爆出 3 發子彈', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'infect', null, null]); M.targets([[120, 0]], 'swarmer', true, 0.1);
+      const r = M.run(40);
+      return { ok: r.created >= r.fired + 3, got: `開火 ${r.fired} 次，另外爆出 ${r.created - r.fired} 發` };
+    }],
+    ['電路晶片', '蓄力', '按住蓄滿，放開射出一發 ×5 傷害', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', null, null]); M.targets([]);
+      const p = Game.player;
+      for (let f = 0; f < 50; f++) p.tickFire(1 / 60, true);
+      const early = Game.bullets.length;
+      for (let f = 0; f < 20; f++) p.tickFire(1 / 60, true);
+      const b = Game.bullets[0];
+      return { ok: early === 0 && b && near1(b.damage, 50), got: b ? `蓄滿前 ${early} 發，蓄滿後一發 ${b.damage.toFixed(1)}` : '沒有射出' };
     }],
     ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', null, null]); M.targets(M.cone);
@@ -189,10 +212,11 @@ const MechCheck = {
       const r = M.run(120);
       return { ok: r.maxDepth === 3 && Game.stats.layers.length === 3, got: `實際最深第 ${r.maxDepth} 層` };
     }],
-    ['電路晶片', '共振器', '相鄰的武器強度 +50%', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'resonator', null, null]);
-      const d = M.firstHit();
-      return { ok: near1(d, 15), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
+    ['電路晶片', '衝刺射擊', '衝刺結束時從落點噴出 6 發', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
+      const p = Game.player; p.dashT = 0.05; p.vx = 900; p.vy = 0;
+      p.tickDash(); p.dashT = 0; p.tickDash();
+      return { ok: Game.bullets.length === 6 && Game.bullets.every(b => b.dashShot), got: `射出 ${Game.bullets.length} 發` };
     }],
     ['電路晶片', '鏡像迴路', '放在武器右邊 = 武器多射一次', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'mirror', null, null]); M.targets([]);
@@ -210,6 +234,12 @@ const MechCheck = {
       Game.acquire('split');
       return { ok: Game.chain[1] === leveledId('split', 2) && Game.stats.count === 4, got: `${CHIPS[Game.chain[1]].name}，每次 ${Game.stats.count} 發` };
     }],
+    ['構築系統', '用量成長', '迴旋回程命中 120 次 → Lv2，360 次 → 進化「迴旋風暴」', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      Game.grow(null, 'boomerang', 120); const a = Game.chain[1];
+      Game.grow(null, 'boomerang', 240); const b = Game.chain[1];
+      return { ok: a === leveledId('boomerang', 2) && b === leveledId('boomerang', 3), got: `${CHIPS[a].name} → ${CHIPS[b].name}` };
+    }],
     ['構築系統', '晶片傷害統計', '武器＋倍增器（×2）：兩者各分到一半，合計等於總傷害', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null]); M.targets([[120, 0]]);
       M.run(60);
@@ -219,11 +249,11 @@ const MechCheck = {
       return { ok: total > 0 && near1(sum, total) && near1(sec, total) && near1(share, 0.5),
         got: `總傷害 ${Math.round(total)}，晶片合計 ${Math.round(sum)}，倍增器佔 ${Math.round(share * 100)}%` };
     }],
-    ['構築系統', '倉庫被動', '巨大化：HP +20；穿甲：受傷 -10%', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null], ['enlarge', 'pierce']);
+    ['構築系統', '倉庫被動', '穿甲放倉庫：受傷 -10%', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null], ['pierce']);
       const p = Game.player; p.hp = p.maxHp; Game.state = 'play';
       Game.hurtPlayer(20);
-      return { ok: p.maxHp === 120 && near1(p.maxHp - p.hp, 18), got: `最大 HP ${p.maxHp}，受 20 傷害實扣 ${(p.maxHp - p.hp).toFixed(1)}` };
+      return { ok: p.maxHp === 100 && near1(p.maxHp - p.hp, 18), got: `最大 HP ${p.maxHp}，受 20 傷害實扣 ${(p.maxHp - p.hp).toFixed(1)}` };
     }],
     ['構築系統', '黑洞融合（成功）', '兩個晶片合成一格，再加超載詞綴', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

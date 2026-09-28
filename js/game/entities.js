@@ -16,6 +16,56 @@ class Player {
     this.iframe = 0; this.fireCd = 0; this.aim = 0; this.moving = false;
     this.dashT = 0; this.dashCd = 0; this.dashA = 0; this.overdrive = 0; this.target = null;
     this.reviveT = 0;  // 雙人：倒下後隊友救援的進度（秒）
+    // V2 晶片：蓄力進度（0～1）、超頻模組的連續射擊秒數與過熱停火秒數、衝刺狀態（衝刺射擊／流星用）
+    this.chargeC = 0; this.ohT = 0; this.ohLock = 0;
+    this.wasDash = false; this.dashDir = 0; this.dashHit = new Set(); this.dx0 = this.x; this.dy0 = this.y;
+  }
+  // 開火（房主執行；隊友的飛船要在 withLoadout(隊友配裝) 裡呼叫）：超頻模組過熱、蓄力、一般連射
+  tickFire(dt, want) {
+    const S = Game.stats;
+    this.fireCd -= dt;
+    if (S.heatLimit) {
+      if (this.ohLock > 0) { this.ohLock -= dt; want = false; }
+      else if (want) {
+        this.ohT += dt;
+        if (this.ohT >= S.heatLimit) { this.ohLock = 1.5; this.ohT = 0; burst(this.x, this.y, '#ff9f1c', 14, 160, 0.5, 3); SFX.play('hurt'); }
+      } else this.ohT = Math.max(0, this.ohT - dt * 1.5);
+    } else { this.ohT = 0; this.ohLock = 0; }
+    if (S.charge) {  // 蓄力：按住累積，放開或蓄滿時射出
+      if (want) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
+      if ((this.chargeC >= 1 || (!want && this.chargeC > 0.08)) && this.fireCd <= 0) {
+        Game.chargeC = this.chargeC;
+        try { this.fire(); } finally { Game.chargeC = null; }
+        this.chargeC = 0; this.fireCd = 0.15;
+      } else if (!want && this.chargeC <= 0.08) this.chargeC = 0;
+      return;
+    }
+    this.chargeC = 0;
+    if (want && this.fireCd <= 0) { this.fire(); this.fireCd = S.interval; }
+  }
+  // 衝刺相關的晶片（房主執行）：衝刺中的流星、衝刺結束時的衝刺射擊
+  tickDash() {
+    const dashing = this.dashT > 0, S = Game.stats;
+    if (dashing && !this.wasDash) { this.dashHit.clear(); this.dx0 = this.x; this.dy0 = this.y; }
+    if (dashing && Math.hypot(this.vx, this.vy) > 100) this.dashDir = Math.atan2(this.vy, this.vx);
+    if (dashing && S.dashfire >= 3) {  // 流星：衝刺穿過的敵人受到重擊
+      for (const e of Game.enemies) {
+        if (e.dead || e.spawnT > 0 || this.dashHit.has(e.id)) continue;
+        const rr = e.r + this.r + 4;
+        if (segDist2(this.dx0, this.dy0, this.x, this.y, e.x, e.y) >= rr * rr) continue;
+        this.dashHit.add(e.id);
+        const dmg = Game.wp.damage * 5;
+        e.hurt(dmg, Math.cos(this.dashDir) * 300, Math.sin(this.dashDir) * 300, 'shock', { src: 'dashfire', cr: null, owner: Game.shooter || null });
+        floatText(e.x, e.y - e.r, Math.round(dmg), '#9dff6b', true);
+        Game.grow(Game.shooter || null, 'dashfire');
+      }
+    }
+    this.dx0 = this.x; this.dy0 = this.y;
+    if (!dashing && this.wasDash && S.dashfire) {  // 衝刺射擊：衝刺結束時從落點朝衝刺方向噴出
+      const list = runSpecial(S.ops, 'dashfire');
+      if (list.length) spawnShots(list, this.x + Math.cos(this.dashDir) * 14, this.y + Math.sin(this.dashDir) * 14, this.dashDir, 0, null);
+    }
+    this.wasDash = dashing;
   }
   onDash() {  // 角色技能：衝刺觸發
     const S = this.ship;
@@ -105,13 +155,10 @@ class Player {
 
     this.iframe -= dt;
     this.overdrive -= dt;
-    this.fireCd -= dt;
     this.wantFire = Input.down;
     if (Net.role === 'client') return;  // 連線的隊友：開火交給房主（子彈、傷害都由房主計算）
-    if (Input.down && this.fireCd <= 0) {
-      this.fire();
-      this.fireCd = Game.stats.interval;
-    }
+    this.tickDash();
+    this.tickFire(dt, Input.down);
   }
   fire() {
     const list = runOps(Game.stats.ops, 0);
@@ -140,31 +187,108 @@ class Bullet {
     this.hitSet = new Set();
     if (ignoreId != null) this.hitSet.add(ignoreId);
     this.owner = Game.shooter || null;  // 雙人：這顆子彈是誰的電路射出的（null = 房主自己）
+    this.ownerP = Game.shooter ? Game.mate : Game.player;  // 環繞、迴旋要跟著／飛回的飛船
     this.dead = false;
+    // V2 改玩法的晶片
+    this.baseSpeed = s.speed;
+    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.prism = s.prism;
+    this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
+    this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
+    this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;
+    if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
+    if (this.orbit) {
+      this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = this.orbit >= 2 ? 70 : 50;
+      this.life = this.orbit >= 2 ? 3.5 : 2.5; this.orbitCd = new Map();
+    }
+  }
+  // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
+  copy(dAngle) {
+    if (Game.bullets.length >= CFG.MAX_LIVE_BULLETS) return null;
+    const c = Object.assign(Object.create(Bullet.prototype), this, { hitSet: new Set(this.hitSet) });
+    c.angle += dAngle;
+    Game.bullets.push(c);
+    return c;
+  }
+  // 迴旋：飛到盡頭後折返，追著飛船飛回來
+  startReturn() {
+    const o = this.ownerP;
+    this.mode = 'return'; this.life = 1.8; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed;
+    if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
+    if (this.boom >= 2) this.damage *= 1.5;
+    if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
   }
   update(dt) {
-    if (this.homing > 0) {
+    this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
+    if (this.mode === 'orbit') {  // 環繞：繞著飛船轉
+      const o = this.ownerP;
+      if (!o || o.dead) { this.dead = true; return; }
+      this.orbR = Math.min(this.R, this.orbR + dt * 260); this.phase += dt * 5;
+      this.x = o.x + Math.cos(this.phase) * this.orbR; this.y = o.y + Math.sin(this.phase) * this.orbR;
+      this.angle = this.phase + Math.PI / 2; this.speed = this.orbR * 5;  // 沿著圓周的方向（隊友那邊畫面推算用）
+      this.life -= dt;
+      if (this.life <= 0) {
+        if (this.orbit >= 3) {  // 星環：整圈向外射出
+          this.orbit = 0; this.mode = 'fly'; this.angle = this.phase; this.speed = this.baseSpeed = 700;
+          this.life = 0.6; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
+        } else this.dead = true;
+      }
+      return;
+    }
+    if (this.mode === 'wait') {  // 停滯：停住，時間到衝向附近的敵人
+      this.waitT -= dt; this.speed = 0;
+      if (this.waitT <= 0) {
+        const t = nearestEnemy(this.x, this.y, this.stasis >= 2 ? 220 : 150, null);
+        if (t) this.angle = Math.atan2(t.y - this.y, t.x - this.x);
+        this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1;
+      }
+      return;
+    }
+    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 0.6 : 1; this.speed = 0; return; }
+    this.flyAge += dt;
+    if (this.homing > 0 && this.mode !== 'return') {
       const t = nearestEnemy(this.x, this.y, 450, this.hitSet);
       if (t) {
         const turn = this.homing * dt;
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }
-    this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
+    if (this.accel) { this.accelMul = Math.min(4, 1 + (this.accel >= 2 ? 4.5 : 3) * this.flyAge); this.speed = this.baseSpeed * this.accelMul; }
+    if (this.mode === 'return') {
+      const o = this.ownerP;
+      if (!o || o.dead) { this.dead = true; return; }
+      this.angle += clamp(angleDiff(this.angle, Math.atan2(o.y - this.y, o.x - this.x)), -9 * dt, 9 * dt);
+      if (dist2(this.x, this.y, o.x, o.y) < 20 * 20) { this.dead = true; return; }
+    }
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
     this.life -= dt;
-    if (this.life <= 0) { this.dead = true; return; }
-    const W = CFG.WORLD_W, H = CFG.WORLD_H;
-    if (this.x < 0 || this.x > W) {
-      if (this.bounce > 0) { this.bounce--; this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
-      else this.dead = true;
+    const W = CFG.WORLD_W, H = CFG.WORLD_H, outX = this.x < 0 || this.x > W, outY = this.y < 0 || this.y > H;
+    if (outX || outY) {
+      if (this.bounce > 0) {  // 牆反彈
+        this.bounce--;
+        if (outX) { this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
+        if (outY) { this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
+        this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
+        Game.grow(this.owner, 'wallbounce');
+        if (this.prism) { this.copy(0.4); this.angle -= 0.2; }  // 稜鏡：反彈時分裂
+      } else if (this.boom && this.mode === 'fly') {  // 迴旋：碰到場地邊緣也算盡頭
+        this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); this.startReturn(); return;
+      } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
+      else {
+        if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
+        this.dead = true; return;
+      }
     }
-    if (this.y < 0 || this.y > H) {
-      if (this.bounce > 0) { this.bounce--; this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
-      else this.dead = true;
+    if (this.life <= 0) {
+      if (this.boom && this.mode === 'fly') this.startReturn();
+      else {
+        if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
+        this.dead = true;
+      }
     }
   }
+  // 無限穿透：環繞、迴旋、超音速（加速 Lv3 且 2 倍速以上）
+  get infPierce() { return this.mode === 'orbit' || !!this.boom || (this.accel >= 3 && this.accelMul >= 2); }
 }
 
 function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
@@ -249,7 +373,7 @@ class Enemy {
         this.hp -= d;
         if (this.t.dummy) { Range.hit(d, 'burn'); if (this.hp <= 0) this.hp += this.maxHp; }  // 標靶打不死
         if (Math.random() < 0.4) burst(this.x, this.y, '#ff9f1c', 2, 60, 0.3, 2);
-        if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = this.burnAtt && this.burnAtt.owner; Game.onEnemyKilled(this); return; }
+        if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = this.burnAtt && this.burnAtt.owner; this.killAtt = this.burnAtt; Game.onEnemyKilled(this); return; }
       }
     }
     if (this.slowT > 0) this.slowT -= dt;
@@ -496,6 +620,6 @@ class Enemy {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
       if (over > 0 && l > 0 && this.mode !== 'charge') { this.vx += kx / l * over * CFG.BOSS_KNOCK; this.vy += ky / l * over * CFG.BOSS_KNOCK; }
     } else if (this.mode !== 'charge') { this.vx += kx; this.vy += ky; }
-    if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; Game.onEnemyKilled(this); }
+    if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; this.killAtt = att; Game.onEnemyKilled(this); }
   }
 }
