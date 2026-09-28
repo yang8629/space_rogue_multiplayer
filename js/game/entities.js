@@ -227,10 +227,11 @@ class Bullet {
     Game.bullets.push(c);
     return c;
   }
-  // 迴旋：飛到盡頭後折返，追著飛船飛回來
-  startReturn() {
+  // 迴旋：打中敵人（穿甲用完）或飛到盡頭後折返，追著飛船飛回來；keepId：剛打到的那隻，回程不再打它
+  startReturn(keepId = null) {
     const o = this.ownerP;
-    this.mode = 'return'; this.life = 1.8; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed;
+    this.mode = 'return'; this.life = 1; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed;
+    if (keepId != null) this.hitSet.add(keepId);
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
     if (this.boom >= 2) this.damage *= 1.5;
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
@@ -305,8 +306,8 @@ class Bullet {
       }
     }
   }
-  // 無限穿透：環繞、迴旋、超音速（加速 Lv3 且 2 倍速以上）
-  get infPierce() { return this.mode === 'orbit' || !!this.boom || (this.accel >= 3 && this.accelMul >= 2); }
+  // 無限穿透：環繞、迴旋的回程、超音速（加速 Lv3 且 2 倍速以上）
+  get infPierce() { return this.mode === 'orbit' || (!!this.boom && this.mode === 'return') || (this.accel >= 3 && this.accelMul >= 2); }
 }
 
 function spawnShots(list, x, y, baseAngle, depth, ignoreId) {

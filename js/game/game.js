@@ -931,8 +931,9 @@ const Game = {
         if (b.payload && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner });
         if (b.sticky) b.dead = true;  // 黏上去了
-        else if (b.infPierce) { /* 環繞、迴旋、超音速：不會消失 */ }
+        else if (b.infPierce) { /* 環繞、迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
+        else if (b.boom && b.mode === 'fly') b.startReturn(e.id);  // 迴旋：去程穿甲用完就折返
         else b.dead = true;
         break;
       }
