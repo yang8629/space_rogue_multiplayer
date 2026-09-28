@@ -223,7 +223,7 @@ class Bullet {
     this.dead = false;
     // V2 改玩法的晶片
     this.baseSpeed = s.speed;
-    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.prism = s.prism;
+    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.intercept = s.intercept; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時傷害 × 這個倍率，最多 4）

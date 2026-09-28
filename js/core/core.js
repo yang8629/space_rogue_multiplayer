@@ -41,7 +41,7 @@ function shot(o) {
     homing: 0, life: 1, color: '#fff', shape: 'dot', payload: null,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, shard: false, src: 'weapon', cr: null,
     // V2 改玩法的晶片（見 chips.js）：各自的等級，0 = 沒有
-    boom: 0, orbit: 0, stasis: 0, accel: 0, quick: 0, prism: false, rear: false, full: 0, endBoom: false, sticky: 0, infect: 0, pull: 0,
+    boom: 0, orbit: 0, stasis: 0, accel: 0, quick: 0, intercept: 0, prism: false, rear: false, full: 0, endBoom: false, sticky: 0, infect: 0, pull: 0,
     dashShot: false, infGen: 0 }, o);
 }
 
