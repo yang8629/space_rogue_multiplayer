@@ -20,10 +20,10 @@ const NODE_META = {
 
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）
 //   精英、黑洞、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
-//   每個精英、黑洞的下一步至少有一條路通維修站（黑洞融合失敗的廢鐵要能拆）；
+//   每個精英的下一步至少有一條路通維修站；黑洞之後的路上走得到維修站就好（融合失敗的廢鐵要能拆，但不用馬上）；
 //   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
 //   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站
-const NEED_REPAIR_AFTER = ['elite', 'blackhole'];
+const NEED_REPAIR_AFTER = ['elite'];  // 下一步就要有維修站的節點
 // 從 n 往後走得到的所有節點（不含 n 自己）
 function descendants(n, byId) {
   const seen = new Set(), stack = [...n.next];
@@ -46,6 +46,7 @@ function mapOk(m) {
     pre.some(n => n.type === 'shop') && pre.some(n => n.type === 'repair') && m[0].every(n => minFights(n) >= 3) &&
     armories.length === 1 && armories[0].L >= 1 && armories[0].L <= 4 &&
     all.filter(n => NEED_REPAIR_AFTER.includes(n.type)).every(n => n.next.some(id => byId(id).type === 'repair')) &&
+    holes.every(h => descendants(h, byId).some(d => d.type === 'repair')) &&
     holes.every(h => !descendants(h, byId).some(d => d.type === 'blackhole')) &&
     !all.some(n => ['repair', 'shop'].includes(n.type) && n.next.some(id => byId(id).type === n.type));
 }
@@ -68,8 +69,8 @@ function genMapOnce() {
   for (let L = 2; L < LAYERS - 2; L++) for (const nd of layers[L]) {
     const r = Math.random();
     nd.type = r < 0.2 ? 'elite' : r < 0.3 ? 'shop' : r < 0.38 ? 'repair' : r < 0.48 ? 'blackhole' : r < 0.58 ? 'workshop' : 'combat';
-    // 精英、黑洞只放第 3～4 層：後面要接維修站
-    if (NEED_REPAIR_AFTER.includes(nd.type) && L > 3) nd.type = 'combat';
+    // 精英、黑洞只放第 3～4 層（精英後面要接維修站；黑洞之後的路上要有維修站）
+    if (['elite', 'blackhole'].includes(nd.type) && L > 3) nd.type = 'combat';
   }
   if (Math.random() < 0.5) pick(layers[1]).type = 'shop';
   // 保底：優先把「戰鬥」節點改成缺少的類型
@@ -104,7 +105,14 @@ function genMapOnce() {
   // 一條路線最多一個黑洞：黑洞後面走得到的其他黑洞改成戰鬥
   for (const h of layers.flat().filter(n => n.type === 'blackhole'))
     if (h.type === 'blackhole') for (const d of descendants(h, byId)) if (d.type === 'blackhole') d.type = 'combat';
-  // 精英、黑洞之後：下一步至少有一條路通維修站（優先把戰鬥節點改掉，其次補給站）
+  // 黑洞之後：路上走得到維修站就好（旗艦前一層之後會放一個；走不到的話，把後面一個戰鬥節點改成維修站）
+  for (const h of layers.flat().filter(n => n.type === 'blackhole')) {
+    const ds = descendants(h, byId);
+    if (ds.some(d => d.type === 'repair' || d.L === LAYERS - 2)) continue;
+    const c = ds.find(d => d.type === 'combat');
+    if (c) c.type = 'repair';
+  }
+  // 精英之後：下一步至少有一條路通維修站（優先把戰鬥節點改掉，其次補給站）
   for (const e of layers.flat().filter(n => NEED_REPAIR_AFTER.includes(n.type))) {
     const next = e.next.map(byId);
     if (next.some(n => n.type === 'repair')) continue;
@@ -137,7 +145,7 @@ function genMapOnce() {
     if (c) c.type = type;
   }
   // 每條路線至少 3 場戰鬥：找出戰鬥最少的那條路，把路上可以改的節點改成戰鬥
-  //   （改裝廠、補給站、黑洞要留至少一個；精英、黑洞後面必要的維修站不改）
+  //   （改裝廠、補給站、黑洞要留至少一個；精英後面必要的維修站不改）
   const count = (type, from, to) => layers.slice(from, to).flat().filter(n => n.type === type).length;
   const spare = x => x.type === 'workshop' ? count('workshop', 1, 5) > 1 : x.type === 'shop' ? count('shop', 1, 5) > 1
     : x.type === 'blackhole' ? count('blackhole', 2, 4) > 1 : x.type === 'repair' ? !needed(x) : false;
