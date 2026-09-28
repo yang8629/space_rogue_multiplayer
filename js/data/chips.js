@@ -32,7 +32,7 @@ const CHIPS = {
     apply: (list, pw, o) => list.map(b => ({ ...b, stasis: o.lv })) },
   accel: { name: '加速', short: '加速', type: 'path', cost: 1, evo: '超音速',
     grow: { what: '1.5 倍速以上命中', need: [100, 300] },
-    desc: '子彈越飛越快，傷害跟著速度提高（最多 ×4）。',
+    desc: '子彈越飛越快，傷害跟著速度提高（最多 ×4）。搭環繞：放出時直接從轉速的倍率開始加速。',
     lvs: ['每秒 +3 倍速', '每秒 +4.5 倍速', '進化：速度超過 2 倍時無限穿透'],
     apply: (list, pw, o) => list.map(b => ({ ...b, accel: o.lv })) },
   wallbounce: { name: '牆反彈', short: '反彈', type: 'path', cost: 1, evo: '稜鏡',

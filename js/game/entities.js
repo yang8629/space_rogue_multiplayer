@@ -261,7 +261,9 @@ class Bullet {
       if (!o.wantFire || (o.autoMode && spin >= orbSpinMax(this.orbit))) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
         const k = spin - 1, d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
-        this.baseSpeed *= 1 + 0.25 * k; this.speed = this.baseSpeed; this.damage *= 1 + 0.5 * k;
+        if (this.accel) this.accel0 = spin;  // 有加速：轉速直接算進加速倍率（從轉速開始繼續加速，最多 ×4）
+        else this.baseSpeed *= 1 + 0.25 * k;
+        this.speed = this.baseSpeed * (this.accel ? spin : 1); this.damage *= 1 + 0.5 * k;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;
@@ -278,7 +280,7 @@ class Bullet {
       if (this.waitT <= 0) {
         const t = nearestEnemy(this.x, this.y, this.stasis >= 2 ? 220 : 150, null);
         if (t) this.angle = Math.atan2(t.y - this.y, t.x - this.x);
-        this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1;
+        this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1;
       }
       return;
     }
@@ -292,7 +294,7 @@ class Bullet {
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }
-    if (this.accel) { this.accelMul = Math.min(4, 1 + (this.accel >= 2 ? 4.5 : 3) * this.flyAge); this.speed = this.baseSpeed * this.accelMul; }
+    if (this.accel) { this.accelMul = Math.min(4, (this.accel0 || 1) + (this.accel >= 2 ? 4.5 : 3) * this.flyAge); this.speed = this.baseSpeed * this.accelMul; }
     if (this.mode === 'return') {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }

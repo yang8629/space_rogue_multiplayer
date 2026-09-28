@@ -180,7 +180,7 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 8 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒傷害 ×1.5', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 8 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒傷害 ×1.5；搭加速時從轉速倍率開始加速', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -193,8 +193,14 @@ const MechCheck = {
       p.wantFire = false; p.aim = Math.PI / 2; p.aimD = 300; Game.enemies = [];
       Game.updateBullets(1 / 60);
       const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.atan2(p.y + 300 - b.y, p.x - b.x))) < 0.01).length;
-      return { ok: kept && stored === 8 && hit > 0 && orb.length > 0 && orb.length < 8 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 1.5),
-        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
+      const dmgOk = orb.length > 0 && near1(orb[0].damage, d0 * 1.5);
+      // 搭加速：放出時從轉速的倍率開始加速
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'accel', null]); M.targets([]);
+      const p2 = Game.player; p2.wantFire = true; M.run(200); const a = Game.bullets.find(b => b.mode === 'orbit');
+      p2.wantFire = false; Game.updateBullets(1 / 60); Game.updateBullets(1 / 60);
+      const am = a ? a.accelMul : 0;
+      return { ok: kept && stored === 8 && hit > 0 && orb.length < 8 && out === orb.length && out > 0 && dmgOk && am > 1.9,
+        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，傷害 ${d0} → ${orb.length && orb[0].damage}；搭加速放出時 ${am.toFixed(2)} 倍速` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
