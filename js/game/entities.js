@@ -48,7 +48,7 @@ class Player {
     const dashing = this.dashT > 0, S = Game.stats;
     if (dashing && !this.wasDash) { this.dashHit.clear(); this.dx0 = this.x; this.dy0 = this.y; }
     if (dashing && Math.hypot(this.vx, this.vy) > 100) this.dashDir = Math.atan2(this.vy, this.vx);
-    const mul = (S.dashfire >= 3 ? 5 : 0) + (Game.mech.traits.assault ? 4 : 0);  // 流星（衝刺射擊 Lv3）、突擊（加速器 4 層）
+    const mul = Game.mech.traits.assault ? 4 : 0;  // 突擊（加速器 4 層）：衝刺穿過的敵人受重擊
     if (dashing && mul) {  // 衝刺穿過的敵人受到重擊
       for (const e of Game.enemies) {
         if (e.dead || e.spawnT > 0 || this.dashHit.has(e.id)) continue;
@@ -56,9 +56,8 @@ class Player {
         if (segDist2(this.dx0, this.dy0, this.x, this.y, e.x, e.y) >= rr * rr) continue;
         this.dashHit.add(e.id);
         const dmg = Game.wp.damage * mul;
-        e.hurt(dmg, Math.cos(this.dashDir) * 300, Math.sin(this.dashDir) * 300, 'shock', { src: S.dashfire >= 3 ? 'dashfire' : 'ship', cr: null, owner: Game.shooter || null });
+        e.hurt(dmg, Math.cos(this.dashDir) * 300, Math.sin(this.dashDir) * 300, 'shock', { src: 'ship', cr: null, owner: Game.shooter || null });
         floatText(e.x, e.y - e.r, Math.round(dmg), '#9dff6b', true);
-        if (S.dashfire >= 3) Game.grow(Game.shooter || null, 'dashfire');
       }
     }
     this.dx0 = this.x; this.dy0 = this.y;
@@ -70,7 +69,7 @@ class Player {
       if (this.ship.ability === 'portal') Game.openPortal(this, this.dashSX, this.dashSY, this.x, this.y);
     }
     if (!dashing && this.wasDash && S.dashfire) { this.dfN = S.dashfire >= 2 ? 2 : 1; this.dfAt = Game.time; }  // 衝刺射擊：衝刺結束時開槍（Lv2 連開 2 槍）
-    if (this.dfN > 0 && S.dashfire && Game.time >= this.dfAt) {  // 用整條電路朝準星開一槍（不佔射擊冷卻，×1.5；會用掉停火蓄力）
+    if (this.dfN > 0 && S.dashfire && Game.time >= this.dfAt) {  // 用整條電路朝準星開一槍（不佔射擊冷卻，傷害 +50%，流星 +100% 且無限穿透；會用掉停火蓄力）
       this.dfN--; this.dfAt = Game.time + 0.12;
       Game.fireMode = 'dashfire'; Game.chargeC = S.charge ? this.chargeC : null;
       let list;
@@ -170,21 +169,9 @@ class Player {
     this.tickDash();
     this.tickFire(dt, Input.down);
   }
-  // 重力井：每 6 秒自己也被往前方那一點拉（重裝甲 ≥ 2 不會被拉）。飛船的移動由自己的電腦計算
-  moduleMove(dt) {
-    const M = Game.mech;
-    if (M.module !== 'gravity') return;
-    if (this.gravT == null) this.gravT = 6;
-    if ((this.gravT -= dt) <= 0) {
-      this.gravT = 6;
-      if (!M.heavy) this.pullV = { x: Math.cos(this.aim) * 260, y: Math.sin(this.aim) * 260, t: 0.3 };
-    }
-    const V = this.pullV;
-    if (V && V.t > 0) {
-      V.t -= dt;
-      this.x = clamp(this.x + V.x * dt, this.r, CFG.WORLD_W - this.r); this.y = clamp(this.y + V.y * dt, this.r, CFG.WORLD_H - this.r);
-    }
-  }
+  // 背包模組對飛船移動的影響：目前沒有（重力井改成減速場，見 Game.tickModules）
+  moduleMove(dt) {}
+
   fire() {
     const list = runOps(Game.stats.ops, 0);
     if (!list.length) return;
@@ -251,10 +238,10 @@ class Bullet {
     Game.bullets.push(c);
     return c;
   }
-  // 迴旋：打中敵人（穿甲用完，先穿過去再折返，回程會再打牠一次）或飛到盡頭後折返，追著飛船飛回來
+  // 迴旋：打中敵人才折返（穿甲用完，先穿過去再折返，回程會再打牠一次），追著射出它的飛船飛回來；沒打中就飛到盡頭消失
   startReturn() {
     const o = this.ownerP;
-    this.mode = 'return'; this.life = 1; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed * this.accelMul; this.overT = 0;
+    this.mode = 'return'; this.life = 4; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed * this.accelMul; this.overT = 0;  // 回程一直追到飛船為止（最多 4 秒）
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
     if (this.boom >= 2) this.damage *= 1.5;
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
@@ -331,8 +318,6 @@ class Bullet {
         this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
         Game.grow(this.owner, 'wallbounce');
         if (this.prism) { this.copy(0.4); this.angle -= 0.2; }  // 稜鏡：反彈時分裂
-      } else if (this.boom && this.mode === 'fly') {  // 迴旋：碰到場地邊緣也算盡頭
-        this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); this.startReturn(); return;
       } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
       else {
         if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
@@ -340,8 +325,7 @@ class Bullet {
       }
     }
     if (this.life <= 0) {
-      if (this.boom && this.mode === 'fly') this.startReturn();
-      else {
+      {
         if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
         this.dead = true;
       }
@@ -389,7 +373,7 @@ const ENEMY_TYPES = {
   brute:   { name: '刺殼', hp: 130, speed: 65, radius: 22, dmg: 25, color: '#ff9f1c', credits: 4, shape: 6 },  // 靠近時縮成球滾過來（見 updateBrute）
   spitter: { name: '噴吐者', hp: 40, speed: 110, radius: 13, dmg: 10, color: '#f72585', credits: 2, shape: 4,
     ranged: { range: 380, cd: 1.8, speed: 260, dmg: 12 } },
-  elite:   { name: '虛空獵手', hp: 520, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
+  elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
@@ -468,7 +452,7 @@ class Enemy {
         this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
         if (this.modeT <= 0) {
           this.mode = 'charge'; this.modeT = 0.45;
-          this.vx = Math.cos(this.chargeA) * 680; this.vy = Math.sin(this.chargeA) * 680;
+          this.vx = Math.cos(this.chargeA) * 800; this.vy = Math.sin(this.chargeA) * 800;
         }
         return;
       }
@@ -479,16 +463,19 @@ class Enemy {
         if (this.modeT <= 0) this.mode = 'chase';
         return;
       }
+      // 環形彈：20 發，0.35 秒後錯開半格再放一圈（兩圈之間有縫可以鑽）
+      const eliteRing = off => { for (let i = 0; i < 20; i++) {
+        const a = (i + off) / 20 * TAU + this.rot;
+        Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6, dmg: 14, life: 4, from: t.name });
+      } };
+      if (this.ring2T > 0 && (this.ring2T -= dt) <= 0) eliteRing(0.5);
       this.skillCd -= dt * endlessAtk();
       if (this.skillCd <= 0) {
-        this.skillCd = 3;
+        this.skillCd = 2.2;
         if (this.nextSkill === 'charge') {
           this.mode = 'windup'; this.modeT = 0.65; this.chargeA = Math.atan2(dy, dx); this.nextSkill = 'ring';
         } else {
-          for (let i = 0; i < 14; i++) {
-            const a = i / 14 * TAU + this.rot;
-            Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6, dmg: 14, life: 4, from: t.name });
-          }
+          eliteRing(0); this.ring2T = 0.35;
           this.nextSkill = 'charge';
         }
       }

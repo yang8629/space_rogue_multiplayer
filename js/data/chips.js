@@ -17,9 +17,9 @@ const CHIPS = {
   // ---------- 彈道：子彈怎麼飛 ----------
   boomerang: { name: '迴旋', short: '迴旋', type: 'path', cost: 2, evo: '迴旋風暴',
     grow: { what: '回程命中', need: [180, 540] },
-    desc: '去程打中敵人就穿過去折返（有穿甲時穿甲用完才折返），回程會再打牠一次，沒打中就飛到 60% 射程折返；回程飛回飛船，一路無限穿透（最多 1 秒）。傷害 ×0.7。',
+    desc: '打中敵人才折返：穿過去再飛回射出它的飛船，回程再打牠一次，一路無限穿透（有穿甲時穿甲用完才折返）；沒打中就飛到盡頭消失。傷害 ×0.7。',
     lvs: ['回程傷害 ×1', '回程傷害 ×1.5', '進化：折返時分裂成 3 發'],
-    apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7, life: b.life * 0.6 })) },
+    apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7 })) },
   orbit: { name: '環繞', short: '環繞', type: 'path', cost: 2, evo: '星環',
     grow: { what: '繞圈或放出後命中', need: [180, 540] },
     desc: '按住射擊時子彈存在飛船旁邊繞圈（碰到敵人照打，同一隻隔 0.5 秒可再打；每打一次扣一次穿甲，用完消失），越繞越快；放開射擊時全部從所在位置朝滑鼠那一點射出，轉越快放出越快：速度倍率就是傷害倍率（Lv1 最多 ×1.5，Lv2 最多 ×2）。右邊晶片的效果從射出後開始。',
@@ -85,9 +85,10 @@ const CHIPS = {
   // ---------- 跟機體連動 ----------
   dashfire: { name: '衝刺射擊', short: '衝射', type: 'body', cost: 1, evo: '流星',
     grow: { what: '衝刺子彈命中', need: [40, 120] },
-    desc: '衝刺結束時，用整條電路朝準星額外開一槍（傷害 ×1.5，不佔射擊冷卻；有停火蓄力時會用掉蓄力）。平常開火不受影響。',
-    lvs: ['開 1 槍', '連開 2 槍', '進化：衝刺穿過的敵人受到重擊（武器傷害 ×5）'],
-    apply: list => Game.fireMode !== 'dashfire' ? list : list.map(b => ({ ...b, damage: b.damage * 1.5, dashShot: true })) },
+    desc: '衝刺結束時，用整條電路朝準星額外開一槍（傷害 +50%，不佔射擊冷卻；有停火蓄力時會用掉蓄力）。平常開火不受影響。',
+    lvs: ['開 1 槍', '連開 2 槍', '進化：衝刺的那一槍無限穿透，傷害 +100%'],
+    apply: (list, pw, o) => Game.fireMode !== 'dashfire' ? list
+      : list.map(b => ({ ...addBonus(b, o.lv >= 3 ? 1 : 0.5), dashShot: true, pierce: o.lv >= 3 ? 99 : b.pierce })) },
   intercept: { name: '攔截', short: '攔截', type: 'impact', cost: 1, evo: '反射鏡',
     grow: { what: '打掉敵彈', need: [50, 150] },
     desc: '子彈碰到敵彈時把它打掉（自己照常飛，不扣穿甲），並從那裡用整條電路朝最近的敵人回射一次（不會用掉停火蓄力）。子彈越多、越大越會攔：散彈、相位刃特別好用。',
