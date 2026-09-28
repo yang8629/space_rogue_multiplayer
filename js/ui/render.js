@@ -77,7 +77,7 @@ function drawWorld() {
   ctx.lineWidth = 3;
   ctx.strokeRect(0, 0, W, H);
 
-  Objects.draw();  // 行星、黑洞、小行星、彗星、星門
+  Objects.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
   ctx.fillStyle = '#ffd166';
   for (const p of Game.pickups) {
     if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;
