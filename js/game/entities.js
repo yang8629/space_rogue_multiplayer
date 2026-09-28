@@ -425,7 +425,8 @@ class Enemy {
         this.burnAcc -= d;
         Game.recordDamage('burn', Math.min(d, Math.max(0, this.hp)), this.burnAtt);
         this.hp -= d;
-        if (this.t.dummy) { Range.hit(d, 'burn'); if (this.hp <= 0) this.hp += this.maxHp; }  // 標靶打不死
+        if (Game.mode === 'range') Range.hit(d, 'burn');
+        if (this.t.dummy) { if (this.hp <= 0) this.hp += this.maxHp; }  // 標靶打不死
         if (Math.random() < 0.4) burst(this.x, this.y, '#ff9f1c', 2, 60, 0.3, 2);
         if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = this.burnAtt && this.burnAtt.owner; this.killAtt = this.burnAtt; Game.onEnemyKilled(this); return; }
       }
@@ -676,7 +677,7 @@ class Enemy {
     if (this.markT > 0) dmg *= 1.25;  // 弱點標記
     if (att) this.lastAtt = att;
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
-    if (this.t.dummy) Range.hit(dmg, source);
+    if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
     this.hp -= dmg; this.flash = 0.08;
     if (this.t.dummy && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶打不死
     if (this.t.boss) {
