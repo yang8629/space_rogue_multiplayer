@@ -208,17 +208,18 @@ const MechCheck = {
       return { ok: sc === 50 && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
         got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發（散彈存了 ${sc} 顆 = 10 發）；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
     }],
-    ['電路晶片', '停滯', '子彈停住後擋下敵彈（沒穿甲擋一發就消失），時間到衝向附近的敵人', M => {
+    ['電路晶片', '佈雷', '子彈停住變成地雷（不擋敵彈）；敵人靠近就衝出去打中（×1.2）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'stasis', null, null]); M.targets([]);
-      const p = Game.player; M.run(1); const b = Game.bullets[0];
+      M.run(1); const b = Game.bullets[0];
       for (let f = 0; f < 20 && b.mode !== 'wait'; f++) Game.updateBullets(1 / 60);
-      const stopped = b.mode === 'wait';
+      const stopped = b.mode === 'wait', d0 = b.damage;
       Game.eBullets = [{ x: b.x + 40, y: b.y, vx: -600, vy: 0, r: 5, dmg: 10, life: 2, from: 'test' }];
       for (let f = 0; f < 10; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
-      const blocked = Game.eBullets.length === 0 && b.dead;
-      M.run(1); const c = Game.bullets[Game.bullets.length - 1]; const e = M.targets([[300, 60]])[0];
-      for (let f = 0; f < 200 && !c.dead; f++) Game.updateBullets(1 / 60);
-      return { ok: stopped && blocked && e.hp < e.maxHp, got: `${stopped ? '停住' : '沒停住'}；${blocked ? '擋下敵彈後消失' : '沒擋下敵彈'}；時間到${e.hp < e.maxHp ? '衝向敵人打中' : '沒打中敵人'}` };
+      const passed = !b.dead && b.mode === 'wait';
+      const e = M.targets([[b.x - Game.player.x + 45, b.y - Game.player.y]])[0];
+      for (let f = 0; f < 30 && e.hp === e.maxHp; f++) Game.updateBullets(1 / 60);
+      const hit = e.maxHp - e.hp;
+      return { ok: stopped && passed && near1(hit, d0 * 1.2), got: `${stopped ? '停住' : '沒停住'}；敵彈${passed ? '穿過去（不擋）' : '被擋了'}；敵人靠近後被打 ${Math.round(hit)}（應為 ${d0 * 1.2}）` };
     }],
     ['電路晶片', '加速', '出手 0.5 倍速，越飛越快；打中時傷害 × 速度倍率（最多 ×4）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'accel', null, null]); M.targets([]);
