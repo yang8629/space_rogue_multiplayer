@@ -157,7 +157,7 @@ function drawWorld() {
   ctx.textAlign = 'center';
   for (const t of Game.texts) {
     ctx.globalAlpha = Math.min(1, t.life * 2);
-    ctx.font = t.big ? 'bold 16px Microsoft JhengHei' : '11px Segoe UI';
+    ctx.font = t.big ? 'bold 21px Microsoft JhengHei' : 'bold 15px Segoe UI';
     ctx.fillStyle = t.color;
     ctx.fillText(t.text, t.x, t.y);
   }
@@ -351,6 +351,16 @@ function drawPlayer(p, tag = '') {
   for (let i = 0; i < (p.shield || 0); i++) {  // 護盾產生器
     ctx.strokeStyle = 'rgba(76, 201, 240, 0.85)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(0, 0, 26 + i * 5, 0, TAU); ctx.stroke();
+  }
+  if (own && Game.stats && Game.stats.charge && (p.chargeC || 0) > 0.02) {  // 停火蓄力：船身外圈的蓄力環（蓄滿時變白、閃動）
+    const k = Math.min(1, p.chargeC), full = k >= 1;
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(255, 179, 71, 0.18)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = full ? '#ffffff' : '#ffb347'; ctx.lineWidth = full ? 5 : 4;
+    if (full) { ctx.shadowBlur = 14 + 8 * Math.sin(Game.time * 10); ctx.shadowColor = '#ffffff'; }
+    ctx.beginPath(); ctx.arc(0, 0, 34, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+    ctx.shadowBlur = 0;
   }
   ctx.restore();
 }

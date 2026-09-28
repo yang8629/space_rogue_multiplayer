@@ -14,7 +14,7 @@ const OBJ = {
   PLANET_GM: 1.2e7, HOLE_GM: 2.4e7,  // 引力強度（加速度 = GM / 距離²）
   HOLE_R: 280, HOLE_CORE: 34,
   ROCK_MIN_DMG: 30, ROCK_GROW: 0.05,  // 小行星：單發至少 30 才打得動；打爆時電路上每個會成長的晶片 + Lv2 門檻的 5%
-  COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60,
+  COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60, COMET_GRAV: 1.5,  // COMET_GRAV：彗星受引力影響的倍數
 };
 const Objects = {
   dt: 1 / 60,
@@ -23,6 +23,7 @@ const Objects = {
   gen(C, node) {
     if (!C || C.sandbox || Math.random() < 0.5) return [];
     const kinds = C.boss ? ['planet', 'planet'] : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
+    if (kinds.includes('comet') && !kinds.includes('planet')) kinds.push('planet');  // 有彗星就配一顆行星：彗星會被引力彎過去
     const out = [], cx = CFG.WORLD_W / 2, cy = CFG.WORLD_H / 2;
     const spot = (minD, r) => {  // 離開場地中央（玩家出生點）和其他物件
       for (let i = 0; i < 60; i++) {
@@ -225,7 +226,7 @@ const Objects = {
     const G = Game;
     if (o.warn > 0) { o.warn -= dt; return; }
     const [ax, ay] = this.gravity(o.x, o.y);  // 行星讓彗星彎軌道，黑洞把彗星吸偏
-    o.vx += ax * dt * 0.5; o.vy += ay * dt * 0.5;
+    o.vx += ax * dt * OBJ.COMET_GRAV; o.vy += ay * dt * OBJ.COMET_GRAV;
     o.x += o.vx * dt; o.y += o.vy * dt; o.age += dt;
     if (o.age > 1 && (o.x < -80 || o.y < -80 || o.x > CFG.WORLD_W + 80 || o.y > CFG.WORLD_H + 80)) { o.dead = true; return; }
     for (const h of G.objs) {
@@ -310,7 +311,25 @@ const Objects = {
     });
   },
   // 隊友：兩次同步之間讓彗星照速度往前飛
-  clientStep(dt) { for (const o of Game.objs) if (o.type === 'comet' && !(o.warn > 0)) { o.x += o.vx * dt; o.y += o.vy * dt; } },
+  clientStep(dt) {
+    for (const o of Game.objs) if (o.type === 'comet' && !(o.warn > 0)) {
+      const [ax, ay] = this.gravity(o.x, o.y);
+      o.vx += ax * dt * OBJ.COMET_GRAV; o.vy += ay * dt * OBJ.COMET_GRAV; o.x += o.vx * dt; o.y += o.vy * dt;
+    }
+  },
+  // 彗星預警：照引力算出之後的路線（撞到行星、黑洞核心或出場就停）
+  cometPath(o) {
+    const pts = [[o.x, o.y]], dt = 1 / 30;
+    let x = o.x, y = o.y, vx = o.vx, vy = o.vy;
+    for (let i = 0; i < 240; i++) {
+      const [ax, ay] = this.gravity(x, y);
+      vx += ax * dt * OBJ.COMET_GRAV; vy += ay * dt * OBJ.COMET_GRAV; x += vx * dt; y += vy * dt;
+      pts.push([x, y]);
+      if (x < -100 || y < -100 || x > CFG.WORLD_W + 100 || y > CFG.WORLD_H + 100) break;
+      if (Game.objs.some(h => (h.type === 'planet' || h.type === 'hole') && dist2(x, y, h.x, h.y) < (h.r + o.r) ** 2)) break;
+    }
+    return pts;
+  },
 
   // ---------- 畫面 ----------
   // 視野陰影：從飛船看出去，每顆小行星後面拖出一塊灰霧（死角；背景太暗，用變暗看不出來）；感測器 4 層看得穿，只留很淡的霧
@@ -368,7 +387,9 @@ const Objects = {
         if (o.warn > 0) {  // 預警線：藍白色（敵人的預警線是紅色）
           ctx.globalAlpha = 0.25 + 0.4 * Math.sin(G.time * 25) ** 2;
           ctx.strokeStyle = '#bfe9ff'; ctx.lineWidth = o.r * 2;
-          ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x + ux * 3000, o.y + uy * 3000); ctx.stroke();
+          ctx.lineJoin = 'round'; ctx.beginPath();
+          this.cometPath(o).forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+          ctx.stroke();
           ctx.globalAlpha = 1;
           continue;
         }
