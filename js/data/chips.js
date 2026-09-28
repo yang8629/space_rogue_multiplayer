@@ -61,7 +61,7 @@ const CHIPS = {
     lvs: ['蓄滿要 1 秒', '蓄滿只要 0.6 秒', '進化：蓄滿的一發無限穿透，飛到盡頭爆炸'],
     apply: (list, pw, o) => {
       const c = Game.chargeC || 0, full = c >= 0.999;  // 只有玩家開火的第一發帶蓄力（觸發、衝刺射擊、擦彈都是 0）
-      return list.map(b => ({ ...b, damage: b.damage * (1 + 4 * c), radius: Math.max(b.radius, Math.min(60, b.radius * (1 + 1.5 * c))), speed: b.speed * (1 - 0.2 * c),
+      return list.map(b => ({ ...b, damage: b.damage * (1 + 4 * c), ...sizeUp(b, 1.5 * c), speed: b.speed * (1 - 0.2 * c),
         full: full ? o.lv : 0, pierce: full && o.lv >= 3 ? 99 : b.pierce, endBoom: full && o.lv >= 3, color: full ? '#ffffff' : b.color }));
     } },
 
@@ -112,7 +112,7 @@ const CHIPS = {
         for (const b of g) { dmg += b.damage; bonus += b.damage * (b.bonus || 0); }
         const ang = g.reduce((a, b) => a + b.angle, 0) / g.length;
         out.push(addBonus({ ...f, angle: ang, damage: dmg, bonus: dmg ? bonus / dmg : 0,
-          pierce: Math.max(...g.map(b => b.pierce)), radius: Math.max(f.radius, Math.min(60, f.radius * (1 + 0.8 * pw))),  // 體積和蓄力一樣相乘（順序不影響），最大 60
+          pierce: Math.max(...g.map(b => b.pierce)), ...sizeUp(f, 0.8 * pw),
           knock: (f.knock == null ? 1 : f.knock) + 0.5 * pw }, 0.3 * pw));
       }
       return out;
@@ -191,6 +191,8 @@ const CHIP_BRIEF = {
   mirror: '複製左邊那一格（武器、數值晶片）',
 };
 const chipBrief = id => CHIP_BRIEF[baseOf(id)] || String(CHIPS[id].desc).split(/[。；]/)[0];
+// 子彈體積加成（巨彈、蓄力）：加成彼此相加，照原本大小算（順序不影響），最大半徑 60
+const sizeUp = (b, add) => { const r0 = b.r0 || b.radius, sb = (b.sizeB || 0) + add; return { r0, sizeB: sb, radius: Math.min(60, r0 * (1 + sb)) }; };
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => CHIPS[id].type !== 'composite' && !CHIPS[id].hidden);
 const COMPOSITE_IDS = [];  // V2 拿掉了軍規複合晶片（精英改給背包模組）
 const OVERLOADS = ['ov_power', 'ov_rate', 'ov_pierce', 'ov_seek'];
