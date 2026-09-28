@@ -61,7 +61,7 @@ const CHIPS = {
     lvs: ['蓄滿要 1 秒', '蓄滿只要 0.6 秒', '進化：蓄滿的一發無限穿透，飛到盡頭爆炸'],
     apply: (list, pw, o) => {
       const c = Game.chargeC || 0, full = c >= 0.999;  // 只有玩家開火的第一發帶蓄力（觸發、衝刺射擊、擦彈都是 0）
-      return list.map(b => ({ ...b, damage: b.damage * (1 + 4 * c), radius: b.radius * (1 + 1.5 * c), speed: b.speed * (1 - 0.2 * c),
+      return list.map(b => ({ ...b, damage: b.damage * (1 + 4 * c), radius: Math.max(b.radius, Math.min(60, b.radius * (1 + 1.5 * c))), speed: b.speed * (1 - 0.2 * c),
         full: full ? o.lv : 0, pierce: full && o.lv >= 3 ? 99 : b.pierce, endBoom: full && o.lv >= 3, color: full ? '#ffffff' : b.color }));
     } },
 
@@ -112,7 +112,7 @@ const CHIPS = {
         for (const b of g) { dmg += b.damage; bonus += b.damage * (b.bonus || 0); }
         const ang = g.reduce((a, b) => a + b.angle, 0) / g.length;
         out.push(addBonus({ ...f, angle: ang, damage: dmg, bonus: dmg ? bonus / dmg : 0,
-          pierce: Math.max(...g.map(b => b.pierce)), radius: Math.min(22, f.radius * (1 + 0.8 * pw)),
+          pierce: Math.max(...g.map(b => b.pierce)), radius: Math.max(f.radius, Math.min(60, f.radius * (1 + 0.8 * pw))),  // 體積和蓄力一樣相乘（順序不影響），最大 60
           knock: (f.knock == null ? 1 : f.knock) + 0.5 * pw }, 0.3 * pw));
       }
       return out;
