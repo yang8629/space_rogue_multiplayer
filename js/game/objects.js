@@ -297,8 +297,27 @@ const Objects = {
   clientStep(dt) { for (const o of Game.objs) if (o.type === 'comet' && !(o.warn > 0)) { o.x += o.vx * dt; o.y += o.vy * dt; } },
 
   // ---------- 畫面 ----------
-  draw() {
+  // 視野陰影：從飛船看出去，每顆小行星後面拖出一塊灰霧（死角；背景太暗，用變暗看不出來）；感測器 4 層看得穿，只留很淡的輪廓
+  drawShadows(viewer) {
+    if (!viewer) return;
+    const seeAll = Game.mech.traits.mark, FAR = 3000;
+    ctx.fillStyle = seeAll ? 'rgba(150, 160, 190, 0.04)' : 'rgba(150, 160, 190, 0.16)';
+    ctx.strokeStyle = seeAll ? 'rgba(170, 180, 210, 0.08)' : 'rgba(170, 180, 210, 0.3)'; ctx.lineWidth = 1;
+    for (const o of Game.objs) {
+      if (o.type !== 'rock') continue;
+      const dx = o.x - viewer.x, dy = o.y - viewer.y, d = Math.hypot(dx, dy);
+      if (d <= o.r + 1) continue;
+      const a = Math.atan2(dy, dx), w = Math.acos(o.r * 0.9 / d);  // 切點（半徑取 0.9，和擋視野的判定一樣）
+      const t = [a + Math.PI + w, a + Math.PI - w].map(q => [o.x + Math.cos(q) * o.r * 0.9, o.y + Math.sin(q) * o.r * 0.9]);
+      const far = ([x, y]) => { const ux = x - viewer.x, uy = y - viewer.y, l = Math.hypot(ux, uy) || 1; return [x + ux / l * FAR, y + uy / l * FAR]; };
+      const [p1, p2] = t, q1 = far(p1), q2 = far(p2);
+      ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(q1[0], q1[1]); ctx.moveTo(p2[0], p2[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke();
+    }
+  },
+  draw(viewer) {
     const G = Game;
+    this.drawShadows(viewer);
     for (const o of G.objs) {
       if (o.type === 'planet') {
         const g = ctx.createRadialGradient(o.x - o.r * 0.4, o.y - o.r * 0.4, o.r * 0.1, o.x, o.y, o.r);
