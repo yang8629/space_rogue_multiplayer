@@ -200,7 +200,7 @@ class Player {
 // 環繞：Lv1 最多存 10 發、3 秒轉到 2 倍；Lv2 起 20 發、2 秒轉到 3 倍。「一發」= 一次開火（散彈一次的 5 顆算同一發）
 const orbCap = lv => lv >= 2 ? 20 : 10;
 let volleySeq = 0, curVolley = 0;  // 每次 spawnShots 算一發（環繞用來數存了幾發）
-const quickBonus = lv => !lv ? 0 : lv >= 2 ? 1.5 : 1;  // 疾射：出手時速度倍率 +1（Lv2 +1.5）
+const quickBonus = lv => !lv ? 0 : lv >= 2 ? 1.25 : 1;  // 疾射：出手時速度倍率 +1（Lv2 +1.25）
 const orbSpinOf = (lv, held) => lv >= 2 ? 1 + 2 * Math.min(1, held / 2) : 1 + Math.min(1, held / 3);
 const orbSpinMax = lv => lv >= 2 ? 3 : 2;
 
@@ -272,7 +272,7 @@ class Bullet {
         this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1) + quickBonus(this.quick); this.orbShot = true; this.flyDist = 0;  // 放出後命中也算環繞成長
         this.speed = this.baseSpeed * this.accelMul;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
-        if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人
+        if (this.orbit >= 3) this.homing = Math.max(this.homing, 2.5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;
         return;
       }
@@ -350,7 +350,7 @@ function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
   curVolley = ++volleySeq;
   for (const s0 of list) {
     if (B.length >= CFG.MAX_LIVE_BULLETS) break;
-    const s = M.bspeed !== 1 || M.traits.lock ? { ...s0, speed: s0.speed * M.bspeed, homing: s0.homing + (M.traits.lock ? 1.5 : 0) } : s0;
+    const s = M.bspeed !== 1 || M.traits.lock ? { ...s0, speed: s0.speed * M.bspeed, homing: s0.homing + (M.traits.lock ? 0.6 : 0) } : s0;
     const b = new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId);
     if (M.traits.mark) b.mark = true;
     B.push(b);
