@@ -69,9 +69,14 @@ class Player {
       if (M.module === 'blink' && M.heavy) Game.explode(this.x, this.y, 110, 25, '#b388ff', null, { src: 'ship', cr: null, owner: Game.shooter || null });
       if (this.ship.ability === 'portal') Game.openPortal(this, this.dashSX, this.dashSY, this.x, this.y);
     }
-    if (!dashing && this.wasDash && S.dashfire) {  // 衝刺射擊：衝刺結束時從落點朝衝刺方向噴出
-      const list = runSpecial(S.ops, 'dashfire');
-      if (list.length) spawnShots(list, this.x + Math.cos(this.dashDir) * 14, this.y + Math.sin(this.dashDir) * 14, this.dashDir, 0, null);
+    if (!dashing && this.wasDash && S.dashfire) { this.dfN = S.dashfire >= 2 ? 2 : 1; this.dfAt = Game.time; }  // 衝刺射擊：衝刺結束時開槍（Lv2 連開 2 槍）
+    if (this.dfN > 0 && S.dashfire && Game.time >= this.dfAt) {  // 用整條電路朝準星開一槍（不佔射擊冷卻，×1.5；會用掉停火蓄力）
+      this.dfN--; this.dfAt = Game.time + 0.12;
+      Game.fireMode = 'dashfire'; Game.chargeC = S.charge ? this.chargeC : null;
+      let list;
+      try { list = runOps(S.ops, 0); } finally { Game.fireMode = null; Game.chargeC = null; }
+      this.chargeC = 0;
+      if (list.length) spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
     }
     this.wasDash = dashing;
   }
