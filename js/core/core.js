@@ -74,7 +74,7 @@ function splitDamage(amount, att, rateCr) {
 }
 function dmgKeyName(key) {
   if (key === 'weapon') return '武器・' + weaponTitle(Game.weapon);
-  if (key === 'ship') return '飛船技能・' + SHIPS[Game.shipId].abilityName;
+  if (key === 'ship') return '機體（零件・模組）';
   const d = CHIPS[key];
   return d ? d.name : key;
 }

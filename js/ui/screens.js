@@ -15,6 +15,22 @@ function chipCard(id, footer = '') {
     <div class="ds">${d.desc}</div>${lv}${ps}${footer}</div>`;
 }
 
+// 背包模組卡片
+function moduleCard(id, footer = '') {
+  const M = MODULES[id];
+  return `<div class="card" style="border-color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">
+    <div class="ty" style="color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">${M.icon} 背包模組${M.boss ? '・旗艦專屬' : ''}</div>
+    <div class="ttl">${M.name}</div><div class="ds">${moduleLine(id)}</div>${footer}</div>`;
+}
+// 零件卡片：每層效果、目前層數、2／4 層特性（已開啟的亮起來）
+function partCard(id, footer = '', parts = Game.parts) {
+  const P = PARTS[id], n = (parts && parts[id]) || 0;
+  const tr = (t, need) => `<div class="ds" style="opacity:${n >= need ? 1 : 0.6}"><b style="color:${n >= need ? '#9dff6b' : P.color}">${need} 層・${t.name}</b>${n >= need ? '（已開啟）' : ''}：${t.desc}</div>`;
+  return `<div class="card" style="border-color:${P.color}">
+    <div class="ty" style="color:${P.color}">⚙ 零件　目前 ${n} 層</div>
+    <div class="ttl">${P.name}</div><div class="ds">${partLine(id)}</div>${tr(P.t2, 2)}${tr(P.t4, 4)}${footer}</div>`;
+}
+
 const Screen = {
   el: document.getElementById('screen'),
   show(html) { this.el.innerHTML = html; this.el.classList.remove('hidden'); },
@@ -26,6 +42,7 @@ const Screen = {
     const p = Game.player;
     return `<div class="row"><span class="pill">HP ${Math.ceil(p.hp)} / ${p.maxHp}</span>
       <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體兩人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
+      <span class="pill" title="零件已用／零件格">⚙ 零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>${Game.module ? `<span class="pill">${MODULES[Game.module].icon} ${MODULES[Game.module].name}</span>` : ''}
       <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
   // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
@@ -82,6 +99,11 @@ const Screen = {
       case 'copyrun': Screen.copyRun(); break;
       case 'copyone': Screen.copyOne(+arg); break;
       case 'heal': Game.shopHeal(); break;
+      case 'module': Game.takeModule(arg); break;
+      case 'bossmod': Game.takeBossModule(); break;
+      case 'wspick': Game.wsPick(arg); break;
+      case 'wsfrom': Game.wsFrom(arg); break;
+      case 'wsto': Game.wsTo(arg); break;
       case 'music': Music.toggle(); Screen.title(); break;
     }
   },
@@ -98,15 +120,13 @@ const Screen = {
           <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>
         <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
         <div class="ds">${S.desc}</div>
-        ${bar(`船體 ${S.hp}`, S.hp, 150, S.color)}
-        ${bar(`速度 ${S.speed}`, S.speed, 310, S.color)}
-        ${bar(`衝刺冷卻 ${S.dashCd} 秒`, 1.4 - S.dashCd, 0.85, S.color)}
-        <div class="ds"><b style="color:${S.color}">技能・${S.abilityName}</b><br>${S.abilityDesc}</div>
+        <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒　·　零件格 ${S.partSlots}</div>
+        <div class="ds"><b style="color:${S.color}">${S.abilityName}</b><br>${S.abilityDesc}</div>
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
-        <div class="sub">${{ run: '開始遠征', coop: '雙人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：每艘飛船有不同的船體性能與衝刺技能。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
+        <div class="sub">${{ run: '開始遠征', coop: '雙人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件，或星門號的傳送門），之後的成長都靠零件和背包模組。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
       <div class="cards">${cards}</div></div>`);
   },
@@ -180,6 +200,26 @@ const Screen = {
         ${this.status()}</div>${body}</div>`);
   },
 
+  // 改裝廠：零件三選一（只能拿 1 個）；付錢把 1 層零件換成另一種
+  workshop() {
+    const W = Game.ws, used = partsUsed(Game.parts), full = used >= Game.partSlots;
+    const pick = W.options.map(id => partCard(id, W.picked ? '<button disabled>已經拿過了</button>'
+      : `<button ${full ? 'disabled' : ''} data-act="wspick" data-arg="${id}">${full ? '零件格已滿' : '裝上這個'}</button>`)).join('');
+    const owned = PART_IDS.filter(id => Game.parts[id] > 0);
+    const swap = owned.length ? `<div class="sub" style="text-align:center">換零件（◆ ${PART_SWAP_PRICE}／次）：先選要拆掉的 1 層，再選要換成哪一種</div>
+      <div class="row" style="justify-content:center">${owned.map(id => `<button data-act="wsfrom" data-arg="${id}" style="${W.from === id ? 'border-color:#ffd166;color:#ffd166' : ''}">拆 ${PARTS[id].name}（${Game.parts[id]} 層）</button>`).join('')}</div>
+      ${W.from ? `<div class="row" style="justify-content:center">${PART_IDS.filter(id => id !== W.from).map(id => `<button ${Game.credits >= PART_SWAP_PRICE ? '' : 'disabled'} data-act="wsto" data-arg="${id}">→ ${PARTS[id].name}</button>`).join('')}</div>` : ''}`
+      : '<div class="sub" style="text-align:center">目前沒有零件可以換。</div>';
+    const T = Game.mech.traits, on = [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])];
+    this.show(`<div class="scr">
+      <div class="between"><div><h2 style="color:#9fe8ff">🔧 改裝廠</h2>
+        <div class="sub">零件格 ${used} / ${Game.partSlots}。每層零件都是小好處＋小代價，同種疊到 2 層、4 層開啟特性；5 種都至少 1 層開啟「均衡」（好處 +30%）。
+          ${on.length ? `<br>已開啟：<b style="color:#9dff6b">${on.join('、')}</b>` : ''}</div></div>${this.status()}</div>
+      <div class="cards">${pick}</div>${swap}
+      <div class="row" style="justify-content:center"><button data-act="leave">離開改裝廠</button></div>
+      <div class="toast" style="text-align:center">${W.msg || ''}</div></div>`);
+  },
+
   blackhole() {
     const B = Game.bh, owned = Game.ownedFusable();
     let body;
@@ -215,7 +255,7 @@ const Screen = {
   title() {
     this.show(`<div class="scr title-wrap">
       <h1>星環電路</h1><div class="en">CIRCUIT ROGUE</div>
-      <div class="sub">5 把武器 × 各 6 種最終型態 · 3 艘飛船 · 電路構築 · 黑洞融合 · 三星區遠征＋無盡模式</div>
+      <div class="sub">V2 · 5 把武器 · 改變玩法的晶片（越用越強、Lv3 進化）· 4 艘飛船 · 零件與背包模組 · 行星、黑洞、彗星、小行星帶 · 三星區遠征＋無盡模式</div>
       <div class="row">
         <button class="big" data-act="select" data-arg="run">開始遠征</button>
         <button class="big" data-act="select" data-arg="sandbox">沙盒模式</button>
@@ -271,17 +311,20 @@ const Screen = {
 
   reward() {
     const R = Game.reward, full = !Game.inventory.includes(null);
-    const cards = R.options.map(id => {
+    const slotCard = () => `<div class="card" style="border-color:#2ee6a6">
+      <div class="ty" style="color:#2ee6a6">⚡ 電路擴充</div><div class="ttl">插槽 +1</div>
+      <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
+      <button data-act="slot" data-arg="reward">選擇</button></div>`;
+    const cards = R.kind === 'elite'
+      ? R.options.map(id => moduleCard(id, `<button data-act="module" data-arg="${id}">裝上${Game.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>`)).join('') + (R.slot ? slotCard() : '')
+      : R.options.map(id => {
       const t = Game.mergeTarget(id), ok = Game.canAcquire(id);
       const label = t ? `選擇（合成 Lv${levelOf(t.arr[t.i]) + 1}）` : ok ? '選擇' : '倉庫已滿';
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
-    }).join('') + (R.slot ? `<div class="card" style="border-color:#2ee6a6">
-      <div class="ty" style="color:#2ee6a6">⚡ 電路擴充</div><div class="ttl">插槽 +1</div>
-      <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
-      <button data-act="slot" data-arg="reward">選擇</button></div>` : '');
+    }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：軍規複合晶片' : '⚔ 戰鬥勝利：選擇 1 個晶片'}</h2>
-        <div class="sub">${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
+      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：背包模組' : '⚔ 戰鬥勝利：選擇 1 個晶片'}</h2>
+        <div class="sub">${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}${R.kind === 'elite' ? '背包模組只有 1 格，換上新的舊的就沒了。重裝甲、加速器 ≥ 2 層時模組有額外加成。' : '獲得的晶片會放入倉庫，按 Tab 裝上電路。'}</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
@@ -371,13 +414,16 @@ const Screen = {
   victory() {
     const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
     const cleared = Game.sector === CFG.CAMPAIGN_SECTORS;  // 剛打完第三關：遠征完成
-    const reward = `獎勵：◆ +50　${V.slot ? '· <b style="color:#4cc9f0">電路插槽 +1</b>' : '· 插槽已達上限'}`;
+    const reward = `獎勵：◆ +50　${V.slot ? '· <b style="color:#4cc9f0">電路插槽 +1</b>' : '· 插槽已達上限'}　· <b style="color:#9fe8ff">零件格 +1</b>`;
+    const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>'
+      : `<button data-act="bossmod">裝上${Game.module && Game.module !== V.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>`)}</div>` : '';
     const head = cleared
       ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">遠征完成！</h1>
         <div class="sub">${boss.name}已被擊沉，${CFG.CAMPAIGN_SECTORS} 個星區全部突破。<br>${reward}<br>
           可以帶著目前的電路繼續挑戰<b style="color:#ff9dbd">無盡模式</b>：敵人持續變強，旗艦隨機出現。選「結束遠征」會存下通關紀錄。</div>`
       : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
     this.show(`<div class="scr title-wrap">${head}
+      ${mod}
       ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
       ${Game.isClient() ? '<div class="sub" style="color:#ff9dbd">👥 等待房主決定：前往下一星區，或結束遠征…</div>' : `

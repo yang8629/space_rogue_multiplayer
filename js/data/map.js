@@ -8,13 +8,14 @@
 // desc：航圖下方的節點介紹（數字直接讀 CFG，改數值時說明會跟著變）
 const NODE_META = {
   combat: { label: '戰鬥', icon: '⚔', color: '#4cc9f0', desc: () => '2 波敵人（第 4 層起 3 波）。勝利後從 3 個晶片選 1 個。' },
-  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => '最後一波出現精英「虛空獵手」。勝利後從 2 個軍規複合晶片或「插槽 +1」選 1 個，另得 ◆15。之後至少有一條路通往維修站。' },
+  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => '最後一波出現精英「虛空獵手」，戰場固定有行星和彗星。勝利後從 3 個背包模組（只有 1 格，換上新的舊的就沒了）或「插槽 +1」選 1 個，另得 ◆15。之後至少有一條路通往維修站。' },
+  workshop: { label: '改裝廠', icon: '🔧', color: '#9fe8ff', desc: () => `零件三選一（佔 1 個零件格）；也可以付 ◆${PART_SWAP_PRICE} 把 1 層零件換成另一種。` },
   shop:   { label: '補給站', icon: '◆', color: '#2ee6a6',
-    desc: () => `買晶片（60% 機率有軍規複合晶片）、補血 HP +${CFG.SHOP_REPAIR.hp}（◆${CFG.SHOP_REPAIR.price}，限 1 次）、電路擴充（◆${CFG.SHOP_SLOT}）。不賣武器升級。` },
+    desc: () => `買晶片、補血 HP +${CFG.SHOP_REPAIR.hp}（◆${CFG.SHOP_REPAIR.price}，限 1 次）、電路擴充（◆${CFG.SHOP_SLOT}）。不賣武器升級。` },
   repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP；可以拆除廢鐵（每塊 ◆${CFG.SCRAP_REMOVE}）。` },
   blackhole: { label: '黑洞', icon: '◐', color: '#b388ff', desc: () => `投入 2 個晶片：${CFG.FUSE_SUCCESS * 100}% 融合成奇異點（兩個效果合一格＋超載詞綴），否則變成廢鐵。也可以不投入直接離開。之後至少有一條路通往維修站；一條路線最多一個黑洞。` },
   armory: { label: '軍械台', icon: '⚒', color: '#ff9f1c', desc: () => `武器升級（每張圖只有 1 個）。武器升滿後改選「插槽 +1」或 ◆${CFG.ARMORY_BONUS.credits}＋HP ${CFG.ARMORY_BONUS.hp}。` },
-  boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦。勝利後插槽 +1、◆50；進入下一關時修復 30% HP。' },
+  boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場兩側有行星當掩體）。勝利後插槽 +1、零件格 +1、◆50，可以裝上這隻旗艦的專屬模組；進入下一關時修復 30% HP。' },
 };
 
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）
@@ -37,7 +38,7 @@ function mapOk(m) {
   const has = (from, to, type) => m.slice(from, to).flat().some(n => n.type === type);
   const all = m.flat(), byId = id => all.find(n => n.id === id);
   const armories = all.filter(n => n.type === 'armory'), holes = all.filter(n => n.type === 'blackhole');
-  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && m[m.length - 2].every(n => n.type === 'shop') &&
+  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && has(1, 5, 'workshop') && m[m.length - 2].every(n => n.type === 'shop') &&
     armories.length === 1 && armories[0].L >= 1 && armories[0].L <= 4 &&
     all.filter(n => NEED_REPAIR_AFTER.includes(n.type)).every(n => n.next.some(id => byId(id).type === 'repair')) &&
     holes.every(h => !descendants(h, byId).some(d => d.type === 'blackhole')) &&
@@ -61,7 +62,7 @@ function genMapOnce() {
   }
   for (let L = 2; L < LAYERS - 2; L++) for (const nd of layers[L]) {
     const r = Math.random();
-    nd.type = r < 0.2 ? 'elite' : r < 0.32 ? 'shop' : r < 0.4 ? 'repair' : r < 0.52 ? 'blackhole' : 'combat';
+    nd.type = r < 0.2 ? 'elite' : r < 0.3 ? 'shop' : r < 0.38 ? 'repair' : r < 0.48 ? 'blackhole' : r < 0.58 ? 'workshop' : 'combat';
     // 精英、黑洞只放第 3～4 層：後面要接維修站，而第 6 層（王前）全部是補給站
     if (NEED_REPAIR_AFTER.includes(nd.type) && L > 3) nd.type = 'combat';
   }
@@ -75,6 +76,7 @@ function genMapOnce() {
   ensure(layers.slice(2, 4).flat(), 'elite');
   ensure(layers.slice(2, 4).flat(), 'blackhole');
   ensure(layers.slice(1, 5).flat(), 'shop');
+  ensure(layers.slice(1, 5).flat(), 'workshop');
   // 軍械台整張圖只有一個，隨機放在第 2～5 層的戰鬥節點上
   const armCands = layers.slice(1, 5).flat().filter(n => n.type === 'combat');
   if (armCands.length) pick(armCands).type = 'armory';

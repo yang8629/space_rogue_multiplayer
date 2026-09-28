@@ -24,6 +24,7 @@ class Player {
   tickFire(dt, want) {
     const S = Game.stats;
     this.fireCd -= dt;
+    if (this.noFireT > 0) { this.noFireT -= dt; want = false; }  // 裂界推進器：衝刺後不能射擊
     if (S.heatLimit) {
       if (this.ohLock > 0) { this.ohLock -= dt; want = false; }
       else if (want) {
@@ -41,62 +42,52 @@ class Player {
       return;
     }
     this.chargeC = 0;
-    if (want && this.fireCd <= 0) { this.fire(); this.fireCd = S.interval; }
+    this.quenchT -= dt;
+    if (want && this.fireCd <= 0) {
+      const M = Game.mech, rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1);  // 散熱片、疾風、急冷
+      this.fire(); this.fireCd = S.interval / rate;
+    }
   }
   // 衝刺相關的晶片（房主執行）：衝刺中的流星、衝刺結束時的衝刺射擊
   tickDash() {
     const dashing = this.dashT > 0, S = Game.stats;
     if (dashing && !this.wasDash) { this.dashHit.clear(); this.dx0 = this.x; this.dy0 = this.y; }
     if (dashing && Math.hypot(this.vx, this.vy) > 100) this.dashDir = Math.atan2(this.vy, this.vx);
-    if (dashing && S.dashfire >= 3) {  // 流星：衝刺穿過的敵人受到重擊
+    const mul = (S.dashfire >= 3 ? 5 : 0) + (Game.mech.traits.assault ? 4 : 0);  // 流星（衝刺射擊 Lv3）、突擊（加速器 4 層）
+    if (dashing && !this.wasDash) { this.dashSX = this.x; this.dashSY = this.y; }
+    if (dashing && mul) {  // 衝刺穿過的敵人受到重擊
       for (const e of Game.enemies) {
         if (e.dead || e.spawnT > 0 || this.dashHit.has(e.id)) continue;
         const rr = e.r + this.r + 4;
         if (segDist2(this.dx0, this.dy0, this.x, this.y, e.x, e.y) >= rr * rr) continue;
         this.dashHit.add(e.id);
-        const dmg = Game.wp.damage * 5;
-        e.hurt(dmg, Math.cos(this.dashDir) * 300, Math.sin(this.dashDir) * 300, 'shock', { src: 'dashfire', cr: null, owner: Game.shooter || null });
+        const dmg = Game.wp.damage * mul;
+        e.hurt(dmg, Math.cos(this.dashDir) * 300, Math.sin(this.dashDir) * 300, 'shock', { src: S.dashfire >= 3 ? 'dashfire' : 'ship', cr: null, owner: Game.shooter || null });
         floatText(e.x, e.y - e.r, Math.round(dmg), '#9dff6b', true);
-        Game.grow(Game.shooter || null, 'dashfire');
+        if (S.dashfire >= 3) Game.grow(Game.shooter || null, 'dashfire');
       }
     }
     this.dx0 = this.x; this.dy0 = this.y;
+    if (!dashing && this.wasDash) {  // 衝刺結束
+      const M = Game.mech;
+      if (M.traits.quench) this.quenchT = 2;
+      if (M.module === 'thruster') this.noFireT = 0.5;
+      if (M.module === 'blink' && M.heavy) Game.explode(this.x, this.y, 110, 25, '#b388ff', null, { src: 'ship', cr: null, owner: Game.shooter || null });
+      if (this.ship.ability === 'portal') Game.openPortal(this, this.dashSX, this.dashSY, this.x, this.y);
+    }
     if (!dashing && this.wasDash && S.dashfire) {  // 衝刺射擊：衝刺結束時從落點朝衝刺方向噴出
       const list = runSpecial(S.ops, 'dashfire');
       if (list.length) spawnShots(list, this.x + Math.cos(this.dashDir) * 14, this.y + Math.sin(this.dashDir) * 14, this.dashDir, 0, null);
     }
     this.wasDash = dashing;
   }
-  onDash() {  // 角色技能：衝刺觸發
-    const S = this.ship;
-    if (Net.role === 'client') {  // 連線的隊友：震波傷害由房主計算，這裡只畫特效
-      if (S.ability === 'shockwave') {
-        for (let i = 0; i < 36 && Game.particles.length < 1500; i++) {
-          const a = i / 36 * TAU;
-          Game.particles.push({ x: this.x, y: this.y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, life: 0.28, max: 0.28, color: S.color, size: 3 });
-        }
-        Game.shake(6);
-      }
-      if (S.ability === 'phase') this.overdrive = 1.2;
-      return;
+  onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：排熱爆發
+    if (Net.role === 'client') return;
+    if (Game.mech.traits.vent) {  // 排熱爆發（散熱片 4 層）：朝四周放出 12 發
+      const w = Game.wp, list = Array.from({ length: 12 }, (_, i) => shot({ angle: i / 12 * TAU, speed: Math.min(700, w.speed), damage: w.damage,
+        radius: w.radius, life: 0.6, color: '#ffb38a', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
+      spawnShots(list, this.x, this.y, 0, 0, null);
     }
-    if (S.ability === 'shockwave') {
-      for (const e of Game.enemies) {
-        if (e.dead || e.spawnT > 0) continue;
-        const d = Math.hypot(e.x - this.x, e.y - this.y);
-        if (d > 150 + e.r) continue;
-        const k = 420 * (14 / e.r) / (d || 1);
-        e.hurt(20, (e.x - this.x) * k, (e.y - this.y) * k, 'shock', { src: 'ship', cr: null, owner: Game.shooter || null });
-        floatText(e.x, e.y - e.r, 20, S.color);
-      }
-      for (let i = 0; i < 36 && Game.particles.length < 1500; i++) {
-        const a = i / 36 * TAU;
-        Game.particles.push({ x: this.x, y: this.y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, life: 0.28, max: 0.28, color: S.color, size: 3 });
-      }
-      Game.shake(6);
-      SFX.play('shock');
-    }
-    if (S.ability === 'phase') this.overdrive = 1.2;
   }
   get invuln() { return this.iframe > 0 || this.dashT > 0; }
   update(dt) {
@@ -129,9 +120,17 @@ class Player {
     if (Input.dash) {
       Input.dash = false;
       if (this.dashCd <= 0) {
-        this.dashT = CFG.DASH_TIME;
-        this.dashCd = this.ship.dashCd * (1 - P.dashCd);
+        const M = Game.mech;
+        this.dashT = CFG.DASH_TIME * M.dashDist;
+        this.dashCd = this.ship.dashCd * (1 - P.dashCd) * M.dashCd;
         this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
+        if (M.module === 'blink') {  // 相位跳躍：瞬移，留一小段「衝刺中」讓衝刺結束的效果照常觸發
+          const x0 = this.x, y0 = this.y;
+          this.x = clamp(this.x + Math.cos(this.dashA) * 150, this.r, CFG.WORLD_W - this.r);
+          this.y = clamp(this.y + Math.sin(this.dashA) * 150, this.r, CFG.WORLD_H - this.r);
+          this.dashT = 0.05; this.blinkT = 0.05;
+          burst(x0, y0, '#b388ff', 12, 160, 0.3, 2);
+        }
         this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
         burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
         if (Game.runStats) Game.runStats.dashes++;
@@ -141,17 +140,22 @@ class Player {
     }
     if (this.dashT > 0) {
       this.dashT -= dt;
-      this.vx = Math.cos(this.dashA) * CFG.DASH_SPEED;
-      this.vy = Math.sin(this.dashA) * CFG.DASH_SPEED;
+      const sp = this.blinkT > 0 ? 0 : CFG.DASH_SPEED;
+      this.blinkT -= dt;
+      this.vx = Math.cos(this.dashA) * sp;
+      this.vy = Math.sin(this.dashA) * sp;
       if (Game.particles.length < 1500)
         Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.ship.color, size: 5 });
     } else {
-      const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed), k = Math.min(1, dt * 12);
+      const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed) * Game.mech.speed, k = Math.min(1, dt * 12);
       this.vx += (mx / l * spd - this.vx) * k;
       this.vy += (my / l * spd - this.vy) * k;
     }
     this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
     this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+    this.moduleMove(dt);
+    Objects.moveShip(this, dt);  // 地圖物件：黑洞拉扯、行星與小行星擋住
+    Game.portalShip(this, dt);   // 星門：走進門從另一個門出來
 
     this.iframe -= dt;
     this.overdrive -= dt;
@@ -160,10 +164,24 @@ class Player {
     this.tickDash();
     this.tickFire(dt, Input.down);
   }
+  // 重力井：每 6 秒自己也被往前方那一點拉（重裝甲 ≥ 2 不會被拉）。飛船的移動由自己的電腦計算
+  moduleMove(dt) {
+    const M = Game.mech;
+    if (M.module !== 'gravity') return;
+    if (this.gravT == null) this.gravT = 6;
+    if ((this.gravT -= dt) <= 0) {
+      this.gravT = 6;
+      if (!M.heavy) this.pullV = { x: Math.cos(this.aim) * 260, y: Math.sin(this.aim) * 260, t: 0.3 };
+    }
+    const V = this.pullV;
+    if (V && V.t > 0) {
+      V.t -= dt;
+      this.x = clamp(this.x + V.x * dt, this.r, CFG.WORLD_W - this.r); this.y = clamp(this.y + V.y * dt, this.r, CFG.WORLD_H - this.r);
+    }
+  }
   fire() {
     const list = runOps(Game.stats.ops, 0);
     if (!list.length) return;
-    if (this.overdrive > 0) for (const s of list) s.damage *= 1.5;  // 幻影號：相位超載
     const nx = this.x + Math.cos(this.aim) * 16, ny = this.y + Math.sin(this.aim) * 16;
     // 子彈從船身中心附近發出：怪物貼臉時也打得到（槍口火光仍在船頭）
     spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
@@ -292,10 +310,13 @@ class Bullet {
 }
 
 function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
-  const B = Game.bullets;
-  for (const s of list) {
+  const B = Game.bullets, M = Game.mech;  // 射出這些子彈的人的機體：感測器（子彈速度、鎖定、弱點標記）
+  for (const s0 of list) {
     if (B.length >= CFG.MAX_LIVE_BULLETS) break;
-    B.push(new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId));
+    const s = M.bspeed !== 1 || M.traits.lock ? { ...s0, speed: s0.speed * M.bspeed, homing: s0.homing + (M.traits.lock ? 1.5 : 0) } : s0;
+    const b = new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId);
+    if (M.traits.mark) b.mark = true;
+    B.push(b);
   }
 }
 
@@ -377,6 +398,7 @@ class Enemy {
       }
     }
     if (this.slowT > 0) this.slowT -= dt;
+    if (this.markT > 0) this.markT -= dt;
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
     if (this.spawnT > 0) { this.spawnT -= dt; return; }
     const t = this.t;
@@ -612,6 +634,8 @@ class Enemy {
   // knock：子彈的擊退值（只有子彈命中會帶）。旗艦只有在擊退值超過自己的抗擊退時才會被推，力道只看超過的部分；
   // 爆炸、震波、電弧不會推王。衝鋒中的敵人不會被推
   hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
+    if (this.markT > 0) dmg *= 1.25;  // 弱點標記
+    if (att) this.lastAtt = att;
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (this.t.dummy) Range.hit(dmg, source);
     this.hp -= dmg; this.flash = 0.08;

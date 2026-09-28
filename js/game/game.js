@@ -18,6 +18,7 @@ const Game = {
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mate: null, shooter: null,
   // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
+  parts: {}, module: null, partSlots: 6, mech: mechStats({}, null), objs: [], portals: [],
   growth: {}, fireMode: null, fireHit: false, chargeC: null, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
@@ -62,6 +63,7 @@ const Game = {
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
     this.growth = {}; this.pullHits = 0;
+    this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
@@ -127,6 +129,7 @@ const Game = {
       case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
       case 'shop':   this.openShop(); break;
       case 'blackhole': this.openBlackhole(); break;
+      case 'workshop': this.openWorkshop(); break;
       case 'armory': this.state = 'armory'; this.armorySource = 'armory'; Screen.armory('armory'); break;
       case 'repair': {
         const p = this.player, heal = Math.round(p.maxHp * CFG.REPAIR_RATIO);
@@ -143,7 +146,7 @@ const Game = {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
-    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = [];
+    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
     this.kills = 0; this.banner = null; this.nextId = 1;
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
@@ -152,6 +155,8 @@ const Game = {
     if (Net.role === 'client') this.player.x += 50;
     if (this.mate) { this.mate.resetPos(); this.mate.x += Net.role === 'host' ? 50 : -50; this.mate.dead = false; }
     this.player.dead = false;
+    for (const p of [this.player, this.mate]) if (p) this.resetMechCombat(p);
+    this.objs = this.isClient() ? [] : Objects.gen(this.combat, this.node);  // 地圖物件（雙人：房主產生，隨同步傳給隊友）
     this.cam.x = this.player.x - ZW / 2; this.cam.y = this.player.y - ZH / 2;
     Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
     try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
@@ -229,21 +234,21 @@ const Game = {
     const p = this.player;
     if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
-    if (p.ship.ability === 'repair') p.hp = Math.min(p.maxHp, p.hp + 10);  // 先鋒號：戰地維修
     const type = this.node.type;
     if (type === 'boss') {  // 擊敗旗艦：插槽 +1、晶體獎勵，可前往下一星區
       const slot = this.chain.length < CFG.MAX_SLOTS;
       if (slot) this.chain.push(null);
       this.credits += 50;  // 雙人：兩人各自拿
+      this.partSlots++;    // 零件格 +1
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
-      this.victory = { slot, boss: this.bossId };
+      this.victory = { slot, boss: this.bossId, module: bossModuleOf(this.bossId), took: false };
       this.state = 'victory';
       Screen.victory();
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
+    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
@@ -274,6 +279,42 @@ const Game = {
     this.inventory[i] = id;
     this.recalc();
     return `獲得「${CHIPS[id].name}」，已放入倉庫`;
+  },
+  takeModule(id) {  // 精英獎勵：裝上背包模組（取代目前的）
+    if (!MODULES[id]) return;
+    this.setModule(id);
+    SFX.play('upgrade');
+    this.showMap(`裝上背包模組「${MODULES[id].name}」`);
+  },
+  takeBossModule() {  // 擊沉旗艦：裝上旗艦專屬模組
+    const V = this.victory;
+    if (!V || V.took || !V.module) return;
+    V.took = true;
+    this.setModule(V.module);
+    SFX.play('upgrade');
+    Screen.victory();
+  },
+  // ---------- 改裝廠：零件三選一、付錢換零件 ----------
+  openWorkshop() {
+    this.ws = { options: pickN(PART_IDS, 3), picked: false, from: null, msg: '' };
+    this.state = 'workshop';
+    Screen.workshop();
+  },
+  wsPick(id) {
+    const W = this.ws;
+    if (!W || W.picked || !W.options.includes(id)) return;
+    if (!this.addPart(id)) { W.msg = '零件格已滿：可以用「換零件」改成別種'; Screen.workshop(); return; }
+    W.picked = true; W.msg = `裝上 ${PARTS[id].name}（${this.parts[id]} 層）`;
+    SFX.play('upgrade');
+    Screen.workshop();
+  },
+  wsFrom(id) { if (this.ws) { this.ws.from = this.ws.from === id ? null : id; Screen.workshop(); } },
+  wsTo(id) {
+    const W = this.ws;
+    if (!W || !W.from) return;
+    const from = W.from;
+    if (this.swapPart(from, id)) { W.msg = `改裝完成：${PARTS[from].name} → ${PARTS[id].name}`; W.from = null; SFX.play('upgrade'); }
+    Screen.workshop();
   },
   takeReward(id) {
     let msg;
@@ -512,9 +553,10 @@ const Game = {
   recalc() {
     this.stats = analyzeChain(this.chain);
     this.passives = computePassives(this.inventory);
+    this.mech = mechStats(this.parts, this.module);
     const p = this.player;
     if (p) {
-      const newMax = p.ship.hp + this.passives.maxHp;
+      const newMax = this.maxHpOf(p.ship, this.passives, this.mech);
       if (newMax > p.maxHp) p.hp += newMax - p.maxHp;
       p.maxHp = newMax;
       p.hp = Math.min(p.hp, p.maxHp);
@@ -538,7 +580,8 @@ const Game = {
       else if (this.state === 'repair') Screen.repair();
       else if (this.state === 'blackhole') { this.bh.sel = []; Screen.blackhole(); }
       else if (this.state === 'armory') Screen.armory(this.armorySource || 'armory');
-    } else if (['play', 'map', 'reward', 'shop', 'repair', 'blackhole', 'armory'].includes(this.state)) {
+      else if (this.state === 'workshop') Screen.workshop();
+    } else if (['play', 'map', 'reward', 'shop', 'repair', 'blackhole', 'armory', 'workshop'].includes(this.state)) {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
@@ -571,6 +614,7 @@ const Game = {
       case 'repair': Screen.repair(); break;
       case 'blackhole': Screen.blackhole(); break;
       case 'armory': Screen.armory(this.armorySource || 'armory'); break;
+      case 'workshop': Screen.workshop(); break;
       case 'victory': Screen.victory(); break;
       case 'dead': Screen.dead(); break;
       default: Screen.hide();
@@ -603,10 +647,22 @@ const Game = {
       if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
     }
   },
-  hurtPlayer(dmg, cause = '', p = this.player) {
+  hurtPlayer(dmg, cause = '', p = this.player, sx = null, sy = null) {
     if (p.dead || p.invuln || this.state !== 'play') return;
-    dmg *= 1 - Math.min(0.6, this.passivesOf(p).armor + p.ship.armor);
-    p.hp -= dmg; p.iframe = CFG.IFRAME;
+    const M = this.mechOf(p), T = M.traits;
+    if (p.shield > 0) {  // 護盾產生器：擋下一次
+      p.shield--; p.shieldT = 0; p.iframe = 0.3;
+      burst(p.x, p.y, '#4cc9f0', 14, 200, 0.35, 2); floatText(p.x, p.y - 26, '護盾', '#4cc9f0');
+      return;
+    }
+    dmg *= (1 - Math.min(0.6, this.passivesOf(p).armor)) * M.taken;
+    if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
+    if (M.module === 'endshell' && !p.shellUsed && p.hp - dmg <= 0) {  // 終焉護殼：留 1 HP
+      p.shellUsed = true; dmg = Math.max(0, p.hp - 1); p.iframe = 2;
+      floatText(p.x, p.y - 30, '終焉護殼', '#2ee6a6', true);
+    }
+    p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.3 : 0)); p.calm = 0;
+    this.withLoadout(p.L, () => this.onPlayerHurt(p, sx, sy));
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
       p.lastHit = cause;
@@ -626,6 +682,104 @@ const Game = {
       this.shake(20);
       setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
     }
+  },
+
+  // ---------- 星門號：衝刺時在起點和落點開一對門（3 秒，同時只有一對） ----------
+  openPortal(p, ax, ay, bx, by) {
+    if (ax == null || Math.hypot(bx - ax, by - ay) < 40) return;
+    this.portals = this.portals.filter(q => q.owner !== p);
+    this.portals.push({ ax, ay, bx, by, t: 3, owner: p, color: p.ship.color });
+  },
+  updatePortals(dt) {
+    for (const q of this.portals) q.t -= dt;
+    this.portals = this.portals.filter(q => q.t > 0 && !q.owner.dead);
+  },
+  // 物體（子彈、敵彈、飛船）碰到門：從另一個門出來，放在門的前方（照移動方向）免得馬上又碰到；cd 秒內不能再走
+  portalHop(o, r, cdKey, cd, dirA = null) {
+    if (!this.portals.length || this.time < (o[cdKey] || 0)) return false;
+    for (const q of this.portals) {
+      for (const [x1, y1, x2, y2] of [[q.ax, q.ay, q.bx, q.by], [q.bx, q.by, q.ax, q.ay]]) {
+        if (dist2(o.x, o.y, x1, y1) > (22 + r) ** 2) continue;
+        const a = dirA != null ? dirA : Math.atan2(o.vy || 0, o.vx || 0), k = 22 + r + 2;
+        o.x = x2 + Math.cos(a) * k; o.y = y2 + Math.sin(a) * k;
+        o[cdKey] = this.time + cd;
+        burst(x2, y2, q.color, 6, 120, 0.25, 2);
+        return true;
+      }
+    }
+    return false;
+  },
+  portalShip(p) { if (this.portalHop(p, p.r, 'portalT', 0.6)) { p.px = p.x; p.py = p.y; } },
+
+  // ---------- 機體成長線（零件、背包模組）：房主執行，隊友的飛船用隊友的配裝 ----------
+  maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
+  mechOf(p) { return p.L ? p.L.mech : this.mech; },
+  // 被打到之後：反擊裝甲、反應裝甲（在打到的那個人的配裝下執行）
+  onPlayerHurt(p, sx, sy) {
+    const M = this.mech;
+    if (M.traits.counter) {  // 朝打你的方向回射 8 發
+      const a = sx != null ? Math.atan2(sy - p.y, sx - p.x) : p.aim, w = this.wp;
+      const list = Array.from({ length: 8 }, (_, i) => shot({ angle: (i / 7 - 0.5) * 0.8, speed: w.speed, damage: w.damage, radius: w.radius,
+        life: Math.max(0.5, w.life), color: '#b8d4ff', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
+      spawnShots(list, p.x, p.y, a, 0, null);
+    }
+    if (M.module === 'reactive') this.explode(p.x, p.y, M.heavy ? 180 : 120, 30, '#ff9f1c', null, { src: 'ship', cr: null, owner: this.shooter || null });
+  },
+  // 背包模組的持續效果（每幀，房主）：護盾回復、修復無人機、重力井、星噬核心
+  tickModules(p, dt) {
+    const M = this.mech, mod = M.module;
+    p.calm = (p.calm || 0) + dt;
+    if (mod === 'shield') {
+      const max = M.heavy ? 2 : 1;
+      if (p.shield < max) { p.shieldT = (p.shieldT || 0) + dt; if (p.shieldT >= (M.light ? 4 : 8)) { p.shield++; p.shieldT = 0; } }
+      else p.shieldT = 0;
+    } else p.shield = 0;
+    if (mod === 'drone' && p.calm >= (M.light ? 3 : 5)) p.hp = Math.min(p.maxHp, p.hp + (M.heavy ? 16 : 8) * dt);
+    if (mod === 'gravity' && (p.gravT -= dt) <= 0) {  // 每 6 秒把周圍敵人吸到飛船前方
+      p.gravT = 6;
+      const px = clamp(p.x + Math.cos(p.aim) * 150, 0, CFG.WORLD_W), py = clamp(p.y + Math.sin(p.aim) * 150, 0, CFG.WORLD_H), R = M.light ? 320 : 220;
+      for (const e of this.enemies) {
+        if (e.dead || e.t.boss || e.spawnT > 0 || dist2(e.x, e.y, p.x, p.y) > R * R) continue;
+        const d = Math.hypot(px - e.x, py - e.y) || 1;
+        e.vx += (px - e.x) / d * Math.min(900, d * 5); e.vy += (py - e.y) / d * Math.min(900, d * 5);
+      }
+      if (this.rings.length < 40) this.rings.push({ x: px, y: py, r: R, life: 0.5, max: 0.5, color: '#b388ff' });
+      if (Net.role === 'host') Net.fx(['r', Math.round(px), Math.round(py), R, '#b388ff']);
+    }
+    if (mod === 'swarmcore' && (p.coreT -= dt) <= 0) {  // 每 5 秒朝四周放出 12 發
+      p.coreT = 5;
+      const w = this.wp, list = Array.from({ length: 12 }, (_, i) => shot({ angle: i / 12 * TAU, speed: Math.min(700, w.speed), damage: w.damage,
+        radius: w.radius, life: 0.8, color: '#ff4d6d', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
+      spawnShots(list, p.x, p.y, 0, 0, null);
+    }
+  },
+  // 每場戰鬥開始時重置的機體狀態
+  resetMechCombat(p) {
+    p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = 5; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
+    p.portalCd = 0; p.pullV = null;
+  },
+  // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
+  addPart(id) {
+    if (!PARTS[id] || partsUsed(this.parts) >= this.partSlots) return false;
+    this.parts[id] = (this.parts[id] || 0) + 1;
+    this.recalc();
+    if (this.runStats) this.runStats.got.push(`${this.here()} 零件 ${PARTS[id].name}（${this.parts[id]} 層）`);
+    return true;
+  },
+  swapPart(from, to) {
+    if (!PARTS[from] || !PARTS[to] || from === to || !(this.parts[from] > 0) || this.credits < PART_SWAP_PRICE) return false;
+    this.pay(PART_SWAP_PRICE, () => {
+      this.parts[from]--; this.parts[to] = (this.parts[to] || 0) + 1;
+      this.recalc();
+      if (this.runStats) this.runStats.got.push(`${this.here()} 改裝：${PARTS[from].name} → ${PARTS[to].name}`);
+    });
+    return true;
+  },
+  setModule(id) {
+    const old = this.module;
+    this.module = MODULES[id] ? id : null;
+    this.recalc();
+    if (this.runStats && id) this.runStats.got.push(`${this.here()} 背包模組 ${MODULES[id].name}${old ? `（取代 ${MODULES[old].name}）` : ''}`);
   },
 
   // 雙人：一方被擊墜 → 等隊友；兩人都被擊墜 → 結束（房主判定）
@@ -673,6 +827,9 @@ const Game = {
       if (!this.player.dead) this.player.update(dt);
       this.updateWaves(dt);
       this.updateEnemies(dt);
+      for (const p of this.players()) this.withLoadout(p.L, () => this.tickModules(p, dt));
+      Objects.update(dt);
+      this.updatePortals(dt);
       this.updateBullets(dt);
       this.updateEnemyBullets(dt);
       this.updatePickups(dt);
@@ -691,7 +848,17 @@ const Game = {
       e.update(dt, this.nearestPlayer(e.x, e.y));  // 雙人：追最近的玩家
       if (e.spawnT <= 0) for (const p of this.players()) {
         const rr = e.r + p.r;
-        if (dist2(e.x, e.y, p.x, p.y) < rr * rr) this.hurtPlayer(e.t.dmg, e.t.name + '（撞擊）', p);
+        if (dist2(e.x, e.y, p.x, p.y) >= rr * rr) continue;
+        const M = this.mechOf(p);
+        if (M.traits.ram) {  // 衝撞（重裝甲 4 層）：撞到的敵人受傷並被撞飛，自己不受碰撞傷害
+          if (this.time < (e.ramT || 0)) continue;
+          e.ramT = this.time + 0.5;
+          const d = Math.hypot(e.x - p.x, e.y - p.y) || 1, k = 520 * (14 / e.r);
+          e.hurt(M.armor * 20, (e.x - p.x) / d * k, (e.y - p.y) / d * k, 'shock', { src: 'ship', cr: null, owner: p.L || null }, 3);
+          floatText(e.x, e.y - e.r, M.armor * 20, '#ffd166', true);
+          continue;
+        }
+        this.hurtPlayer(e.t.dmg, e.t.name + '（撞擊）', p, e.x, e.y);
       }
     }
     for (let i = 0; i < E.length; i++) {  // 簡單分離，避免怪物疊在一起
@@ -712,6 +879,8 @@ const Game = {
       if (b.dead) continue;
       b.update(dt);
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
+      if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle)) { b.px = b.x; b.py = b.y; }
+      if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
       const orbit = b.mode === 'orbit';
       for (const e of E) {
         if (e.dead) continue;
@@ -738,6 +907,7 @@ const Game = {
         }
         const kb = Math.min(220, dmg * 5) * (14 / e.r) * b.knock;
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', b.att, b.knock);
+        if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
         SFX.play('hit');
@@ -931,6 +1101,7 @@ const Game = {
       e.hurt(dmg, (e.x - x) * k, (e.y - y) * k, 'explode', att);
       floatText(e.x, e.y - e.r, Math.round(dmg), '#ffd166');
     }
+    Objects.explodeRocks(x, y, r, dmg, att);
     if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color });
     if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
     SFX.play('explode');
@@ -947,9 +1118,11 @@ const Game = {
     const ps = this.players();
     for (const b of this.eBullets) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      this.portalHop(b, b.r, 'portalT', 0.3);  // 敵彈也會穿門
+      if (Objects.eBulletHit(b)) continue;
       for (const p of ps) {
         const rr = b.r + p.r;
-        if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p); break; }
+        if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
         if (this.withLoadout(p.L, () => this.graze(p, b))) break;
       }
     }

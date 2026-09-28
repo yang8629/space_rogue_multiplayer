@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'inventory', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits'];
+const LOADOUT_KEYS = ['chain', 'inventory', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -338,7 +338,8 @@ const Net = {
     return {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state,
       you: { pick: this.matePick, weapon: L.weapon, chain: L.chain.map(back), inventory: L.inventory.map(back), sg,
-        hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L) },
+        hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
+        parts: L.parts, module: L.module, ps: L.partSlots, growth: L.growth },
       map: this.packMap(G.map), sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
       lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
@@ -360,6 +361,12 @@ const Net = {
       const lo = this.sanitizeLoadout(Y, '');
       if (lo.weapon && lo.weapon.id === G.weapon.id) G.weapon = lo.weapon;
       G.chain = lo.chain; G.inventory = lo.inventory;
+      const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與用量成長也以房主記住的為準
+      G.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(YP[id])), 0, 20)]));
+      G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
+      G.module = typeof Y.module === 'string' && MODULES[Y.module] ? Y.module : null;
+      G.growth = {};
+      if (Y.growth && typeof Y.growth === 'object') for (const k in Y.growth) if (CHIPS[k] && CHIPS[k].grow) G.growth[k] = Math.max(0, num(Y.growth[k]));
       G.refreshWeapon();
       G.credits = Math.max(0, num(Y.credits));
       this.resetRun();
@@ -564,9 +571,10 @@ const Net = {
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
       chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null), growth: {}, pullHits: 0,
+      parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module); });
     return L;
   },
   startHost() {
@@ -575,7 +583,7 @@ const Net = {
     Game.newRun('coop', me.ship, me.weapon, me.chip);
     const mate = Game.mate = new Player(SHIPS[mp.ship]);
     mate.L = this.makeLoadout(mp);
-    mate.hp = mate.maxHp = SHIPS[mp.ship].hp + mate.L.passives.maxHp;
+    mate.hp = mate.maxHp = Game.maxHpOf(SHIPS[mp.ship], mate.L.passives, mate.L.mech);
     mate.dashSeq = 0; mate.wantFire = false;
     this.resetRun();
     this.runId = Math.random().toString(36).slice(2, 10);  // 這一局的編號：斷線重連時用來判斷是不是同一局
@@ -672,7 +680,8 @@ const Net = {
     const G = Game, sg = {};
     for (const id of [...G.chain, ...G.inventory])
       if (id && CHIPS[id] && CHIPS[id].type === 'singularity') sg[id] = { name: CHIPS[id].name, cost: CHIPS[id].cost, combo: CHIPS[id].combo };
-    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sg, hp: G.player.hp, cr: G.credits });
+    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sg, hp: G.player.hp, cr: G.credits,
+      parts: G.parts, module: G.module, ps: G.partSlots });
   },
   // 檢查對方傳來的電路、倉庫、武器：不認得的晶片變空格；奇異點（動態產生的晶片）登記成 sgPrefix + 原本的 id
   sanitizeLoadout(m, sgPrefix) {
@@ -710,8 +719,13 @@ const Net = {
     L.credits = Math.max(0, num(m.cr, L.credits || 0));  // 隊友的錢包（重新連線時還原用）
     L.lootAtLo = this.lootTotal || 0;  // 之後撿到的掉落另外算
     L.chain = chain; L.inventory = inventory; L.wp = weaponParams(L.weapon);
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); });
-    mate.maxHp = mate.ship.hp + L.passives.maxHp;
+    // 機體：零件層數（0～20）、零件格、背包模組（不認得的模組當作沒有）
+    const P = m.parts && typeof m.parts === 'object' ? m.parts : {};
+    L.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(P[id])), 0, 20)]));
+    L.partSlots = clamp(Math.floor(num(m.ps, L.partSlots || 6)), 1, 20);
+    L.module = typeof m.module === 'string' && MODULES[m.module] ? m.module : null;
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module); });
+    mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
     if (!Game.inArena) mate.hp = clamp(num(m.hp, mate.hp), 1, mate.maxHp);  // 戰鬥中的血量以房主為準
     else mate.hp = Math.min(mate.hp, mate.maxHp);
   },
@@ -791,6 +805,7 @@ const Net = {
     m.y = clamp(m.y + m.vy * dt, m.r, CFG.WORLD_H - m.r);
     m.iframe -= dt; m.overdrive -= dt; m.dashT -= dt;
     Game.withLoadout(m.L, () => { m.tickDash(); m.tickFire(dt, m.wantFire); });  // 開火（蓄力、過熱）與衝刺相關的晶片
+    Objects.hostCheckMate(m);
   },
   hostSend(dt) {
     this.sendAcc += dt;
@@ -806,8 +821,11 @@ const Net = {
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
         P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT)],
       me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock))] : null,
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0] : null,
       gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
+      ob: Objects.pack(),         // 地圖物件
+      pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
+      pp: [...PART_IDS.map(id => G.parts[id] || 0), G.module || ''],  // 房主的零件與模組（隊友那邊畫房主的船用）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0]),
@@ -838,6 +856,7 @@ const Net = {
       }
       for (const b of G.bullets) { b.x += Math.cos(b.angle) * b.speed * dt; b.y += Math.sin(b.angle) * b.speed * dt; b.life -= dt; }
       for (const b of G.eBullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
+      Objects.clientStep(dt);
       for (const c of G.pickups) {  // 晶體：用和房主一樣的算法飛向最近的玩家；碰到自己就先藏起來（房主那邊才真的入帳）
         if (c.gone) continue;
         const m = G.mate, dP = P.dead ? Infinity : dist2(c.x, c.y, P.x, P.y), dM = m && !m.dead ? dist2(c.x, c.y, m.x, m.y) : Infinity;
@@ -881,7 +900,7 @@ const Net = {
       if (s.me[3] && !P.dead) { P.dead = true; Input.down = false; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); G.shake(20); }
       else if (!s.me[3] && P.dead && hp > 0) { P.dead = false; P.vx = P.vy = 0; P.iframe = CFG.REVIVE.iframe; }  // 被隊友救起來
       P.reviveT = num(s.me[5]);
-      P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]);
+      P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]); P.shield = num(s.me[9]);
     }
     if (s.gr && typeof s.gr === 'object') {  // 用量成長：房主算好的累積量，這邊只增不減，到了就升級
       let up = false;
@@ -902,6 +921,9 @@ const Net = {
         shape: a[6], splits: num(a[7]), payload: !!a[8], life: num(a[9], 1),
         sx: num(a[0]) - Math.cos(ang) * tl, sy: num(a[1]) - Math.sin(ang) * tl };
     });
+    G.objs = Objects.unpack(s.ob);
+    G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
+    if (m && Array.isArray(s.pp)) { m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(s.pp[i]), 0, 20)])); m.module = MODULES[s.pp[5]] ? s.pp[5] : null; }
     G.eBullets = arr(s.eb).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2]), vy: num(a[3]), r: num(a[4], 5) }));
     // 晶體：隊友這邊自己模擬飛行（見 clientUpdate），房主的位置只拿來慢慢修正，不直接跳過去
     this.mateMagnet = num(s.mg, CFG.MAGNET_RANGE);
