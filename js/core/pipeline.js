@@ -21,12 +21,12 @@ function compileChain(chain) {
     pw *= def.lvMul || 1;  // 晶片等級
     if (id === 'mirror') {
       const src = slotOps[i - 1];
-      if (src) ops.push(...src.map(o => ({ id: o.id, pw: Math.max(pw, o.pw), slot: i, n: o.n, key: 'mirror' })));
+      if (src) ops.push(...src.map(o => ({ id: o.id, pw: Math.max(pw, o.pw), lv: o.lv, slot: i, n: o.n, key: 'mirror' })));
       return;
     }
     if (def.type === 'link' || def.type === 'scrap') return;
     // key：傷害統計用的晶片（複合／奇異點的每個組成都算在那一格的晶片上）
-    const mine = (def.combo || [id]).map(cid => ({ id: cid, pw, slot: i, n: chipCount - 1, key: baseOf(id) }));
+    const mine = (def.combo || [id]).map(cid => ({ id: cid, pw, lv: levelOf(id), slot: i, n: chipCount - 1, key: baseOf(id) }));
     slotOps[i] = mine;
     ops.push(...mine);
   });
@@ -79,13 +79,19 @@ function analyzeChain(chain) {
   for (const id of chain) if (id) heat -= coolOf(id);  // 冷卻管線
   heat = Math.max(0, heat);
   const ops = compileChain(chain);
-  for (const o of ops) if (CHIPS[o.id].rate) rate *= Math.pow(CHIPS[o.id].rate, o.pw);
+  for (const o of ops) if (CHIPS[o.id].rate) rate *= Math.pow(CHIPS[o.id].rate, CHIPS[o.id].rateFixed ? 1 : o.pw);
   const wp = Game.wp;  // 武器決定基礎射擊間隔
-  const interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat) * rate * wp.rate);
+  // 電路上的特殊晶片：蓄力（改成按住蓄力）、超頻模組（會過熱）、衝刺射擊／擦彈（另外的發射時機）
+  const lvOf = b => { const o = ops.find(o => baseOf(o.id) === b); return o ? o.lv || 1 : 0; };
+  const charge = lvOf('charge'), oc = lvOf('overclock');
+  const chargeTime = charge ? (charge >= 2 ? 0.6 : 1) : 0;
+  const heatLimit = oc ? CHIPS.overclock.heatLimit[oc - 1] : 0;
+  let interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat) * rate * wp.rate);
+  if (charge) interval = Math.max(interval, chargeTime);  // 估算用：蓄滿一發的週期
   // 傷害統計：射速類晶片讓每秒傷害變成幾倍，記成 ln 倍率（見 splitDamage）
   const rateCr = {};
   for (const o of ops) if (CHIPS[o.id].rate && o.key)
-    rateCr[o.key] = (rateCr[o.key] || 0) - o.pw * Math.log(CHIPS[o.id].rate);
+    rateCr[o.key] = (rateCr[o.key] || 0) - (CHIPS[o.id].rateFixed ? 1 : o.pw) * Math.log(CHIPS[o.id].rate);
   const coolers = chain.filter(id => id && coolOf(id) > 0);
   if (coolers.length) {
     let raw = 0;
@@ -95,7 +101,9 @@ function analyzeChain(chain) {
     if (gain > 0) for (const id of coolers)
       rateCr[baseOf(id)] = (rateCr[baseOf(id)] || 0) + gain * coolOf(id) / total;
   }
+  const cc = Game.chargeC; Game.chargeC = 1;  // 估算時當作蓄滿
   const top = runOps(ops, 0);
+  Game.chargeC = cc;
   const sum = l => l.reduce((a, b) => a + b.damage, 0);
   // 估算命中效果的額外傷害：爆炸假設多打到 1.5 隻、碎片命中一半
   const effect = b => b.damage +
@@ -112,7 +120,18 @@ function analyzeChain(chain) {
     layers.push({ count: sub.length, dmg: sum(sub) });
     carrier = sub.find(s => s.payload);
   }
-  return { ops, heat, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr };
+  return { ops, heat, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
+    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), graze: lvOf('graze') };
+}
+
+// 衝刺射擊／擦彈：只執行到那個晶片為止，它把左邊產生的子彈換成自己的發射方式；沒執行到（例如在觸發器右邊）就不發射
+function runSpecial(ops, id) {
+  const i = ops.findIndex(o => baseOf(o.id) === id);
+  if (i < 0) return [];
+  Game.fireMode = id; Game.fireHit = false;
+  let list;
+  try { list = runOps(ops.slice(0, i + 1), 0); } finally { Game.fireMode = null; }
+  return Game.fireHit ? list : [];
 }
 
 function computePassives(inventory) {

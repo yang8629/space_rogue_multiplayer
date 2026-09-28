@@ -206,6 +206,14 @@ function drawEnemy(e) {
     ctx.strokeStyle = `rgba(255, 159, 28, ${0.4 + 0.4 * Math.sin(Game.time * 20)})`; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2, 0, TAU); ctx.stroke();
   }
+  const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
+  if (stuck) {  // 黏著：身上黏了幾發（粉紅小點繞一圈）
+    ctx.fillStyle = '#f78cff';
+    for (let i = 0; i < Math.min(stuck, 16); i++) {
+      const a = i / Math.min(stuck, 16) * TAU + Game.time * 2;
+      ctx.beginPath(); ctx.arc(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5, 0, TAU); ctx.fill();
+    }
+  }
   if (e.spawnT > 0) {
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (2.2 - sp), 0, TAU);
     ctx.strokeStyle = e.t.color; ctx.lineWidth = 1; ctx.stroke();
@@ -367,6 +375,15 @@ function drawHUD() {
   ctx.fillStyle = dr >= 1 ? '#bdf0ff' : '#35508a'; ctx.fillRect(21, 43, 108 * dr, 6);
   ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
   ctx.fillText(T ? '衝刺' : '衝刺 [Space/右鍵]', 136, 50);
+  // 蓄力／超頻模組過熱（隊友：數值由房主同步過來）
+  const heat = Net.role === 'client' ? p.heatR || 0 : s.heatLimit ? p.ohT / s.heatLimit : 0;
+  const bar = (x, label, k, col) => {
+    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(x, 42, 70, 8);
+    ctx.fillStyle = col; ctx.fillRect(x + 1, 43, 68 * clamp(k, 0, 1), 6);
+    ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = col; ctx.fillText(label, x + 74, 50);
+  };
+  if (s.charge) bar(T ? 180 : 250, p.chargeC >= 1 ? '蓄滿' : '蓄力', p.chargeC || 0, p.chargeC >= 1 ? '#ffffff' : '#ffb347');
+  if (s.heatLimit) bar(T ? 250 : 330, p.ohLock > 0 ? '過熱！' : '熱度', p.ohLock > 0 ? 1 : heat, p.ohLock > 0 ? '#ff4d6d' : '#ff9f1c');
   ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px Segoe UI';
   ctx.fillText(`◆ ${Game.credits}`, 20, 72);
   ctx.fillStyle = p.ship.color; ctx.font = 'bold 12px Microsoft JhengHei';

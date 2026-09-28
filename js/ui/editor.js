@@ -245,7 +245,8 @@ const Editor = {
     const price = !Game.freePlay() ? `　回收價 ◆${sellPrice(id)}` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
       `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span><br>${d.desc}` +
-      `${!d.lv && LV_INFO[id] ? '<br>' + lvLine(id, 1) : ''}${ps}`;
+      `${!d.lv && LV_INFO[id] ? '<br>' + lvLine(id, 1) : ''}${ps}` +
+      (CHIPS[baseOf(id)].grow ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '');
   },
 
   // 分析每格狀態：所在區段（第幾層命中）、是否生效
