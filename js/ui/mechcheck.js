@@ -252,17 +252,17 @@ const MechCheck = {
       const r = M.run(40);
       return { ok: r.created >= r.fired + 3, got: `開火 ${r.fired} 次，另外爆出 ${r.created - r.fired} 發` };
     }],
-    ['電路晶片', '蓄力', '停火 1 秒蓄滿，再按下的第一發 ×5，之後照常連射', M => {
+    ['電路晶片', '蓄力', '停火 2 秒蓄滿，再按下的第一發 ×5，之後照常連射', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', null, null]); M.targets([]);
       const p = Game.player; p.chargeC = 0;
       for (let f = 0; f < 60; f++) p.tickFire(1 / 60, true);
       const normal = Game.bullets.map(b => b.damage);
       Game.bullets = [];
-      for (let f = 0; f < 60; f++) p.tickFire(1 / 60, false);
+      for (let f = 0; f < 120; f++) p.tickFire(1 / 60, false);
       for (let f = 0; f < 30; f++) p.tickFire(1 / 60, true);
       const d = Game.bullets.map(b => b.damage);
       return { ok: normal.length > 2 && normal.every(x => near1(x, 10)) && near1(d[0], 50) && d.length > 1 && d.slice(1).every(x => near1(x, 10)),
-        got: `按住連射 ${normal.length} 發（${normal[0]}）；停火 1 秒後：${d.map(x => Math.round(x)).join('、')}` };
+        got: `按住連射 ${normal.length} 發（${normal[0]}）；停火 2 秒後：${d.map(x => Math.round(x)).join('、')}` };
     }],
     ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）；觸發射出的子彈不會進環繞的圈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', null, null]); M.targets(M.cone);
@@ -300,7 +300,7 @@ const MechCheck = {
       const r = M.run(30);
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', 'mirror', null]); M.targets([]);
       const p = Game.player; p.chargeC = 0;
-      for (let f = 0; f < 60; f++) p.tickFire(1 / 60, false);
+      for (let f = 0; f < 120; f++) p.tickFire(1 / 60, false);
       p.tickFire(1 / 60, true);
       const d = Game.bullets[0] ? Game.bullets[0].damage : 0;
       return { ok: r.created === r.fired * 2 && near1(d, 50), got: `開火 ${r.fired} 次，射出 ${r.created} 發；蓄力＋鏡像蓄滿一發 ${Math.round(d)}（應為 50，不是 250）` };
@@ -316,8 +316,12 @@ const MechCheck = {
       Game.acquire('split');
       return { ok: Game.chain[1] === leveledId('split', 2) && Game.stats.count === 4, got: `${CHIPS[Game.chain[1]].name}，每次 ${Game.stats.count} 發` };
     }],
-    ['構築系統', '用量成長', '迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」', M => {
+    ['構築系統', '用量成長', '迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」；拿到重複的不會合成，獎勵也不再出現', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      Game.acquire('boomerang');
+      const noMerge = Game.chain[1] === 'boomerang' && !Game.chipOffers().includes('boomerang') && Game.chipOffers().includes('amp');
+      if (!noMerge) return { ok: false, got: '改玩法的晶片拿到重複的還是會合成升級，或獎勵還會出現' };
+      Game.inventory = Game.inventory.map(() => null);
       Game.grow(null, 'boomerang', 180); const a = Game.chain[1];
       Game.grow(null, 'boomerang', 360); const b = Game.chain[1];
       return { ok: a === leveledId('boomerang', 2) && b === leveledId('boomerang', 3), got: `${CHIPS[a].name} → ${CHIPS[b].name}` };

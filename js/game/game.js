@@ -248,15 +248,20 @@ const Game = {
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : pickN(NORMAL_IDS, 3), bonus: kind === 'elite' ? 15 : 0,
+    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : pickN(this.chipOffers(), 3), bonus: kind === 'elite' ? 15 : 0,
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
     Screen.reward();
   },
+  // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
+  chipOffers() {
+    const own = new Set([...this.chain, ...this.inventory].filter(Boolean).map(baseOf));
+    return NORMAL_IDS.filter(id => !(CHIPS[id].grow && own.has(id)));
+  },
   // ---------- 取得晶片：已擁有同種晶片（且未滿級）就合成升級，否則放進倉庫 ----------
   mergeTarget(id) {
-    if (!canLevelUp(id)) return null;
+    if (!canLevelUp(id) || CHIPS[baseOf(id)].grow) return null;  // 改玩法的晶片只能靠用量成長升級，拿到重複的不會合成
     const b = baseOf(id);
     for (const arr of [this.chain, this.inventory])
       for (let i = 0; i < arr.length; i++)
@@ -335,7 +340,7 @@ const Game = {
 
   // ---------- 商店 ----------
   openShop() {
-    const items = pickN(NORMAL_IDS, 4).map(id => ({ id, price: chipPrice(id), sold: false }));
+    const items = pickN(this.chipOffers(), 4).map(id => ({ id, price: chipPrice(id), sold: false }));
     if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: chipPrice(id), sold: false }); }
     this.shop = { items, slotBought: false, healed: false };
     this.state = 'shop';
@@ -424,7 +429,13 @@ const Game = {
     // chips0：這一關開始時的整局晶片傷害（隊友的傷害由房主算，本關 = 整局 − chips0）
     this.sectorStats = { chips: {}, chips0: { ...this.runStats.chips }, t0: this.runStats.time, kills0: this.runStats.kills, dmg0: this.totalDmg() };
     if (this.isClient()) { this.bossId = Net.nextMap.bossId; this.map = Net.nextMap.map; }  // 隊友：用房主產生的星圖
-    else { this.bossId = this.bossFor(this.sector); this.map = genMap(); }
+    else {
+      this.bossId = this.bossFor(this.sector); this.map = genMap();
+      // 武器都已經升滿（雙人：兩人都升滿）就不再出現軍械台，改成戰鬥
+      const maxed = W => W && W.final != null;
+      if (maxed(this.weapon) && (!this.mate || maxed(this.mate.L && this.mate.L.weapon)))
+        for (const n of this.map.flat()) if (n.type === 'armory') n.type = 'combat';
+    }
     this.node = null; this.visited = [];
     if (this.mode === 'coop' && Net.role === 'host') Net.sendSector();
     const p = this.player;

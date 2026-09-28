@@ -87,7 +87,7 @@ function analyzeChain(chain) {
   // 電路上的特殊晶片：蓄力（改成按住蓄力）、超頻模組（會過熱）、衝刺射擊／擦彈（另外的發射時機）
   const lvOf = b => { const o = ops.find(o => baseOf(o.id) === b); return o ? o.lv || 1 : 0; };
   const charge = lvOf('charge'), oc = lvOf('overclock');
-  const chargeTime = charge ? (charge >= 2 ? 0.6 : 1) : 0;
+  const chargeTime = charge ? (charge >= 2 ? 1.5 : 2) : 0;
   const heatLimit = oc ? CHIPS.overclock.heatLimit[oc - 1] : 0;
   let interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat) * rate * wp.rate);
   // 傷害統計：射速類晶片讓每秒傷害變成幾倍，記成 ln 倍率（見 splitDamage）
