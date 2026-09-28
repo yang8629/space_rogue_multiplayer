@@ -891,10 +891,10 @@ const Game = {
   },
   updateBullets(dt) {
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
-    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbN 由存著的子彈每幀重新數
+    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbV（存著的「發」）由存著的子彈每幀重新數
       p.orbHeld = p.orbT || 0;
-      p.orbT = p.orbN && p.wantFire ? (p.orbT || 0) + dt : 0;
-      p.orbN = 0;
+      p.orbT = p.orbV && p.orbV.size && p.wantFire ? (p.orbT || 0) + dt : 0;
+      p.orbV = new Set();
     }
     for (const b of B) {
       if (b.dead) continue;
