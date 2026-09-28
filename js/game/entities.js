@@ -287,7 +287,7 @@ class Bullet {
       }
       return;
     }
-    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 0.6 : 1; this.speed = 0; return; }
+    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 2.5 : 1.5; this.speed = 0; return; }
     this.flyAge += dt;
     if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
     if (this.homing > 0 && this.mode !== 'return') {
