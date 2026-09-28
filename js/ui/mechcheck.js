@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（45 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（53 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -310,24 +310,102 @@ const MechCheck = {
       Game.updateEnemyBullets(1 / 60);
       return { ok: p.hp === hp, got: `HP ${hp} → ${p.hp}` };
     }],
-    ['飛船技能', '震盪衝撞（堡壘號）', '衝刺時周圍敵人受 20 傷害', M => {
-      M.setup('sandbox', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
-      const e = M.targets([[80, 0]])[0], hp = e.hp;
-      Game.player.onDash();
-      return { ok: near1(hp - e.hp, 20), got: `敵人受到 ${Math.round(hp - e.hp)} 傷害` };
+    ['機體', '堡壘號・厚甲', '開局重裝甲 2 層：HP 140，單次受傷最多扣 20%（28）', M => {
+      M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player; p.hp = p.maxHp; Game.state = 'play';
+      Game.hurtPlayer(100);
+      return { ok: p.maxHp === 140 && near1(p.maxHp - p.hp, 28), got: `最大 HP ${p.maxHp}，受 100 傷害實扣 ${(p.maxHp - p.hp).toFixed(1)}` };
     }],
-    ['飛船技能', '相位超載（幻影號）', '衝刺後開火傷害 ×1.5', M => {
-      M.setup('sandbox', 'wraith', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
-      Game.player.onDash(); Game.player.fire();
-      const d = Game.bullets[0] ? Game.bullets[0].damage : 0;
-      return { ok: near1(d, 15), got: `子彈傷害 ${d}（基礎 10）` };
+    ['機體', '衝撞（重裝甲 4 層）', '撞到敵人造成 80 傷害，自己不扣血', M => {
+      M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
+      Game.parts.armor = 4; Game.recalc();
+      const p = Game.player; p.hp = p.maxHp; Game.state = 'play';
+      const e = M.targets([[10, 0]], 'brute', true, 60)[0], hp = e.hp; e.t = { ...e.t, dmg: 25 };
+      Game.updateEnemies(1 / 60);
+      return { ok: near1(hp - e.hp, 80) && p.hp === p.maxHp, got: `敵人受到 ${Math.round(hp - e.hp)}，自己 HP ${p.hp}/${p.maxHp}` };
     }],
-    ['飛船技能', '戰地維修（先鋒號）', '戰鬥勝利後修復 10 HP', M => {
+    ['機體', '均衡', '5 種零件各 1 層：好處 +30%（HP 100 + (20+10)×1.3 − 10 = 129）', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
-      const p = Game.player; p.hp = 50;
-      Game.node = Game.map[0][0]; Game.combat = { sandbox: false };
-      Game.combatWon();
-      return { ok: p.hp === 60, got: `HP 50 → ${p.hp}` };
+      for (const id of PART_IDS) Game.addPart(id);
+      return { ok: Game.mech.traits.balance && Game.player.maxHp === 129, got: `均衡${Game.mech.traits.balance ? '開啟' : '沒開'}，最大 HP ${Game.player.maxHp}` };
+    }],
+    ['機體', '改裝廠：換零件', '付 ◆30 把 1 層重裝甲換成加速器', M => {
+      M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
+      Game.credits = 100;
+      Game.swapPart('armor', 'booster');
+      return { ok: Game.parts.armor === 1 && Game.parts.booster === 1 && Game.credits === 100 - PART_SWAP_PRICE,
+        got: `重裝甲 ${Game.parts.armor}、加速器 ${Game.parts.booster}，剩 ◆${Game.credits}` };
+    }],
+    ['機體', '背包模組：護盾產生器', '8 秒充好 1 層護盾，擋下一次傷害', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.setModule('shield');
+      const p = Game.player; p.hp = p.maxHp; Game.state = 'play'; Game.resetMechCombat(p);
+      for (let i = 0; i < 60 * 8.1; i++) Game.tickModules(p, 1 / 60);
+      const got1 = p.shield;
+      Game.hurtPlayer(30);
+      return { ok: got1 === 1 && p.hp === p.maxHp && p.shield === 0, got: `護盾 ${got1} 層，被打後 HP ${p.hp}/${p.maxHp}` };
+    }],
+    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來', M => {
+      M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player, x0 = p.x;
+      p.dashT = 0.1; p.vx = 900; p.tickDash();
+      p.x += 200; p.dashT = 0; p.tickDash();
+      const q = Game.portals[0];
+      if (!q) return { ok: false, got: '沒有開門' };
+      spawnShots([shot({ angle: 0, speed: 300, damage: 10, life: 2 })], q.bx - 30, q.by, 0, 0, null);
+      const b = Game.bullets[Game.bullets.length - 1];
+      let at = null;
+      for (let i = 0; i < 20 && at == null; i++) { Game.updateBullets(1 / 60); if (b.portalT) at = b.x; }
+      return { ok: at != null && Math.abs(at - q.ax) < 60, got: at == null ? `門在 ${Math.round(q.ax - x0)} 與 ${Math.round(q.bx - x0)}，子彈沒有穿門` : `子彈從 ${Math.round(q.bx - x0)} 的門進去，從 ${Math.round(at - x0)} 出來` };
+    }],
+    ['地圖物件', '行星：擋子彈、彈弓', '正對行星的子彈被擋住；從旁邊經過的電漿球被彎過去', M => {
+      M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player;
+      Game.objs = [{ type: 'planet', x: p.x + 300, y: p.y, r: 70 }];
+      spawnShots([shot({ angle: 0, speed: 300, damage: 10, life: 3 })], p.x, p.y, 0, 0, null);
+      spawnShots([shot({ angle: 0, speed: 300, damage: 10, life: 3 })], p.x, p.y + 130, 0, 0, null);
+      const [hit, pass] = Game.bullets;
+      for (let i = 0; i < 90; i++) Game.updateBullets(1 / 60);
+      return { ok: hit.dead && hit.x < p.x + 300 && Math.abs(pass.angle) > 0.05,
+        got: `正對的子彈${hit.dead ? '被擋下' : '穿過去了'}；旁邊的子彈轉了 ${(pass.angle * 180 / Math.PI).toFixed(1)}°` };
+    }],
+    ['地圖物件', '小行星：重武器才打得動', '10 傷害打不動；打爆時電路上的晶片成長 +8', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      const o = { type: 'rock', x: 0, y: 0, r: 20, hp: 80, maxHp: 80 };
+      Game.objs = [o];
+      Objects.hitRock(o, 10, null, 0, 0); const hp1 = o.hp;
+      Objects.hitRock(o, 100, null, 0, 0);
+      return { ok: hp1 === 80 && o.dead && Game.growth.boomerang === 8, got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，迴旋成長 ${Game.growth.boomerang || 0}` };
+    }],
+    ['地圖物件', '小行星：擋住視野', '小行星後面的敵人看不到；感測器 4 層看得到', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]])[0];
+      Game.objs = [{ type: 'rock', x: p.x + 150, y: p.y, r: 30, hp: 100, maxHp: 100 }];
+      const hidden = !!Objects.blocker(p, e);
+      Game.parts.sensor = 4; Game.recalc();
+      const seen = !Objects.blocker(p, e);
+      return { ok: hidden && seen, got: `一般${hidden ? '看不到' : '看得到'}，感測器 4 層${seen ? '看得到' : '看不到'}` };
+    }],
+    ['地圖物件', '黑洞', '把附近的敵人往中心拉，核心吞掉子彈', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[400, 150]], 'brute', true, 60)[0];
+      Game.objs = [{ type: 'hole', x: p.x + 400, y: p.y, r: 34, R: 280, tick: 0 }];
+      const d0 = Math.hypot(e.x - (p.x + 400), e.y - p.y);
+      for (let i = 0; i < 60; i++) Objects.update(1 / 60);
+      spawnShots([shot({ angle: 0, speed: 400, damage: 10, life: 3 })], p.x + 300, p.y, 0, 0, null);
+      const b = Game.bullets[0];
+      for (let i = 0; i < 30; i++) Game.updateBullets(1 / 60);
+      const d1 = Math.hypot(e.x - (p.x + 400), e.y - p.y);
+      return { ok: d1 < d0 - 20 && b.dead, got: `敵人離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}` };
+    }],
+    ['地圖物件', '彗星', '有預警線；打爆後碎片往前炸出 10 發', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      Game.objs = [];
+      Objects.spawnComet();
+      const c = Game.objs[0], warned = c.warn > 0;
+      c.warn = 0; c.lastAtt = { src: 'weapon', cr: null, owner: null };
+      Objects.breakComet(c);
+      return { ok: warned && Game.bullets.length === 10, got: `預警${warned ? '有' : '沒有'}，碎片 ${Game.bullets.length} 發` };
     }],
 
     ['敵人', '精英：衝鋒與環形彈幕', '會蓄力衝鋒，也會放 14 發環形彈', M => {

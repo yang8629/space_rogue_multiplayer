@@ -77,6 +77,7 @@ function drawWorld() {
   ctx.lineWidth = 3;
   ctx.strokeRect(0, 0, W, H);
 
+  Objects.draw();  // 行星、黑洞、小行星、彗星、星門
   ctx.fillStyle = '#ffd166';
   for (const p of Game.pickups) {
     if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;
@@ -116,7 +117,15 @@ function drawWorld() {
   ctx.globalCompositeOperation = 'source-over';
 
   // 敵人畫在我方子彈之上，才不會被彈幕蓋住
-  for (const e of Game.enemies) drawEnemy(e);
+  // 被小行星擋住的敵人看不到：只在那顆小行星邊緣畫一個淡淡的「？」
+  const viewer = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player;
+  for (const e of Game.enemies) {
+    const rock = e.t.boss ? null : Objects.blocker(viewer, e);
+    if (!rock) { drawEnemy(e); continue; }
+    const a = Math.atan2(e.y - rock.y, e.x - rock.x);
+    ctx.globalAlpha = 0.35; ctx.fillStyle = '#ff8f8f'; ctx.font = 'bold 14px Segoe UI'; ctx.textAlign = 'center';
+    ctx.fillText('?', rock.x + Math.cos(a) * (rock.r + 10), rock.y + Math.sin(a) * (rock.r + 10) + 5);
+  }
   ctx.globalAlpha = 1;
 
   // 敵方攻擊畫在我方子彈之上、不用 lighter 疊色：紅色實心＋深色外框，才不會被我方彈幕蓋掉
@@ -201,6 +210,10 @@ function drawEnemy(e) {
   if (e.slowT > 0) {  // 減速：藍色外圈
     ctx.strokeStyle = 'rgba(127, 212, 255, 0.8)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, TAU); ctx.stroke();
+  }
+  if (e.markT > 0) {  // 弱點標記：紅色準星
+    ctx.strokeStyle = 'rgba(255, 90, 90, 0.8)'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Game.time; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 8, a, a + 0.5); ctx.stroke(); }
   }
   if (e.burnT > 0) {  // 燃燒：橘色閃爍
     ctx.strokeStyle = `rgba(255, 159, 28, ${0.4 + 0.4 * Math.sin(Game.time * 20)})`; ctx.lineWidth = 2;
@@ -296,10 +309,29 @@ function drawPlayer(p, tag = '') {
   ctx.translate(p.x, p.y);
   ctx.rotate(p.aim);
   if (p.iframe > 0 && Math.floor(Game.time * 20) % 2) ctx.globalAlpha = 0.35;
-  const S = p.ship;
+  const S = p.ship, own = p === Game.player;
+  const parts = own ? Game.parts : p.L ? p.L.parts : p.parts || {}, mod = own ? Game.module : p.L ? p.L.module : p.module;
+  const n = id => (parts && parts[id]) || 0;
+  // 外觀跟著零件變：加速器 → 尾焰變長變藍、散熱片 → 兩側散熱鰭、感測器 → 船頭天線、輕裝甲 → 外圈薄殼、重裝甲 → 外框變粗
   if (p.moving) {
-    ctx.fillStyle = `rgba(255, 159, 28, ${rand(0.5, 0.9)})`;
-    ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-6 - rand(8, 14), 0); ctx.lineTo(-6, 4); ctx.fill();
+    const L = 8 + n('booster') * 4;
+    ctx.fillStyle = n('booster') ? `rgba(120, 200, 255, ${rand(0.5, 0.9)})` : `rgba(255, 159, 28, ${rand(0.5, 0.9)})`;
+    ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-6 - rand(L, L + 6), 0); ctx.lineTo(-6, 4); ctx.fill();
+  }
+  if (n('sink')) {
+    ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 2;
+    for (let i = 0; i < Math.min(4, n('sink')); i++) for (const sgn of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(-2 - i * 4, sgn * 9); ctx.lineTo(-5 - i * 4, sgn * 16); ctx.stroke();
+    }
+  }
+  if (n('sensor')) {
+    ctx.strokeStyle = '#9dff6b'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(22 + n('sensor') * 2, 0); ctx.stroke();
+    ctx.fillStyle = '#9dff6b'; ctx.beginPath(); ctx.arc(22 + n('sensor') * 2, 0, 2, 0, TAU); ctx.fill();
+  }
+  if (mod && MODULES[mod]) {  // 背包模組畫在船尾
+    ctx.fillStyle = '#070a16'; ctx.strokeStyle = '#cfe8ff'; ctx.lineWidth = 1.5;
+    ctx.fillRect(-19, -5, 8, 10); ctx.strokeRect(-19, -5, 8, 10);
   }
   // 深色實心船身＋船色粗外框＋白色內框：在後期的亮色彈幕裡形成暗色剪影
   const hot = p.dashT > 0 || p.overdrive > 0;
@@ -307,10 +339,19 @@ function drawPlayer(p, tag = '') {
   ctx.beginPath();
   S.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
   ctx.closePath();
-  ctx.strokeStyle = S.color; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.strokeStyle = S.color; ctx.lineWidth = 5 + n('armor') * 1.5; ctx.lineJoin = 'round'; ctx.stroke();
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#070a16'; ctx.fill();
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.rotate(-p.aim);
+  for (let i = 0; i < Math.min(3, n('larmor')); i++) {  // 輕裝甲：外圈薄殼
+    ctx.strokeStyle = 'rgba(159, 232, 255, 0.45)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, 0, 22 + i * 4, 0, TAU); ctx.stroke();
+  }
+  for (let i = 0; i < (p.shield || 0); i++) {  // 護盾產生器
+    ctx.strokeStyle = 'rgba(76, 201, 240, 0.85)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, 26 + i * 5, 0, TAU); ctx.stroke();
+  }
   ctx.restore();
 }
 
