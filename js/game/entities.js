@@ -242,11 +242,11 @@ class Bullet {
   }
   update(dt) {
     this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
-    if (this.mode === 'orbit') {  // 環繞：按住射擊時繞著飛船轉，越轉越快；放開射擊或衝刺時朝準星射出
+    if (this.mode === 'orbit') {  // 環繞：按住射擊時繞著飛船轉，越轉越快；放開射擊時朝準星射出
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
       const spin = o.orbSpin || 1;
-      if (!o.wantFire || o.dashT > 0) {  // 放出：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
+      if (!o.wantFire) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
         const k = spin - 1;
         this.mode = 'fly'; this.angle = o.aim; this.baseSpeed *= 1 + 0.25 * k; this.speed = this.baseSpeed; this.damage *= 1 + 0.5 * k;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;

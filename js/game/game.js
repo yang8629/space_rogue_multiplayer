@@ -889,7 +889,7 @@ const Game = {
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
     for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（2 秒內 1 → 3 倍）；orbN 由存著的子彈每幀重新數
       p.orbSpin = 1 + 2 * Math.min(1, (p.orbT || 0) / 2);
-      p.orbT = p.orbN && p.wantFire && !(p.dashT > 0) ? (p.orbT || 0) + dt : 0;
+      p.orbT = p.orbN && p.wantFire ? (p.orbT || 0) + dt : 0;
       p.orbN = 0;
     }
     for (const b of B) {
