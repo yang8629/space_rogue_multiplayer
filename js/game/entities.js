@@ -265,7 +265,7 @@ class Bullet {
         const d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
         // 速度倍率 = 傷害倍率：轉速 1～3 倍 → 放出時速度倍率 1～2（Lv1 最多 1.5）；有加速時從這裡繼續加上去（不相乘）
-        this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1);
+        this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1); this.orbShot = true;  // 放出後命中也算環繞成長
         this.speed = this.baseSpeed * this.accelMul;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人

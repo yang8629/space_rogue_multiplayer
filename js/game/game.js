@@ -913,7 +913,7 @@ const Game = {
         // 用量成長：照著晶片的玩法打中敵人
         const own = b.owner;
         if (b.mode === 'return') this.grow(own, 'boomerang');
-        if (orbit) this.grow(own, 'orbit');
+        if (orbit || b.orbShot) this.grow(own, 'orbit');
         if (b.accel && b.accelMul >= 1.5) this.grow(own, 'accel');
         if (b.full) this.grow(own, 'charge');
         if (b.rear) this.grow(own, 'rear');
