@@ -795,7 +795,7 @@ const Net = {
     p.x = clamp(num(m.x, p.x), p.r, CFG.WORLD_W - p.r); p.y = clamp(num(m.y, p.y), p.r, CFG.WORLD_H - p.r);
     p.vx = num(m.vx); p.vy = num(m.vy); p.aim = num(m.a, p.aim);
     p.moving = !!m.mv; p.dashT = clamp(num(m.dT), 0, CFG.DASH_TIME); p.wantFire = !!m.f;
-    p.aimD = num(m.ad, 300); p.autoMode = !!m.au;  // 準星距離（環繞放出）、手機自動攻擊（蓄滿就射）
+    p.aimD = num(m.ad, 300); p.autoMode = !!m.au;  // 準星距離（環繞放出）、手機自動攻擊（環繞轉滿就放）
     const ds = num(m.ds, p.dashSeq);
     if (ds > p.dashSeq) { p.dashSeq = ds; Game.withLoadout(p.L, () => p.onDash()); }  // 衝刺技能（震波、相位超載）由房主執行
   },

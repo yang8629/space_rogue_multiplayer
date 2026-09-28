@@ -22,7 +22,7 @@ class Player {
   }
   // 開火（房主執行；隊友的飛船要在 withLoadout(隊友配裝) 裡呼叫）：超頻模組過熱、蓄力、一般連射
   tickFire(dt, want) {
-    const S = Game.stats;
+    const S = Game.stats, held = want;
     this.fireCd -= dt;
     if (this.noFireT > 0) { this.noFireT -= dt; want = false; }  // 裂界推進器：衝刺後不能射擊
     if (S.heatLimit) {
@@ -32,20 +32,15 @@ class Player {
         if (this.ohT >= S.heatLimit) { this.ohLock = 1.5; this.ohT = 0; burst(this.x, this.y, '#ff9f1c', 14, 160, 0.5, 3); SFX.play('hurt'); }
       } else this.ohT = Math.max(0, this.ohT - dt * 1.5);
     } else { this.ohT = 0; this.ohLock = 0; }
-    if (S.charge) {  // 蓄力：按住累積，放開或蓄滿時射出
-      if (want) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
-      if (((this.chargeC >= 1 && this.autoMode) || (!want && this.chargeC > 0.08)) && this.fireCd <= 0) {  // 放開才射（蓄滿就停在蓄滿）
-        Game.chargeC = this.chargeC;
-        try { this.fire(); } finally { Game.chargeC = null; }
-        this.chargeC = 0; this.fireCd = 0.15;
-      } else if (!want && this.chargeC <= 0.08) this.chargeC = 0;
-      return;
-    }
-    this.chargeC = 0;
+    // 停火蓄力：沒按射擊時累積，再按下的第一發依蓄力程度變強（之後照常連射）
+    if (!S.charge) this.chargeC = 0;
+    else if (!held) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
     this.quenchT -= dt;
     if (want && this.fireCd <= 0) {
       const M = Game.mech, rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1);  // 散熱片、疾風、急冷
-      this.fire(); this.fireCd = S.interval / rate;
+      Game.chargeC = S.charge ? this.chargeC : null;
+      try { this.fire(); } finally { Game.chargeC = null; }
+      this.chargeC = 0; this.fireCd = S.interval / rate;
     }
   }
   // 衝刺相關的晶片（房主執行）：衝刺中的流星、衝刺結束時的衝刺射擊
@@ -112,7 +107,7 @@ class Player {
       }
       Input.down = !!a || (Input.autoFire && !!target);
       this.target = Input.down ? target : null;
-      this.autoMode = !a && Input.autoFire;  // 自動攻擊：沒有「放開」，蓄力蓄滿就射、環繞轉滿就放
+      this.autoMode = !a && Input.autoFire;  // 自動攻擊：沒有「放開」，環繞轉滿就放
       this.aimD = target ? Math.hypot(target.x - this.x, target.y - this.y) : 300;
     } else {
       const wx = Input.mx / ZOOM + Game.cam.x, wy = Input.my / ZOOM + Game.cam.y;
@@ -188,6 +183,7 @@ class Player {
   fire() {
     const list = runOps(Game.stats.ops, 0);
     if (!list.length) return;
+    if (list.every(s => s.orbit) && (this.orbN || 0) >= (list[0].orbit >= 2 ? 20 : 12)) return;  // 環繞存滿：按住也不再射
     const nx = this.x + Math.cos(this.aim) * 16, ny = this.y + Math.sin(this.aim) * 16;
     // 子彈從船身中心附近發出：怪物貼臉時也打得到（槍口火光仍在船頭）
     spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
@@ -226,7 +222,7 @@ class Bullet {
         o.orbN = (o.orbN || 0) + 1;
         this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = 60;
         this.life0 = this.life; this.life = 99;
-      } else this.orbit = 0;
+      } else this.dead = true;  // 存滿了：多的子彈不射出去
     }
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單

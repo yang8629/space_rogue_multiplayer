@@ -210,14 +210,17 @@ const MechCheck = {
       const r = M.run(40);
       return { ok: r.created >= r.fired + 3, got: `開火 ${r.fired} 次，另外爆出 ${r.created - r.fired} 發` };
     }],
-    ['電路晶片', '蓄力', '按住蓄滿不會自己射，放開射出一發 ×5 傷害', M => {
+    ['電路晶片', '蓄力', '停火 1 秒蓄滿，再按下的第一發 ×5，之後照常連射', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', null, null]); M.targets([]);
-      const p = Game.player; p.autoMode = false;
-      for (let f = 0; f < 120; f++) p.tickFire(1 / 60, true);
-      const early = Game.bullets.length;
-      p.tickFire(1 / 60, false);
-      const b = Game.bullets[0];
-      return { ok: early === 0 && b && near1(b.damage, 50), got: b ? `按住 2 秒射出 ${early} 發，放開一發 ${b.damage.toFixed(1)}` : '放開沒有射出' };
+      const p = Game.player; p.chargeC = 0;
+      for (let f = 0; f < 60; f++) p.tickFire(1 / 60, true);
+      const normal = Game.bullets.map(b => b.damage);
+      Game.bullets = [];
+      for (let f = 0; f < 60; f++) p.tickFire(1 / 60, false);
+      for (let f = 0; f < 30; f++) p.tickFire(1 / 60, true);
+      const d = Game.bullets.map(b => b.damage);
+      return { ok: normal.length > 2 && normal.every(x => near1(x, 10)) && near1(d[0], 50) && d.length > 1 && d.slice(1).every(x => near1(x, 10)),
+        got: `按住連射 ${normal.length} 發（${normal[0]}）；停火 1 秒後：${d.map(x => Math.round(x)).join('、')}` };
     }],
     ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', null, null]); M.targets(M.cone);

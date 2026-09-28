@@ -87,7 +87,6 @@ function analyzeChain(chain) {
   const chargeTime = charge ? (charge >= 2 ? 0.6 : 1) : 0;
   const heatLimit = oc ? CHIPS.overclock.heatLimit[oc - 1] : 0;
   let interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat) * rate * wp.rate);
-  if (charge) interval = Math.max(interval, chargeTime);  // 估算用：蓄滿一發的週期
   // 傷害統計：射速類晶片讓每秒傷害變成幾倍，記成 ln 倍率（見 splitDamage）
   const rateCr = {};
   for (const o of ops) if (CHIPS[o.id].rate && o.key)
@@ -101,7 +100,7 @@ function analyzeChain(chain) {
     if (gain > 0) for (const id of coolers)
       rateCr[baseOf(id)] = (rateCr[baseOf(id)] || 0) + gain * coolOf(id) / total;
   }
-  const cc = Game.chargeC; Game.chargeC = 1;  // 估算時當作蓄滿
+  const cc = Game.chargeC; Game.chargeC = 0;  // 估算持續輸出：停火蓄力只影響第一發，不算進去
   const top = runOps(ops, 0);
   Game.chargeC = cc;
   const sum = l => l.reduce((a, b) => a + b.damage, 0);
