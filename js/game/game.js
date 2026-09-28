@@ -921,7 +921,7 @@ const Game = {
         if (b.dashShot) this.grow(own, 'dashfire');
         if (b.infGen > 0) this.grow(own, 'infect');
         if (b.pull) this.pullAt(b);
-        let dmg = b.damage * (b.accel ? b.accelMul : 1);
+        let dmg = b.damage * (b.accelMul || 1);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸
           (e.stuck = e.stuck || []).push({ dmg, att: b.att, lv: b.sticky, owner: own });
           if (!(e.stickT > 0)) e.stickT = 2;
