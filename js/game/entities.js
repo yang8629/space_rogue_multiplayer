@@ -49,7 +49,6 @@ class Player {
     if (dashing && !this.wasDash) { this.dashHit.clear(); this.dx0 = this.x; this.dy0 = this.y; }
     if (dashing && Math.hypot(this.vx, this.vy) > 100) this.dashDir = Math.atan2(this.vy, this.vx);
     const mul = (S.dashfire >= 3 ? 5 : 0) + (Game.mech.traits.assault ? 4 : 0);  // 流星（衝刺射擊 Lv3）、突擊（加速器 4 層）
-    if (dashing && !this.wasDash) { this.dashSX = this.x; this.dashSY = this.y; }
     if (dashing && mul) {  // 衝刺穿過的敵人受到重擊
       for (const e of Game.enemies) {
         if (e.dead || e.spawnT > 0 || this.dashHit.has(e.id)) continue;
@@ -124,6 +123,7 @@ class Player {
         this.dashT = CFG.DASH_TIME * M.dashDist;
         this.dashCd = this.ship.dashCd * (1 - P.dashCd) * M.dashCd;
         this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
+        this.dashSX = this.x; this.dashSY = this.y;  // 衝刺起點（星門號的第一個門）：在瞬移之前記
         if (M.module === 'blink') {  // 相位跳躍：瞬移，留一小段「衝刺中」讓衝刺結束的效果照常觸發
           const x0 = this.x, y0 = this.y;
           this.x = clamp(this.x + Math.cos(this.dashA) * 150, this.r, CFG.WORLD_W - this.r);

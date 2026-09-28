@@ -365,23 +365,32 @@ const MechCheck = {
       Game.hurtPlayer(30);
       return { ok: got1 === 1 && p.hp === p.maxHp && p.shield === 0, got: `護盾 ${got1} 層，被打後 HP ${p.hp}/${p.maxHp}` };
     }],
-    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送，走出去再走回來才會', M => {
+    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送；衝刺途中穿門不會把門越拉越長；相位跳躍也會開門', M => {
       M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, x0 = p.x;
-      p.dashT = 0.1; p.vx = 900; p.tickDash();
+      p.dashSX = p.x; p.dashSY = p.y; p.dashT = 0.1; p.vx = 900; p.tickDash();
       p.x += 200; p.dashT = 0; p.tickDash();
       const q = Game.portals[0];
       if (!q) return { ok: false, got: '沒有開門' };
       Game.portalShip(p, p.x, p.y);  // 站在剛開的門上
       const stay = !p.portalT && p.x === q.bx;
-      Game.portalShip(p, p.x + 80, p.y);  // 從門外走進來
-      const hop = !!p.portalT && Math.abs(p.x - q.ax) < 60;
+      p.dashT = 0.1; p.dashSX = p.x + 5000;
+      Game.portalShip(p, p.x + 80, p.y);  // 衝刺中從門外衝進來
+      const hop = !!p.portalT && Math.abs(p.x - q.ax) < 60, reset = p.dashSX === p.x;
+      p.dashT = 0;
       if (!stay || !hop) return { ok: false, got: stay ? '從門外走進門沒有傳送' : '門一開在飛船身上就被傳走了' };
+      if (!reset) return { ok: false, got: '衝刺途中穿門後，衝刺起點沒有改成出口（門會越拉越長）' };
       spawnShots([shot({ angle: 0, speed: 300, damage: 10, life: 2 })], q.bx - 30, q.by, 0, 0, null);
       const b = Game.bullets[Game.bullets.length - 1];
       let at = null;
       for (let i = 0; i < 20 && at == null; i++) { Game.updateBullets(1 / 60); if (b.portalT) at = b.x; }
-      return { ok: at != null && Math.abs(at - q.ax) < 60, got: at == null ? `門在 ${Math.round(q.ax - x0)} 與 ${Math.round(q.bx - x0)}，子彈沒有穿門` : `子彈從 ${Math.round(q.bx - x0)} 的門進去，從 ${Math.round(at - x0)} 出來` };
+      if (at == null || Math.abs(at - q.ax) >= 60) return { ok: false, got: `門在 ${Math.round(q.ax - x0)} 與 ${Math.round(q.bx - x0)}，子彈沒有穿門` };
+      M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      Game.setModule('blink');
+      const p2 = Game.player; p2.dashCd = 0; Game.portals = []; Input.dash = true;
+      for (let f = 0; f < 20; f++) { p2.update(1 / 60); p2.tickDash(); }
+      const q2 = Game.portals[0], len = q2 ? Math.round(Math.hypot(q2.bx - q2.ax, q2.by - q2.ay)) : 0;
+      return { ok: len > 130 && len < 170, got: `子彈從 ${Math.round(q.bx - x0)} 的門進去，從 ${Math.round(at - x0)} 出來；相位跳躍${len ? `開出相距 ${len} 的門` : '沒開門'}` };
     }],
     ['地圖物件', '行星：擋子彈、彈弓', '正對行星的子彈被擋住；從旁邊經過的電漿球被彎過去', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
