@@ -150,12 +150,16 @@ const MechCheck = {
       const d = M.firstHit();
       return { ok: near1(d, 20), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
     }],
-    ['電路晶片', '迴旋', '子彈飛到盡頭後飛回飛船', M => {
+    ['電路晶片', '迴旋', '子彈飛到盡頭後飛回飛船；打中敵人時穿過去折返，回程再打牠一次', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); M.targets([]);
       M.run(1); const b = Game.bullets[0];
       let back = false;
       for (let f = 0; f < 120 && b && !b.dead; f++) { Game.updateBullets(1 / 60); if (b.mode === 'return') back = true; }
-      return { ok: back && b.dead, got: back ? `折返後回到飛船${b.dead ? '（消失）' : '（還在飛）'}` : '沒有折返' };
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); const e = M.targets([[150, 0]])[0];
+      M.run(1); const c = Game.bullets[0];
+      for (let f = 0; f < 120 && c && !c.dead; f++) Game.updateBullets(1 / 60);
+      const dmg = e.maxHp - e.hp;
+      return { ok: back && b.dead && near1(dmg, 14), got: (back ? `折返後回到飛船${b.dead ? '（消失）' : '（還在飛）'}` : '沒有折返') + `；單發打一隻：${Math.round(dmg)}（應為 7 + 7）` };
     }],
     ['電路晶片', '超頻模組', '同樣時間內開火次數變多', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
@@ -190,11 +194,14 @@ const MechCheck = {
       return { ok: stored === 12 && hit > 0 && orb.length > 0 && orb.length < 12 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 2),
         got: `存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
     }],
-    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）', M => {
+    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
       M.run(20); const n = e.stuck ? e.stuck.length : 0, hp = e.hp; Game.bullets = [];
       for (let f = 0; f < 150; f++) { Game.time += 1 / 60; Game.updateEnemies(1 / 60); }
-      return { ok: n > 0 && near1(hp - e.hp, n * 10 * 2), got: `黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${n * 20}）` };
+      M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', 'sticky', null, null]); const row = M.targets([[120, 0], [180, 0], [240, 0], [300, 0], [360, 0]]);
+      M.run(1); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+      const each = row.map(r => r.stuck ? r.stuck.length : 0).join('');
+      return { ok: n > 0 && near1(hp - e.hp, n * 10 * 2) && each === '11110', got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${n * 20}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}` };
     }],
     ['電路晶片', '感染', '被擊殺的敵人爆出 3 發子彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'infect', null, null]); M.targets([[120, 0]], 'swarmer', true, 0.1);

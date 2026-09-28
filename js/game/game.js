@@ -898,6 +898,7 @@ const Game = {
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
+      if (b.overT > 0) continue;  // 迴旋：正在穿過打中的敵人，準備折返
       const orbit = b.mode === 'orbit';  // 環繞：繞圈時打到敵人照穿甲規則消失（存著的子彈擋一次就少一發）
       for (const e of E) {
         if (e.dead) continue;
@@ -937,10 +938,10 @@ const Game = {
         if (b.arcs) this.arc(e, b);
         if (b.payload && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner });
-        if (b.sticky) b.dead = true;  // 黏上去了
+        if (b.sticky && !b.infPierce && !(b.pierce > 0)) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
-        else if (b.boom && b.mode === 'fly') b.startReturn(e.id);  // 迴旋：去程穿甲用完就折返
+        else if (b.boom && b.mode === 'fly') b.overT = (e.r * 2 + 30) / b.speed;  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
         else b.dead = true;
         break;
       }

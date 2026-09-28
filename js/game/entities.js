@@ -232,11 +232,10 @@ class Bullet {
     Game.bullets.push(c);
     return c;
   }
-  // 迴旋：打中敵人（穿甲用完）或飛到盡頭後折返，追著飛船飛回來；keepId：剛打到的那隻，回程不再打它
-  startReturn(keepId = null) {
+  // 迴旋：打中敵人（穿甲用完，先穿過去再折返，回程會再打牠一次）或飛到盡頭後折返，追著飛船飛回來
+  startReturn() {
     const o = this.ownerP;
-    this.mode = 'return'; this.life = 1; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed;
-    if (keepId != null) this.hitSet.add(keepId);
+    this.mode = 'return'; this.life = 1; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed; this.overT = 0;
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
     if (this.boom >= 2) this.damage *= 1.5;
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
@@ -272,6 +271,7 @@ class Bullet {
     }
     if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 0.6 : 1; this.speed = 0; return; }
     this.flyAge += dt;
+    if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
     if (this.homing > 0 && this.mode !== 'return') {
       const t = nearestEnemy(this.x, this.y, 450, this.hitSet);
       if (t) {
