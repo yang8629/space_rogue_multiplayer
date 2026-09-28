@@ -243,6 +243,8 @@ class Bullet {
     const o = this.ownerP;
     this.mode = 'return'; this.life = 4; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed * this.accelMul; this.overT = 0;  // 回程一直追到飛船為止（最多 4 秒）
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
+    // 折返的那一刻剛好重疊到的敵人不算（不然折返點剛好停在下一隻身上會多打一下）；剛剛穿過的那一隻回程照樣再打
+    for (const e of Game.enemies) if (e.id !== this.overId && dist2(this.x, this.y, e.x, e.y) < (e.r + this.r) ** 2) this.hitSet.add(e.id);
     if (this.boom >= 2) this.damage *= 1.5;
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
   }

@@ -988,7 +988,7 @@ const Game = {
         if (b.sticky && !b.infPierce && !(b.pierce > 0)) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
-        else if (b.boom && b.mode === 'fly') b.overT = (e.r * 2 + 30) / b.speed;  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
+        else if (b.boom && b.mode === 'fly') { b.overT = (e.r * 2 + 30) / b.speed; b.overId = e.id; }  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
         else b.dead = true;
         break;
       }
