@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（55 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（56 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -226,6 +226,16 @@ const MechCheck = {
       for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
       const m1 = b.accelMul;
       return { ok: m0 >= 0.5 && m0 < 0.6 && near1(m1 - m0, 1.5), got: `出手 ${m0.toFixed(2)} 倍，0.5 秒後 ${m1.toFixed(2)} 倍` };
+    }],
+    ['電路晶片', '疾射', '出手 ×2 速度與傷害，每飛 200 −1（最低 0.5）；跟加速一起裝時加在同一個倍率上', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'quick', null, null]); M.targets([]);
+      M.run(1); const b = Game.bullets[0], m0 = b.accelMul;
+      for (let f = 0; f < 60 && (b.flyDist || 0) < 200; f++) Game.updateBullets(1 / 60);
+      const m1 = b.accelMul, d1 = b.flyDist;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'quick', 'accel', null]); M.targets([]);
+      M.run(1); const c = Game.bullets[0], c0 = c.accelMul;
+      return { ok: m0 > 1.9 && m0 <= 2 && Math.abs(m1 - (2 - d1 / 200)) < 0.12 && c0 > 1.5 && c0 < 1.6,
+        got: `出手 ${m0.toFixed(2)} 倍，飛了 ${Math.round(d1)} 後 ${m1.toFixed(2)} 倍；疾射＋加速出手 ${c0.toFixed(2)} 倍（0.5 + 1，不相乘）` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];

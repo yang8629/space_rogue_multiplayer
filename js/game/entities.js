@@ -200,6 +200,7 @@ class Player {
 // 環繞：Lv1 最多存 10 發、3 秒轉到 2 倍；Lv2 起 20 發、2 秒轉到 3 倍。「一發」= 一次開火（散彈一次的 5 顆算同一發）
 const orbCap = lv => lv >= 2 ? 20 : 10;
 let volleySeq = 0, curVolley = 0;  // 每次 spawnShots 算一發（環繞用來數存了幾發）
+const quickBonus = lv => !lv ? 0 : lv >= 2 ? 1.5 : 1;  // 疾射：出手時速度倍率 +1（Lv2 +1.5）
 const orbSpinOf = (lv, held) => lv >= 2 ? 1 + 2 * Math.min(1, held / 2) : 1 + Math.min(1, held / 3);
 const orbSpinMax = lv => lv >= 2 ? 3 : 2;
 
@@ -222,11 +223,14 @@ class Bullet {
     this.dead = false;
     // V2 改玩法的晶片
     this.baseSpeed = s.speed;
-    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.prism = s.prism;
+    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時傷害 × 這個倍率，最多 4）
-    if (this.accel) { this.accel0 = this.accelMul = 0.5; this.speed = this.baseSpeed * 0.5; }  // 加速：出手只有 0.5 倍速（貼臉打很虧），越飛越快
+    if (this.accel || this.quick) {  // 速度倍率的起點：加速從 0.5 倍開始；疾射 +1（Lv2 +1.5）
+      this.accel0 = this.accelMul = (this.accel ? 0.5 : 1) + quickBonus(this.quick); this.flyDist = 0;
+      this.speed = this.baseSpeed * this.accelMul;
+    }
     if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
     if (this.orbit && depth > 0) this.orbit = 0;  // 觸發射出的子彈不進圈（不會瞬移回飛船）
     this.vid = curVolley;
@@ -265,7 +269,7 @@ class Bullet {
         const d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
         // 速度倍率 = 傷害倍率：轉速 1～3 倍 → 放出時速度倍率 1～2（Lv1 最多 1.5）；有加速時從這裡繼續加上去（不相乘）
-        this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1); this.orbShot = true;  // 放出後命中也算環繞成長
+        this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1) + quickBonus(this.quick); this.orbShot = true; this.flyDist = 0;  // 放出後命中也算環繞成長
         this.speed = this.baseSpeed * this.accelMul;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 5);  // 星環：射出的子彈追蹤敵人
@@ -283,7 +287,7 @@ class Bullet {
       if (this.waitT <= 0) {
         const t = nearestEnemy(this.x, this.y, this.stasis >= 2 ? 220 : 150, null);
         if (t) this.angle = Math.atan2(t.y - this.y, t.x - this.x);
-        this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1;
+        this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1; this.flyDist = 0;
       }
       return;
     }
@@ -297,7 +301,11 @@ class Bullet {
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }
-    if (this.accel) { this.accelMul = Math.min(4, (this.accel0 || 1) + (this.accel >= 2 ? 4.5 : 3) * this.flyAge); this.speed = this.baseSpeed * this.accelMul; }
+    if (this.accel || this.quick) {  // 速度倍率（= 傷害倍率）：加速每秒往上加、疾射照飛行距離往下減，全部加在同一個倍率上；0.5～4
+      const up = this.accel ? (this.accel >= 2 ? 4.5 : 3) * this.flyAge : 0;
+      const down = this.quick ? (this.flyDist || 0) / (this.quick >= 2 ? 250 : 200) : 0;
+      this.accelMul = clamp((this.accel0 || 1) + up - down, 0.5, 4); this.speed = this.baseSpeed * this.accelMul;
+    }
     if (this.mode === 'return') {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
@@ -306,6 +314,7 @@ class Bullet {
     }
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
+    if (this.quick) this.flyDist = (this.flyDist || 0) + this.speed * dt;  // 疾射：照飛行距離減速
     this.life -= dt;
     const W = CFG.WORLD_W, H = CFG.WORLD_H, outX = this.x < 0 || this.x > W, outY = this.y < 0 || this.y > H;
     if (outX || outY) {
