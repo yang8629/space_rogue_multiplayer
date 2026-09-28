@@ -191,6 +191,8 @@ const Net = {
     this.role = 'host';
     const code = this.code = Array.from({ length: 4 }, () => pick([...NET_CODE_CHARS])).join('');
     this.setMsg('正在建立房間…');
+    const btns = document.getElementById('netBtns');
+    if (btns) btns.innerHTML = '';  // 開了房間就不再顯示「開房間／加入房間」（離開用下方的按鈕；開房失敗會回到大廳重新顯示）
     const peer = this.peer = new Peer(NET_PREFIX + code);
     peer.on('open', () => this.setMsg(`房號 <b style="font-size:34px;letter-spacing:.2em;color:#ffd166">${code}</b><br>把房號告訴隊友，等待加入中…`));
     peer.on('connection', conn => {
