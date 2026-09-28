@@ -17,7 +17,7 @@ class Player {
     this.dashT = 0; this.dashCd = 0; this.dashA = 0; this.overdrive = 0; this.target = null;
     this.reviveT = 0;  // 雙人：倒下後隊友救援的進度（秒）
     // V2 晶片：蓄力進度（0～1）、超頻模組的連續射擊秒數與過熱停火秒數、衝刺狀態（衝刺射擊／流星用）
-    this.chargeC = 0; this.ohT = 0; this.ohLock = 0;
+    this.chargeC = 0; this.ohT = 0; this.ohLock = 0; this.blinkT = 0;
     this.wasDash = false; this.dashDir = 0; this.dashHit = new Set(); this.dx0 = this.x; this.dy0 = this.y;
   }
   // 開火（房主執行；隊友的飛船要在 withLoadout(隊友配裝) 裡呼叫）：超頻模組過熱、蓄力、一般連射
@@ -223,7 +223,7 @@ class Bullet {
     this.dead = false;
     // V2 改玩法的晶片
     this.baseSpeed = s.speed;
-    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.intercept = s.intercept; this.prism = s.prism;
+    this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.intercept = s.intercept; this.parry = s.parry; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時傷害 × 這個倍率，最多 4）
@@ -391,7 +391,7 @@ const ENEMY_TYPES = {
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
-  boss:    { name: '星噬母艦', hp: 2600, speed: 45, radius: 50, dmg: 35, color: '#ff4d6d', credits: 40, shape: 8, boss: true,
+  boss:    { name: '星噬母艦', hp: 2000, speed: 45, radius: 50, dmg: 35, color: '#ff4d6d', credits: 40, shape: 8, boss: true,
     knockResist: 1.5, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring'],
     desc: '螺旋彈幕、扇形齊射、召喚蟲群、環形彈。' },
   boss2:   { name: '裂界獵艦', hp: 2800, speed: 80, radius: 42, dmg: 35, color: '#b388ff', credits: 40, shape: 3, boss: true,
@@ -552,8 +552,8 @@ class Enemy {
   //   星噬母艦：螺旋彈幕 / 扇形齊射 / 召喚蟲群 / 環形彈
   //   裂界獵艦：預警衝鋒（兩側灑彈）/ 旋轉十字彈流 / 三連狙擊 / 部署噴吐者
   //   終焉核心：缺口環形波 / 雙向螺旋 / 慢速彈牆 / 刺殼護衛
-  shootAt(a, spd, r = 6, dmg = 14) {
-    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg, life: 10, from: this.t.name });  // 王的子彈存在 10 秒
+  shootAt(a, spd, r = 6, dmg = 14) {  // 旗艦的子彈傷害 ×0.85（整局模擬：第一星區旗艦是斷層）
+    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.t.boss ? 0.85 : 1), life: 10, from: this.t.name });  // 王的子彈存在 10 秒
   }
   ring(n, spd, offset, gap = 0) {  // gap：連續空出幾發，讓玩家有縫可鑽
     const g0 = gap ? randInt(0, n - 1) : -1;

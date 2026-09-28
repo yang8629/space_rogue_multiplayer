@@ -78,8 +78,8 @@ const WEAPONS = {
           { name: '感電', desc: '命中的敵人減速 40%。', apply: p => { p.slow = 0.4; } }] },
     } },
   // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段
-  blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 3 段弧形能量刃，無限穿透，只打得到身邊。',
-    base: { interval: 0.3, count: 3, spread: 0.7, damage: 10, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },
+  blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 3 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
+    base: { interval: 0.3, count: 3, spread: 0.7, damage: 10, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
     paths: {
       A: { name: '巨刃', desc: '刃片 5 段、範圍更大。', apply: p => { p.count = 5; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
@@ -112,7 +112,7 @@ function weaponEmit(p, pw) {
     const a = (p.count > 1 ? -p.spread / 2 + p.spread * k / (p.count - 1) : 0) + (p.jitter ? rand(-p.jitter, p.jitter) : 0);
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: p.color, shape: p.shape,
-      explode: p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal }));
+      explode: p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry }));
   }
   return out;
 }
