@@ -19,10 +19,10 @@ const OBJ = {
 const Objects = {
   dt: 1 / 60,
 
-  // ---------- 產生：一般戰鬥隨機 0～3 個；精英、旗艦固定配置；沙盒／靶場沒有 ----------
+  // ---------- 產生：每場戰鬥一半機率完全沒有；有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）、旗艦戰兩顆對稱行星；沙盒／靶場沒有 ----------
   gen(C, node) {
-    if (!C || C.sandbox) return [];
-    const kinds = C.boss ? ['planet', 'planet'] : C.elites ? ['planet', 'comet'] : pickN(['planet', 'hole', 'comet', 'belt'], randInt(0, 3));
+    if (!C || C.sandbox || Math.random() < 0.5) return [];
+    const kinds = C.boss ? ['planet', 'planet'] : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
     const out = [], cx = CFG.WORLD_W / 2, cy = CFG.WORLD_H / 2;
     const spot = (minD, r) => {  // 離開場地中央（玩家出生點）和其他物件
       for (let i = 0; i < 60; i++) {
@@ -77,11 +77,11 @@ const Objects = {
         }
       }
     }
-    // 敵人不會穿過行星、小行星（撞得很快時多受傷：被擊退撞上去）
+    // 敵人不會穿過行星（撞得很快時多受傷：被擊退撞上去）；小行星帶不擋敵人的移動（只擋子彈和視野），不然敵人會卡在帶子後面
     for (const e of G.enemies) {
       if (e.dead) continue;
       for (const o of G.objs) {
-        if (o.type !== 'planet' && o.type !== 'rock') continue;
+        if (o.type !== 'planet') continue;
         if (!this.pushOut(e, o, e.r)) continue;
         if (o.type === 'planet' && Math.hypot(e.vx, e.vy) > 300 && G.time > (e.slamT || 0)) {
           e.slamT = G.time + 0.5;
@@ -313,12 +313,15 @@ const Objects = {
   clientStep(dt) { for (const o of Game.objs) if (o.type === 'comet' && !(o.warn > 0)) { o.x += o.vx * dt; o.y += o.vy * dt; } },
 
   // ---------- 畫面 ----------
-  // 視野陰影：從飛船看出去，每顆小行星後面拖出一塊灰霧（死角；背景太暗，用變暗看不出來）；感測器 4 層看得穿，只留很淡的輪廓
+  // 視野陰影：從飛船看出去，每顆小行星後面拖出一塊灰霧（死角；背景太暗，用變暗看不出來）；感測器 4 層看得穿，只留很淡的霧
+  // 所有死角合成一個路徑一次填滿（重疊處不會疊得更深），邊緣模糊，不畫硬邊
   drawShadows(viewer) {
     if (!viewer) return;
     const seeAll = Game.mech.traits.mark, FAR = 3000;
-    ctx.fillStyle = seeAll ? 'rgba(150, 160, 190, 0.04)' : 'rgba(150, 160, 190, 0.16)';
-    ctx.strokeStyle = seeAll ? 'rgba(170, 180, 210, 0.08)' : 'rgba(170, 180, 210, 0.3)'; ctx.lineWidth = 1;
+    ctx.save();
+    ctx.fillStyle = seeAll ? 'rgba(150, 160, 190, 0.05)' : 'rgba(150, 160, 190, 0.17)';
+    ctx.filter = `blur(${Math.round(14 * ZOOM)}px)`;
+    ctx.beginPath();
     for (const o of Game.objs) {
       if (o.type !== 'rock') continue;
       const dx = o.x - viewer.x, dy = o.y - viewer.y, d = Math.hypot(dx, dy);
@@ -327,9 +330,10 @@ const Objects = {
       const t = [a + Math.PI + w, a + Math.PI - w].map(q => [o.x + Math.cos(q) * o.r * 0.9, o.y + Math.sin(q) * o.r * 0.9]);
       const far = ([x, y]) => { const ux = x - viewer.x, uy = y - viewer.y, l = Math.hypot(ux, uy) || 1; return [x + ux / l * FAR, y + uy / l * FAR]; };
       const [p1, p2] = t, q1 = far(p1), q2 = far(p2);
-      ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(q1[0], q1[1]); ctx.moveTo(p2[0], p2[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke();
+      ctx.moveTo(p1[0], p1[1]); ctx.lineTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath();
     }
+    ctx.fill('nonzero');
+    ctx.restore();
   },
   draw(viewer) {
     const G = Game;
