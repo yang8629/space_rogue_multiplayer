@@ -92,7 +92,7 @@ const Screen = {
       case 'records': Screen.records(); break;
       case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
       case 'clearrecok':
-        try { localStorage.removeItem('runRecords'); } catch (e) {}
+        try { localStorage.removeItem(RECORDS_KEY); } catch (e) {}
         Screen.records('已刪除所有紀錄。');
         break;
       case 'copyrec': Screen.copyRecords(); break;
@@ -451,6 +451,7 @@ const Screen = {
           return list2('隊友的各晶片傷害', r.coop.mateChipDmg.map(([n, v]) => `${n}　${fmt(v)}（${t ? Math.round(v / t * 100) : 0}%）`));
         })() : '',
         r.taken ? list2(`受到的傷害（被打 ${r.hits} 下、衝刺 ${r.dashes} 次）`, Object.entries(r.taken).map(([k, v]) => `${k}　${fmt(v)}`)) : '',
+        r.mech ? `<div><b>機體</b><br>零件：${Object.entries(r.mech.parts).map(([k, v]) => `${k} ${v}`).join('、') || '無'}（${r.mech.slots} 格）${r.mech.module ? `　·　模組：${r.mech.module}` : ''}${r.mech.traits.length ? `<br>特性：${r.mech.traits.join('、')}` : ''}${Object.keys(r.mech.growth).length ? `<br>晶片成長：${Object.entries(r.mech.growth).map(([k, v]) => `${k} ${v}`).join('、')}` : ''}</div>` : '',
         list2('各關摘要', r.sectors), list2('走過的節點', r.path), list2('武器升級', r.upgrades), list2('取得的晶片', r.got),
       ].join('');
       return `<div class="rec"><div class="between"><span><b style="color:${color}">${label}</b>　${r.where || `${r.endless ? '無盡 · ' : ''}星區 ${r.sector} 第 ${r.layer} 層`}　·　${when}</span>

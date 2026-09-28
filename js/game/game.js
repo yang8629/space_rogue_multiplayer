@@ -371,6 +371,7 @@ const Game = {
   swapShip(id) {  // 靶場：換機體（保留位置、電路與倉庫）
     const old = this.player;
     this.shipId = id;
+    this.parts = { ...SHIPS[id].parts }; this.partSlots = SHIPS[id].partSlots;
     this.player = new Player(SHIPS[id]);
     if (old) { this.player.x = old.x; this.player.y = old.y; }
     this.recalc();
@@ -446,7 +447,7 @@ const Game = {
 
   // ---------- 遊玩紀錄（存在瀏覽器；標題畫面「遊玩紀錄」可以查看、複製） ----------
   loadRecords() {
-    try { const r = JSON.parse(localStorage.getItem('runRecords') || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
+    try { const r = JSON.parse(localStorage.getItem(RECORDS_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
   },
   saveRecord(result) {
     const R = this.runStats;
@@ -454,7 +455,7 @@ const Game = {
     R.recorded = true;
     const rec = this.mode === 'coop' ? Net.buildRecord(result) : this.buildRecord(result);
     const list = [rec, ...this.loadRecords()].slice(0, CFG.MAX_RECORDS);
-    try { localStorage.setItem('runRecords', JSON.stringify(list)); } catch (e) {}
+    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(list)); } catch (e) {}
   },
   // 目前這一局的紀錄（結算畫面的「複製這局紀錄」也用它，打完 Boss 還沒結束的局也能複製）
   buildRecord(result) {
@@ -484,6 +485,7 @@ const Game = {
         perFire: s.count, fireDmg: Math.round(s.dmg), estDps: Math.round(s.dpsEst), triggerLayers: s.layers.length, knock: this.wp.knock,
         passives: Object.entries(P).filter(([, v]) => v > 0).map(([k, v]) => PASSIVE_LABEL[k](+v.toFixed(2))) },
       credits: this.credits, hp: Math.max(0, Math.ceil(this.player.hp)), maxHp: this.player.maxHp,
+      mech: this.mechRecord(),
       // 生存：受到的傷害依來源、被打中次數、衝刺次數
       taken: Object.fromEntries(Object.entries(R.taken).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v)])),
       hits: R.hits, dashes: R.dashes,
@@ -493,6 +495,14 @@ const Game = {
       upgrades: R.upgrades.slice(), got: R.got.slice(),
     };
     return rec;
+  },
+  // 機體（遊玩紀錄用）：零件層數、零件格、背包模組、開啟的特性、各晶片的用量成長
+  mechRecord() {
+    const T = this.mech.traits;
+    return { parts: Object.fromEntries(PART_IDS.filter(id => this.parts[id]).map(id => [PARTS[id].name, this.parts[id]])), slots: this.partSlots,
+      module: this.module ? MODULES[this.module].name : null,
+      traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
+      growth: Object.fromEntries(Object.entries(this.growth).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, Math.round(v)])) };
   },
   findScrap() {
     for (const arr of [this.chain, this.inventory]) {

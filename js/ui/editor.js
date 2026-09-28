@@ -41,8 +41,13 @@ const Editor = {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
       SFX.play('click');
-      const [kind, id] = b.dataset.pick.split(':');
+      const [kind, id, v] = b.dataset.pick.split(':');
+      if (!Game.freePlay()) return;  // 遠征、雙人：只能看
       if (kind === 'ship') Game.swapShip(id);
+      else if (kind === 'part') {  // 沙盒／靶場：直接加減零件層數（不受零件格限制）
+        Game.parts[id] = clamp((Game.parts[id] || 0) + +v, 0, 8);
+        Game.recalc();
+      } else if (kind === 'module') { Game.module = MODULES[id] ? id : null; Game.recalc(); }
       else if (kind === 'weapon') { Game.weapon = { id, path: null, final: null }; Game.refreshWeapon(); }
       else {
         const [path, final] = id.split('.');
@@ -120,10 +125,9 @@ const Editor = {
   open() {
     this.sel = null;
     this.toolsEl.classList.toggle('hidden', !Game.freePlay());
-    this.shipTabEl.classList.toggle('hidden', Game.mode !== 'range');
     this.showDefaultInfo();
     this.render();
-    this.setTab(this.tab === 'ship' && Game.mode !== 'range' ? 'main' : this.tab);  // 停在上次的分頁；統計分頁每次打開都重算
+    this.setTab(this.tab);  // 停在上次的分頁；統計分頁每次打開都重算
     this.el.classList.remove('hidden');
   },
   close() { this.el.classList.add('hidden'); },
@@ -137,13 +141,25 @@ const Editor = {
     if (tab === 'dmg') this.renderDmg();
     if (tab === 'ship') this.renderShip();
   },
-  // 靶場：切換機體、武器與武器升級（電路與倉庫保留）
+  // 機體分頁：零件、背包模組、已開啟的特性（遠征／雙人只能看）；沙盒／靶場另外可以換機體、武器、直接調零件和模組
   renderShip() {
     const on = (yes, col) => yes ? `outline:2px solid ${col};outline-offset:2px` : '';
+    const free = Game.freePlay(), T = Game.mech.traits, M = Game.mech;
+    const traits = [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]), ...(T.balance ? [BALANCE] : [])];
+    const partCards = PART_IDS.map(id => partCard(id, free ? `<div class="bar"><button data-pick="part:${id}:-1">−1 層</button><button data-pick="part:${id}:1">+1 層</button></div>` : '')).join('');
+    const modCards = (free ? Object.keys(MODULES) : Game.module ? [Game.module] : []).map(id =>
+      moduleCard(id, free ? `<button data-pick="module:${id}">${Game.module === id ? '使用中' : '裝上'}</button>` : '')).join('');
+    const mech = `<h3>零件 ${partsUsed(Game.parts)} / ${Game.partSlots} 格${free ? '（沙盒／靶場不受格數限制）' : ''}</h3>
+      <div class="sub">最大 HP ${Game.player.maxHp}　·　移動速度 ×${M.speed.toFixed(2)}　·　受到的傷害 ×${M.taken.toFixed(2)}　·　射速 ×${M.rate.toFixed(2)}　·　子彈速度 ×${M.bspeed.toFixed(2)}　·　衝刺冷卻 ×${M.dashCd.toFixed(2)}
+        <br>已開啟的特性：${traits.length ? traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`).join('、') : '無'}${M.heavy ? '　·　<span style="color:#ffd166">模組裝甲加成</span>' : ''}${M.light ? '　·　<span style="color:#4cc9f0">模組加速加成</span>' : ''}</div>
+      <div class="cards" style="margin:8px 0">${partCards}</div>
+      <h3>背包模組${free ? ` <button data-pick="module:none">拿掉模組</button>` : ''}</h3>
+      <div class="cards" style="margin:8px 0">${modCards || '<div class="sub">還沒有背包模組（精英戰鬥勝利後三選一）。</div>'}</div>`;
+    if (!free) { this.shipEl.innerHTML = mech + '<p class="hint">零件在「🔧 改裝廠」取得或更換，背包模組來自精英戰鬥與擊沉旗艦。</p>'; return; }
     const ships = Object.entries(SHIPS).map(([id, S]) => `<div class="card" style="border-color:${S.color};${on(Game.shipId === id, S.color)}">
         <div class="ttl" style="color:${S.color}">${S.name}</div>
-        <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒${S.armor ? `　·　受傷 -${S.armor * 100}%` : ''}</div>
-        <div class="ds">${S.desc}<br><b style="color:${S.color}">技能・${S.abilityName}</b>：${S.abilityDesc}</div>
+        <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒　·　零件格 ${S.partSlots}</div>
+        <div class="ds">${S.desc}<br><b style="color:${S.color}">${S.abilityName}</b>：${S.abilityDesc}</div>
         <button data-pick="ship:${id}">${Game.shipId === id ? '使用中' : '換成' + S.name}</button></div>`).join('');
     const weapons = Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
@@ -161,11 +177,11 @@ const Editor = {
       ups += up(k, P.name, st.path === k && st.final == null, P.desc);
       P.next.forEach((n, i) => ups += up(`${k}.${i}`, `${P.name}→${n.name}`, st.path === k && st.final === i, n.desc));
     }
-    this.shipEl.innerHTML = `
-      <h3>機體</h3><div class="cards" style="margin:8px 0">${ships}</div>
+    this.shipEl.innerHTML = `${mech}
+      <h3>換飛船（換成它的開局零件）</h3><div class="cards" style="margin:8px 0">${ships}</div>
       <h3>武器</h3><div class="cards" style="margin:8px 0">${weapons}</div>
       <h3>武器升級：<span style="color:${W.color}">${weaponTitle(st)}</span></h3><div class="bar">${ups}</div>
-      <p class="hint">換機體或武器時電路與倉庫都會保留，HP 回滿、靶場數據歸零。</p>`;
+      <p class="hint">換飛船或武器時電路與倉庫都會保留，HP 回滿、靶場數據歸零。</p>`;
   },
   // 晶片傷害統計：本關（目前星區）與整局，依整局傷害排序
   renderDmg() {
