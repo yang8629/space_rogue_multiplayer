@@ -148,8 +148,8 @@ const Screen = {
       return `<div class="card" style="border-color:${W.color}">
         <div class="ttl" style="color:${W.color}">${W.name}</div>
         <div class="ds brief">${WEAPON_BRIEF[id] || W.desc}</div>
-        <div class="det"><div class="ds">${W.desc}</div>
         <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
+        <div class="det"><div class="ds">${W.desc}</div>
         <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
@@ -157,7 +157,7 @@ const Screen = {
       <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
         <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，在「⚒ 軍械台」升級兩段：第一段 3 選 1，第二段 2 選 1。</div></div>
         <button data-act="select" data-arg="${mode}" data-back>返回 (Esc)</button></div>
-      <div class="cards">${cards}</div></div>`);
+      <div class="cards left">${cards}</div></div>`);
   },
 
   // 開局三選一起始晶片（遠征與雙人；取代以前飛船自帶的晶片）
