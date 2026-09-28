@@ -721,7 +721,11 @@ const Game = {
     }
     return false;
   },
-  portalShip(p, x0, y0) { if (this.portalHop(p, p.r, 'portalT', 0.6, null, x0, y0)) { p.px = p.x; p.py = p.y; } },
+  portalShip(p, x0, y0) {
+    if (!this.portalHop(p, p.r, 'portalT', 0.6, null, x0, y0)) return;
+    p.px = p.x; p.py = p.y;
+    if (p.dashT > 0) { p.dashSX = p.x; p.dashSY = p.y; }  // 衝刺途中穿門：起點改成出口，新門不會越拉越長
+  },
 
   // ---------- 機體成長線（零件、背包模組）：房主執行，隊友的飛船用隊友的配裝 ----------
   maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
