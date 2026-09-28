@@ -35,8 +35,8 @@ function partCard(id, footer = '', parts = Game.parts) {
 const Screen = {
   el: document.getElementById('screen'),
   show(html) {
-    // 有卡片的畫面：卡片只顯示精簡說明，按住 Shift／Alt（手機按「詳細」）展開完整說明
-    if (html.includes('class="card')) html += '<div class="detail-hint">按住 Shift／Alt 看詳細說明　<button data-act="detail">詳細</button></div>';
+    // 有卡片的畫面：卡片只顯示精簡說明，按 Shift（手機按「詳細」）切換完整說明
+    if (html.includes('class="card')) html += '<div class="detail-hint">按 Shift 切換詳細說明　<button data-act="detail">詳細</button></div>';
     this.el.innerHTML = html; this.el.classList.remove('hidden');
   },
   hide() {
