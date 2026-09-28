@@ -38,6 +38,8 @@ const CFG = {
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
 };
 
+// 遊玩紀錄存在瀏覽器的名稱：V2 用新的名稱，不會蓋掉 V1（同一個網域）的紀錄
+const RECORDS_KEY = 'v2_runRecords';
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));

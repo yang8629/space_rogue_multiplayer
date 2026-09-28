@@ -411,7 +411,7 @@ function drawHUD() {
   ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
   ctx.fillText(`HP ${Math.ceil(p.hp)} / ${p.maxHp}`, 28, 33);
   // 衝刺冷卻
-  const dashMax = p.ship.dashCd * (1 - Game.passives.dashCd), dr = 1 - clamp(p.dashCd / dashMax, 0, 1);
+  const dashMax = p.ship.dashCd * (1 - Game.passives.dashCd) * Game.mech.dashCd, dr = 1 - clamp(p.dashCd / dashMax, 0, 1);
   ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 42, 110, 8);
   ctx.fillStyle = dr >= 1 ? '#bdf0ff' : '#35508a'; ctx.fillRect(21, 43, 108 * dr, 6);
   ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
@@ -428,7 +428,7 @@ function drawHUD() {
   ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px Segoe UI';
   ctx.fillText(`◆ ${Game.credits}`, 20, 72);
   ctx.fillStyle = p.ship.color; ctx.font = 'bold 12px Microsoft JhengHei';
-  ctx.fillText(p.ship.name + (p.overdrive > 0 ? '　相位超載 ×1.5' : ''), 72, 72);
+  ctx.fillText(p.ship.name + (Game.module ? `　${MODULES[Game.module].icon} ${MODULES[Game.module].name}${p.shield ? ' ' + '⛨'.repeat(p.shield) : ''}` : ''), 72, 72);
   const m = Game.mate;
   if (m) {  // 雙人：隊友血條
     const mw = Math.min(160, VW * 0.3), tag = Net.role === 'host' ? '2P' : '1P';

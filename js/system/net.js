@@ -772,7 +772,7 @@ const Net = {
       dmgBySource: R ? Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])) : {},
       chain: G.chain.map(name), inv: G.inventory.filter(Boolean).map(name),
       chipDmg: R ? Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]) : [],
-      credits: G.credits, hp: Math.max(0, Math.ceil(G.player.hp)), maxHp: G.player.maxHp,
+      credits: G.credits, hp: Math.max(0, Math.ceil(G.player.hp)), maxHp: G.player.maxHp, mech: G.mechRecord(),
       cause: G.player.dead ? G.lastHit : '',
       coop: {
         role: host ? '房主' : '隊友',
