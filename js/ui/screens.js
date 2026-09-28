@@ -12,7 +12,8 @@ function chipCard(id, footer = '') {
   return `<div class="card t-${d.type}">
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
     <div class="ttl">${d.name}</div>
-    <div class="ds">${d.desc}</div>${lv}${ps}${footer}</div>`;
+    <div class="ds brief">${chipBrief(id)}</div>
+    <div class="det"><div class="ds">${d.desc}</div>${lv}${ps}</div>${footer}</div>`;
 }
 
 // 背包模組卡片
@@ -20,7 +21,7 @@ function moduleCard(id, footer = '') {
   const M = MODULES[id];
   return `<div class="card" style="border-color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">
     <div class="ty" style="color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">${M.icon} 背包模組${M.boss ? '・旗艦專屬' : ''}</div>
-    <div class="ttl">${M.name}</div><div class="ds">${moduleLine(id)}</div>${footer}</div>`;
+    <div class="ttl">${M.name}</div><div class="ds brief">${M.eff}</div><div class="ds det">${moduleLine(id)}</div>${footer}</div>`;
 }
 // 零件卡片：每層效果、目前層數、2／4 層特性（已開啟的亮起來）
 function partCard(id, footer = '', parts = Game.parts) {
@@ -28,12 +29,16 @@ function partCard(id, footer = '', parts = Game.parts) {
   const tr = (t, need) => `<div class="ds" style="opacity:${n >= need ? 1 : 0.6}"><b style="color:${n >= need ? '#9dff6b' : P.color}">${need} 層・${t.name}</b>${n >= need ? '（已開啟）' : ''}：${t.desc}</div>`;
   return `<div class="card" style="border-color:${P.color}">
     <div class="ty" style="color:${P.color}">⚙ 零件　目前 ${n} 層</div>
-    <div class="ttl">${P.name}</div><div class="ds">${partLine(id)}</div>${tr(P.t2, 2)}${tr(P.t4, 4)}${footer}</div>`;
+    <div class="ttl">${P.name}</div><div class="ds">${partLine(id)}</div><div class="det">${tr(P.t2, 2)}${tr(P.t4, 4)}</div>${footer}</div>`;
 }
 
 const Screen = {
   el: document.getElementById('screen'),
-  show(html) { this.el.innerHTML = html; this.el.classList.remove('hidden'); },
+  show(html) {
+    // 有卡片的畫面：卡片只顯示精簡說明，按住 Shift／Alt（手機按「詳細」）展開完整說明
+    if (html.includes('class="card')) html += '<div class="detail-hint">按住 Shift／Alt 看詳細說明　<button data-act="detail">詳細</button></div>';
+    this.el.innerHTML = html; this.el.classList.remove('hidden');
+  },
   hide() {
     this.el.classList.add('hidden');
     if (document.activeElement) document.activeElement.blur();  // 避免 Space/Enter 再次觸發按鈕
@@ -53,6 +58,7 @@ const Screen = {
     SFX.play('click');
     switch (a) {
       case 'mute': SFX.setMuted(!SFX.muted); break;
+      case 'detail': document.body.classList.toggle('detail'); break;
       case 'codex': Codex.open('rules'); break;
       case 'run': this.restart(); break;
       case 'editor': Game.toggleEditor(); break;
@@ -119,9 +125,10 @@ const Screen = {
         <svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
           <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>
         <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
-        <div class="ds">${S.desc}</div>
+        <div class="ds brief"><b style="color:${S.color}">${S.abilityName}</b>　${S.desc.split('。')[0]}</div>
+        <div class="det"><div class="ds">${S.desc}</div>
         <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒　·　零件格 ${S.partSlots}</div>
-        <div class="ds"><b style="color:${S.color}">${S.abilityName}</b><br>${S.abilityDesc}</div>
+        <div class="ds"><b style="color:${S.color}">${S.abilityName}</b><br>${S.abilityDesc}</div></div>
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">
@@ -140,9 +147,10 @@ const Screen = {
         `<div><b style="color:${W.color}">${P.name}</b>：${P.desc}<br><span style="color:#6a79ad">→ ${P.next.map(n => n.name).join(' ／ ')}</span></div>`).join('');
       return `<div class="card" style="border-color:${W.color}">
         <div class="ttl" style="color:${W.color}">${W.name}</div>
-        <div class="ds">${W.desc}</div>
+        <div class="ds brief">${WEAPON_BRIEF[id] || W.desc}</div>
+        <div class="det"><div class="ds">${W.desc}</div>
         <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
-        <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div>
+        <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">

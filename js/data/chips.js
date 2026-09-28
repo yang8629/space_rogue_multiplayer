@@ -167,6 +167,30 @@ const lvLine = (base, cur) => {
     (CHIPS[base].stored ? '<br><span style="color:#6a79ad">倉庫被動也會 ×1.5／×2。</span>' : '');
 };
 
+// 卡片上的一行精簡說明（按住 Shift／Alt 才顯示完整說明）
+const CHIP_BRIEF = {
+  boomerang: '打中後穿過去再飛回來，回程再打一次（傷害 ×0.7）',
+  orbit: '按住射擊存彈繞圈，放開一次射出',
+  stasis: '子彈停住變地雷，敵人靠近就衝出去',
+  accel: '越飛越快越痛；貼臉很虧',
+  quick: '出手最快最痛，越飛越弱；打近用',
+  wallbounce: '射程 ×1.5，碰到場地邊緣反彈',
+  rear: '朝反方向也射一份',
+  charge: '停火蓄力，下一發最多 ×5',
+  sticky: '黏在敵人身上，2 秒後一起爆炸',
+  infect: '擊殺的敵人爆出子彈',
+  pull: '命中時把附近的敵人拉過來',
+  dashfire: '衝刺結束時額外開一槍',
+  intercept: '子彈打掉敵彈，並回射一次',
+  split: '每顆子彈分成 3 顆（每顆 ×0.4）',
+  bigshot: '子彈數量減半，合併成更大更痛的',
+  pierce: '子彈穿透 +2',
+  amp: '左邊的子彈傷害 +100%',
+  overclock: '射速 ×2，但連射會過熱',
+  trigger: '命中時從命中點再射一次（右邊的晶片）',
+  mirror: '複製左邊那一格（武器、數值晶片）',
+};
+const chipBrief = id => CHIP_BRIEF[baseOf(id)] || String(CHIPS[id].desc).split(/[。；]/)[0];
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => CHIPS[id].type !== 'composite' && !CHIPS[id].hidden);
 const COMPOSITE_IDS = [];  // V2 拿掉了軍規複合晶片（精英改給背包模組）
 const OVERLOADS = ['ov_power', 'ov_rate', 'ov_pierce', 'ov_seek'];

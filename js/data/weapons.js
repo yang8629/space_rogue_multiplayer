@@ -96,6 +96,10 @@ const WEAPONS = {
     } },
 };
 
+// 選武器卡片的一行精簡說明
+const WEAPON_BRIEF = { laser: '高射速單發，最好上手', scatter: '近距離 5 發散射', plasma: '慢速大球，會穿透',
+  railgun: '高速穿甲，射速慢、打得動小行星', blade: '近身揮刃，會砍掉敵彈' };
+
 function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,

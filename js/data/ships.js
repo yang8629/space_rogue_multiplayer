@@ -21,7 +21,7 @@ const SHIPS = {
     hull: [[21, 0], [-12, -8], [-4, 0], [-12, 8]],
     parts: { larmor: 1, booster: 1 }, partSlots: 6,
     desc: '開局帶輕裝甲 1 層、加速器 1 層。適合往閃避、高機動發展。',
-    ability: 'light', abilityName: '輕裝甲＋加速器', abilityDesc: '開局輕裝甲 1 層（HP +10、受傷 +3%）、加速器 1 層（速度 +6%、HP −10）。' },
+    ability: 'light', abilityName: '輕裝甲＋加速器', abilityDesc: '開局輕裝甲 1 層（HP +15、衝刺冷卻 +3%）、加速器 1 層（速度 +6%、HP −10）。' },
   gate: { name: '星門號', en: 'GATE', color: '#2ee6a6', hp: 90, speed: 270, radius: 12, dashCd: 1.2,
     hull: [[18, 0], [2, -12], [-11, -7], [-6, 0], [-11, 7], [2, 12]],
     parts: {}, partSlots: 6,
