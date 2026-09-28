@@ -180,7 +180,7 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部朝準星射出，繞滿 2 秒傷害 ×2', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，繞滿 2 秒傷害 ×2', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -190,11 +190,11 @@ const MechCheck = {
       const orb = Game.bullets.filter(b => b.mode === 'orbit'), d0 = orb.length && orb[0].damage, hit = e.maxHp - e.hp;
       p.dashT = 0.2; Game.updateBullets(1 / 60); p.dashT = 0;  // 衝刺不會放出
       const kept = orb.every(b => b.mode === 'orbit');
-      p.wantFire = false; p.aim = Math.PI / 2; Game.enemies = [];
+      p.wantFire = false; p.aim = Math.PI / 2; p.aimD = 300; Game.enemies = [];
       Game.updateBullets(1 / 60);
-      const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.PI / 2)) < 0.01).length;
+      const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.atan2(p.y + 300 - b.y, p.x - b.x))) < 0.01).length;
       return { ok: kept && stored === 12 && hit > 0 && orb.length > 0 && orb.length < 12 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 2),
-        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝準星射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
+        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
@@ -210,14 +210,14 @@ const MechCheck = {
       const r = M.run(40);
       return { ok: r.created >= r.fired + 3, got: `開火 ${r.fired} 次，另外爆出 ${r.created - r.fired} 發` };
     }],
-    ['電路晶片', '蓄力', '按住蓄滿，放開射出一發 ×5 傷害', M => {
+    ['電路晶片', '蓄力', '按住蓄滿不會自己射，放開射出一發 ×5 傷害', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', null, null]); M.targets([]);
-      const p = Game.player;
-      for (let f = 0; f < 50; f++) p.tickFire(1 / 60, true);
+      const p = Game.player; p.autoMode = false;
+      for (let f = 0; f < 120; f++) p.tickFire(1 / 60, true);
       const early = Game.bullets.length;
-      for (let f = 0; f < 20; f++) p.tickFire(1 / 60, true);
+      p.tickFire(1 / 60, false);
       const b = Game.bullets[0];
-      return { ok: early === 0 && b && near1(b.damage, 50), got: b ? `蓄滿前 ${early} 發，蓄滿後一發 ${b.damage.toFixed(1)}` : '沒有射出' };
+      return { ok: early === 0 && b && near1(b.damage, 50), got: b ? `按住 2 秒射出 ${early} 發，放開一發 ${b.damage.toFixed(1)}` : '放開沒有射出' };
     }],
     ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', null, null]); M.targets(M.cone);
