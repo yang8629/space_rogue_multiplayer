@@ -47,6 +47,9 @@ function shot(o) {
 
 // ---------- 增幅相加：每顆子彈記住累積的加成 bonus，傷害 ＝ 基礎 ×（1 ＋ 所有加成的總和） ----------
 //   分裂、子彈上限換算、聚焦合併這些「數量」類的變化仍然是相乘，只有增幅類的百分比加成是相加
+// 命中傷害：加成池全部相加（倍增、巨彈、蓄力、速度倍率…），照武器原本的傷害算，不會互相相乘
+//   速度倍率（加速、疾射、環繞放出）打中時才知道，所以在這裡加進去：1 + 加成 + (速度倍率 − 1)
+const hitDamage = b => b.damage / Math.max(0.1, 1 + (b.bonus || 0)) * Math.max(0.1, 1 + (b.bonus || 0) + (b.accelMul || 1) - 1);
 function addBonus(b, add) {
   const old = b.bonus || 0, nb = old + add;
   return { ...b, bonus: nb, damage: b.damage / Math.max(0.1, 1 + old) * Math.max(0.1, 1 + nb) };
