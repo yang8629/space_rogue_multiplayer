@@ -180,7 +180,7 @@ const MechCheck = {
       return { ok: lockAt != null && lockAt > 2.9 && lockAt < 3.1 && n > 0,
         got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
     }],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（最多 12 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，繞滿 2 秒傷害 ×2', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 8 發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒傷害 ×1.5', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -193,7 +193,7 @@ const MechCheck = {
       p.wantFire = false; p.aim = Math.PI / 2; p.aimD = 300; Game.enemies = [];
       Game.updateBullets(1 / 60);
       const out = orb.filter(b => b.mode === 'fly' && Math.abs(angleDiff(b.angle, Math.atan2(p.y + 300 - b.y, p.x - b.x))) < 0.01).length;
-      return { ok: kept && stored === 12 && hit > 0 && orb.length > 0 && orb.length < 12 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 2),
+      return { ok: kept && stored === 8 && hit > 0 && orb.length > 0 && orb.length < 8 && out === orb.length && out > 0 && near1(orb[0].damage, d0 * 1.5),
         got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，傷害 ${d0} → ${orb.length && orb[0].damage}` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
@@ -222,17 +222,26 @@ const MechCheck = {
       return { ok: normal.length > 2 && normal.every(x => near1(x, 10)) && near1(d[0], 50) && d.length > 1 && d.slice(1).every(x => near1(x, 10)),
         got: `按住連射 ${normal.length} 發（${normal[0]}）；停火 1 秒後：${d.map(x => Math.round(x)).join('、')}` };
     }],
-    ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）', M => {
+    ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）；觸發射出的子彈不會進環繞的圈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', null, null]); M.targets(M.cone);
       const r = M.run(90);
-      return { ok: r.created > r.fired && r.hits.some(h => near1(h, 5)), got: `開火 ${r.fired} 次，回響 ${r.created - r.fired} 發，回響傷害 5` };
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'orbit', null]); M.targets([[200, 0]]);
+      Game.player.wantFire = true; M.run(40);
+      const trig = Game.bullets.filter(b => b.depth > 0), inRing = trig.filter(b => b.mode === 'orbit').length;
+      return { ok: r.created > r.fired && r.hits.some(h => near1(h, 5)) && trig.length > 0 && inRing === 0,
+        got: `開火 ${r.fired} 次，回響 ${r.created - r.fired} 發，回響傷害 5；接環繞時觸發 ${trig.length} 發、進圈 ${inRing} 發` };
     }],
     ['電路晶片', '觸發巢狀上限', '連放 4 個觸發器，最多只展開 3 層', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'trigger', 'trigger', 'trigger', null]); M.targets(M.cone);
       const r = M.run(120);
       return { ok: r.maxDepth === 3 && Game.stats.layers.length === 3, got: `實際最深第 ${r.maxDepth} 層` };
     }],
-    ['電路晶片', '衝刺射擊', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射', M => {
+    ['電路晶片', '衝刺射擊／擦彈', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；擦彈也用整條電路回射', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'graze', 'split', null]); M.targets([[300, 0]]);
+      const gp = Game.player, gn = runOps(Game.stats.ops, 0).length, eb = { x: gp.x + gp.r + 10, y: gp.y, r: 5 };
+      Game.graze(gp, eb); eb.x += 10; Game.graze(gp, eb);
+      const gOut = Game.bullets.length;
+      if (gOut !== gn) return { ok: false, got: `擦彈回射 ${gOut} 發，整條電路一槍是 ${gn} 發（右邊的分裂沒吃到）` };
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
       const p = Game.player, n0 = runOps(Game.stats.ops, 0), d0 = n0[0].damage;
       p.aim = Math.PI / 2; p.dashT = 0.05; p.vx = 900; p.vy = 0;
@@ -241,10 +250,15 @@ const MechCheck = {
       return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
         got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
-    ['電路晶片', '鏡像迴路', '放在武器右邊 = 武器多射一次', M => {
+    ['電路晶片', '鏡像迴路', '放在武器右邊 = 武器多射一次；接在玩法晶片（蓄力）後面沒有效果', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'mirror', null, null]); M.targets([]);
       const r = M.run(30);
-      return { ok: r.created === r.fired * 2, got: `開火 ${r.fired} 次，射出 ${r.created} 發` };
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', 'mirror', null]); M.targets([]);
+      const p = Game.player; p.chargeC = 0;
+      for (let f = 0; f < 60; f++) p.tickFire(1 / 60, false);
+      p.tickFire(1 / 60, true);
+      const d = Game.bullets[0] ? Game.bullets[0].damage : 0;
+      return { ok: r.created === r.fired * 2 && near1(d, 50), got: `開火 ${r.fired} 次，射出 ${r.created} 發；蓄力＋鏡像蓄滿一發 ${Math.round(d)}（應為 50，不是 250）` };
     }],
     ['電路晶片', '子彈上限 32 發', '超過的數量換算成傷害，總傷害不變', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'split', 'split', null]);

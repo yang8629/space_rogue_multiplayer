@@ -274,6 +274,8 @@ const Editor = {
         Object.assign(info[i], { idle: true, why: '左右沒有可共振的晶片' });
       if (id === 'mirror' && (!chain[i - 1] || CHIPS[chain[i - 1]].type === 'link'))
         Object.assign(info[i], { idle: true, why: '左側沒有可複製的晶片' });
+      else if (id === 'mirror' && PLAY_TYPES.includes(CHIPS[chain[i - 1]].type))
+        Object.assign(info[i], { idle: true, why: '無效：鏡像不能複製玩法晶片（只能複製武器和數值晶片）' });
     });
     const active = chain.map(() => false), reason = chain.map(() => '');
     let seg = 0, hasSrc = false, dead = false;

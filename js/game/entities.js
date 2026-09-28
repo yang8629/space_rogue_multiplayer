@@ -188,7 +188,7 @@ class Player {
   fire() {
     const list = runOps(Game.stats.ops, 0);
     if (!list.length) return;
-    if (list.every(s => s.orbit) && (this.orbN || 0) >= (list[0].orbit >= 2 ? 20 : 12)) return;  // 環繞存滿：按住也不再射
+    if (list.every(s => s.orbit) && (this.orbN || 0) >= orbCap(list[0].orbit)) return;  // 環繞存滿：按住也不再射
     const nx = this.x + Math.cos(this.aim) * 16, ny = this.y + Math.sin(this.aim) * 16;
     // 子彈從船身中心附近發出：怪物貼臉時也打得到（槍口火光仍在船頭）
     spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
@@ -196,6 +196,11 @@ class Player {
     burst(nx, ny, list[0].color, 3, 120, 0.15, 2);
   }
 }
+
+// 環繞：Lv1 最多存 8 發、3 秒轉到 2 倍；Lv2 起 20 發、2 秒轉到 3 倍（放出時傷害 ×轉速的一半加成）
+const orbCap = lv => lv >= 2 ? 20 : 8;
+const orbSpinOf = (lv, held) => lv >= 2 ? 1 + 2 * Math.min(1, held / 2) : 1 + Math.min(1, held / 3);
+const orbSpinMax = lv => lv >= 2 ? 3 : 2;
 
 class Bullet {
   constructor(x, y, angle, s, depth, ignoreId) {
@@ -221,9 +226,10 @@ class Bullet {
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;
     if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
-    if (this.orbit) {  // 環繞：存在飛船旁邊（最多 12 發，Lv2 20 發；存滿之後照常射出）
+    if (this.orbit && depth > 0) this.orbit = 0;  // 觸發射出的子彈不進圈（不會瞬移回飛船）
+    if (this.orbit) {  // 環繞：存在飛船旁邊（Lv1 8 發，Lv2 20 發；存滿了多的丟掉）
       const o = this.ownerP;
-      if (o && (o.orbN || 0) < (this.orbit >= 2 ? 20 : 12)) {
+      if (o && (o.orbN || 0) < orbCap(this.orbit)) {
         o.orbN = (o.orbN || 0) + 1;
         this.mode = 'orbit'; this.phase = angle; this.orbR = 0; this.R = 60;
         this.life0 = this.life; this.life = 99;
@@ -251,8 +257,8 @@ class Bullet {
     if (this.mode === 'orbit') {  // 環繞：按住射擊時繞著飛船轉，越轉越快；放開射擊時朝準星射出
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
-      const spin = o.orbSpin || 1;
-      if (!o.wantFire || (o.autoMode && spin >= 3)) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
+      const spin = orbSpinOf(this.orbit, o.orbHeld || 0);
+      if (!o.wantFire || (o.autoMode && spin >= orbSpinMax(this.orbit))) {  // 放開射擊才放出（衝刺不會）：轉速 1～3 倍 → 子彈速度 ×1～1.5、傷害 ×1～2；右邊晶片的效果（迴旋、加速……）從這裡開始
         const k = spin - 1, d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
         this.baseSpeed *= 1 + 0.25 * k; this.speed = this.baseSpeed; this.damage *= 1 + 0.5 * k;

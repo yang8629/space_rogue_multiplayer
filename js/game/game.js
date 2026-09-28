@@ -19,7 +19,7 @@ const Game = {
   mate: null, shooter: null,
   // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
   parts: {}, module: null, partSlots: 6, mech: mechStats({}, null), objs: [], portals: [],
-  growth: {}, fireMode: null, fireHit: false, chargeC: null, vortices: [], pullHits: 0, arcT: 0,
+  growth: {}, fireMode: null, chargeC: null, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
   players() { return [this.player, this.mate].filter(p => p && !p.dead && !p.gone); },  // gone：隊友離線，房主一個人繼續
@@ -891,8 +891,8 @@ const Game = {
   },
   updateBullets(dt) {
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
-    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（2 秒內 1 → 3 倍）；orbN 由存著的子彈每幀重新數
-      p.orbSpin = 1 + 2 * Math.min(1, (p.orbT || 0) / 2);
+    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbN 由存著的子彈每幀重新數
+      p.orbHeld = p.orbT || 0;
       p.orbT = p.orbN && p.wantFire ? (p.orbT || 0) + dt : 0;
       p.orbN = 0;
     }
@@ -1081,7 +1081,10 @@ const Game = {
     // 擦過：進入擦彈範圍後開始遠離（最接近的那一刻已經過了）而且沒打中（打中的子彈已經消失）
     if (prev == null || d <= prev) return false;
     (b.grazed = b.grazed || new Set()).add(p);
-    const t = nearestEnemy(p.x, p.y, 900, null), list = runSpecial(Game.stats.ops, 'graze');
+    const t = nearestEnemy(p.x, p.y, 900, null);  // 用整條電路回射（不會用掉停火蓄力）
+    this.fireMode = 'graze'; this.chargeC = null;
+    let list;
+    try { list = runOps(Game.stats.ops, 0); } finally { this.fireMode = null; }
     if (list.length) spawnShots(list, p.x, p.y, t ? Math.atan2(t.y - p.y, t.x - p.x) : p.aim, 0, null);
     this.grow(Game.shooter || null, 'graze');
     burst(b.x, b.y, '#9dff6b', 5, 120, 0.2, 2);
