@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（56 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（60 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -239,14 +239,30 @@ const MechCheck = {
       return { ok: m0 > 1.9 && m0 <= 2 && Math.abs(m1 - (2 - d1 / 200)) < 0.12 && c0 > 1.5 && c0 < 1.6,
         got: `出手 ${m0.toFixed(2)} 倍，飛了 ${Math.round(d1)} 後 ${m1.toFixed(2)} 倍；疾射＋加速出手 ${c0.toFixed(2)} 倍（0.5 + 1，不相乘）` };
     }],
-    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（×2）；會穿透的子彈每穿過一隻留一份', M => {
+    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（Lv1 ×1.5＋0.1／發，最多 ×3）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
       M.run(20); const n = e.stuck ? e.stuck.length : 0, hp = e.hp; Game.bullets = [];
       for (let f = 0; f < 150; f++) { Game.time += 1 / 60; Game.updateEnemies(1 / 60); }
       M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', 'sticky', null, null]); const row = M.targets([[120, 0], [180, 0], [240, 0], [300, 0], [360, 0]]);
       M.run(1); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
       const each = row.map(r => r.stuck ? r.stuck.length : 0).join('');
-      return { ok: n > 0 && near1(hp - e.hp, n * 10 * 2) && each === '11110', got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${n * 20}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}` };
+      const want = n * 10 * Math.min(3, 1.5 + 0.1 * n);
+      return { ok: n > 0 && near1(hp - e.hp, want) && each === '11110', got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${Math.round(want)}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}` };
+    }],
+    ['電路晶片', '黏著＋迴旋', '迴旋的子彈打中時留一份黏著，照常折返（不會黏住就消失）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', 'boomerang', null]); const e = M.targets([[150, 0]])[0];
+      Game.player.fire();
+      let ret = false;
+      for (let f = 0; f < 40; f++) { Game.updateBullets(1 / 60); if (Game.bullets.some(b => b.mode === 'return')) ret = true; }
+      const n = e.stuck ? e.stuck.length : 0;
+      return { ok: ret && n >= 1, got: `${ret ? '有' : '沒有'}折返，黏了 ${n} 份` };
+    }],
+    ['電路晶片', '反向：傷害歸屬', '往前的子彈不算反向的；多射出來的那發基礎傷害算反向', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'rear', null, null]); M.targets([]);
+      Game.player.fire();
+      const fwd = Game.bullets.find(b => !b.rear), back = Game.bullets.find(b => b.rear);
+      const fs = fwd && splitDamage(10, fwd.att, null), bs = back && splitDamage(10, back.att, null);
+      return { ok: !!fs && !!bs && !fs.rear && near1(bs.rear || 0, 10), got: `往前：${JSON.stringify(fs)}；往後：${JSON.stringify(bs)}` };
     }],
     ['電路晶片', '感染', '被擊殺的敵人爆出 3 發子彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'infect', null, null]); M.targets([[120, 0]], 'swarmer', true, 0.1);
@@ -469,6 +485,32 @@ const MechCheck = {
       for (let i = 0; i < 90; i++) Game.updateBullets(1 / 60);
       return { ok: hit.dead && hit.x < p.x + 300 && Math.abs(pass.angle) > 0.05,
         got: `正對的子彈${hit.dead ? '被擋下' : '穿過去了'}；旁邊的子彈轉了 ${(pass.angle * 180 / Math.PI).toFixed(1)}°` };
+    }],
+    ['地圖物件', '行星：只有旗艦打得掉', '旗艦的子彈打到行星會讓它變小、打光崩解；一般敵人的子彈只會被擋住', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player, mk = () => ({ type: 'planet', x: p.x + 300, y: p.y, r: 60, r0: 60, hp: 1200, maxHp: 1200, gm: 1 });
+      const shoot = (o, boss, n) => {
+        Game.objs = [o];
+        for (let i = 0; i < n; i++) Game.eBullets.push({ x: o.x - 70, y: o.y, vx: 200, vy: 0, r: 6, dmg: 20, life: 3, from: 't', boss });
+        for (let f = 0; f < 30; f++) Game.updateEnemyBullets(1 / 60);
+      };
+      const a = mk(); shoot(a, false, 10);
+      const b = mk(); shoot(b, true, 10); const rb = b.r;
+      const c = mk(); shoot(c, true, 60);
+      return { ok: a.r === 60 && rb < 60 && rb > 30 && c.dead, got: `一般子彈後半徑 ${a.r}；旗艦 10 發後 ${Math.round(rb)}；60 發後${c.dead ? '崩解' : '還在（' + Math.round(c.r) + '）'}` };
+    }],
+    ['地圖物件', '小行星帶：敵人繞路鑽縫', '敵人不會穿過小行星，從帶子的縫鑽過來追到玩家', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[400, 0]], 'swarmer', false, 1)[0]; e.t = { ...e.t, dmg: 0 };
+      Game.objs = [];
+      for (let y = -500; y <= 500; y += 50) if (Math.abs(y - 200) > 40) Game.objs.push({ type: 'rock', x: p.x + 200, y: p.y + y, r: 26, hp: 999, maxHp: 999 });
+      let inside = false, closest = 1e9;
+      for (let f = 0; f < 60 * 8; f++) {
+        Game.time += 1 / 60; Objects.update(1 / 60); e.update(1 / 60, p);
+        if (Game.objs.some(o => dist2(e.x, e.y, o.x, o.y) < (o.r + e.r - 3) ** 2)) inside = true;
+        closest = Math.min(closest, Math.hypot(e.x - p.x, e.y - p.y));
+      }
+      return { ok: !inside && closest < 40, got: `${inside ? '穿進小行星了' : '沒有穿過小行星'}，最接近玩家 ${Math.round(closest)}` };
     }],
     ['地圖物件', '小行星：重武器才打得動', '10 傷害打不動；打爆時電路上的晶片成長 + Lv2 門檻的 5%', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);

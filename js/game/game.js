@@ -964,14 +964,19 @@ const Game = {
         if (b.infGen > 0) this.grow(own, 'infect');
         if (b.pull) this.pullAt(b);
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
+        let att = b.att;
+        if (dmg !== b.damage && b.damage > 0) {  // 傷害統計：速度倍率多出來的傷害平分給造成它的晶片（環繞放出、加速、疾射）
+          const ks = [b.orbShot && 'orbit', b.accel && 'accel', b.quick && 'quick'].filter(Boolean);
+          for (const k of ks) att = attCredit(att, k, Math.pow(dmg / b.damage, 1 / ks.length));
+        }
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸
-          (e.stuck = e.stuck || []).push({ dmg, att: b.att, lv: b.sticky, owner: own });
+          (e.stuck = e.stuck || []).push({ dmg, att, lv: b.sticky, owner: own });
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
         }
         const knock = b.knock * (b.quick >= 3 && b.accelMul >= 2 ? 3 : 1);  // 衝擊（疾射 Lv3）：2 倍速以上打中強力擊退
         const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
-        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', b.att, knock);
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
@@ -985,7 +990,7 @@ const Game = {
         if (b.arcs) this.arc(e, b);
         if (b.payload && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner });
-        if (b.sticky && !b.infPierce && !(b.pierce > 0)) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈每穿過一隻就留一份
+        if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
         else if (b.boom && b.mode === 'fly') { b.overT = (e.r * 2 + 30) / b.speed; b.overId = e.id; }  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
@@ -1066,17 +1071,30 @@ const Game = {
     this.arcT -= dt;
     if (this.arcT > 0) return;
     this.arcT = 0.2;
-    const W = this.bullets.filter(b => !b.dead && b.mode === 'wait' && b.stasis >= 3).slice(0, 120);
-    for (let i = 0; i < W.length; i++) for (let j = i + 1; j < W.length; j++) {
-      const p = W[i], q = W[j];
-      if (dist2(p.x, p.y, q.x, q.y) > 110 * 110) continue;
-      if (this.zaps.length < 60) {
-        this.zaps.push({ x1: p.x, y1: p.y, x2: q.x, y2: q.y, life: 0.18, max: 0.18 });
-        if (Net.role === 'host') Net.fx(['z', Math.round(p.x), Math.round(p.y), Math.round(q.x), Math.round(q.y)]);
+    // 每顆地雷只連到最近的 2 顆（110 以內），連成一張網；所有地雷都算（原本只取前 120 顆、畫面只畫前 60 條，新放的地雷和側邊、後方的網看不到）
+    const W = this.bullets.filter(b => !b.dead && b.mode === 'wait' && b.stasis >= 3), G = new Map(), C = 110, key = (x, y) => x * 1e4 + y;
+    W.forEach((b, i) => { b.netI = i; const k = key(Math.floor(b.x / C), Math.floor(b.y / C)); (G.get(k) || G.set(k, []).get(k)).push(b); });
+    const links = new Set(), pairs = [];
+    for (const p of W) {
+      const cx = Math.floor(p.x / C), cy = Math.floor(p.y / C), near = [];
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) for (const q of G.get(key(cx + ox, cy + oy)) || []) {
+        if (q === p) continue;
+        const d = dist2(p.x, p.y, q.x, q.y);
+        if (d <= C * C && d > 16) near.push([d, q]);  // 疊在同一點的不連（散彈同一發的彈丸幾乎重疊）
       }
+      near.sort((a, b) => a[0] - b[0]);
+      for (const [, q] of near.slice(0, 2)) {
+        const id = p.netI < q.netI ? p.netI * 1e5 + q.netI : q.netI * 1e5 + p.netI;
+        if (!links.has(id)) { links.add(id); pairs.push([p, q]); }
+      }
+    }
+    let sent = 0;
+    for (const [p, q] of pairs) {
+      if (this.zaps.length < 400) this.zaps.push({ x1: p.x, y1: p.y, x2: q.x, y2: q.y, life: 0.22, max: 0.22 });
+      if (Net.role === 'host' && sent < 60 && Math.random() < 60 / pairs.length) { sent++; Net.fx(['z', Math.round(p.x), Math.round(p.y), Math.round(q.x), Math.round(q.y)]); }
       for (const e of this.enemies) {
         if (e.dead || e.spawnT > 0) continue;
-        if (segDist2(p.x, p.y, q.x, q.y, e.x, e.y) < (e.r + 5) ** 2) e.hurt(p.damage * 0.4, 0, 0, 'arc', p.att);
+        if (segDist2(p.x, p.y, q.x, q.y, e.x, e.y) < (e.r + 5) ** 2) e.hurt(p.damage * 0.4, 0, 0, 'arc', p.arcAtt || (p.arcAtt = { ...p.att, src: 'stasis' }));  // 電弧的傷害算伏擊網的
       }
     }
   },
@@ -1085,7 +1103,10 @@ const Game = {
     const S = e.stuck || [], n = S.length;
     e.stuck = []; e.stickT = 0;
     if (!n || e.dead) return;
-    const lv = S[0].lv, total = S.reduce((a, q) => a + q.dmg, 0) * (lv >= 2 ? 3 : 2), att = S[0].att, x = e.x, y = e.y;
+    // 爆炸倍率隨黏著發數往上加（Lv1 ×1.5＋0.1／發，最多 ×3；Lv2 起 ×2＋0.15／發，最多 ×4.5）；多出來的算黏著的
+    const lv = S[0].lv, M = lv >= 2 ? Math.min(4.5, 2 + 0.15 * n) : Math.min(3, 1.5 + 0.1 * n);
+    const total = S.reduce((a, q) => a + q.dmg, 0) * M, x = e.x, y = e.y;
+    const att = attCredit(mergeAtt(S.map(q => ({ att: q.att, w: q.dmg }))), 'sticky', M);
     if (n >= 5) this.grow(S[0].owner, 'sticky');
     const ring = (r, c) => {
       if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color: c });
@@ -1109,7 +1130,7 @@ const Game = {
     const A = e.killAtt, inf = A && A.inf;
     if (!inf) return;
     const n = inf.lv >= 2 ? 5 : 3, gen = inf.gen + 1, base = inf.tpl.infBase || inf.tpl.damage;
-    const tpl = { ...inf.tpl, damage: base * 1.5, infBase: base, orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
+    const tpl = { ...inf.tpl, src: 'infect', damage: base * 1.5, infBase: base,  // 爆出的子彈算感染的（src） orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
       infect: inf.lv >= 3 && gen <= 2 ? inf.lv : 0, infGen: gen, color: '#c6ff8a' };
     const a0 = rand(0, TAU), list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
     this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
@@ -1129,6 +1150,7 @@ const Game = {
         this.fireMode = 'intercept'; this.chargeC = null;
         let list;
         try { list = runOps(this.stats.ops, 0); } finally { this.fireMode = null; }
+        for (const s of list) s.src = 'intercept';  // 回射的子彈算攔截的
         if (list.length) spawnShots(list, eb.x, eb.y, t ? Math.atan2(t.y - eb.y, t.x - eb.x) : b.angle, 1, null);  // 第 1 層：不會進環繞的圈
         if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
           life: 2, color: '#9dff6b', src: 'ship' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);

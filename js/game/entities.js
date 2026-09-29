@@ -74,6 +74,7 @@ class Player {
       Game.fireMode = 'dashfire'; Game.chargeC = S.charge ? this.chargeC : null;
       let list;
       try { list = runOps(S.ops, 0); } finally { Game.fireMode = null; Game.chargeC = null; }
+      for (const s of list) s.src = 'dashfire';  // 傷害統計：衝刺結束這一槍算衝刺射擊的
       this.chargeC = 0;
       if (list.length) spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
     }
@@ -209,7 +210,7 @@ class Bullet {
     this.ownerP = Game.shooter ? Game.mate : Game.player;  // 環繞、迴旋要跟著／飛回的飛船
     this.dead = false;
     // V2 改玩法的晶片
-    this.baseSpeed = s.speed;
+    this.baseSpeed = this.speed0 = s.speed;  // speed0：武器原本的速度（佈雷衝出去會改 baseSpeed，迴旋回程用這個）
     this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.intercept = s.intercept; this.parry = s.parry; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
@@ -241,11 +242,11 @@ class Bullet {
   // 迴旋：打中敵人才折返（穿甲用完，先穿過去再折返，回程會再打牠一次），追著射出它的飛船飛回來；沒打中就飛到盡頭消失
   startReturn() {
     const o = this.ownerP;
-    this.mode = 'return'; this.life = 4; this.hitSet.clear(); this.flyAge = 0; this.speed = this.baseSpeed * this.accelMul; this.overT = 0;  // 回程一直追到飛船為止（最多 4 秒）
+    this.mode = 'return'; this.life = 4; this.hitSet.clear(); this.flyAge = 0; this.speed = (this.dashed ? this.speed0 : this.baseSpeed) * this.accelMul; this.overT = 0;  // 回程一直追到飛船為止（最多 4 秒）；地雷衝出去的用武器原本的速度飛回
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
     // 折返的那一刻剛好重疊到的敵人不算（不然折返點剛好停在下一隻身上會多打一下）；剛剛穿過的那一隻回程照樣再打
     for (const e of Game.enemies) if (e.id !== this.overId && dist2(this.x, this.y, e.x, e.y) < (e.r + this.r) ** 2) this.hitSet.add(e.id);
-    if (this.boom >= 2) this.damage *= 1.5;
+    if (this.boom >= 2) { this.damage *= 1.5; this.att = attCredit(this.att, 'boomerang', 1.5); }
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
   }
   update(dt) {
@@ -277,12 +278,14 @@ class Bullet {
       if (!near && this.waitT <= 0) { this.dead = true; burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
       if (near) {
         this.angle = Math.atan2(near.y - this.y, near.x - this.x);
-        this.damage *= 1.2; Game.grow(this.owner, 'stasis');
+        this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2); Game.grow(this.owner, 'stasis');
         this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1; this.flyDist = 0;
       }
       return;
     }
-    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return; }
+    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22 && !(this.overT > 0)) {  // 迴旋已經打中、準備折返的不變地雷
+      this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return;
+    }
     this.flyAge += dt;
     if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
     const o = this.ownerP, L = this.lock && o && o.lockT > Game.time && o.lockE && !o.lockE.dead ? o.lockE : null;
@@ -491,14 +494,19 @@ class Enemy {
       }
     }
 
-    let mx = dx / d, my = dy / d;
+    // 看不到玩家（中間有行星或小行星）：照尋路方向繞過去或鑽縫
+    let bx = dx / d, by = dy / d;
+    const blocked = Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8);
+    if (blocked) { const f = Objects.flowDir(this, p); if (f) [bx, by] = f; }
+    let mx = bx, my = by;
     if (this.type === 'swarmer') {
-      const w = Math.sin(Game.time * 6 + this.phase) * 0.6;
-      mx += -my * w; my += (dx / d) * w;
+      const w = Math.sin(Game.time * 6 + this.phase) * (blocked ? 0.25 : 0.6);
+      mx += -by * w; my += bx * w;
     }
     if (t.ranged) {
       const R = t.ranged.range;
-      if (d < R * 0.55) { mx = -mx; my = -my; }
+      if (blocked) { /* 繞路中：不後退、不橫移 */ }
+      else if (d < R * 0.55) { mx = -mx; my = -my; }
       else if (d < R * 0.9) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s; my = dx / d * s; }
       this.cd -= dt * endlessAtk();
       if (this.cd <= 0 && d < R + 120) {
@@ -557,7 +565,7 @@ class Enemy {
   //   裂界獵艦：預警衝鋒（兩側灑彈）/ 旋轉十字彈流 / 三連狙擊 / 部署噴吐者
   //   終焉核心：缺口環形波 / 雙向螺旋 / 慢速彈牆 / 刺殼護衛
   shootAt(a, spd, r = 6, dmg = 14) {  // 旗艦子彈傷害（整局模擬調的）：前兩隻 ×0.85（第一星區旗艦原本是斷層）、終焉核心 ×1.15（第三星區原本太簡單）
-    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.type === 'boss3' ? 1.15 : this.t.boss ? 0.85 : 1), life: 10, from: this.t.name });  // 王的子彈存在 10 秒
+    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.type === 'boss3' ? 1.15 : this.t.boss ? 0.85 : 1), life: 10, from: this.t.name, boss: !!this.t.boss });  // 王的子彈存在 10 秒；boss：會削行星、打碎小行星
   }
   ring(n, spd, offset, gap = 0) {  // gap：連續空出幾發，讓玩家有縫可鑽
     const g0 = gap ? randInt(0, n - 1) : -1;
@@ -575,6 +583,7 @@ class Enemy {
   }
   updateBoss(dt, dx, dy, d) {
     const t = this.t, rage = this.hp < this.maxHp * 0.5;
+    this.blocked = Game.objs.length ? Objects.losBlocked(this.x, this.y, this.x + dx, this.y + dy, 6) : null;
     if (rage && !this.enraged) {
       this.enraged = true; this.skillCd = Math.min(this.skillCd, 1);
       Game.banner = { text: t.rage, sub: '攻擊頻率上升', t: 2 };
@@ -604,7 +613,11 @@ class Enemy {
       const [far, near, orbit] = this.type === 'boss2' ? [300, 180, 60] : this.type === 'boss3' ? [460, 260, 18] : [340, 220, 35];
       const want = d > far ? 1 : d < near ? -1 : 0;
       const sp = t.speed * this.spdMul * endlessSpd();
-      const tvx = dx / d * sp * want - dy / d * orbit, tvy = dy / d * sp * want + dx / d * orbit;
+      let tvx = dx / d * sp * want - dy / d * orbit, tvy = dy / d * sp * want + dx / d * orbit;
+      if (this.blocked) {  // 射線被行星或小行星擋住：往離擋路物件遠的那一側橫移，找得到玩家的角度
+        const B = this.blocked, px = -dy / d, py = dx / d, side = (B.x - this.x) * px + (B.y - this.y) * py > 0 ? -1 : 1, v = Math.max(90, sp * 1.8);
+        tvx += px * side * v; tvy += py * side * v;
+      }
       const k = Math.min(1, dt * 2);
       this.vx += (tvx - this.vx) * k; this.vy += (tvy - this.vy) * k;
       this.move(dt);
@@ -622,7 +635,8 @@ class Enemy {
       }
     }
     const V = this.volley;  // 瞄準玩家的連續齊射
-    if (V && V.n > 0) {
+    if (V && V.n > 0 && this.blocked && (V.wait || 0) < 1.5) V.wait = (V.wait || 0) + dt;  // 瞄準型攻擊：被擋住時最多等 1.5 秒再打
+    else if (V && V.n > 0) {
       V.T -= dt;
       if (V.T <= 0) {
         V.T = V.every; V.n--;

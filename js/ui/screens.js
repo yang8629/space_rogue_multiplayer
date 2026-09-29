@@ -495,15 +495,15 @@ const Screen = {
   copyRecords() {
     this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: Game.loadRecords() }));
   },
-  copyOne(i) {  // 紀錄頁：只複製其中一筆（提示顯示在那一筆的下面）
+  copyOne(i) {  // 紀錄頁：只複製其中一筆（提示顯示在那一筆的下面）；精簡文字
     const r = Game.loadRecords()[i];
-    if (r) this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: [r] }), 'copyBox' + i);
+    if (r) this.copyText(recordText(r), 'copyBox' + i);
   },
   // 結算畫面：複製這一局目前的紀錄（打完 Boss 還沒結束遠征時也能複製）
   copyRun() {
     const result = Game.state === 'dead' ? 'dead' : Game.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'in_progress';
     const rec = Game.mode === 'coop' ? Net.buildRecord(result) : Game.buildRecord(result);
-    this.copyText(JSON.stringify({ game: '星環電路', exported: new Date().toISOString(), records: [rec] }));
+    this.copyText(recordText(rec));
   },
   // 複製文字到剪貼簿；被擋時（例如嵌在 iframe 裡）在畫面上的 #copyBox 顯示文字框讓玩家自己全選複製
   copyText(text, boxId = 'copyBox') {
@@ -521,3 +521,76 @@ const Screen = {
     } catch (e) { fallback(); }
   },
 };
+
+// ---------- 精簡紀錄文字（「複製這局／這筆紀錄」用；代號對照表在 README「遊玩紀錄的代號」） ----------
+//   完整資料還是存在瀏覽器裡（紀錄頁「展開細節」、「複製全部紀錄」是完整 JSON）
+const REC_CODE = {
+  node: { 戰鬥: '戰', 精英: '精', 旗艦: '王', 改裝廠: '改', 軍械台: '軍', 維修站: '修', 補給站: '補', 黑洞: '洞' },
+  enemy: { 蟲群: '蟲', 刺殼: '刺', 噴吐者: '噴', 虛空獵手: '獵', 星噬母艦: '母', 裂界獵艦: '裂', 終焉核心: '核', 彗星: '彗', 黑洞核心: '洞' },
+  result: { dead: '死', cleared: '通', retired: '退', disconnect: '斷線', in_progress: '進行中' },
+  src: { 武器直擊: '直擊', '命中觸發（回響）': '回響', 震盪衝撞: '衝撞' },
+};
+function recordText(r) {
+  const C = REC_CODE, L = [];
+  const en = n => C.enemy[n] || n;
+  const hurt = k => { const m = /^(.+?)（(子彈|撞擊)）$/.exec(k); return m ? en(m[1]) + (m[2] === '子彈' ? '彈' : '撞') : en(k); };
+  // 晶片名稱 → 短名：「超頻模組 Lv2」→ 超頻2；「全向（反向 Lv3）」→ 全向
+  const short = {};
+  for (const id in CHIPS) if (!/Lv\d|（/.test(CHIPS[id].name)) short[CHIPS[id].name] = CHIPS[id].short;
+  const chip = n => {
+    if (!n) return '空';
+    if (/（.+ Lv3）$/.test(n)) return n.replace(/（.+）$/, '');
+    const m = /^(.+) Lv(\d)$/.exec(n);
+    return m ? (short[m[1]] || m[1]) + m[2] : short[n] || n;
+  };
+  const sec = t => { const m = /^(\d+)秒$/.exec(t); return m ? +m[1] : 0; };
+  // 第 1 行：版本｜結果、打到哪｜飛船、操作｜時間、擊殺
+  const where = r.where || '', bm = /，(\S+?)剩 (\d+)% 血/.exec(where);
+  L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '雙人 ' : ''}${C.result[r.result] || r.result} ${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
+  L.push(`武器 ${r.weapon.replace('・', '+')}`);
+  const S = r.stats;
+  L.push(`電路 ${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（熱${S.heat} 射速${S.rateCut} ${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
+  const M = r.mech;
+  if (M) {
+    L.push(`機體 ${Object.entries(M.parts).map(([k, v]) => k.slice(0, 2) + v).join(' ') || '無零件'}${M.module ? `｜${M.module}${M.traits.length ? `(${M.traits.join(' ')})` : ''}` : M.traits.length ? `(${M.traits.join(' ')})` : ''} HP${r.hp}/${r.maxHp} 晶${r.credits}`);
+    const g = Object.entries(M.growth).sort((a, b) => b[1] - a[1]);
+    if (g.length) L.push(`成長 ${g.map(([k, v]) => k + v).join(' ')}`);
+  }
+  const src = Object.entries(r.dmgBySource || {}).map(([k, v]) => (C.src[k] || k) + v).join(' ');
+  const cd = (r.chipDmg || []).map(([k, v]) => (/^武器・/.test(k) ? '武器' : /^機體/.test(k) ? '機體' : chip(k)) + v).join(' ');
+  L.push(`傷害 ${r.dmg} 最大${r.maxHit}｜${src}｜${cd}`);
+  if (r.taken) L.push(`被打 ${r.hits}下 衝刺${r.dashes}｜${Object.entries(r.taken).map(([k, v]) => hurt(k) + v).join(' ')}`);
+  // 每個星區一行：摘要＋走過的節點（戰28-10 ＝ 戰鬥 28 秒、掉 10 血）
+  const nodes = {};
+  for (const p of r.path || []) {
+    const m = /^(\d+)-\d+ (\S+)(?: (\d+秒) HP (\d+)→(\d+))?/.exec(p);
+    if (!m) continue;
+    const code = C.node[m[2].replace(/・.*/, '')] || m[2], lost = m[4] ? +m[4] - +m[5] : 0;
+    (nodes[m[1]] = nodes[m[1]] || []).push(m[3] ? `${code}${sec(m[3])}${lost > 0 ? '-' + lost : lost < 0 ? '+' + -lost : ''}` : code);
+  }
+  (r.sectors || []).forEach((t, i) => {
+    const m = /星區 (\d+)：戰鬥 (\d+) 秒、擊殺 (\d+)、傷害 (\d+)、離開時 HP (\d+\/\d+)、晶體 (\d+)/.exec(t), n = m ? m[1] : String(i + 1);
+    L.push(`S${n} ${m ? `${m[2]}秒 殺${m[3]} 傷${m[4]} HP${m[5]} 晶${m[6]}` : t}｜${(nodes[n] || []).join(' ')}`);
+  });
+  // 取得：同一層的東西只在第一個前面寫層號
+  const got = [...(r.upgrades || []).map(t => [t, 1]), ...(r.got || []).map(t => [t, 0])].map(([t, up]) => {
+    const m = /^(\d+)-(\d+) (.*)$/.exec(t);
+    if (!m) return null;
+    let b = m[3];
+    if (up) b = b.replace(/^.*・/, '');
+    else b = b.replace(/^零件 (\S+)（(\d+) 層）$/, (_, a, n) => a.slice(0, 2) + n)
+      .replace(/^插槽 \+1.*$/, '插槽').replace(/^背包模組 (\S+?)(（.*）)?$/, '$1')
+      .replace(/^(\S+) 升到 Lv(\d)（用量成長）$/, (_, a, n) => chip(a) + n).replace(/^\S+ 進化 → (\S+?)！（用量成長）$/, '$1')
+      .replace(/^黑洞融合 (\S+)＋(\S+) → (\S+)$/, '融合$1+$2→$3').replace(/^改裝：(\S+) → (\S+)$/, '改裝$1→$2');
+    return { s: +m[1], l: +m[2], b: up ? b : chip(b) };
+  }).filter(Boolean).sort((a, b) => a.s - b.s || a.l - b.l);
+  let last = '';
+  if (got.length) L.push('取得 ' + got.map(g => { const k = g.s + '-' + g.l, t = (k === last ? '' : k) + g.b; last = k; return t; }).join(' '));
+  if (r.coop) {
+    const c = r.coop, ping = typeof c.ping === 'object' ? `延遲${c.ping.avg}ms(最高${c.ping.max})` : '';
+    L.push(`雙人 ${c.role}｜隊友 ${c.mate}${c.mateDown ? '(倒下)' : ''}｜${ping} 同步最長${c.sync.maxGapMs}ms`);
+    if (c.team) L.push(`分工 ${c.team.map(t => `${t.who} ${t.ship} ${t.dmg}(殺${t.kills})`).join('｜')}`);
+    if (c.mateChipDmg && c.mateChipDmg.length) L.push(`隊友晶片 ${c.mateChipDmg.map(([k, v]) => (/^武器・/.test(k) ? '武器' : chip(k)) + v).join(' ')}`);
+  }
+  return L.join('\n');
+}
