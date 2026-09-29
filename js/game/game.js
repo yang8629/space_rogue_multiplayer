@@ -156,7 +156,8 @@ const Game = {
     if (this.mate) { this.mate.resetPos(); this.mate.x += Net.role === 'host' ? 50 : -50; this.mate.dead = false; }
     this.player.dead = false;
     for (const p of [this.player, this.mate]) if (p) this.resetMechCombat(p);
-    this.objs = this.isClient() ? [] : Objects.gen(this.combat, this.node);  // 地圖物件（雙人：房主產生，隨同步傳給隊友）
+    this.objs = this.isClient() ? [] : Objects.gen(this.combat, this.node);
+    if (!this.combat.boss && !this.combat.sandbox && !this.combat.range) this.combat.themes = this.pickThemes(this.sector, !!this.node && this.node.L >= 3);  // 地圖物件（雙人：房主產生，隨同步傳給隊友）
     this.cam.x = this.player.x - ZW / 2; this.cam.y = this.player.y - ZH / 2;
     Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
     try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
@@ -172,9 +173,13 @@ const Game = {
       SFX.play('boss');
       return;
     }
-    let budget = 5 + n * 3 + C.level * 3;
-    const list = [];
+    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL;
+    const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
     while (budget > 0) {
+      if (TH.list.length && Math.random() < TH.share) {  // 主題小兵
+        const k = pick(TH.list), c = THEMES[k];
+        if (budget >= c.cost && !(c.max && list.filter(x => x === k).length >= c.max)) { list.push(k); budget -= c.cost; continue; }
+      }
       const r = Math.random(), lv = C.sandbox ? n : C.level + n;
       if (lv >= 3 && r < 0.18 && budget >= 6) { list.push('brute'); budget -= 6; }
       else if (lv >= 2 && r < 0.45 && budget >= 3) { list.push('spitter'); budget -= 3; }
@@ -191,6 +196,14 @@ const Game = {
     if (sbBoss) this.banner.sub = `♛ ${ENEMY_TYPES[sbBoss].name}接近中`;
     else if (list.includes('elite')) this.banner.sub = '⚠ 精英反應接近中';
   },
+  // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
+  pickThemes(sector, late) {
+    const s = sector;
+    const [n, share] = s >= 4 ? [Math.min(5, 3 + Math.floor((s - 4) / 2)), 0.65] : s === 3 ? [randInt(2, 3), 0.55]
+      : s === 2 ? [randInt(1, 2), 0.4] : late ? [1, 0.3] : [randInt(0, 1), 0.2];
+    const pool = Object.keys(THEMES).filter(k => THEMES[k].from <= Math.min(s, 3));
+    return { list: pickN(pool, Math.min(n, pool.length)), share };
+  },
   spawnEnemy(type) {
     const C = this.combat, p = this.player, a = rand(0, TAU), d = rand(520, 780);
     const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
@@ -201,6 +214,14 @@ const Game = {
     const e = new Enemy(type, x, y, scale);
     this.enemies.push(e);
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
+    if (type === 'worm') {  // 列隊蟲：再往外排 5 節，每節跟著前一節
+      const ux = (x - p.x) / (Math.hypot(x - p.x, y - p.y) || 1), uy = (y - p.y) / (Math.hypot(x - p.x, y - p.y) || 1);
+      let prev = e;
+      for (let i = 1; i < 6; i++) {
+        const w = new Enemy('worm', clamp(x + ux * 22 * i, 20, CFG.WORLD_W - 20), clamp(y + uy * 22 * i, 20, CFG.WORLD_H - 20), scale);
+        w.ahead = prev; prev = w; this.enemies.push(w);
+      }
+    }
   },
   updateWaves(dt) {
     const C = this.combat;
@@ -676,7 +697,13 @@ const Game = {
     const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
     if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
-    if (!this.isClient()) { this.infectBurst(e); this.payGrowTags(e); }
+    if (!this.isClient()) {
+      this.infectBurst(e); this.payGrowTags(e);
+      if (e.type === 'splitter') for (let i = 0; i < 3; i++) {  // 分裂體：分成 3 隻碎裂體
+        const a = i / 3 * TAU + rand(0, 1), k = new Enemy('splitling', clamp(e.x + Math.cos(a) * 20, 20, CFG.WORLD_W - 20), clamp(e.y + Math.sin(a) * 20, 20, CFG.WORLD_H - 20), e.hpScale);
+        k.spawnT = 0.15; k.vx = Math.cos(a) * 200; k.vy = Math.sin(a) * 200; this.enemies.push(k);
+      }
+    }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     SFX.play(e.t.boss ? 'bossdeath' : big ? 'bigkill' : 'kill');
     if (big) this.shake(e.type === 'elite' ? 14 : 6);
@@ -952,6 +979,10 @@ const Game = {
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
         if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
         b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
+        if (e.shieldA != null) {  // 盾衛：從盾的那一側（±60°）打過來的子彈反彈回去
+          const ca = Math.atan2(b.py - e.y, b.px - e.x);
+          if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.reflectShot(e, b, ca); break; }
+        }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
         // 用量成長：照著晶片的玩法打中敵人 → 在牠身上貼標記（2 秒），牠死掉時每個標記各加「牠的晶體值」（見 tagGrow）
         const own = b.owner;
@@ -1165,6 +1196,16 @@ const Game = {
     return false;
   },
   // 用量成長：owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
+  // 盾衛反彈：子彈照盾面的法線反彈，變成敵人的子彈（傷害 ×0.5，最多 25），我方子彈消失
+  reflectShot(e, b, ca) {
+    const nx = Math.cos(ca), ny = Math.sin(ca), vx = Math.cos(b.angle), vy = Math.sin(b.angle), dot = vx * nx + vy * ny;
+    let rx = vx - 2 * dot * nx, ry = vy - 2 * dot * ny;
+    if (rx * nx + ry * ny < 0.3) { rx = nx; ry = ny; }  // 擦邊的也往外彈
+    const l = Math.hypot(rx, ry) || 1, spd = clamp(b.speed * 0.6, 200, 450), dmg = Math.min(25, hitDamage(b) * 0.5);
+    this.eBullets.push({ x: e.x + nx * (e.r + 8), y: e.y + ny * (e.r + 8), vx: rx / l * spd, vy: ry / l * spd, r: 5, dmg, life: 2.5, from: e.t.name });
+    b.dead = true;
+    burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 6, 160, 0.25, 2);
+  },
   // 成長標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），2 秒內敵人死掉就各加「牠的晶體值」
   //   蟲群 1、噴吐者 2、刺殼 4、虛空獵手 12、旗艦 40；子彈再多，同一隻敵人死掉也只算一份
   tagGrow(e, owner, id) {
@@ -1173,6 +1214,7 @@ const Game = {
     if (t) t.t = this.time; else T.push({ id, owner: o, t: this.time });
   },
   payGrowTags(e) {
+    if (e.noGrow) { e.growTags = null; return; }  // 母巢生的蟲群不給成長
     for (const q of e.growTags || []) if (this.time - q.t <= CFG.GROW_TAG_TIME) this.grow(q.owner, q.id, e.t.credits || 0);
     e.growTags = null;
   },
@@ -1274,4 +1316,10 @@ const Game = {
     c.y += (ty - c.y) * Math.min(1, dt * 8);
     c.shake = Math.max(0, c.shake - dt * 40);
   },
+};
+
+// 主題小兵：cost = 佔一波的預算、from = 第幾星區開始出現、max = 一波最多幾隻
+const THEMES = {
+  gunboat: { cost: 3, from: 1 }, worm: { cost: 4, from: 1 }, splitter: { cost: 4, from: 1 },
+  shield: { cost: 5, from: 2 }, lurker: { cost: 3, from: 2 }, hive: { cost: 8, from: 3, max: 1 },
 };

@@ -171,6 +171,12 @@ function drawTelegraph(e) {
   if (e.type === 'elite') { len = 320; alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; w = e.r * 1.4; }
   else if (e.type === 'brute') { len = CFG.BRUTE.rollSpeed * CFG.BRUTE.rollT; alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }  // 最後鎖定方向時變亮
   else if (e.type === 'boss2') { len = 520; alpha = 0.25 + 0.45 * Math.sin(Game.time * 30) ** 2; }
+  else if (e.type === 'lurker') { len = 520 * 0.4; alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; }
+  else if (e.type === 'gunboat') {  // 彈幕艇：蓄力中，外圈縮小的紅圈（縮到身上就放彈）
+    ctx.globalAlpha = 0.35 + 0.4 * Math.sin(Game.time * 30) ** 2; ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6 + 40 * Math.max(0, e.modeT) / 0.6, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+    return;
+  }
   else return;
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = w;
@@ -178,10 +184,24 @@ function drawTelegraph(e) {
   ctx.globalAlpha = 1;
 }
 
+// 潛伏者的殘影：記住最近幾個位置（依敵人 id；雙人的隊友那邊也畫得出來）
+const LURK_TRAIL = new Map();
+function drawLurkerTrail(e) {
+  let T = LURK_TRAIL.get(e.id);
+  if (!T) { T = []; LURK_TRAIL.set(e.id, T); if (LURK_TRAIL.size > 80) for (const k of LURK_TRAIL.keys()) { if (!Game.enemies.some(q => q.id === k)) LURK_TRAIL.delete(k); } }
+  const last = T[T.length - 1];
+  if (!last || Math.hypot(e.x - last.x, e.y - last.y) > 10) { T.push({ x: e.x, y: e.y }); if (T.length > 6) T.shift(); }
+  ctx.strokeStyle = e.t.color; ctx.lineWidth = 1.5;
+  T.forEach((q, i) => {
+    ctx.globalAlpha = 0.08 + 0.1 * (i / T.length) * (0.4 + (e.cloak || 0));
+    polygon(q.x, q.y, e.r * (0.6 + 0.4 * i / T.length), e.t.shape, Math.atan2(e.vy, e.vx)); ctx.stroke();
+  });
+}
 function drawEnemy(e) {
   const sp = e.spawnT > 0 ? 1 - e.spawnT / e.spawnMax : 1;
-  ctx.globalAlpha = 0.3 + 0.7 * sp;
-  const rot = e.type === 'swarmer' ? Math.atan2(e.vy, e.vx)
+  if (e.type === 'lurker') drawLurkerTrail(e);
+  ctx.globalAlpha = (0.3 + 0.7 * sp) * (1 - 0.9 * (e.cloak || 0));  // 潛伏者隱形時幾乎看不到（殘影還在）
+  const rot = ['swarmer', 'worm', 'splitling', 'lurker'].includes(e.type) ? Math.atan2(e.vy, e.vx)
     : e.type === 'spitter' ? Math.atan2(Game.player.y - e.y, Game.player.x - e.x) : e.rot;
   if (e.type === 'elite') {
     ctx.strokeStyle = 'rgba(255, 212, 0, 0.35)'; ctx.lineWidth = 1;
@@ -207,6 +227,14 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.28 * sp, 0, TAU); ctx.fill();
     ctx.globalAlpha = 0.3 + 0.7 * sp;
   }
+  if (e.shieldA != null) {  // 盾衛：朝固定方向的弧形盾（120°）
+    ctx.strokeStyle = '#bfefff'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 7, e.shieldA - Math.PI / 3, e.shieldA + Math.PI / 3); ctx.stroke();
+  }
+  if (e.type === 'hive') {  // 母巢：脈動的核心
+    ctx.fillStyle = e.t.color; ctx.globalAlpha *= 0.4 + 0.3 * Math.sin(Game.time * 4);
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.45, 0, TAU); ctx.fill(); ctx.globalAlpha = 0.3 + 0.7 * sp;
+  }
   if (e.slowT > 0) {  // 減速：藍色外圈
     ctx.strokeStyle = 'rgba(127, 212, 255, 0.8)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, TAU); ctx.stroke();
@@ -231,7 +259,7 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (2.2 - sp), 0, TAU);
     ctx.strokeStyle = e.t.color; ctx.lineWidth = 1; ctx.stroke();
   }
-  if (e.hp < e.maxHp && e.type !== 'swarmer' && !e.t.boss) {
+  if (e.hp < e.maxHp && !['swarmer', 'worm', 'splitling'].includes(e.type) && !e.t.boss && !(e.cloak > 0.5)) {
     const w = e.type === 'elite' ? e.r * 3 : e.r * 2;
     ctx.fillStyle = '#300'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 4);
     ctx.fillStyle = e.t.color; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4);

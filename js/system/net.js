@@ -832,7 +832,8 @@ const Net = {
       pp: [...PART_IDS.map(id => G.parts[id] || 0), G.module || ''],  // 房主的零件與模組（隊友那邊畫房主的船用）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
-        e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0]),
+        e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
+        e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0)]),  // 盾衛的盾方向、潛伏者的隱形程度
       b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
         ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
       eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r]),
@@ -917,7 +918,8 @@ const Net = {
       if (!t) return null;
       return { id: a[0], type: a[1], t, r: t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
         hp: num(a[6]), maxHp: num(a[7], 1), rot: num(a[8]), flash: a[9] ? 0.08 : 0, spawnT: num(a[10]), spawnMax: num(a[11], 1) || 1,
-        mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]), dead: false };
+        mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
+        shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false };
     }).filter(Boolean);
     const pal = arr(s.pal);
     G.bullets = arr(s.b).map(a => {
