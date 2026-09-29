@@ -106,7 +106,7 @@ class Player {
       else {
         // 自動攻擊的索敵距離依武器射程調整（近戰武器只在敵人靠近時攻擊）
         const wp = Game.wp, reach = clamp(wp.speed * wp.life + 40, 140, CFG.AUTO_RANGE);
-        target = nearestEnemy(this.x, this.y, a ? 900 : reach, null);
+        target = nearestEnemy(this.x, this.y, a ? 900 : reach, null, true);
         if (target) this.aim = Math.atan2(target.y - this.y, target.x - this.x);
       }
       Input.down = !!a || (Input.autoFire && !!target);
@@ -296,7 +296,7 @@ class Bullet {
       // 追蹤：只找前方 ±70° 內、450 以內最近的敵人（身後的不追，往反方向射不會整個轉回去）
       let t = null, bd = 450 * 450;
       for (const e of Game.enemies) {
-        if (e.dead || e.spawnT > 0 || this.hitSet.has(e.id)) continue;
+        if (e.dead || e.spawnT > 0 || this.hitSet.has(e.id) || e.cloak > 0.5) continue;  // 隱形的潛伏者不追
         const d2 = dist2(this.x, this.y, e.x, e.y);
         if (d2 >= bd || Math.abs(angleDiff(this.angle, Math.atan2(e.y - this.y, e.x - this.x))) > 1.22) continue;
         bd = d2; t = e;
@@ -371,10 +371,10 @@ function stepPickup(c, p, range, d2, dt) {
   c.x += c.vx * dt; c.y += c.vy * dt;
 }
 
-function nearestEnemy(x, y, range, exclude) {
+function nearestEnemy(x, y, range, exclude, visible = false) {  // visible：略過隱形中的潛伏者（自動瞄準用）
   let best = null, bd = range * range;
   for (const e of Game.enemies) {
-    if (e.dead || (exclude && exclude.has(e.id))) continue;
+    if (e.dead || (exclude && exclude.has(e.id)) || (visible && e.cloak > 0.5)) continue;
     const d = dist2(x, y, e.x, e.y);
     if (d < bd) { bd = d; best = e; }
   }
@@ -387,6 +387,14 @@ const ENEMY_TYPES = {
   spitter: { name: '噴吐者', hp: 40, speed: 110, radius: 13, dmg: 10, color: '#f72585', credits: 2, shape: 4,
     ranged: { range: 380, cd: 1.8, speed: 260, dmg: 12 } },
   elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
+  // 主題小兵（每場隨機抽幾種，越後面越多，見 Game.pickThemes）
+  gunboat:  { name: '彈幕艇', hp: 60, speed: 70, radius: 16, dmg: 10, color: '#ff6b9d', credits: 3, shape: 7 },    // 停在 420～520 外，每 3 秒放一圈 10 發慢速彈（先閃 0.6 秒）
+  worm:     { name: '列隊蟲', hp: 14, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
+  shield:   { name: '盾衛', hp: 110, speed: 55, radius: 20, dmg: 20, color: '#5ec8ff', credits: 4, shape: 6 },    // 出生時隨機決定盾的方向（120°），之後不轉；打到盾的子彈反彈回去（傷害 ×0.5，最多 25）
+  splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 3, shape: 5 },   // 死掉時分成 3 隻碎裂體
+  splitling:{ name: '碎裂體', hp: 20, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },
+  lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
+  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9 },      // 不會動，每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不給成長）
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
@@ -419,9 +427,11 @@ class Enemy {
     this.stream = null; this.volley = null; this.ringQ = []; this.enraged = false;
     this.rollCd = rand(0.5, 1.5); this.bounced = false;  // 刺殼滾球用
     this.phase = rand(0, TAU); this.rot = rand(0, TAU);
-    this.cd = t.ranged ? rand(0.8, t.ranged.cd) : 0;
+    this.cd = t.ranged ? rand(0.8, t.ranged.cd) : type === 'gunboat' ? rand(1.5, 3) : type === 'hive' ? 2 : 0;
+    if (type === 'shield') this.shieldA = rand(0, TAU);  // 盾的方向（世界座標，不會轉）
+    this.cloak = type === 'lurker' ? 1 : 0;              // 潛伏者：1 = 隱形
     this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0;
-    this.mode = 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
+    this.mode = type === 'lurker' ? 'stalk' : 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
     this.dead = false;
   }
   move(dt) {
@@ -460,6 +470,7 @@ class Enemy {
     this.rot += dt * (this.type === 'brute' ? 0.8 : this.type === 'elite' ? 1.5 : this.type === 'boss' ? 0.4 : 0);
     if (t.boss) { this.updateBoss(dt, dx, dy, d); return; }
     if (this.type === 'brute' && this.updateBrute(dt, dx, dy, d)) return;
+    if (THEME_AI[this.type] && THEME_AI[this.type].call(this, dt, p, dx, dy, d)) return;
 
     if (t.elite) {  // 精英：蓄力衝鋒 / 環形彈幕 交替
       if (this.mode === 'windup') {
@@ -524,6 +535,18 @@ class Enemy {
     this.vx += (mx / ml * t.speed * this.spdMul * endlessSpd() - this.vx) * k;
     this.vy += (my / ml * t.speed * this.spdMul * endlessSpd() - this.vy) * k;
     this.move(dt);
+  }
+  // 往 (mx, my) 方向走（繞開黑洞），速度 sp；主題小兵共用
+  steerMove(dt, mx, my, sp, k = 4) {
+    if (Game.objs.length) [mx, my] = Objects.steer(this, mx, my);
+    const l = Math.hypot(mx, my) || 1, s = sp * this.spdMul * endlessSpd(), q = Math.min(1, dt * k);
+    this.vx += (mx / l * s - this.vx) * q; this.vy += (my / l * s - this.vy) * q;
+    this.move(dt);
+  }
+  // 追向 p 的方向：看不到（中間有行星、小行星）時照尋路方向
+  chaseDir(p, dx, dy, d) {
+    if (Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) { const f = Objects.flowDir(this, p); if (f) return f; }
+    return [dx / d, dy / d];
   }
   // ---------- 刺殼：平常慢慢走；靠近時縮成球（有預警線）→ 高速滾向玩家（撞牆反彈一次）→ 暈眩 ----------
   //   回傳 true 表示這一幀的移動已經處理完（縮球、滾動、暈眩中）；false 則照一般追擊
@@ -711,3 +734,67 @@ class Enemy {
     if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; this.killAtt = att; Game.onEnemyKilled(this); }
   }
 }
+
+// ---------- 主題小兵的行為（this = Enemy）；回傳 true 表示這一幀的移動已經處理完 ----------
+const THEME_AI = {
+  gunboat(dt, p, dx, dy, d) {  // 停在 420～520 外；每 3 秒閃 0.6 秒後放一圈 10 發慢速彈
+    if (this.mode === 'windup') {
+      this.modeT -= dt; this.vx *= 0.9; this.vy *= 0.9; this.move(dt);
+      if (this.modeT <= 0) {
+        this.mode = 'chase'; this.cd = 3;
+        const off = rand(0, TAU);
+        for (let i = 0; i < 10; i++) { const a = off + i / 10 * TAU; Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 6, dmg: 10, life: 5, from: this.t.name }); }
+        SFX.play('eshot');
+      }
+      return true;
+    }
+    let [mx, my] = this.chaseDir(p, dx, dy, d);
+    if (d < 420) { mx = -dx / d; my = -dy / d; }
+    else if (d < 520) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s * 0.5; my = dx / d * s * 0.5; }
+    this.cd -= dt * endlessAtk();
+    if (this.cd <= 0 && d < 750) { this.mode = 'windup'; this.modeT = 0.6; }
+    this.steerMove(dt, mx, my, this.t.speed);
+    return true;
+  },
+  worm(dt, p, dx, dy, d) {  // 頭：蛇行追過來；身體：跟著前一節（間距 22）
+    while (this.ahead && this.ahead.dead) this.ahead = this.ahead.ahead;
+    const A = this.ahead;
+    if (!A) {
+      const [bx, by] = this.chaseDir(p, dx, dy, d), w = Math.sin(Game.time * 4 + this.phase) * 0.8;
+      this.steerMove(dt, bx - by * w, by + bx * w, this.t.speed);
+      return true;
+    }
+    const ax = A.x - this.x, ay = A.y - this.y, ad = Math.hypot(ax, ay) || 1;
+    this.steerMove(dt, ax, ay, ad > 22 ? this.t.speed * Math.min(1.6, ad / 22) : this.t.speed * 0.3, 8);
+    return true;
+  },
+  lurker(dt, p, dx, dy, d) {  // 隱形接近 → 離 140 內現形 0.4 秒（預警線）→ 撲過去 0.4 秒 → 現形 2 秒 → 再隱形
+    this.cloak = this.mode === 'stalk' ? Math.min(1, this.cloak + dt * 2) : 0;
+    if (this.mode === 'windup') {
+      this.modeT -= dt; this.vx *= 0.8; this.vy *= 0.8; this.move(dt);
+      if (this.modeT > 0.15) this.chargeA = Math.atan2(dy, dx);
+      if (this.modeT <= 0) { this.mode = 'charge'; this.modeT = 0.4; this.vx = Math.cos(this.chargeA) * 520; this.vy = Math.sin(this.chargeA) * 520; }
+      return true;
+    }
+    if (this.mode === 'charge') { this.modeT -= dt; this.move(dt); if (this.modeT <= 0) { this.mode = 'shown'; this.modeT = 2; } return true; }
+    if (this.mode === 'shown' && (this.modeT -= dt) <= 0) this.mode = 'stalk';
+    if (this.mode === 'stalk' && d < 140 && this.cloak >= 1) { this.mode = 'windup'; this.modeT = 0.4; this.chargeA = Math.atan2(dy, dx); return true; }
+    const [mx, my] = this.chaseDir(p, dx, dy, d);
+    this.steerMove(dt, mx, my, this.t.speed);
+    return true;
+  },
+  hive(dt) {  // 不會動；每 4 秒生 2 隻蟲群（同時最多 8 隻）
+    this.vx *= 0.9; this.vy *= 0.9; this.move(dt);
+    this.cd -= dt * endlessAtk();
+    if (this.cd > 0) return true;
+    this.cd = 4;
+    this.kids = (this.kids || []).filter(k => !k.dead);
+    for (let i = 0; i < 2 && this.kids.length < 8; i++) {
+      const a = rand(0, TAU), k = new Enemy('swarmer', clamp(this.x + Math.cos(a) * 45, 40, CFG.WORLD_W - 40), clamp(this.y + Math.sin(a) * 45, 40, CFG.WORLD_H - 40), this.hpScale);
+      k.summoned = true; k.noGrow = true;  // 不掉晶體、不給晶片成長（不然可以一直刷）
+      this.kids.push(k); Game.enemies.push(k);
+    }
+    burst(this.x, this.y, this.t.color, 10, 120, 0.4, 2);
+    return true;
+  },
+};

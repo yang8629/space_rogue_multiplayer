@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（62 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（69 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -634,6 +634,62 @@ const MechCheck = {
       }
       return { ok: seen.has('windup') && seen.has('charge') && seen.has('stun') && maxSpd > 400 && closest < 60,
         got: `經過：${[...seen].join(' → ')}，最高速度 ${Math.round(maxSpd)}，最接近玩家 ${Math.round(closest)}` };
+    }],
+    ['敵人', '彈幕艇', '停在遠處，閃 0.6 秒後放一圈 10 發慢速彈', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[470, 0]], 'gunboat', false, 1)[0]; e.cd = 0.1;
+      let wind = false;
+      for (let f = 0; f < 90; f++) { Game.time += 1 / 60; e.update(1 / 60, p); if (e.mode === 'windup') wind = true; }
+      const d = Math.hypot(e.x - p.x, e.y - p.y);
+      return { ok: wind && Game.eBullets.length === 10 && d > 380, got: (wind ? '有預警' : '沒預警') + '，放了 ' + Game.eBullets.length + ' 發，距離 ' + Math.round(d) };
+    }],
+    ['敵人', '列隊蟲', '6 節排成一列跟著走；頭被打死，下一節變成頭', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player, W = [];
+      for (let i = 0; i < 6; i++) { const w = new Enemy('worm', p.x + 600 + i * 22, p.y, 1); w.spawnT = 0; w.t = { ...w.t, dmg: 0 }; w.ahead = W[i - 1] || null; W.push(w); }
+      Game.enemies = W.slice();
+      for (let f = 0; f < 120; f++) { Game.time += 1 / 60; for (const w of W) w.update(1 / 60, p); }
+      const gap = Math.max(...W.slice(1).map((w, i) => Math.hypot(w.x - W[i].x, w.y - W[i].y)));
+      W[0].dead = true; W[1].update(1 / 60, p);
+      return { ok: gap < 40 && W[1].ahead === null, got: '最大間距 ' + Math.round(gap) + '；頭死後第 2 節' + (W[1].ahead === null ? '變成頭' : '還在跟') };
+    }],
+    ['敵人', '盾衛', '打到盾（朝固定方向）的子彈反彈回去變成敵彈，不扣血；從背面打照常受傷', M => {
+      const shoot = ang => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const e = M.targets([[150, 0]], 'shield', true, 1)[0]; e.shieldA = ang; const hp = e.hp;
+        M.run(10);
+        return { dmg: hp - e.hp, eb: Game.eBullets.length };
+      };
+      const front = shoot(Math.PI), back = shoot(0);
+      return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發' };
+    }],
+    ['敵人', '分裂體', '死掉時分成 3 隻碎裂體', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const e = M.targets([[150, 0]], 'splitter', true, 1)[0];
+      e.hurt(9999, 0, 0, 'direct', null);
+      const n = Game.enemies.filter(q => q.type === 'splitling').length;
+      return { ok: n === 3, got: '分出 ' + n + ' 隻' };
+    }],
+    ['敵人', '潛伏者', '隱形接近（自動瞄準、追蹤看不到），離 140 內現形、預警後撲過去，之後現形 2 秒', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[400, 0]], 'lurker', false, 1)[0]; e.t = { ...e.t, dmg: 0 };
+      const hidden = e.cloak >= 1 && !nearestEnemy(p.x, p.y, 900, null, true);
+      const seen = new Set();
+      for (let f = 0; f < 60 * 5; f++) { Game.time += 1 / 60; e.update(1 / 60, p); seen.add(e.mode); }
+      return { ok: hidden && seen.has('windup') && seen.has('charge') && seen.has('shown'), got: (hidden ? '一開始隱形、自動瞄準找不到' : '一開始就看得到') + '；經過 ' + [...seen].join(' → ') };
+    }],
+    ['敵人', '母巢', '每 4 秒生 2 隻蟲群，最多 8 隻；生出來的不給晶片成長', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'rear', null, null]);
+      const p = Game.player, h = M.targets([[300, 0]], 'hive', true, 1)[0]; h.cd = 0.05;
+      for (let f = 0; f < 60 * 30; f++) { Game.time += 1 / 60; h.update(1 / 60, p); }
+      const kids = Game.enemies.filter(q => q.type === 'swarmer' && !q.dead), k = kids[0];
+      Game.growth = {}; Game.tagGrow(k, null, 'rear'); k.hurt(9999, 0, 0, 'direct', null);
+      return { ok: kids.length === 8 && !(Game.growth.rear > 0), got: '生了 ' + kids.length + ' 隻；打死一隻成長 +' + (Game.growth.rear || 0) };
+    }],
+    ['敵人', '主題小兵隨進度增加', '第 1 星區前半 0～1 種、第 3 星區 2～3 種；母巢第 3 星區才出現', M => {
+      const avg = (s, late) => { let n = 0, hive = 0; for (let i = 0; i < 200; i++) { const T = Game.pickThemes(s, late); n += T.list.length; if (T.list.includes('hive')) hive++; } return [n / 200, hive]; };
+      const [a1, h1] = avg(1, false), [a2] = avg(2, false), [a3, h3] = avg(3, false);
+      return { ok: a1 <= 1 && a2 >= 1 && a3 >= 2 && h1 === 0 && h3 > 0, got: '平均幾種：星區 1 ' + a1.toFixed(1) + '、星區 2 ' + a2.toFixed(1) + '、星區 3 ' + a3.toFixed(1) + '；母巢出現：星區 1 ' + h1 + ' 次、星區 3 ' + h3 + ' 次' };
     }],
     ['敵人', '推王（抗擊退）', '攻城砲（擊退 4）推得動星噬母艦（抗 1.5），雷射（0.6）推不動', M => {
       const push = (weapon, path) => {
