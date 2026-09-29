@@ -951,6 +951,7 @@ const Game = {
         const rr = b.r + e.r;
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
         if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
+        b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
         // 用量成長：照著晶片的玩法打中敵人
         const own = b.owner;

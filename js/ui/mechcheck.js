@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（60 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（61 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -248,6 +248,18 @@ const MechCheck = {
       const each = row.map(r => r.stuck ? r.stuck.length : 0).join('');
       const want = n * 10 * Math.min(3, 1.5 + 0.1 * n);
       return { ok: n > 0 && near1(hp - e.hp, want) && each === '11110', got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${Math.round(want)}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}` };
+    }],
+    ['電路晶片', '相刃＋迴旋', '刃片揮到盡頭時有砍到敵人就飛回飛船；沒砍到就消失', M => {
+      const go = tg => {
+        M.setup('sandbox', 'vanguard', 'blade', null, null, ['weapon', 'boomerang', null, null]); M.targets(tg);
+        Game.player.fire();
+        let ret = 0, home = false;
+        for (let f = 0; f < 90; f++) { Game.updateBullets(1 / 60); ret = Math.max(ret, Game.bullets.filter(b => b.mode === 'return').length); }
+        home = !Game.bullets.length;
+        return { ret, home };
+      };
+      const hit = go([[70, 0]]), miss = go([]);
+      return { ok: hit.ret > 0 && hit.home && miss.ret === 0, got: `砍到：${hit.ret} 片折返${hit.home ? '、都飛回來了' : '、還沒回來'}；沒砍到：${miss.ret} 片折返` };
     }],
     ['電路晶片', '黏著＋迴旋', '迴旋的子彈打中時留一份黏著，照常折返（不會黏住就消失）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', 'boomerang', null]); const e = M.targets([[150, 0]])[0];

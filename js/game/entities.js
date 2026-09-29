@@ -337,6 +337,7 @@ class Bullet {
       }
     }
     if (this.life <= 0) {
+      if (this.boom && this.mode === 'fly' && this.shape === 'blade' && this.hitAny) { this.startReturn(); return; }  // 相刃＋迴旋：刃片揮到盡頭時，有砍到敵人就飛回來（相刃無限穿透，穿甲永遠用不完）
       {
         if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
         this.dead = true;
