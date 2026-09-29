@@ -50,10 +50,11 @@ const CHIPS = {
   rear: { name: '反向', short: '反向', type: 'launch', cost: 2, evo: '全向',
     grow: { what: '反向子彈命中', need: [30, 90] },
     desc: '目前的子彈另外朝反方向也射一份。',
+    copyCredit: true,  // 傷害統計：只有多射出來的子彈算反向的（當成它的基礎傷害），原本往前的不算
     lvs: ['反方向 1 份', '反方向 2 份（稍微張開）', '進化：前後左右 4 個方向'],
     apply: (list, pw, o) => {
       const offs = o.lv >= 3 ? [Math.PI, Math.PI / 2, -Math.PI / 2] : o.lv >= 2 ? [Math.PI - 0.12, Math.PI + 0.12] : [Math.PI];
-      return [...list, ...offs.flatMap(d => list.map(b => ({ ...b, angle: b.angle + d, rear: true })))];
+      return [...list, ...offs.flatMap(d => list.map(b => ({ ...b, angle: b.angle + d, rear: true, src: o.key || b.src })))];
     } },
   charge: { name: '蓄力', short: '蓄力', type: 'launch', cost: 0, evo: '過載砲',
     grow: { what: '蓄滿命中', need: [90, 270] },
@@ -68,8 +69,8 @@ const CHIPS = {
   // ---------- 命中之後 ----------
   sticky: { name: '黏著', short: '黏著', type: 'impact', cost: 1, evo: '連鎖引爆',
     grow: { what: '一次引爆 5 發以上', need: [30, 90] },
-    desc: '子彈黏在敵人身上（先造成 30% 傷害），2 秒後黏著的子彈一起爆炸。會穿透的子彈每穿過一隻就留一份，穿甲用完才黏住。適合打血厚的敵人。',
-    lvs: ['爆炸 ×2', '爆炸 ×3', '進化：爆炸波及周圍，並立刻引爆鄰近敵人身上的子彈'],
+    desc: '子彈黏在敵人身上（先造成 30% 傷害）；第一發黏上後 2 秒，黏著的子彈一起爆炸（之後黏上的不重新計時）。黏越多發，爆炸倍率越高。會穿透的子彈每穿過一隻就留一份，穿甲用完才黏住；迴旋每打一隻留一份，照常折返。適合打血厚的敵人。',
+    lvs: ['爆炸 ×(1.5 ＋ 每發 0.1)，最多 ×3', '爆炸 ×(2 ＋ 每發 0.15)，最多 ×4.5', '進化：爆炸波及周圍，並立刻引爆鄰近敵人身上的子彈'],
     apply: (list, pw, o) => list.map(b => ({ ...b, sticky: o.lv })) },
   infect: { name: '感染', short: '感染', type: 'impact', cost: 2, evo: '瘟疫',
     grow: { what: '爆出的子彈命中', need: [15, 45] },

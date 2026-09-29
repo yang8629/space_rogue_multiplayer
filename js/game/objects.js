@@ -4,25 +4,28 @@
 
 // =====================================================================
 // 地圖物件：場上固定存在、會改變走位和子彈路線（不是可以撿的東西）
-//   行星  planet：實心大球，擋所有子彈；靠近的子彈被引力彎過去（越慢彎越多）
+//   行星  planet：實心大球，擋所有子彈；靠近的子彈被引力彎過去（越慢彎越多）；大小、耐久、引力隨機；只有旗艦的子彈打得掉（越打越小，打光就崩解）
 //   黑洞  hole  ：把附近所有東西往中心拉；核心吞掉子彈，敵人和飛船受傷（敵人走路會繞開，被打進去才會受傷）
 //   彗星  comet ：定時沿直線橫越（先有預警線）。撞到敵人、飛船都受傷；打爆後碎片往前炸（只傷敵人）
-//   小行星 rock ：一整條小行星帶，擋所有子彈；擋住視野；只有單發 ≥ 30 的傷害打得動，打爆給電路上的晶片成長
+//   小行星 rock ：一整條小行星帶（中間留 2 個縫），擋所有子彈和敵人（敵人會繞路或鑽縫）；擋住視野；只有單發 ≥ 30 的傷害打得動，打爆給電路上的晶片成長；
+//                 旗艦的子彈、旗艦和滾動的刺殼撞上去也會打碎（不給成長）
 //   雙人：房主模擬，隊友只收同步（Game.objs）；飛船被拉、被擋由各自的電腦算
 // =====================================================================
 const OBJ = {
   PLANET_GM: 1.2e7, HOLE_GM: 2.4e7,  // 引力強度（加速度 = GM / 距離²）
   HOLE_R: 280, HOLE_CORE: 34,
   ROCK_MIN_DMG: 30, ROCK_GROW: 0.05,  // 小行星：單發至少 30 才打得動；打爆時電路上每個會成長的晶片 + Lv2 門檻的 5%
+  PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
+  FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
   COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60, COMET_GRAV: 1.5,  // COMET_GRAV：彗星受引力影響的倍數
 };
 const Objects = {
   dt: 1 / 60,
 
-  // ---------- 產生：每場戰鬥一半機率完全沒有；有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）、旗艦戰兩顆對稱行星；沙盒／靶場沒有 ----------
+  // ---------- 產生：每場戰鬥一半機率完全沒有；有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）、旗艦戰 1～2 種（行星 1～2 顆、小行星帶、彗星，沒有黑洞）；沙盒／靶場沒有 ----------
   gen(C, node) {
     if (!C || C.sandbox || Math.random() < 0.5) return [];
-    const kinds = C.boss ? ['planet', 'planet'] : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
+    const kinds = C.boss ? pickN(['planet', 'belt', 'comet'], randInt(1, 2)) : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
     if (kinds.includes('comet') && !kinds.includes('planet')) kinds.push('planet');  // 有彗星就配一顆行星：彗星會被引力彎過去
     const out = [], cx = CFG.WORLD_W / 2, cy = CFG.WORLD_H / 2;
     const spot = (minD, r) => {  // 離開場地中央（玩家出生點）和其他物件
@@ -34,18 +37,20 @@ const Objects = {
       }
       return null;
     };
-    if (C.boss) {  // 旗艦戰：左右兩顆對稱的行星當掩體
-      out.push({ type: 'planet', x: cx - 520, y: cy, r: 80 }, { type: 'planet', x: cx + 520, y: cy, r: 80 });
-      return out;
-    }
     for (const k of kinds) {
-      if (k === 'planet') { const r = randInt(60, 90), p = spot(300, r); if (p) out.push({ type: 'planet', ...p, r }); }
+      if (k === 'planet') for (let n = C.boss ? randInt(1, 2) : 1; n > 0; n--) {  // 大小、耐久、引力隨機（引力 ×0.7～1.3）
+        const r = randInt(55, 95), p = spot(300, r);
+        if (p) out.push({ type: 'planet', ...p, r, r0: r, hp: r * OBJ.PLANET_HP, maxHp: r * OBJ.PLANET_HP, gm: +rand(0.7, 1.3).toFixed(2) });
+      }
       if (k === 'hole') { const p = spot(420, OBJ.HOLE_R * 0.6); if (p) out.push({ type: 'hole', ...p, r: OBJ.HOLE_CORE, R: OBJ.HOLE_R, tick: 0 }); }
       if (k === 'comet') out.push({ type: 'cometgen', t: rand(4, 7) });
-      if (k === 'belt') {  // 小行星帶：一條斜線上十幾顆，中央（出生點）附近空出來
+      if (k === 'belt') {  // 小行星帶：一條斜線上十幾顆，中央（出生點）附近空出來；另外留 2 個縫（缺一顆，兩旁的縮小、不偏移，寬約 80）讓敵人鑽
         const a = rand(0, TAU), ox = cx + Math.cos(a + Math.PI / 2) * rand(260, 420), oy = cy + Math.sin(a + Math.PI / 2) * rand(260, 420);
+        const g1 = randInt(-7, -2), g2 = randInt(2, 7), gap = i => i === g1 || i === g2, edge = i => gap(i - 1) || gap(i + 1);
         for (let i = -9; i <= 9; i++) {
-          const x = ox + Math.cos(a) * i * 58 + rand(-22, 22), y = oy + Math.sin(a) * i * 58 + rand(-22, 22), r = randInt(18, 32);
+          if (gap(i)) continue;
+          const e = edge(i), j = e ? 0 : rand(-22, 22);
+          const x = ox + Math.cos(a) * (i * 58 + j) - Math.sin(a) * rand(-12, 12), y = oy + Math.sin(a) * (i * 58 + j) + Math.cos(a) * rand(-12, 12), r = e ? 18 : randInt(18, 32);
           if (x < r || y < r || x > CFG.WORLD_W - r || y > CFG.WORLD_H - r || Math.hypot(x - cx, y - cy) < 200 + r) continue;
           const hp = r * 4;
           out.push({ type: 'rock', x, y, r, hp, maxHp: hp });
@@ -78,13 +83,18 @@ const Objects = {
         }
       }
     }
-    // 敵人不會穿過行星（撞得很快時多受傷：被擊退撞上去）；小行星帶不擋敵人的移動（只擋子彈和視野），不然敵人會卡在帶子後面
+    // 敵人不會穿過行星和小行星（撞得很快時多受傷：被擊退撞上去）；繞路靠尋路（flowDir）
+    // 旗艦、滾動中的刺殼撞到小行星直接撞碎
     for (const e of G.enemies) {
       if (e.dead) continue;
       for (const o of G.objs) {
-        if (o.type !== 'planet') continue;
+        if (o.type !== 'planet' && (o.type !== 'rock' || o.dead)) continue;
+        if (o.type === 'rock' && (e.t.boss || (e.type === 'brute' && e.mode === 'charge'))) {
+          if (dist2(e.x, e.y, o.x, o.y) < (o.r + e.r) ** 2) this.hitRock(o, o.hp, null, o.x, o.y, true);
+          continue;
+        }
         if (!this.pushOut(e, o, e.r)) continue;
-        if (o.type === 'planet' && Math.hypot(e.vx, e.vy) > 300 && G.time > (e.slamT || 0)) {
+        if (Math.hypot(e.vx, e.vy) > 300 && G.time > (e.slamT || 0)) {
           e.slamT = G.time + 0.5;
           e.hurt(20, 0, 0, 'shock', e.lastAtt || null);
           floatText(e.x, e.y - e.r, 20, '#ffd166');
@@ -92,6 +102,63 @@ const Objects = {
       }
     }
     G.objs = G.objs.filter(o => !o.dead);
+    if ((this.flowT = (this.flowT || 0) - dt) <= 0) { this.flowT = OBJ.FLOW_EVERY; this.buildFlow(); }
+  },
+
+  // ---------- 敵人尋路：看不到玩家（中間有行星或小行星）時，照路線圖繞過去或鑽縫 ----------
+  //   場地切成 20×20 的格子，障礙物（外擴 12）佔的格子不能走；每 0.25 秒從每個玩家往外算一次步數（BFS）
+  //   敵人往周圍 8 格裡步數最少的那一格走
+  blockers() { return Game.objs.filter(o => o.type === 'planet' || (o.type === 'rock' && !o.dead)); },
+  buildFlow() {
+    const B = this.blockers();
+    this.fields = new Map();
+    if (!B.length) return;
+    const C = OBJ.FLOW_CELL, W = Math.ceil(CFG.WORLD_W / C), H = Math.ceil(CFG.WORLD_H / C), blk = new Uint8Array(W * H);
+    for (const o of B) {
+      const R = o.r + OBJ.FLOW_PAD, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
+      const y0 = Math.max(0, Math.floor((o.y - R) / C)), y1 = Math.min(H - 1, Math.floor((o.y + R) / C));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+        if (dist2((x + 0.5) * C, (y + 0.5) * C, o.x, o.y) < R * R) blk[y * W + x] = 1;
+    }
+    for (const p of Game.players()) {
+      if (!p || p.dead) continue;
+      const dist = new Int32Array(W * H).fill(-1), q = new Int32Array(W * H);
+      const px = clamp(Math.floor(p.x / C), 0, W - 1), py = clamp(Math.floor(p.y / C), 0, H - 1);
+      let head = 0, tail = 0;
+      dist[py * W + px] = 0; q[tail++] = py * W + px;
+      while (head < tail) {
+        const c = q[head++], x = c % W, y = (c - x) / W, d = dist[c] + 1;
+        if (x > 0 && dist[c - 1] < 0 && !blk[c - 1]) { dist[c - 1] = d; q[tail++] = c - 1; }
+        if (x < W - 1 && dist[c + 1] < 0 && !blk[c + 1]) { dist[c + 1] = d; q[tail++] = c + 1; }
+        if (y > 0 && dist[c - W] < 0 && !blk[c - W]) { dist[c - W] = d; q[tail++] = c - W; }
+        if (y < H - 1 && dist[c + W] < 0 && !blk[c + W]) { dist[c + W] = d; q[tail++] = c + W; }
+      }
+      this.fields.set(p, { dist, W, H });
+    }
+  },
+  // 從 (ax, ay) 到 (bx, by) 的直線有沒有被行星、小行星擋住（pad：線的半寬）；回傳擋住的那一個
+  losBlocked(ax, ay, bx, by, pad) {
+    for (const o of Game.objs) {
+      if (o.type !== 'planet' && (o.type !== 'rock' || o.dead)) continue;
+      if (segDist2(ax, ay, bx, by, o.x, o.y) < (o.r + pad) ** 2) return o;
+    }
+    return null;
+  },
+  // 尋路方向：往周圍 8 格裡步數最少的格子中心走；找不到路（被圍住、路線圖還沒算好）回傳 null，照直線追
+  flowDir(e, p) {
+    const F = this.fields && this.fields.get(p);
+    if (!F) return null;
+    const C = OBJ.FLOW_CELL, { dist, W, H } = F, cx = clamp(Math.floor(e.x / C), 0, W - 1), cy = clamp(Math.floor(e.y / C), 0, H - 1);
+    let best = -1, bd = dist[cy * W + cx] >= 0 ? dist[cy * W + cx] : Infinity;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const x = cx + ox, y = cy + oy;
+      if ((!ox && !oy) || x < 0 || y < 0 || x >= W || y >= H) continue;
+      const d = dist[y * W + x];
+      if (d >= 0 && d < bd) { bd = d; best = y * W + x; }
+    }
+    if (best < 0) return null;
+    const tx = (best % W + 0.5) * C - e.x, ty = (Math.floor(best / W) + 0.5) * C - e.y, l = Math.hypot(tx, ty) || 1;
+    return [tx / l, ty / l];
   },
   // 敵人繞開黑洞：(mx, my) 是敵人想走的方向；在引力範圍（外加 30）內時，拿掉朝核心的分量改往旁邊繞，再加上往外的力（越近越強）
   // 只影響敵人自己走路：被擊退、被減速、精英衝鋒時還是可能被吸進核心
@@ -126,7 +193,7 @@ const Objects = {
       if (o.type !== 'planet' && o.type !== 'hole') continue;
       const range = o.type === 'hole' ? o.R : o.r * 3.2, dx = o.x - x, dy = o.y - y, d2 = dx * dx + dy * dy;
       if (d2 > range * range || d2 < 1) continue;
-      const d = Math.sqrt(d2), a = (o.type === 'hole' ? OBJ.HOLE_GM : OBJ.PLANET_GM) / Math.max(d2, (o.r * 1.2) ** 2);
+      const d = Math.sqrt(d2), a = (o.type === 'hole' ? OBJ.HOLE_GM : OBJ.PLANET_GM * (o.gm || 1)) / Math.max(d2, (o.r * 1.2) ** 2);
       ax += dx / d * a; ay += dy / d * a;
     }
     return [ax, ay];
@@ -182,20 +249,44 @@ const Objects = {
     }
     return false;
   },
-  // 敵彈：被行星、小行星擋住，被黑洞核心吞掉，被引力彎曲；回傳 true = 消失了
+  // 敵彈：被行星、小行星擋住，被黑洞核心吞掉，被引力彎曲；回傳 true = 消失了；旗艦的子彈會削掉行星、打碎小行星
   eBulletHit(b) {
     if (!Game.objs.length) return false;
     const [ax, ay] = this.gravity(b.x, b.y);
     b.vx += ax * this.dt; b.vy += ay * this.dt;
     for (const o of Game.objs) {
-      if (o.type !== 'planet' && o.type !== 'rock' && o.type !== 'hole') continue;
-      if (dist2(b.x, b.y, o.x, o.y) < (o.r + b.r) ** 2) { b.life = 0; return true; }
+      if ((o.type !== 'planet' && o.type !== 'rock' && o.type !== 'hole') || o.dead) continue;
+      if (dist2(b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
+      if (b.boss && o.type === 'planet') this.hurtPlanet(o, b.dmg, b.x, b.y);
+      if (b.boss && o.type === 'rock') this.hitRock(o, b.dmg, null, b.x, b.y, true);
+      b.life = 0; return true;
     }
     return false;
   },
+  // 行星受傷（只有旗艦的子彈）：越打越小（面積跟著耐久），縮到一半大小以下就崩解
+  hurtPlanet(o, dmg, x, y) {
+    if (o.dead || !o.maxHp) return;
+    o.hp -= dmg;
+    o.r = o.r0 * Math.sqrt(Math.max(0, o.hp) / o.maxHp);
+    if (Math.random() < 0.3) burst(x, y, '#6c7fb8', 3, 100, 0.3, 2);
+    if (o.r >= o.r0 * 0.5) return;
+    o.dead = true;
+    burst(o.x, o.y, '#6c7fb8', 40, 300, 0.8, 4);
+    Game.shake(10); SFX.play('bigkill');
+    floatText(o.x, o.y - o.r0, '行星崩解', '#9fb4ff', true);
+    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r0), '行星崩解', '#9fb4ff', 1]);
+  },
   // 小行星受傷：單發至少 30 才算；打爆時打的人電路上每個會成長的晶片 + 它 Lv2 門檻的 5%（每個晶片一樣值錢）
-  hitRock(o, dmg, owner, x, y) {
-    if (dmg < OBJ.ROCK_MIN_DMG || o.dead) { if (Math.random() < 0.3) burst(x, y, '#8a8f98', 2, 80, 0.2, 2); return; }
+  //   byBoss：旗艦的子彈或撞擊、滾動的刺殼（沒有最低傷害，打碎不給成長）
+  hitRock(o, dmg, owner, x, y, byBoss = false) {
+    if (o.dead) return;
+    if (byBoss) {
+      o.hp -= dmg;
+      if (Math.random() < 0.3) burst(x, y, '#c9b79c', 3, 100, 0.3, 2);
+      if (o.hp <= 0) { o.dead = true; burst(o.x, o.y, '#c9b79c', 20, 220, 0.6, 3); SFX.play('explode'); }
+      return;
+    }
+    if (dmg < OBJ.ROCK_MIN_DMG) { if (Math.random() < 0.3) burst(x, y, '#8a8f98', 2, 80, 0.2, 2); return; }
     o.hp -= dmg;
     burst(x, y, '#c9b79c', 4, 120, 0.3, 2);
     if (o.hp > 0) return;
@@ -298,7 +389,7 @@ const Objects = {
   pack() {
     const r = Math.round;
     return Game.objs.filter(o => o.type !== 'cometgen').map(o =>
-      o.type === 'planet' ? [0, r(o.x), r(o.y), o.r]
+      o.type === 'planet' ? [0, r(o.x), r(o.y), r(o.r), o.gm || 1]
         : o.type === 'hole' ? [1, r(o.x), r(o.y), o.r, o.R]
         : o.type === 'rock' ? [2, r(o.x), r(o.y), o.r, r(o.hp), r(o.maxHp)]
         : [3, r(o.x), r(o.y), o.r, r(o.vx), r(o.vy), r2(Math.max(0, o.warn)), o.id]);
@@ -308,6 +399,7 @@ const Objects = {
     return (Array.isArray(arr) ? arr : []).filter(a => Array.isArray(a) && T[a[0]]).map(a => {
       const o = { type: T[a[0]], x: num(a[1]), y: num(a[2]), r: num(a[3], 20) };
       if (o.type === 'hole') o.R = num(a[4], OBJ.HOLE_R);
+      if (o.type === 'planet') o.gm = num(a[4], 1);
       if (o.type === 'rock') { o.hp = num(a[4]); o.maxHp = num(a[5], 1); }
       if (o.type === 'comet') { o.vx = num(a[4]); o.vy = num(a[5]); o.warn = num(a[6]); o.id = a[7]; }
       return o;

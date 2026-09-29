@@ -64,7 +64,7 @@ function runOps(ops, depth) {
       for (const b of list) before += b.damage;
       list = def.apply(list, o.pw, o);
       for (const b of list) after += b.damage;
-      if (before > 0) creditFactor(list, o.key, after / before);
+      if (before > 0 && !def.copyCredit) creditFactor(list, o.key, after / before);  // copyCredit：多射出來的子彈自己記在晶片上（反向）
     }
     if (list.length > CFG.MAX_SHOTS_PER_FIRE) list = capShots(list);
   }

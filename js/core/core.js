@@ -65,6 +65,17 @@ function creditFactor(list, key, f) {
   for (const b of list) b.cr = Object.assign({}, b.cr, { [key]: ((b.cr && b.cr[key]) || 0) + lf });
   return list;
 }
+// 命中之後才發生的倍率（黏著爆炸、地雷衝出去、迴旋回程）：把 ln(倍率) 記在那個晶片上
+function attCredit(att, key, f) {
+  if (!att || !(f > 0)) return att;
+  return { ...att, cr: { ...(att.cr || {}), [key]: ((att.cr && att.cr[key]) || 0) + Math.log(f) } };
+}
+// 好幾發合在一起的傷害（黏著一起爆炸）：各晶片的 ln 倍率照每一發的傷害加權平均
+function mergeAtt(list) {
+  const tot = list.reduce((a, q) => a + q.w, 0) || 1, cr = {};
+  for (const { att, w } of list) if (att && att.cr) for (const k in att.cr) cr[k] = (cr[k] || 0) + att.cr[k] * w / tot;
+  return { ...list[0].att, cr };
+}
 function splitDamage(amount, att, rateCr) {
   const w = {};
   for (const src of [att && att.cr, rateCr]) if (src) for (const k in src) w[k] = (w[k] || 0) + src[k];

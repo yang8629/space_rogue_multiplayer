@@ -15,7 +15,7 @@ const NODE_META = {
   repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP；可以拆除廢鐵（每塊 ◆${CFG.SCRAP_REMOVE}）。` },
   blackhole: { label: '黑洞', icon: '◐', color: '#b388ff', desc: () => `投入 2 個晶片：${CFG.FUSE_SUCCESS * 100}% 融合成奇異點（兩個效果合一格＋超載詞綴），否則變成廢鐵。也可以不投入直接離開。之後至少有一條路通往維修站；一條路線最多一個黑洞。` },
   armory: { label: '軍械台', icon: '⚒', color: '#ff9f1c', desc: () => `武器升級（每張圖只有 1 個）。武器升滿後改選「插槽 +1」或 ◆${CFG.ARMORY_BONUS.credits}＋HP ${CFG.ARMORY_BONUS.hp}。` },
-  boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場兩側有行星當掩體）。勝利後插槽 +1、零件格 +1、◆50，可以裝上這隻旗艦的專屬模組；進入下一關時修復 30% HP。' },
+  boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場可能有行星、小行星帶、彗星；旗艦的子彈會削掉行星、打碎小行星）。勝利後插槽 +1、零件格 +1、◆50，可以裝上這隻旗艦的專屬模組；進入下一關時修復 30% HP。' },
 };
 
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）
