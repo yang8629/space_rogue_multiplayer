@@ -11,6 +11,7 @@ const CFG = {
   DASH_SPEED: 900, DASH_TIME: 0.14,
   START_SLOTS: 4, MAX_SLOTS: 8, INV_SLOTS: 6,
   MAX_CHIP_LV: 3,           // 晶片等級上限；每級效果強度 +50%
+  GROW_TAG_TIME: 2,         // 用量成長：照玩法打中後 2 秒內敵人死掉才算（見 Game.tagGrow）
   MAX_SHOTS_PER_FIRE: 32,   // 單次開火子彈上限，超過的轉為傷害
   MAX_TRIGGER_DEPTH: 3,     // 命中觸發巢狀上限
   MAX_LIVE_BULLETS: 700,

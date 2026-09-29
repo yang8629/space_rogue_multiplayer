@@ -676,7 +676,7 @@ const Game = {
     const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
     if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
-    if (!this.isClient()) this.infectBurst(e);
+    if (!this.isClient()) { this.infectBurst(e); this.payGrowTags(e); }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     SFX.play(e.t.boss ? 'bossdeath' : big ? 'bigkill' : 'kill');
     if (big) this.shake(e.type === 'elite' ? 14 : 6);
@@ -953,16 +953,18 @@ const Game = {
         if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
         b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
-        // 用量成長：照著晶片的玩法打中敵人
+        // 用量成長：照著晶片的玩法打中敵人 → 在牠身上貼標記（2 秒），牠死掉時每個標記各加「牠的晶體值」（見 tagGrow）
         const own = b.owner;
-        if (b.mode === 'return') this.grow(own, 'boomerang');
-        if (orbit || b.orbShot) this.grow(own, 'orbit');
-        if (b.accel && b.accelMul >= 1.5) this.grow(own, 'accel');
-        if (b.quick && b.accelMul >= 1.5) this.grow(own, 'quick');
-        if (b.full) this.grow(own, 'charge');
-        if (b.rear) this.grow(own, 'rear');
-        if (b.dashShot) this.grow(own, 'dashfire');
-        if (b.infGen > 0) this.grow(own, 'infect');
+        if (b.mode === 'return') this.tagGrow(e, own, 'boomerang');
+        if (orbit || b.orbShot) this.tagGrow(e, own, 'orbit');
+        if (b.stasis && b.dashed) this.tagGrow(e, own, 'stasis');
+        if (b.accel && b.accelMul >= 1.5) this.tagGrow(e, own, 'accel');
+        if (b.quick && b.accelMul >= 1.5) this.tagGrow(e, own, 'quick');
+        if (b.bounced) this.tagGrow(e, own, 'wallbounce');
+        if (b.full) this.tagGrow(e, own, 'charge');
+        if (b.rear) this.tagGrow(e, own, 'rear');
+        if (b.dashShot) this.tagGrow(e, own, 'dashfire');
+        if (b.infGen > 0) this.tagGrow(e, own, 'infect');
         if (b.pull) this.pullAt(b);
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         let att = b.att;
@@ -1040,9 +1042,9 @@ const Game = {
       const d = Math.hypot(o.x - b.x, o.y - b.y);
       if (d > R + o.r || d < 1) continue;
       o.vx += (b.x - o.x) / d * 380; o.vy += (b.y - o.y) / d * 380;
+      this.tagGrow(o, b.owner, 'pull');
       n++;
     }
-    this.grow(b.owner, 'pull', n);
     if (b.pull >= 3) {
       const L = b.owner || this;
       L.pullHits = (L.pullHits || 0) + 1;
@@ -1057,7 +1059,7 @@ const Game = {
         const d = Math.hypot(o.x - v.x, o.y - v.y);
         if (d > v.r || d < 4) continue;
         o.vx += (v.x - o.x) / d * 1600 * dt; o.vy += (v.y - o.y) / d * 1600 * dt;
-        if (Math.random() < dt * 2) this.grow(v.owner, 'pull');
+        this.tagGrow(o, v.owner, 'pull');
       }
       if (v.fx <= 0) {
         v.fx = 0.3;
@@ -1108,7 +1110,7 @@ const Game = {
     const lv = S[0].lv, M = lv >= 2 ? Math.min(4.5, 2 + 0.15 * n) : Math.min(3, 1.5 + 0.1 * n);
     const total = S.reduce((a, q) => a + q.dmg, 0) * M, x = e.x, y = e.y;
     const att = attCredit(mergeAtt(S.map(q => ({ att: q.att, w: q.dmg }))), 'sticky', M);
-    if (n >= 5) this.grow(S[0].owner, 'sticky');
+    this.tagGrow(e, S[0].owner, 'sticky');
     const ring = (r, c) => {
       if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color: c });
       if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), c]);
@@ -1120,6 +1122,7 @@ const Game = {
     if (lv >= 3) {  // 連鎖引爆：波及周圍，並立刻引爆鄰近敵人身上的子彈
       for (const o of this.enemies) {
         if (o === e || o.dead || o.spawnT > 0 || dist2(x, y, o.x, o.y) > 90 * 90) continue;
+        this.tagGrow(o, S[0].owner, 'sticky');
         o.hurt(total * 0.5, 0, 0, 'explode', att);
         if (o.stuck && o.stuck.length) o.stickT = 0.05;
       }
@@ -1162,6 +1165,17 @@ const Game = {
     return false;
   },
   // 用量成長：owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
+  // 成長標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），2 秒內敵人死掉就各加「牠的晶體值」
+  //   蟲群 1、噴吐者 2、刺殼 4、虛空獵手 12、旗艦 40；子彈再多，同一隻敵人死掉也只算一份
+  tagGrow(e, owner, id) {
+    const T = e.growTags || (e.growTags = []), o = owner || null;
+    const t = T.find(q => q.id === id && q.owner === o);
+    if (t) t.t = this.time; else T.push({ id, owner: o, t: this.time });
+  },
+  payGrowTags(e) {
+    for (const q of e.growTags || []) if (this.time - q.t <= CFG.GROW_TAG_TIME) this.grow(q.owner, q.id, e.t.credits || 0);
+    e.growTags = null;
+  },
   grow(owner, id, n = 1) {
     const g = owner ? owner.growth : this.growth;
     if (!g || !(n > 0)) return;

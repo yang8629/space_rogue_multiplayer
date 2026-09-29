@@ -278,7 +278,7 @@ class Bullet {
       if (!near && this.waitT <= 0) { this.dead = true; burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
       if (near) {
         this.angle = Math.atan2(near.y - this.y, near.x - this.x);
-        this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2); Game.grow(this.owner, 'stasis');
+        this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
         this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1; this.flyDist = 0;
       }
       return;
@@ -328,7 +328,7 @@ class Bullet {
         if (outX) { this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
         if (outY) { this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
         this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
-        Game.grow(this.owner, 'wallbounce');
+        this.bounced = true;  // 成長：反彈過的子彈打中才貼標記
         if (this.prism) { this.copy(0.4); this.angle -= 0.2; }  // 稜鏡：反彈時分裂
       } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
       else {
