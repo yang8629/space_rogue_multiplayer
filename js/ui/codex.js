@@ -260,7 +260,7 @@ const Codex = {
         另外有兩個防止卡頓的上限，超過的部分<b>會直接消失</b>：畫面上的玩家子彈最多 ${CFG.MAX_LIVE_BULLETS} 發；同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次命中觸發。平常打不到，只有極端的觸發＋分裂電路才會碰到。`)}
       ${R('強度（等級）', '數值晶片的「強度」是效果的倍率：再拿到已擁有的同種晶片會自動合成升級，Lv2 強度 ×1.5、Lv3 強度 ×2（例如分裂 3 → 4 → 5 顆），倉庫被動也一起放大。改變玩法的晶片每一級的效果寫在卡片上。')}
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格。部分晶片放在倉庫時提供被動效果；同一個晶片要裝上電路，還是留在倉庫拿被動，需要取捨。不要的晶片可以回收，拿回 40% 售價。`)}
-      ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT}）、精英戰獎勵、武器升滿後的軍械台。`)}
+      ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT} 起，隨星區上漲）、精英戰獎勵、武器升滿後的軍械台。`)}
       ${R('黑洞融合', '投入 2 個晶片：50% 融合成奇異點（兩個效果合進一格，再加一個超載詞綴），50% 變成廢鐵（卡住插槽，只能在維修站拆除）。奇異點不會照用量成長。')}
       ${R('機體與地圖', '零件（改裝廠）、背包模組（精英、旗艦）、4 艘飛船與地圖物件，見「機體與地圖」分頁。')}
     </div>`;
@@ -289,7 +289,7 @@ const Codex = {
     const R = (t, d) => `<div><b>${t}</b><br>${d}</div>`;
     return `<div class="codex-sec"><h3>🚀 飛船（開局配置）</h3><div class="cards" style="justify-content:flex-start;margin:0">${ships}</div></div>
       <div class="codex-sec"><h3>⚙ 零件</h3><div class="sub">零件格開局 6 格（先鋒號 7 格），擊沉旗艦 +1。每層小好處＋小代價，同種疊到 2 層、4 層開啟特性；
-        <b>${BALANCE.name}</b>：${BALANCE.desc}。零件在「🔧 改裝廠」三選一取得，也可以付 ◆${PART_SWAP_PRICE} 把 1 層換成另一種。</div>
+        <b>${BALANCE.name}</b>：${BALANCE.desc}。零件在「🔧 改裝廠」三選一取得，也可以付 ◆${PART_SWAP_PRICE}（隨星區上漲）把 1 層換成另一種。</div>
         <div class="cards" style="justify-content:flex-start;margin:0">${parts}</div></div>
       <div class="codex-sec"><h3>🎒 背包模組（只有 1 格）</h3><div class="sub">精英戰鬥勝利後三選一；擊沉旗艦時可以裝上那隻旗艦的專屬模組。換上新的，舊的就沒了。</div>
         <div class="cards" style="justify-content:flex-start;margin:0">${mods}</div></div>
@@ -311,7 +311,7 @@ const Codex = {
         ${sg.length ? `<div class="cards" style="justify-content:flex-start;margin:0">${sg.map(id => chipCard(id)).join('')}</div>`
           : '<div class="sub">還沒有。在航圖上的「◐ 黑洞」節點融合晶片即可取得。</div>'}</div>
       <div class="codex-sec"><h3 style="color:${TYPE_META.scrap.color}">✖ 廢鐵</h3>
-        <div class="cards" style="justify-content:flex-start;margin:0">${chipCard('scrap', `<div class="ty">維修站拆除費用 ◆${CFG.SCRAP_REMOVE}</div>`)}</div></div>`;
+        <div class="cards" style="justify-content:flex-start;margin:0">${chipCard('scrap', `<div class="ty">維修站拆除費用 ◆${CFG.SCRAP_REMOVE}（隨星區上漲）</div>`)}</div></div>`;
   },
 
   weapons() {

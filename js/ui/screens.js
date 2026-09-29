@@ -215,9 +215,9 @@ const Screen = {
     const pick = W.options.map(id => partCard(id, W.picked ? '<button disabled>已經拿過了</button>'
       : `<button ${full ? 'disabled' : ''} data-act="wspick" data-arg="${id}">${full ? '零件格已滿' : '裝上這個'}</button>`)).join('');
     const owned = PART_IDS.filter(id => Game.parts[id] > 0);
-    const swap = owned.length ? `<div class="sub" style="text-align:center">換零件（◆ ${PART_SWAP_PRICE}／次）：先選要拆掉的 1 層，再選要換成哪一種</div>
+    const swap = owned.length ? `<div class="sub" style="text-align:center">換零件（◆ ${Game.shopPrice(PART_SWAP_PRICE)}／次）：先選要拆掉的 1 層，再選要換成哪一種</div>
       <div class="row" style="justify-content:center">${owned.map(id => `<button data-act="wsfrom" data-arg="${id}" style="${W.from === id ? 'border-color:#ffd166;color:#ffd166' : ''}">拆 ${PARTS[id].name}（${Game.parts[id]} 層）</button>`).join('')}</div>
-      ${W.from ? `<div class="row" style="justify-content:center">${PART_IDS.filter(id => id !== W.from).map(id => `<button ${Game.credits >= PART_SWAP_PRICE ? '' : 'disabled'} data-act="wsto" data-arg="${id}">→ ${PARTS[id].name}</button>`).join('')}</div>` : ''}`
+      ${W.from ? `<div class="row" style="justify-content:center">${PART_IDS.filter(id => id !== W.from).map(id => `<button ${Game.credits >= Game.shopPrice(PART_SWAP_PRICE) ? '' : 'disabled'} data-act="wsto" data-arg="${id}">→ ${PARTS[id].name}</button>`).join('')}</div>` : ''}`
       : '<div class="sub" style="text-align:center">目前沒有零件可以換。</div>';
     const T = Game.mech.traits, on = [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])];
     this.show(`<div class="scr">
@@ -387,13 +387,13 @@ const Screen = {
         .replace('class="card', `class="card${it.sold ? ' sold' : ''}`);
     }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>◆ 補給站</h2><div class="sub">晶片會放入倉庫。不要的晶片可在電路編輯器拖到「回收」換成晶體。</div></div>${this.status()}</div>
+      <div class="between"><div><h2>◆ 補給站</h2><div class="sub">晶片會放入倉庫。不要的晶片可在電路編輯器拖到「回收」換成晶體。價格隨星區上漲（目前 ×${+Game.shopMul().toFixed(2)}）。</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${Game.shop.healed ? '<button disabled>已補血</button>'
-          : `<button ${Game.credits >= CFG.SHOP_REPAIR.price && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${CFG.SHOP_REPAIR.hp}（◆ ${CFG.SHOP_REPAIR.price}，限 1 次）</button>`}
+          : `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_REPAIR.price) && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${Game.shopHealHp()}（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆ ${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）</button>`}
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
-          ? `<button ${Game.credits >= CFG.SHOP_SLOT ? '' : 'disabled'} data-act="slot" data-arg="shop">⚡ 電路擴充 插槽 +1（◆ ${CFG.SHOP_SLOT}，每間限 1 次）</button>` : ''}
+          ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">⚡ 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>
       <div class="toast" style="text-align:center">${toast}</div></div>`);
   },
@@ -404,7 +404,7 @@ const Screen = {
     this.show(`<div class="scr">
       <div class="between"><div><h2>✚ 維修站</h2><div class="sub">${Game.repairMsg || ''}。電路或倉庫裡還有 ${n} 塊廢鐵，可以在這裡拆除。</div></div>${this.status()}</div>
       <div class="row" style="justify-content:center">
-        ${n ? `<button ${Game.credits >= CFG.SCRAP_REMOVE ? '' : 'disabled'} data-act="scrap">拆除 1 塊廢鐵（◆ ${CFG.SCRAP_REMOVE}）</button>` : ''}
+        ${n ? `<button ${Game.credits >= Game.shopPrice(CFG.SCRAP_REMOVE) ? '' : 'disabled'} data-act="scrap">拆除 1 塊廢鐵（◆ ${Game.shopPrice(CFG.SCRAP_REMOVE)}）</button>` : ''}
         <button data-act="leave">離開維修站</button></div>
       <div class="toast" style="text-align:center">${toast}</div></div>`);
   },
