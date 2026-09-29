@@ -389,10 +389,18 @@ const Screen = {
         <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
         <div class="sum-val">${fmt(R.dmg[k])}<span>${pct.toFixed(0)}%</span></div>`;
     }).join('');
+    // 照晶片分（跟「晶片傷害統計」分頁一樣：武器、各晶片、機體）
+    const chips = Object.entries(R.chips).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
+      const pct = total ? v / total * 100 : 0, color = dmgKeyColor(k);
+      return `<div class="sum-lab"><i style="background:${color}"></i>${dmgKeyName(k)}</div>
+        <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
+        <div class="sum-val">${fmt(v)}<span>${pct.toFixed(0)}%</span></div>`;
+    }).join('');
     const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
     return `<div class="summary">
       <div class="sum-head"><span>${Game.mode === 'coop' ? '你的傷害明細' : '本局傷害總計'}</span><b>${fmt(total)}</b></div>
-      ${rows ? `<div class="sum-rows">${rows}</div>` : '<div class="sub">這一局還沒有造成傷害。</div>'}
+      ${chips ? `<div class="sum-sub">各晶片</div><div class="sum-rows">${chips}</div>` : ''}
+      ${rows ? `<div class="sum-sub">傷害方式</div><div class="sum-rows">${rows}</div>` : '<div class="sub">這一局還沒有造成傷害。</div>'}
       <div class="sum-tiles">${tile('擊殺', fmt(R.kills))}${tile('最高單發', fmt(R.maxHit))}
         ${tile('戰鬥時間', `${mm}:${String(ss).padStart(2, '0')}`)}${tile('平均 DPS', R.time > 0 ? fmt(total / R.time) : '—')}</div>
       <div class="sum-note">武器：${weaponTitle(Game.weapon)}　·　飛船：${SHIPS[Game.shipId].name}</div></div>`;
@@ -529,7 +537,7 @@ const REC_CODE = {
   enemy: { 蟲群: '蟲', 刺殼: '刺', 噴吐者: '噴', 虛空獵手: '獵', 星噬母艦: '母', 裂界獵艦: '裂', 終焉核心: '核', 彗星: '彗', 黑洞核心: '洞',
     彈幕艇: '艇', 列隊蟲: '列', 盾衛: '盾', 分裂體: '分', 碎裂體: '碎', 潛伏者: '潛', 母巢: '巢' },
   result: { dead: '死', cleared: '通', retired: '退', disconnect: '斷線', in_progress: '進行中' },
-  src: { 武器直擊: '直擊', '命中觸發（回響）': '回響', 震盪衝撞: '衝撞' },
+  src: { 武器直擊: '直擊', '命中觸發（回響）': '回響', 攔截回射: '回射', 震盪衝撞: '衝撞' },
 };
 function recordText(r) {
   const C = REC_CODE, L = [];

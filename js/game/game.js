@@ -984,7 +984,7 @@ const Game = {
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.reflectShot(e, b, ca); break; }
         }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
-        // 用量成長：照著晶片的玩法打中敵人 → 在牠身上貼標記（2 秒），牠死掉時每個標記各加「牠的晶體值」（見 tagGrow）
+        // 用量成長：照著晶片的玩法打中敵人 → 在牠身上貼標記（1 秒），牠死掉時每個標記各加「牠的晶體值」（見 tagGrow）
         const own = b.owner;
         if (b.mode === 'return') this.tagGrow(e, own, 'boomerang');
         if (orbit || b.orbShot) this.tagGrow(e, own, 'orbit');
@@ -996,6 +996,7 @@ const Game = {
         if (b.rear) this.tagGrow(e, own, 'rear');
         if (b.dashShot) this.tagGrow(e, own, 'dashfire');
         if (b.infGen > 0) this.tagGrow(e, own, 'infect');
+        if (b.att.src === 'intercept') this.tagGrow(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
         if (b.pull) this.pullAt(b);
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         let att = b.att;
@@ -1010,7 +1011,7 @@ const Game = {
         }
         const knock = b.knock * (b.quick >= 3 && b.accelMul >= 2 ? 3 : 1);  // 衝擊（疾射 Lv3）：2 倍速以上打中強力擊退
         const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
-        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.depth > 0 ? 'echo' : 'direct', att, knock);
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
@@ -1188,8 +1189,7 @@ const Game = {
         for (const s of list) s.src = 'intercept';  // 回射的子彈算攔截的
         if (list.length) spawnShots(list, eb.x, eb.y, t ? Math.atan2(t.y - eb.y, t.x - eb.x) : b.angle, 1, null);  // 第 1 層：不會進環繞的圈
         if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
-          life: 2, color: '#9dff6b', src: 'ship' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);
-        this.grow(this.shooter || null, 'intercept');
+          life: 2, color: '#9dff6b', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);
       });
       return true;
     }
@@ -1206,16 +1206,16 @@ const Game = {
     b.dead = true;
     burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 6, 160, 0.25, 2);
   },
-  // 成長標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），2 秒內敵人死掉就各加「牠的晶體值」
+  // 成長標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），1 秒內敵人死掉就各加「牠的晶體值」
   //   蟲群 1、噴吐者 2、刺殼 4、虛空獵手 12、旗艦 40；子彈再多，同一隻敵人死掉也只算一份
-  tagGrow(e, owner, id) {
+  tagGrow(e, owner, id, dur = CFG.GROW_TAG_TIME) {
     const T = e.growTags || (e.growTags = []), o = owner || null;
     const t = T.find(q => q.id === id && q.owner === o);
-    if (t) t.t = this.time; else T.push({ id, owner: o, t: this.time });
+    if (t) { t.t = this.time; t.dur = dur; } else T.push({ id, owner: o, t: this.time, dur });
   },
   payGrowTags(e) {
     if (e.noGrow) { e.growTags = null; return; }  // 母巢生的蟲群不給成長
-    for (const q of e.growTags || []) if (this.time - q.t <= CFG.GROW_TAG_TIME) this.grow(q.owner, q.id, e.t.credits || 0);
+    for (const q of e.growTags || []) if (this.time - q.t <= (q.dur || CFG.GROW_TAG_TIME)) this.grow(q.owner, q.id, e.t.credits || 0);
     e.growTags = null;
   },
   grow(owner, id, n = 1) {
