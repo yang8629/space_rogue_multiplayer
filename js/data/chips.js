@@ -48,7 +48,7 @@ const CHIPS = {
 
   // ---------- 發射：從哪裡、朝哪裡射 ----------
   rear: { name: '反向', short: '反向', type: 'launch', cost: 2, evo: '全向',
-    grow: { what: '反向擊殺', need: [5, 15] },
+    grow: { what: '反向擊殺', need: [8, 24] },
     desc: '目前的子彈另外朝反方向也射一份。',
     copyCredit: true,  // 傷害統計：只有多射出來的子彈算反向的（當成它的基礎傷害），原本往前的不算
     lvs: ['反方向 1 份', '反方向 2 份（稍微張開）', '進化：前後左右 4 個方向'],
@@ -78,7 +78,7 @@ const CHIPS = {
     lvs: ['爆出 3 發', '爆出 5 發', '進化：爆出的子彈也帶感染（最多傳 2 代）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, infect: o.lv })) },
   pull: { name: '吸引', short: '吸引', type: 'impact', cost: 1, evo: '引力漩渦',
-    grow: { what: '拉過後擊殺', need: [110, 330] },
+    grow: { what: '拉過後擊殺', need: [75, 225] },
     desc: '命中時把附近的敵人往命中點拉（旗艦不會被拉）。',
     lvs: ['範圍 90', '範圍 130', '進化：每命中 8 次生成一個 1.5 秒的引力漩渦'],
     apply: (list, pw, o) => list.map(b => ({ ...b, pull: o.lv })) },
