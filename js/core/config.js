@@ -13,6 +13,8 @@ const CFG = {
   MAX_CHIP_LV: 3,           // 晶片等級上限；每級效果強度 +50%
   GROW_TAG_TIME: 1,         // 用量成長：照玩法打中後 1 秒內敵人死掉才算（見 Game.tagGrow）
   WAVE_MUL: 1.4,            // 一波的敵人預算倍數（主題小兵加入後調）
+  // 雙人（隊友在線時）：敵人數量照人數線性 ×2；成長需求 ×COOP_GROW（兩人都能打到同一隻，每人拿到的不是剛好一半，照雙人模擬實測）；血量只影響擊殺效率，用來調通關率
+  COOP_COUNT: 2, COOP_GROW: 1.25, COOP_HP: 1,
   MAX_SHOTS_PER_FIRE: 32,   // 單次開火子彈上限，超過的轉為傷害
   MAX_TRIGGER_DEPTH: 3,     // 命中觸發巢狀上限
   MAX_LIVE_BULLETS: 700,
@@ -63,3 +65,7 @@ function segDist2(ax, ay, bx, by, px, py) {
   const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
   return dist2(ax + dx * t, ay + dy * t, px, py);
 }
+
+// 敵人血量倍率（難度 ＝ 層數 ＋（星區 − 1）× 7）：二次成長，後面的星區越來越硬，跟得上玩家疊起來的傷害
+//   1 ＋ 0.1×難度 ＋ 0.01×難度² ＋（波次 − 1）× 0.08：第 1 星區 ×1.0～1.96、第 2 星區到 ×3.64、第 3 星區到 ×7.0
+function enemyHpMul(level, wave = 1) { return 1 + level * 0.1 + level * level * 0.01 + (wave - 1) * 0.08; }
