@@ -271,7 +271,7 @@ const Game = {
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : this.rewardOptions(), bonus: kind === 'elite' ? 15 : 0, reroll: 15,
+    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : this.rewardOptions(), bonus: kind === 'elite' ? 15 : 0, reroll: this.shopPrice(15),
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
@@ -286,7 +286,7 @@ const Game = {
   rerollReward() {
     const R = this.reward;
     if (!R || R.kind === 'elite' || this.credits < R.reroll) return;
-    this.pay(R.reroll, () => { R.reroll += 10; R.options = this.rewardOptions(); Screen.reward(); });
+    this.pay(R.reroll, () => { R.reroll += this.shopPrice(10); R.options = this.rewardOptions(); Screen.reward(); });
   },
   // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
   chipOffers() {
@@ -390,20 +390,24 @@ const Game = {
   },
 
   // ---------- 商店 ----------
+  // 花晶體的價格照星區漲（見 CFG.SHOP_PRICE_UP）：補給站、刷新獎勵、換零件、拆廢鐵
+  shopMul() { return 1 + CFG.SHOP_PRICE_UP * Math.max(0, this.sector - 1); },
+  shopPrice(base) { return Math.round(base * this.shopMul()); },
+  shopHealHp(p = this.player) { return Math.ceil(p.maxHp * CFG.SHOP_REPAIR.ratio); },
   openShop() {
-    const items = pickN(this.chipOffers(), 4).map(id => ({ id, price: chipPrice(id), sold: false }));
-    if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: chipPrice(id), sold: false }); }
+    const items = pickN(this.chipOffers(), 4).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
+    if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: this.shopPrice(chipPrice(id)), sold: false }); }
     this.shop = { items, slotBought: false, healed: false };
     this.state = 'shop';
     Screen.shop();
   },
-  shopHeal() {  // 補給站補血：每間限 1 次
-    const p = this.player, R = CFG.SHOP_REPAIR;
-    if (this.shop.healed || this.credits < R.price || p.hp >= p.maxHp) return;
-    this.pay(R.price, () => {
+  shopHeal() {  // 補給站補血：回復最大 HP 的 20%，每間限 1 次
+    const p = this.player, price = this.shopPrice(CFG.SHOP_REPAIR.price), hp = this.shopHealHp(p);
+    if (this.shop.healed || this.credits < price || p.hp >= p.maxHp) return;
+    this.pay(price, () => {
       this.shop.healed = true;
-      p.hp = Math.min(p.maxHp, p.hp + R.hp);
-      Screen.shop(`補血完成：HP +${R.hp}`);
+      p.hp = Math.min(p.maxHp, p.hp + hp);
+      Screen.shop(`補血完成：HP +${hp}`);
     });
   },
   buy(idx) {
@@ -447,8 +451,9 @@ const Game = {
   expandSlot(source) {
     if (this.chain.length >= CFG.MAX_SLOTS) return;
     if (source === 'shop') {
-      if (this.credits < CFG.SHOP_SLOT || this.shop.slotBought) return;
-      this.pay(CFG.SHOP_SLOT, () => { this.shop.slotBought = true; this.addSlot(source); });
+      const price = this.shopPrice(CFG.SHOP_SLOT);
+      if (this.credits < price || this.shop.slotBought) return;
+      this.pay(price, () => { this.shop.slotBought = true; this.addSlot(source); });
       return;
     }
     this.addSlot(source);
@@ -574,7 +579,7 @@ const Game = {
     return null;
   },
   removeScrap() {
-    const s = this.findScrap(), price = CFG.SCRAP_REMOVE;
+    const s = this.findScrap(), price = this.shopPrice(CFG.SCRAP_REMOVE);
     if (!s || this.credits < price) return;
     this.pay(price, () => {
       s.arr[s.i] = null;
@@ -852,8 +857,8 @@ const Game = {
     return true;
   },
   swapPart(from, to) {
-    if (!PARTS[from] || !PARTS[to] || from === to || !(this.parts[from] > 0) || this.credits < PART_SWAP_PRICE) return false;
-    this.pay(PART_SWAP_PRICE, () => {
+    if (!PARTS[from] || !PARTS[to] || from === to || !(this.parts[from] > 0) || this.credits < this.shopPrice(PART_SWAP_PRICE)) return false;
+    this.pay(this.shopPrice(PART_SWAP_PRICE), () => {
       this.parts[from]--; this.parts[to] = (this.parts[to] || 0) + 1;
       this.recalc();
       if (this.runStats) this.runStats.got.push(`${this.here()} 改裝：${PARTS[from].name} → ${PARTS[to].name}`);

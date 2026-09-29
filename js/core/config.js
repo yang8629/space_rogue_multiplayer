@@ -32,7 +32,8 @@ const CFG = {
   BRUTE: { range: 350, windup: 0.7, lock: 0.3, rollSpeed: 520, rollT: 0.9, stunT: 1, cooldown: 1.5 },
   BOSS_KNOCK: 30,          // 推王：每超過抗擊退 1 點，每次命中推 30（王會慢慢拉回自己的速度）
   REPAIR_RATIO: 0.5, SCRAP_REMOVE: 25,  // 維修站修復 50% 最大 HP
-  SHOP_REPAIR: { price: 40, hp: 20 },   // 補給站補血：每間只能補一次
+  SHOP_REPAIR: { price: 40, ratio: 0.2 },  // 補給站補血：回復最大 HP 的 20%，每間只能補一次
+  SHOP_PRICE_UP: 0.4,       // 所有花晶體的價格每個星區 +40%（第 1 星區 ×1、第 2 ×1.4、第 3 ×1.8，無盡照樣往上加）：補給站、刷新獎勵、換零件、拆廢鐵
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   FUSE_SUCCESS: 0.5,
