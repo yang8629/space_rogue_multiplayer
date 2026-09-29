@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（61 項，總覽的「機制檢查」分頁）
+// 星環電路 雙人版 · mechcheck.js：機制觸發檢查（62 項，總覽的「機制檢查」分頁）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -146,8 +146,8 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
       Game.player.x = CFG.WORLD_W - 40;
       M.run(40);
-      const back = Game.bullets.some(b => Math.cos(b.angle) < 0);
-      return { ok: (Game.growth.wallbounce || 0) > 0 && back, got: `反彈 ${Game.growth.wallbounce || 0} 次${back ? '，子彈往回飛' : ''}` };
+      const back = Game.bullets.filter(b => Math.cos(b.angle) < 0), marked = back.filter(b => b.bounced).length;
+      return { ok: back.length > 0 && marked === back.length, got: `${back.length} 發往回飛，其中 ${marked} 發標成反彈過（打中才算成長）` };
     }],
     ['電路晶片', '威力倍增器', '實際命中傷害 ×2', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null]);
@@ -248,6 +248,19 @@ const MechCheck = {
       const each = row.map(r => r.stuck ? r.stuck.length : 0).join('');
       const want = n * 10 * Math.min(3, 1.5 + 0.1 * n);
       return { ok: n > 0 && near1(hp - e.hp, want) && each === '11110', got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${Math.round(want)}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}` };
+    }],
+    ['電路晶片', '用量成長：擊殺標記', '照玩法打中後 2 秒內敵人死掉，晶片成長 + 牠的晶體值；散彈多顆打中同一隻只算一份；超過 2 秒不算', M => {
+      const kill = (weapon, type, wait) => {
+        M.setup('sandbox', 'vanguard', weapon, null, null, ['weapon', 'rear', null, null]);
+        const e = M.targets([[-120, 0]], type, true, 0.01)[0]; e.hp = e.maxHp = 1e6;  // 在飛船後面，先打不死
+        Game.growth = {};
+        M.run(20);
+        for (let f = 0; f < wait * 60; f++) Game.time += 1 / 60;
+        e.hp = 1; e.hurt(5, 0, 0, 'direct', null);
+        return Game.growth.rear || 0;
+      };
+      const a = kill('laser', 'swarmer', 0), b = kill('scatter', 'swarmer', 0), c = kill('laser', 'brute', 0), d = kill('laser', 'swarmer', 3);
+      return { ok: a === 1 && b === 1 && c === 4 && d === 0, got: `雷射殺蟲群 +${a}；散彈殺蟲群 +${b}；雷射殺刺殼 +${c}；打中 3 秒後才死 +${d}` };
     }],
     ['電路晶片', '相刃＋迴旋', '刃片揮到盡頭時有砍到敵人就飛回飛船；沒砍到就消失', M => {
       const go = tg => {
@@ -351,8 +364,8 @@ const MechCheck = {
       const noMerge = Game.chain[1] === 'boomerang' && !Game.chipOffers().includes('boomerang') && Game.chipOffers().includes('amp');
       if (!noMerge) return { ok: false, got: '改玩法的晶片拿到重複的還是會合成升級，或獎勵還會出現' };
       Game.inventory = Game.inventory.map(() => null);
-      Game.grow(null, 'boomerang', 180); const a = Game.chain[1];
-      Game.grow(null, 'boomerang', 360); const b = Game.chain[1];
+      const G1 = CHIPS.boomerang.grow.need; Game.grow(null, 'boomerang', G1[0]); const a = Game.chain[1];
+      Game.grow(null, 'boomerang', G1[1] - G1[0]); const b = Game.chain[1];
       return { ok: a === leveledId('boomerang', 2) && b === leveledId('boomerang', 3), got: `${CHIPS[a].name} → ${CHIPS[b].name}` };
     }],
     ['構築系統', '晶片傷害統計', '武器＋倍增器（×2）：兩者各分到一半，合計等於總傷害', M => {
@@ -530,7 +543,7 @@ const MechCheck = {
       Game.objs = [o];
       Objects.hitRock(o, 10, null, 0, 0); const hp1 = o.hp;
       Objects.hitRock(o, 100, null, 0, 0);
-      return { ok: hp1 === 80 && o.dead && Game.growth.boomerang === Math.round(CHIPS.boomerang.grow.need[0] * 0.05), got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，迴旋成長 ${Game.growth.boomerang || 0}` };
+      return { ok: hp1 === 80 && o.dead && Math.abs(Game.growth.boomerang - CHIPS.boomerang.grow.need[0] * 0.05) < 1e-9, got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，迴旋成長 ${Game.growth.boomerang || 0}` };
     }],
     ['地圖物件', '小行星：擋住視野', '小行星後面的敵人看不到；感測器 4 層看得到', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
