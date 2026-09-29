@@ -174,11 +174,23 @@ const Codex = {
       { name: '聚焦透鏡', f: l => 1 + 0.15 * pw(l) },
     ].map((c, i) => ({ name: c.name, color: S[i], values: lv.map(c.f) }));
 
-    // 4. 敵人血量倍率（每星區 7 層，第 1 波與第 3 波）
+    // 4. 敵人數量、血量（每星區 7 層；單人／雙人）—— 公式跟 Game.startWave、spawnEnemy 一樣
     const pts = [];
     for (let s = 1; s <= 3; s++) for (let L = 0; L < 7; L++) pts.push({ s, L, level: L + (s - 1) * 7 });
-    const hpMul = (level, wave) => 1 + level * 0.15 + (wave - 1) * 0.08;
-    const hpSeries = [1, 3].map((w, i) => ({ name: `第 ${w} 波`, color: S[i], values: pts.map(pt => hpMul(pt.level, w)) }));
+    const hpMul = enemyHpMul;
+    const hpSeries = [
+      { name: '單人 第 1 波', color: S[0], values: pts.map(pt => hpMul(pt.level, 1)) },
+      { name: '單人 第 3 波', color: S[1], values: pts.map(pt => hpMul(pt.level, 3)) },
+      { name: '雙人 第 1 波', color: S[2], values: pts.map(pt => hpMul(pt.level, 1) * CFG.COOP_HP) },
+      { name: '雙人 第 3 波', color: S[3], values: pts.map(pt => hpMul(pt.level, 3) * CFG.COOP_HP) }];
+    // 一場一般戰的敵人總量（預算：1 ≈ 1 隻蟲群）：每波 (5 ＋ 波次×3 ＋ 難度×3) × 一波倍數；第 4 層起 3 波；雙人再 × 人數
+    const cPts = pts.filter(pt => pt.L < 6);
+    const fightBudget = (pt, coop) => { let b = 0; for (let n = 1; n <= 2 + (pt.L >= 3 ? 1 : 0); n++) b += (5 + n * 3 + pt.level * 3) * CFG.WAVE_MUL; return b * (coop ? CFG.COOP_COUNT : 1); };
+    const themeShare = pt => pt.s >= 3 ? 55 : pt.s === 2 ? 40 : pt.L >= 3 ? 30 : 20;  // 見 Game.pickThemes
+    const cntSeries = [
+      { name: '單人', color: S[0], values: cPts.map(pt => fightBudget(pt, false)) },
+      { name: '雙人', color: S[2], values: cPts.map(pt => fightBudget(pt, true)) }];
+    const xsCnt = cPts.map(p => `${p.s}-${p.L + 1}`);
     const hpTip = i => {
       const pt = pts[i], m = hpMul(pt.level, 1);
       const B = ENEMY_TYPES[CFG.BOSS_ORDER[pt.s - 1]];
@@ -208,10 +220,17 @@ const Codex = {
         ${this.lineChart('chiplv', { xs: lv.map(l => 'Lv' + l), series: chipSeries, yFmt: v => '×' + f2(v), height: 280 })}
         ${this.table(['晶片', 'Lv1', 'Lv2', 'Lv3'], chipSeries.map(s => [s.name, ...s.values.map(v => '×' + f2(v))]))}</div>
 
+      <div class="viz"><h4>敵人數量成長（一場一般戰）</h4>
+        <div class="cap">x 軸為「星區-層」（第 7 層是旗艦戰，不畫）。一場的敵人總量用「預算」表示（1 預算 ≈ 1 隻蟲群；噴吐者 3、刺殼 6、主題小兵 3～8）：
+          每一波 ＝ (5 ＋ 波次 × 3 ＋ 難度 × 3) × ${CFG.WAVE_MUL}，第 1～3 層 2 波、第 4 層起 3 波；雙人（隊友在線）再 × ${CFG.COOP_COUNT}。
+          主題小兵佔一波的比例隨星區增加（表格最後一欄）。</div>
+        ${this.lineChart('cnt', { xs: xsCnt, series: cntSeries, yFmt: v => Math.round(v), tipTitle: x => `星區 ${x.split('-')[0]}・第 ${x.split('-')[1]} 層` })}
+        ${this.table(['星區-層', '難度等級', '單人', '雙人', '主題小兵比例'], cPts.map((p, i) => [xsCnt[i], p.level, Math.round(cntSeries[0].values[i]), Math.round(cntSeries[1].values[i]), themeShare(p) + '%']))}</div>
+
       <div class="viz"><h4>敵人血量成長</h4>
-        <div class="cap">x 軸為「星區-層」。難度等級 ＝ 層數 ＋（星區 − 1）× 7；血量倍率 ＝ 1 ＋ 難度 × 0.15 ＋（波次 − 1）× 0.08。滑鼠移上去可看各敵人的實際血量；第 7 層是 Boss 戰。</div>
+        <div class="cap">x 軸為「星區-層」。難度等級 ＝ 層數 ＋（星區 − 1）× 7；血量倍率 ＝ 1 ＋ 難度 × 0.15 ＋（波次 − 1）× 0.08；雙人（隊友在線）再 × ${CFG.COOP_HP}。滑鼠移上去可看各敵人的實際血量（單人第 1 波）；第 7 層是旗艦戰。</div>
         ${this.lineChart('hp', { xs: xsHp, series: hpSeries, yFmt: v => '×' + f2(v), tipTitle: x => `星區 ${x.split('-')[0]}・第 ${x.split('-')[1]} 層`, tipExtra: hpTip })}
-        ${this.table(['星區-層', '難度等級', '第 1 波', '第 3 波'], pts.map((p, i) => [xsHp[i], p.level, '×' + f2(hpSeries[0].values[i]), '×' + f2(hpSeries[1].values[i])]))}</div>`;
+        ${this.table(['星區-層', '難度等級', ...hpSeries.map(q => q.name)], pts.map((p, i) => [xsHp[i], p.level, ...hpSeries.map(q => '×' + f2(q.values[i]))]))}</div>`;
   },
 
   rules() {

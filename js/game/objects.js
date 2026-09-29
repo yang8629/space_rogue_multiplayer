@@ -294,7 +294,7 @@ const Objects = {
     burst(o.x, o.y, '#c9b79c', 24, 220, 0.6, 3);
     SFX.play('bigkill');
     const G = Game, chain = owner ? owner.chain : G.chain, bases = new Set(chain.filter(Boolean).map(baseOf).filter(b => CHIPS[b] && CHIPS[b].grow));
-    for (const b of bases) G.grow(owner, b, CHIPS[b].grow.need[0] * OBJ.ROCK_GROW);  // 可以是小數（門檻小的晶片不會被進位成一大截）
+    for (const b of bases) G.grow(owner, b, growNeed(b, 1) * OBJ.ROCK_GROW);  // 可以是小數（門檻小的晶片不會被進位成一大截）
     floatText(o.x, o.y - o.r, bases.size ? '晶片成長 +5%' : '小行星碎裂', '#9dff6b', true);
     if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r), bases.size ? '晶片成長 +5%' : '小行星碎裂', '#9dff6b', 1]);
   },

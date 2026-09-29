@@ -41,6 +41,7 @@ const Game = {
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
   isClient() { return Net.role === 'client' && this.mode === 'coop'; },
+  coopOn() { return this.mode === 'coop' && !!this.mate && !this.mate.gone; },  // 雙人而且隊友在線（離線時敵人數量、血量、成長需求都恢復單人）
   freePlay() { return this.mode === 'sandbox' || this.mode === 'range'; },  // 沙盒、靶場：晶片無限供應、可以隨意改武器
   // 錢：雙人時每人各自一個錢包。怪物掉落的晶體兩人都拿（見 Net 的 loot），其他收入、花費都是自己的
   pay(price, fn) {
@@ -173,7 +174,7 @@ const Game = {
       SFX.play('boss');
       return;
     }
-    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL;
+    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? CFG.COOP_COUNT : 1);  // 雙人：敵人數量照人數線性增加
     const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
     while (budget > 0) {
       if (TH.list.length && Math.random() < TH.share) {  // 主題小兵
@@ -208,8 +209,8 @@ const Game = {
     const C = this.combat, p = this.player, a = rand(0, TAU), d = rand(520, 780);
     const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
     const y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
-    const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : 1 + C.level * 0.15 + (C.wave - 1) * 0.08) *
-      (this.mode === 'coop' && this.mate && !this.mate.gone ? 1.8 : 1) *  // 雙人：敵人血量 ×1.8（雙人整局模擬調到通關率約 40%）；隊友離線時恢復單人血量
+    const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
+      (this.coopOn() ? CFG.COOP_HP : 1) *  // 雙人：敵人血量 ×COOP_HP（照雙人整局模擬調）；隊友離線時恢復單人血量
       (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）
     const e = new Enemy(type, x, y, scale);
     this.enemies.push(e);
@@ -1231,7 +1232,7 @@ const Game = {
       const base = baseOf(id), g = id && CHIPS[base] && CHIPS[base].grow;
       if (!g || CHIPS[id].type === 'singularity') return;
       let lv = levelOf(id);
-      while (lv < CFG.MAX_CHIP_LV && (this.growth[base] || 0) >= g.need[lv - 1]) lv++;
+      while (lv < CFG.MAX_CHIP_LV && (this.growth[base] || 0) >= growNeed(base, lv)) lv++;
       if (lv <= levelOf(id)) return;
       this.chain[i] = leveledId(base, lv);
       msgs.push(lv >= CFG.MAX_CHIP_LV ? `${CHIPS[base].name} 進化 → ${CHIPS[base].evo}！` : `${CHIPS[base].name} 升到 Lv${lv}`);

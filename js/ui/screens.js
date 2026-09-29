@@ -97,6 +97,7 @@ const Screen = {
       case 'next': Game.nextSector(); break;
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
+      case 'refresh': Screen.hardRefresh(); break;
       case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
       case 'clearrecok':
         try { localStorage.removeItem(RECORDS_KEY); } catch (e) {}
@@ -262,6 +263,7 @@ const Screen = {
 
   title() {
     this.show(`<div class="scr title-wrap">
+      <div class="refresh-corner">${this.refreshBtn()}</div>
       <h1>星環電路</h1><div class="en">CIRCUIT ROGUE</div>
       <div class="sub">V2 · 5 把武器 · 改變玩法的晶片（越用越強、Lv3 進化）· 4 艘飛船 · 零件與背包模組 · 行星、黑洞、彗星、小行星帶 · 三星區遠征＋無盡模式</div>
       <div class="row">
@@ -277,6 +279,37 @@ const Screen = {
       手機：自動攻擊時任意位置拖曳移動；關閉自動攻擊後，左半邊移動、右半邊瞄準射擊　·　「衝刺」「電路」「自動」按鈕　·　建議橫向遊玩</div>
       <div class="ver">版本 ${CFG.VERSION}</div>
     </div>`);
+    this.checkVersion();
+  },
+  // 清暫存重新整理：GitHub Pages 的檔案會被瀏覽器暫存，一般重新整理可能還是舊版
+  //   開標題畫面時在背景抓一次最新的版號，跟目前的不一樣就讓按鈕亮起來
+  refreshBtn() {  // 平常不顯示（只留位置），檢查到新版才出現
+    return this.newVer
+      ? `<button id="refreshBtn" class="glow" data-act="refresh">🔄 有新版 ${this.newVer}，按這裡更新</button>`
+      : '<span id="refreshBtn"></span>';
+  },
+  checkVersion() {
+    if (this.verChecked || typeof fetch !== 'function' || location.protocol === 'file:') return;  // 本機開檔、測試環境不檢查
+    this.verChecked = true;
+    fetch('js/core/config.js', { cache: 'no-store' }).then(r => r.text()).then(t => {
+      const m = t.match(/VERSION: '([^']+)'/);
+      if (!m || m[1] === CFG.VERSION) return;
+      this.newVer = m[1];
+      const b = document.getElementById('refreshBtn');
+      if (b) b.outerHTML = this.refreshBtn();
+    }).catch(() => {});
+  },
+  // 重新下載頁面、所有程式檔和樣式（不用暫存，順便更新瀏覽器的暫存），再重新載入；遊玩紀錄、設定存在本機儲存，不會被清掉
+  async hardRefresh() {
+    const b = document.getElementById('refreshBtn');
+    if (b) { b.disabled = true; b.textContent = '更新中…'; }
+    try {
+      const urls = [location.pathname, ...[...document.querySelectorAll('script[src]')].map(x => x.getAttribute('src')),
+        ...[...document.querySelectorAll('link[rel="stylesheet"]')].map(x => x.getAttribute('href'))];
+      await Promise.all(urls.map(u => fetch(u, { cache: 'reload' }).catch(() => {})));
+      if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+    } catch (e) { /* 抓不到也照樣重新載入 */ }
+    location.reload();
   },
 
   map(toast = '') {

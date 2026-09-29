@@ -29,7 +29,9 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .pill { font-size: 13px; background: #070b1a; border-radius: 20px; padding: 4px 12px; color: #cfe8ff; }
 .pill.gold { color: #ffd166; }
-.title-wrap { text-align: center; padding: 30px 10px; }
+.title-wrap { text-align: center; padding: 30px 10px; position: relative; }
+.refresh-corner { position: absolute; top: 12px; right: 12px; }  /* 清暫存重新整理：右上角獨立一顆 */
+.refresh-corner button { padding: 8px 14px; font-size: 14px; border-color: #4cc9f0; color: #4cc9f0; }
 .title-wrap h1 { font-size: 54px; }
 .title-wrap .en { color: #4cc9f0; letter-spacing: 8px; margin: 6px 0 24px; }
 .title-wrap .row { justify-content: center; margin: 26px 0 18px; }
@@ -206,6 +208,8 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .sum-head b { font-size: 34px; color: #fff; }
 .sum-rows { display: grid; grid-template-columns: minmax(96px, auto) 1fr 92px; gap: 6px 10px; align-items: center; font-size: 12px; }
 .sum-lab { color: #c9d4ff; white-space: nowrap; }
+.refresh-corner #refreshBtn.glow { border-color: #ffd166; color: #ffd166; animation: glowPulse 1.2s ease-in-out infinite; }
+@keyframes glowPulse { 0%, 100% { box-shadow: 0 0 4px rgba(255, 209, 102, 0.4); } 50% { box-shadow: 0 0 16px rgba(255, 209, 102, 0.9); } }
 .sum-sub { color: #8fa3d9; font-size: 11px; margin: 8px 0 4px; }
 .sum-lab i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .sum-track { height: 10px; background: #111a3a; border-radius: 0 4px 4px 0; }
@@ -282,6 +286,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 @media (max-width: 700px) {
   .scr, .panel { padding: 16px 14px; }
   .title-wrap h1 { font-size: 40px; }
+  .refresh-corner { position: static; margin-bottom: 8px; }  /* 手機：放在標題上面，不蓋住標題 */
   .title-wrap .en { letter-spacing: 4px; }
   .map { height: min(440px, 58vh); }
   .node { width: 40px; height: 40px; font-size: 16px; }
