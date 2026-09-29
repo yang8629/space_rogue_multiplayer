@@ -206,6 +206,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .sum-head b { font-size: 34px; color: #fff; }
 .sum-rows { display: grid; grid-template-columns: minmax(96px, auto) 1fr 92px; gap: 6px 10px; align-items: center; font-size: 12px; }
 .sum-lab { color: #c9d4ff; white-space: nowrap; }
+.sum-sub { color: #8fa3d9; font-size: 11px; margin: 8px 0 4px; }
 .sum-lab i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .sum-track { height: 10px; background: #111a3a; border-radius: 0 4px 4px 0; }
 .sum-track div { height: 10px; border-radius: 0 4px 4px 0; min-width: 2px; }

@@ -101,6 +101,7 @@ function dmgKeyColor(key) {
 const DMG_SOURCES = [
   ['direct', '武器直擊', '#3987e5'],
   ['echo', '命中觸發（回響）', '#d55181'],
+  ['counter', '攔截回射', '#9dff6b'],
   ['explode', '爆炸', '#d95926'],
   ['burn', '燃燒', '#c98500'],
   ['shard', '碎片', '#199e70'],
