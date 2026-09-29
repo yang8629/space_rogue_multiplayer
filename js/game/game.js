@@ -391,7 +391,7 @@ const Game = {
 
   // ---------- 商店 ----------
   // 花晶體的價格照星區漲（見 CFG.SHOP_PRICE_UP）：補給站、刷新獎勵、換零件、拆廢鐵
-  shopMul() { return 1 + CFG.SHOP_PRICE_UP * Math.max(0, this.sector - 1); },
+  shopMul() { const k = Math.max(0, this.sector - 1); return 1 + CFG.SHOP_PRICE_UP * k * k; },
   shopPrice(base) { return Math.round(base * this.shopMul()); },
   shopHealHp(p = this.player) { return Math.ceil(p.maxHp * CFG.SHOP_REPAIR.ratio); },
   openShop() {
