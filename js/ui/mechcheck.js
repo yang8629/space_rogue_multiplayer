@@ -320,7 +320,7 @@ const MechCheck = {
       const r = M.run(120);
       return { ok: r.maxDepth === 3 && Game.stats.layers.length === 3, got: `實際最深第 ${r.maxDepth} 層` };
     }],
-    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈後照常飛，並用整條電路回射', M => {
+    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈（沒有穿甲就消失），並用整條電路回射', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'intercept', 'split', null]); M.targets([[300, 200]]);
       const gp = Game.player, gn = runOps(Game.stats.ops, 0).length;
       spawnShots([shot({ angle: 0, speed: 600, damage: 10, life: 1, intercept: 1 })], gp.x, gp.y, 0, 0, null);
@@ -328,7 +328,7 @@ const MechCheck = {
       Game.eBullets = [{ x: gp.x + 60, y: gp.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'test' }];
       for (let f = 0; f < 10 && Game.eBullets.length; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
       const back = Game.bullets.filter(b => b.depth === 1).length;
-      if (Game.eBullets.length || mine.dead || back !== gn) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；回射 ${back} 發（整條電路一槍 ${gn} 發）` };
+      if (Game.eBullets.length || !mine.dead || back !== gn) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；回射 ${back} 發（整條電路一槍 ${gn} 發）` };
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
       const p = Game.player, n0 = runOps(Game.stats.ops, 0), d0 = n0[0].damage;
       p.aim = Math.PI / 2; p.dashT = 0.05; p.vx = 900; p.vy = 0;
@@ -452,10 +452,11 @@ const MechCheck = {
       Game.updateEnemies(1 / 60);
       return { ok: near1(hp - e.hp, 80) && p.hp === p.maxHp, got: `敵人受到 ${Math.round(hp - e.hp)}，自己 HP ${p.hp}/${p.maxHp}` };
     }],
-    ['機體', '均衡', '5 種零件各 1 層：好處 +30%（HP 100 + (20+15)×1.3 − 10 = 136）', M => {
+    ['機體', '均衡', '5 種零件各 1 層：好處 +30%（HP 100 + 20×1.3 − 10 = 116；輕裝甲衝刺冷卻 ×(1 − 0.08×1.3)）', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       for (const id of PART_IDS) Game.addPart(id);
-      return { ok: Game.mech.traits.balance && Game.player.maxHp === 136, got: `均衡${Game.mech.traits.balance ? '開啟' : '沒開'}，最大 HP ${Game.player.maxHp}` };
+      const cd = Game.mech.dashCd, want = (1 - 0.08 * 1.3) * 1.05;  // 輕裝甲 1 層（均衡加成）× 感測器 1 層的代價
+      return { ok: Game.mech.traits.balance && Game.player.maxHp === 116 && Math.abs(cd - want) < 1e-9, got: `均衡${Game.mech.traits.balance ? '開啟' : '沒開'}，最大 HP ${Game.player.maxHp}，衝刺冷卻 ×${cd.toFixed(3)}（應為 ${want.toFixed(3)}）` };
     }],
     ['機體', '改裝廠：換零件', '付 ◆30 把 1 層重裝甲換成加速器', M => {
       M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);

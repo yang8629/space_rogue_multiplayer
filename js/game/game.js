@@ -1178,7 +1178,7 @@ const Game = {
       if (segDist2(b.px, b.py, b.x, b.y, eb.x, eb.y) >= rr * rr) continue;
       eb.life = 0;
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
-      if (b.mode === 'orbit' && (b.orbBlock = (b.orbBlock || 0) + 1) >= 3) b.dead = true;  // 繞圈中的子彈最多擋 3 發敵彈（割怪不受影響）
+      if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
       if (!b.intercept) return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射
       this.withLoadout(b.owner, () => {
         const t = nearestEnemy(eb.x, eb.y, 900, null);

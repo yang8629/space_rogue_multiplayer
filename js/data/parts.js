@@ -11,7 +11,7 @@ const PARTS = {
   armor:   { name: '重裝甲', color: '#ffd166', up: '最大 HP +20', dn: '移動速度 −4%',
     t2: { id: 'thick', name: '厚甲', desc: '單次受傷最多扣最大 HP 的 20%' },
     t4: { id: 'ram', name: '衝撞', desc: '撞到敵人造成「重裝甲層數 × 20」傷害並撞飛，自己不受碰撞傷害' } },
-  larmor:  { name: '輕裝甲', color: '#9fe8ff', up: '最大 HP +15', dn: '衝刺冷卻 +3%',
+  larmor:  { name: '輕裝甲', color: '#9fe8ff', up: '衝刺冷卻 −8%', dn: '受到的傷害 +3%',
     t2: { id: 'deflect', name: '偏折', desc: '被打到後的無敵時間 +0.8 秒' },
     t4: { id: 'counter', name: '反擊裝甲', desc: '被打到時，朝打你的方向回射 8 發子彈' } },
   booster: { name: '加速器', color: '#4cc9f0', up: '移動速度 +6%', dn: '最大 HP −10',
@@ -55,7 +55,7 @@ function mechStats(parts, module) {
   const s = { maxHp: 0, hpMul: 1, speed: 1, taken: 1, rate: 1, bspeed: 1, dashCd: 1, dashDist: 1, traits: T,
     heavy: n('armor') >= 2, light: n('booster') >= 2, module: module || null, armor: n('armor') };
   s.maxHp += 20 * k * n('armor'); s.speed *= Math.pow(0.96, n('armor'));
-  s.maxHp += 15 * k * n('larmor'); s.dashCd *= Math.pow(1.03, n('larmor'));
+  s.dashCd *= Math.pow(1 - 0.08 * k, n('larmor')); s.taken *= Math.pow(1.03, n('larmor'));  // 輕裝甲：裝甲薄、身手快
   s.speed *= 1 + 0.06 * k * n('booster'); s.maxHp -= 10 * n('booster');
   s.rate *= 1 + 0.06 * k * n('sink'); s.taken *= Math.pow(1.04, n('sink'));
   s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashCd *= Math.pow(1.05, n('sensor'));
