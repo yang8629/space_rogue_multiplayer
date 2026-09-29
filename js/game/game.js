@@ -174,7 +174,7 @@ const Game = {
       SFX.play('boss');
       return;
     }
-    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? CFG.COOP_COUNT : 1);  // 雙人：敵人數量照人數線性增加
+    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopMul(CFG.COOP_COUNT, C.level) : 1);  // 雙人：敵人數量 ×2 → ×2.5（隨難度）
     const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
     while (budget > 0) {
       if (TH.list.length && Math.random() < TH.share) {  // 主題小兵
@@ -210,7 +210,7 @@ const Game = {
     const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
     const y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
-      (this.coopOn() ? CFG.COOP_HP : 1) *  // 雙人：敵人血量 ×COOP_HP（照雙人整局模擬調）；隊友離線時恢復單人血量
+      (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
       (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）
     const e = new Enemy(type, x, y, scale);
     this.enemies.push(e);
