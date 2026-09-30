@@ -145,7 +145,8 @@ const MechCheck = {
     ['電路晶片', '巨彈', '散彈 5 發兩兩合併成 3 發，總傷害 +30%', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'bigshot', null, null]);
       const list = runOps(Game.stats.ops, 0), sum = list.reduce((a, b) => a + b.damage, 0);
-      return { ok: list.length === 3 && near1(sum, 30 * 1.3), got: `${list.length} 發，總傷害 ${sum.toFixed(1)}` };
+      const base = WEAPONS.scatter.base.damage * 5;  // 散彈一次 5 顆的總傷害
+      return { ok: list.length === 3 && near1(sum, base * 1.3), got: `${list.length} 發，總傷害 ${sum.toFixed(1)}（應為 ${(base * 1.3).toFixed(1)}）` };
     }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
@@ -340,8 +341,8 @@ const MechCheck = {
     }],
     ['電路晶片', '子彈上限 32 發', '超過的數量換算成傷害，總傷害不變', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'split', 'split', null]);
-      const a = Game.stats;
-      return { ok: a.count === 32 && near1(a.dmg, 30 * 0.16 * 9), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${(30 * 0.16 * 9).toFixed(1)}）` };
+      const a = Game.stats, want = WEAPONS.scatter.base.damage * 5 * 0.16 * 9;  // 5 顆 × 分裂兩次（×0.4 × 3，兩次）
+      return { ok: a.count === 32 && near1(a.dmg, want), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${want.toFixed(1)}）` };
     }],
 
     ['構築系統', '晶片合成升級', '拿到第 2 個分裂 → Lv2，分裂成 4 發', M => {

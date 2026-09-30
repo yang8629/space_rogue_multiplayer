@@ -1004,7 +1004,7 @@ const Game = {
         if (b.dashShot) this.tagGrow(e, own, 'dashfire');
         if (b.infGen > 0) this.tagGrow(e, own, 'infect');
         if (b.att.src === 'intercept') this.tagGrow(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
-        if (b.pull) this.pullAt(b);
+        if (b.pull && b.mode !== 'orbit') this.pullAt(b);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         let att = b.att;
         if (dmg !== b.damage && b.damage > 0) {  // 傷害統計：速度倍率多出來的傷害平分給造成它的晶片（環繞放出、加速、疾射）

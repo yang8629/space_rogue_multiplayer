@@ -27,7 +27,7 @@ const WEAPONS = {
           { name: '過載射線', desc: '命中時爆炸（半徑 50，60% 傷害）。', apply: p => { p.explode = { r: 50, ratio: 0.6 }; } }] },
     } },
   scatter: { name: '散彈砲', short: '散彈', color: '#ffb347', desc: '扇形噴出 5 顆短程彈丸，近距離爆發高。',
-    base: { interval: 0.42, count: 5, spread: 0.5, jitter: 0.04, speedVar: true, damage: 6, speed: 650, radius: 3.5, life: 0.5, shape: 'dot', knock: 1 },
+    base: { interval: 0.42, count: 5, spread: 0.5, jitter: 0.04, speedVar: true, damage: 7, speed: 650, radius: 3.5, life: 0.5, shape: 'dot', knock: 1 },
     paths: {
       A: { name: '霰彈擴充', desc: '彈丸 +3。', apply: p => { p.count += 3; },
         next: [
