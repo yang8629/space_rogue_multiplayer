@@ -125,7 +125,8 @@ const Game = {
     const L = node.L, level = L + (this.sector - 1) * 7;  // 每個星區難度往上疊
     this.logNodeStart(node);
     switch (node.type) {
-      case 'combat': this.startCombat({ level, wavesTotal: 2 + (L >= 3 ? 1 : 0), elites: 0 }); break;
+      // 一般戰：第 1 星區前 3 層 2 波，之後都是 3 波（新星區開頭不會比上一個星區結尾少）
+      case 'combat': this.startCombat({ level, wavesTotal: 2 + (L >= 3 || this.sector > 1 ? 1 : 0), elites: 0 }); break;
       case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1 }); break;
       case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
       case 'shop':   this.openShop(); break;
