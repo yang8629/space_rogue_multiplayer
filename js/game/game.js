@@ -1222,7 +1222,7 @@ const Game = {
   },
   payGrowTags(e) {
     if (e.noGrow) { e.growTags = null; return; }  // 母巢生的蟲群不給成長
-    for (const q of e.growTags || []) if (this.time - q.t <= (q.dur || CFG.GROW_TAG_TIME)) this.grow(q.owner, q.id, e.t.credits || 0);
+    for (const q of e.growTags || []) if (this.time - q.t <= (q.dur || CFG.GROW_TAG_TIME)) this.grow(q.owner, q.id, e.t.grow ?? e.t.credits ?? 0);  // 成長值（沒寫就跟掉的晶體一樣）
     e.growTags = null;
   },
   grow(owner, id, n = 1) {
