@@ -263,7 +263,7 @@ class Bullet {
         this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1) + quickBonus(this.quick); this.orbShot = true; this.flyDist = 0;  // 放出後命中也算環繞成長
         this.speed = this.baseSpeed * this.accelMul;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
-        if (this.orbit >= 3) this.homing = Math.max(this.homing, 1.5);  // 星環：射出的子彈追蹤敵人
+        if (this.orbit >= 3) this.starHome = true;  // 星環：射出的子彈追蹤敵人（轉向固定、追打幾隻後停，見下面的追蹤）
         this.orbit = 0;
         return;
       }
@@ -293,7 +293,7 @@ class Bullet {
     if (L && this.mode === 'fly') {  // 鎖定（感測器 2 層）：轉向剛剛打中的那一隻
       const turn = 2 * dt * Math.max(1, this.speed / 600);
       this.angle += clamp(angleDiff(this.angle, Math.atan2(L.y - this.y, L.x - this.x)), -turn, turn);
-    } else if (this.homing > 0 && this.mode !== 'return') {
+    } else if ((this.homing > 0 || this.starHome) && this.mode !== 'return') {
       // 追蹤：只找前方 ±70° 內、450 以內最近的敵人（身後的不追，往反方向射不會整個轉回去）
       let t = null, bd = 450 * 450;
       for (const e of Game.enemies) {
@@ -303,7 +303,9 @@ class Bullet {
         bd = d2; t = e;
       }
       if (t) {
-        const turn = this.homing * dt * Math.max(1, this.speed / 600);  // 快的子彈轉得跟著快：轉彎半徑跟 600 速度時一樣，不會繞圈追不到
+        // 快的子彈轉得跟著快：轉彎半徑跟 600 速度時一樣，不會繞圈追不到；
+        //   星環的追蹤另外算：固定每秒 1.5 弧度、不跟速度放大（環繞放出 ×2 速度，快的武器原本幾乎指哪打哪）
+        const turn = Math.max(this.homing * Math.max(1, this.speed / 600), this.starHome ? CFG.STAR_HOME_TURN : 0) * dt;
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }
@@ -393,7 +395,7 @@ const ENEMY_TYPES = {
   worm:     { name: '列隊蟲', hp: 14, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
   shield:   { name: '盾衛', hp: 110, speed: 55, radius: 20, dmg: 20, color: '#5ec8ff', credits: 4, shape: 6 },    // 出生時隨機決定盾的方向（120°），之後不轉；打到盾的子彈反彈回去（傷害 ×0.5，最多 25）
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 3, shape: 5 },   // 死掉時分成 3 隻碎裂體
-  splitling:{ name: '碎裂體', hp: 20, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 0, grow: 1, shape: 3 },  // 不掉晶體（分裂體本身已經掉 3 顆）；晶片成長照算 1
+  splitling:{ name: '碎裂體', hp: 20, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 0, shape: 3 },  // 不掉晶體、不給成長（都算在分裂體身上）
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
   hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9 },      // 不會動，每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不給成長）
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
