@@ -78,8 +78,8 @@ const WEAPONS = {
           { name: '感電', desc: '命中的敵人減速 40%。', apply: p => { p.slow = 0.4; } }] },
     } },
   // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段
-  blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 3 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
-    base: { interval: 0.3, count: 3, spread: 0.7, damage: 9, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
+  blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 2 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
+    base: { interval: 0.3, count: 2, spread: 0.35, damage: 9, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
     paths: {
       A: { name: '巨刃', desc: '刃片 5 段、範圍更大。', apply: p => { p.count = 5; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
@@ -102,7 +102,7 @@ const WEAPON_BRIEF = {
   scatter: '一次噴出 5 顆短程彈丸，貼近敵人時爆發最高。',
   plasma: '慢速的大型電漿球，單發傷害高、可以穿透。',
   railgun: '超高速穿甲彈，一發貫穿一排；射速慢，打得動小行星。',
-  blade: '向前揮出 3 段能量刃，只打得到身邊；刃片會砍掉敵彈。' };
+  blade: '向前揮出 2 段能量刃，只打得到身邊；刃片會砍掉敵彈。' };
 
 function weaponParams(state) {
   const W = WEAPONS[state.id];

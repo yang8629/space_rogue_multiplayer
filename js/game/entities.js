@@ -761,12 +761,17 @@ const THEME_AI = {
     while (this.ahead && this.ahead.dead) this.ahead = this.ahead.ahead;
     const A = this.ahead;
     if (!A) {
+      // 越短越快：整條 6 節是原本速度，每少一節 +16%，只剩頭 ×1.8（身體照頭的倍率跟上）
+      const headOf = o => { let h = o; for (let q = o.ahead; q; q = q.ahead) if (!q.dead) h = q; return h; };  // 往前找最前面還活著的那節（跳過中間死掉的）
+      const len = Game.enemies.reduce((n, o) => n + (o.type === 'worm' && !o.dead && headOf(o) === this ? 1 : 0), 0);
+      this.wormMul = 1 + CFG.WORM_FAST * Math.max(0, 6 - len) / 5;
       const [bx, by] = this.chaseDir(p, dx, dy, d), w = Math.sin(Game.time * 4 + this.phase) * 0.8;
-      this.steerMove(dt, bx - by * w, by + bx * w, this.t.speed);
+      this.steerMove(dt, bx - by * w, by + bx * w, this.t.speed * this.wormMul);
       return true;
     }
-    const ax = A.x - this.x, ay = A.y - this.y, ad = Math.hypot(ax, ay) || 1;
-    this.steerMove(dt, ax, ay, ad > 22 ? this.t.speed * Math.min(1.6, ad / 22) : this.t.speed * 0.3, 8);
+    let H = A; for (let q = A.ahead; q; q = q.ahead) if (!q.dead) H = q;
+    const sp = this.t.speed * (H.wormMul || 1), ax = A.x - this.x, ay = A.y - this.y, ad = Math.hypot(ax, ay) || 1;
+    this.steerMove(dt, ax, ay, ad > 22 ? sp * Math.min(1.6, ad / 22) : sp * 0.3, 8);
     return true;
   },
   lurker(dt, p, dx, dy, d) {  // 隱形接近 → 離 140 內現形 0.4 秒（預警線）→ 撲過去 0.4 秒 → 現形 2 秒 → 再隱形
