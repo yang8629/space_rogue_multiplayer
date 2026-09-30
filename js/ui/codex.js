@@ -187,9 +187,13 @@ const Codex = {
     const cPts = pts.filter(pt => pt.L < 6);
     const fightBudget = (pt, coop) => { let b = 0; for (let n = 1; n <= 2 + (pt.L >= 3 ? 1 : 0); n++) b += (5 + n * 3 + pt.level * 3) * CFG.WAVE_MUL; return b * (coop ? coopMul(CFG.COOP_COUNT, pt.level) : 1); };
     const themeShare = pt => pt.s >= 3 ? 55 : pt.s === 2 ? 40 : pt.L >= 3 ? 30 : 20;  // 見 Game.pickThemes
+    // 畫成「單人 1-1 的幾倍」（滑鼠提示和表格另外列實際數量）
+    const cntRaw = [cPts.map(pt => fightBudget(pt, false)), cPts.map(pt => fightBudget(pt, true))], cnt0 = cntRaw[0][0];
     const cntSeries = [
-      { name: '單人', color: S[0], values: cPts.map(pt => fightBudget(pt, false)) },
-      { name: '雙人', color: S[2], values: cPts.map(pt => fightBudget(pt, true)) }];
+      { name: '單人', color: S[0], values: cntRaw[0].map(v => v / cnt0) },
+      { name: '雙人', color: S[2], values: cntRaw[1].map(v => v / cnt0) }];
+    const cntTip = i => `<div style="margin-top:4px;color:var(--muted)">敵人總量（預算）</div>` +
+      cntSeries.map((s, k) => `<div>${s.name}<span class="v">${Math.round(cntRaw[k][i])}</span></div>`).join('');
     const xsCnt = cPts.map(p => `${p.s}-${p.L + 1}`);
     const hpTip = i => {
       const pt = pts[i], m = hpMul(pt.level, 1);
@@ -223,9 +227,10 @@ const Codex = {
       <div class="viz"><h4>敵人數量成長（一場一般戰）</h4>
         <div class="cap">x 軸為「星區-層」（第 7 層是旗艦戰，不畫）。一場的敵人總量用「預算」表示（1 預算 ≈ 1 隻蟲群；噴吐者 3、刺殼 6、主題小兵 3～8）：
           每一波 ＝ (5 ＋ 波次 × 3 ＋ 難度 × 3) × ${CFG.WAVE_MUL}，第 1～3 層 2 波、第 4 層起 3 波；雙人（隊友在線）再 × ${CFG.COOP_COUNT[0]}～${CFG.COOP_COUNT[1]}（隨難度增加：兩個人的配裝一起疊，後期成長比單人快）。
-          主題小兵佔一波的比例隨星區增加（表格最後一欄）。</div>
-        ${this.lineChart('cnt', { xs: xsCnt, series: cntSeries, yFmt: v => Math.round(v), tipTitle: x => `星區 ${x.split('-')[0]}・第 ${x.split('-')[1]} 層` })}
-        ${this.table(['星區-層', '難度等級', '單人', '雙人', '主題小兵比例'], cPts.map((p, i) => [xsCnt[i], p.level, Math.round(cntSeries[0].values[i]), Math.round(cntSeries[1].values[i]), themeShare(p) + '%']))}</div>
+          主題小兵佔一波的比例隨星區增加（表格最後一欄）。
+          圖上是「單人 1-1 的幾倍」（單人 1-1 ＝ ${Math.round(cnt0)} ＝ ×1）；滑鼠移上去可看實際數量。</div>
+        ${this.lineChart('cnt', { xs: xsCnt, series: cntSeries, yFmt: v => '×' + (+v.toFixed(1)), tipTitle: x => `星區 ${x.split('-')[0]}・第 ${x.split('-')[1]} 層`, tipExtra: cntTip })}
+        ${this.table(['星區-層', '難度等級', '單人', '雙人', '主題小兵比例'], cPts.map((p, i) => [xsCnt[i], p.level, ...cntSeries.map((s, k) => `${Math.round(cntRaw[k][i])}（×${(+s.values[i].toFixed(1))}）`), themeShare(p) + '%']))}</div>
 
       <div class="viz"><h4>敵人血量成長</h4>
         <div class="cap">x 軸為「星區-層」。難度等級 ＝ 層數 ＋（星區 − 1）× 7；血量倍率 ＝ 1 ＋ 0.1 × 難度 ＋ 0.01 × 難度² ＋（波次 − 1）× 0.08；雙人（隊友在線）再 × ${CFG.COOP_HP[0]}～${CFG.COOP_HP[1]}（隨難度增加）。滑鼠移上去可看各敵人的實際血量（單人第 1 波）；第 7 層是旗艦戰。</div>
