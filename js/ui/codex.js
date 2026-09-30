@@ -38,7 +38,7 @@ const Codex = {
     this.body.innerHTML = `<div class="between"><h2>📖 電路總覽</h2><button data-cx="close">關閉 (Esc)</button></div>
       <div class="tabs">${tabs.map(([k, l]) => `<button data-cx="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       ${content}`;
-    if (this.tab === 'charts') this.bindCharts();
+    if (this.tab === 'charts') { this.bindCharts(); this.bindScatter(); }
   },
 
   // ---------- 機制檢查 ----------
@@ -97,6 +97,80 @@ const Codex = {
     const legend = series.length > 1
       ? `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('')}</div>` : '';
     return `${legend}<svg data-chart="${key}" viewBox="0 0 ${W} ${H}" role="img">${g}</svg><div class="viz-tip" hidden></div>`;
+  },
+  // 落點圖：pts = [{ x, y, k（系列序號）, tip（滑鼠提示 HTML） }]；invertY：數值小的畫在上面（右上角 = 好）
+  //   xRef／yRef 畫虛線（沒有效果的位置）；超出 clampX／clampY 的點畫在邊上（提示照實際數字）
+  scatterChart(key, { pts, xName, yName, xFmt, yFmt, xRef, yRef, invertY = false, clampX, clampY, corner, height = 360 }) {
+    const W = 640, H = height, L = 50, R = 14, T = 26, B = 40;
+    const cl = (v, c) => c ? Math.max(c[0], Math.min(c[1], v)) : v;
+    const P = pts.map(p => ({ ...p, cx: cl(p.x, clampX), cy: cl(p.y, clampY) }));
+    const ext = vs => { const lo = Math.min(...vs), hi = Math.max(...vs), st = niceStep((hi - lo) / 5 || 0.1); return [Math.floor(lo / st - 0.3) * st, Math.ceil(hi / st + 0.3) * st, st]; };
+    const [x0, x1, xst] = ext([...P.map(p => p.cx), xRef]), [y0, y1, yst] = ext([...P.map(p => p.cy), yRef]);
+    const x = v => L + (W - L - R) * (v - x0) / (x1 - x0);
+    const y = v => { const f = (v - y0) / (y1 - y0); return T + (H - T - B) * (invertY ? f : 1 - f); };
+    let g = '';
+    for (let v = x0; v <= x1 + 1e-9; v += xst)
+      g += `<line x1="${x(v)}" x2="${x(v)}" y1="${T}" y2="${H - B}" stroke="#182244" stroke-width="1"/>` +
+        `<text x="${x(v)}" y="${H - B + 16}" fill="#8fa3d9" font-size="11" text-anchor="middle">${xFmt(+v.toFixed(4))}</text>`;
+    for (let v = y0; v <= y1 + 1e-9; v += yst)
+      g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#182244" stroke-width="1"/>` +
+        `<text x="${L - 8}" y="${y(v) + 4}" fill="#8fa3d9" font-size="11" text-anchor="end">${yFmt(+v.toFixed(4))}</text>`;
+    g += `<line x1="${x(xRef)}" x2="${x(xRef)}" y1="${T}" y2="${H - B}" stroke="#8fa3d9" stroke-width="1" stroke-dasharray="4 4"/>` +
+      `<line x1="${L}" x2="${W - R}" y1="${y(yRef)}" y2="${y(yRef)}" stroke="#8fa3d9" stroke-width="1" stroke-dasharray="4 4"/>`;
+    g += `<text x="${(L + W - R) / 2}" y="${H - 6}" fill="#c9d4ff" font-size="12" text-anchor="middle">${xName}</text>` +
+      `<text x="${L - 40}" y="${T - 10}" fill="#c9d4ff" font-size="12">${yName}</text>` +
+      `<text x="${W - R - 6}" y="${T + 14}" fill="#c9d4ff" font-size="12" text-anchor="end">${corner}</text>`;
+    const S = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'];
+    P.forEach((p, i) => { p.px = x(p.cx); p.py = y(p.cy);
+      g += `<circle data-i="${i}" data-k="${p.k}" cx="${p.px.toFixed(1)}" cy="${p.py.toFixed(1)}" r="4" fill="${S[p.k]}" stroke="#070b1a" stroke-width="1.5"/>`; });
+    g += `<circle data-role="hl" r="7" fill="none" stroke="#eef2ff" stroke-width="2" visibility="hidden"/>`;
+    g += `<rect data-role="hit" x="0" y="0" width="${W}" height="${H}" fill="transparent"/>`;
+    this._charts[key] = { scatter: true, P, W, H };
+    return `<svg data-scatter="${key}" viewBox="0 0 ${W} ${H}" role="img">${g}</svg><div class="viz-tip" hidden></div>`;
+  },
+  // 難度切換＋武器圖例（點一下只看那把武器）＋每個難度一張落點圖和數據表
+  scatterPanel(group, panes, series) {
+    const S = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'];
+    return `<div class="viz-tabs" data-group="${group}">${panes.map((p, i) => `<button type="button" data-pane="${group}-${p.id}"${i ? '' : ' class="on"'}>${p.label}</button>`).join('')}</div>
+      <div class="legend" data-group="${group}">${series.map((s, i) => `<button type="button" data-k="${i}"><i style="background:${S[i]}"></i>${s}</button>`).join('')}<span class="hint">點武器：只看那把</span></div>
+      ${panes.map((p, i) => `<div data-pane-body="${group}-${p.id}"${i ? ' hidden' : ''}>${p.cap ? `<div class="cap">${p.cap}</div>` : ''}${p.html}</div>`).join('')}`;
+  },
+  bindScatter() {
+    for (const svg of this.body.querySelectorAll('svg[data-scatter]')) {
+      const spec = this._charts[svg.dataset.scatter], tip = svg.nextElementSibling, box = svg.closest('.viz');
+      const hl = svg.querySelector('[data-role="hl"]'), hit = svg.querySelector('[data-role="hit"]');
+      const show = e => {
+        const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) / r.width * spec.W, vy = (e.clientY - r.top) / r.height * spec.H;
+        const off = box.__off || new Set();
+        let best = null, bd = 14 * 14;
+        for (const p of spec.P) { if (off.has(p.k)) continue; const d = (p.px - vx) ** 2 + (p.py - vy) ** 2; if (d < bd) { bd = d; best = p; } }
+        if (!best) return hide();
+        hl.setAttribute('cx', best.px); hl.setAttribute('cy', best.py); hl.setAttribute('visibility', 'visible');
+        tip.innerHTML = best.tip; tip.hidden = false;
+        const br = box.getBoundingClientRect(), px = e.clientX - br.left, py = e.clientY - br.top;
+        tip.style.left = Math.min(px + 14, br.width - tip.offsetWidth - 8) + 'px';
+        tip.style.top = Math.max(8, py - tip.offsetHeight - 12) + 'px';
+      };
+      const hide = () => { tip.hidden = true; hl.setAttribute('visibility', 'hidden'); };
+      hit.addEventListener('pointermove', show);
+      hit.addEventListener('pointerdown', show);
+      hit.addEventListener('pointerleave', hide);
+    }
+    for (const tabs of this.body.querySelectorAll('.viz-tabs')) tabs.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const box = tabs.closest('.viz');
+      for (const x of tabs.querySelectorAll('button')) x.classList.toggle('on', x === b);
+      for (const d of box.querySelectorAll('[data-pane-body]')) d.hidden = d.dataset.paneBody !== b.dataset.pane;
+    });
+    for (const lg of this.body.querySelectorAll('.legend[data-group]')) lg.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const box = lg.closest('.viz'), k = +b.dataset.k, all = [...lg.querySelectorAll('button')];
+      // 點一下：只看這把；再點同一把（已經是唯一一把）：全部顯示
+      const only = box.__off && box.__off.size === all.length - 1 && !box.__off.has(k);
+      box.__off = only ? new Set() : new Set(all.map(x => +x.dataset.k).filter(i => i !== k));
+      all.forEach(x => x.classList.toggle('off', box.__off.has(+x.dataset.k)));
+      for (const c of box.querySelectorAll('circle[data-k]')) c.setAttribute('visibility', box.__off.has(+c.dataset.k) ? 'hidden' : 'visible');
+    });
   },
   table(head, rows) {
     return `<details><summary>數據表</summary><div class="tbl"><table>
@@ -204,6 +278,45 @@ const Codex = {
         list.map(([n, hp]) => `<div>${n}<span class="v">${Math.round(hp * m)}</span></div>`).join('');
     };
 
+    // 5. 晶片價值落點圖（資料是 mp_tests 自動對戰模擬的結果：js/data/chipvalue.js）
+    const V = typeof CHIP_VALUE !== 'undefined' ? CHIP_VALUE : null, WK = Object.keys(WEAPONS), WS = WK.map(w => WEAPONS[w].short);
+    const cn = id => CHIPS[id] ? CHIPS[id].name : id, x2 = v => '×' + (+v.toFixed(2)), sg = v => (v > 0 ? '+' : v < 0 ? '−' : '') + (+Math.abs(v).toFixed(2));
+    const tipRow = (n, v) => `<div>${n}<span class="v">${v}</span></div>`;
+    const tierCap = L => { const T = V.tiers[L]; return `難度 ${L}（${L <= 6 ? '第 1 星區' : L <= 13 ? '第 2 星區' : '第 3 星區'}）：電路 ${T.chips} 個晶片${T.chips > 1 ? `（其他 ${T.chips - 1} 個輪流換）` : ''}` +
+      `${T.lv2 ? `、其他晶片 Lv2 ${T.lv2 * 100}%` : ''}${T.lv3 ? `、進化 ${T.lv3 * 100}%` : ''}、武器升 ${T.stage} 段、零件 ${T.parts} 層`; };
+    let cvHtml = '<div class="cap">還沒有模擬資料（在 mp_tests 跑 node chipvalue.js --save 和 node chipvalue.js --pairs --save）。</div>';
+    let pairHtml = cvHtml;
+    if (V && Object.keys(V.single).length) {
+      const panes = Object.keys(V.single).map(Number).sort((a, b) => a - b).map(L => {
+        const rows = V.single[L], ns = rows.map(r => r[4]);
+        const pts = rows.map(([c, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
+          tip: `<b>${cn(c)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('清場速度', x2(s))}${tipRow('掉血', x2(d))}${tipRow('場數', n)}` }));
+        const chips = [...new Set(rows.map(r => r[0]))], cell = (c, w) => rows.find(r => r[0] === c && r[1] === w);
+        const avg = c => WK.reduce((a, w) => a + (cell(c, w) ? cell(c, w)[2] / Math.sqrt(Math.max(0.2, cell(c, w)[3])) : 0), 0);
+        chips.sort((a, b) => avg(b) - avg(a));
+        return { id: L, label: `難度 ${L}`, cap: `${tierCap(L)}。每個點 ${Math.min(...ns)}～${Math.max(...ns)} 場。`,
+          html: this.scatterChart(`cv${L}`, { pts, xName: '清場速度（裝了之後快幾倍）→', yName: '↑ 掉血（越上面越少）', xFmt: x2, yFmt: x2, xRef: 1, yRef: 1, invertY: true,
+            clampX: [0.4, 2.2], clampY: [0.2, 2.5], corner: '清得更快又少掉血 ↗' }) +
+            this.table(['晶片', ...WS.map(s => s + '（速度／掉血）')], chips.map(c => [cn(c), ...WK.map(w => { const r = cell(c, w); return r ? `${x2(r[2])}／${x2(r[3])}` : '—'; })])) };
+      });
+      cvHtml = this.scatterPanel('cv', panes, WS);
+    }
+    if (V && Object.keys(V.pair).length) {
+      const panes = Object.keys(V.pair).map(Number).sort((a, b) => a - b).map(L => {
+        const rows = V.pair[L];
+        const pts = rows.map(([a, b, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
+          tip: `<b>${cn(a)} ＋ ${cn(b)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('速度加乘', x2(s))}${tipRow('多掉的血', sg(d))}${tipRow('場數', n)}` }));
+        const keys = [...new Set(rows.map(r => r[0] + '+' + r[1]))], cell = (k, w) => rows.find(r => r[0] + '+' + r[1] === k && r[2] === w);
+        const avg = k => WK.reduce((a, w) => a + (cell(k, w) ? cell(k, w)[3] : 0), 0);
+        keys.sort((a, b) => avg(b) - avg(a));
+        return { id: L, label: `難度 ${L}`, cap: `${tierCap(L).replace(/：.*/, '')}：只有武器＋這兩個晶片（都是 Lv1）、武器升 ${V.tiers[L].stage} 段、零件 ${V.tiers[L].parts} 層。每個點 ${rows[0][5]} 場，場數少，差 20% 以上才算數。`,
+          html: this.scatterChart(`cp${L}`, { pts, xName: '速度加乘（一起裝 ÷ 各自的倍數相乘）→', yName: '↑ 多掉的血（越上面越少）', xFmt: x2, yFmt: sg, xRef: 1, yRef: 0, invertY: true,
+            clampX: [0.4, 2.2], clampY: [-1.5, 1.5], corner: '一起裝更快又少掉血 ↗' }) +
+            this.table(['組合', ...WS.map(s => s + '（速度加乘）')], keys.map(k => [k.split('+').map(cn).join(' ＋ '), ...WK.map(w => { const r = cell(k, w); return r ? x2(r[3]) : '—'; })])) };
+      });
+      pairHtml = this.scatterPanel('cp', panes, WS);
+    }
+
     Game.wp = savedWp; Game.inventory = savedInv;
     const xsHp = pts.map(p => `${p.s}-${p.L + 1}`);
     return `
@@ -223,6 +336,17 @@ const Codex = {
         <div class="cap">影響傷害的晶片在 Lv1 → Lv3 的傷害倍率（Lv2 強度 ×1.5、Lv3 強度 ×2）。協同處理器以電路中 4 個其他晶片、資料鏈結以倉庫 4 個晶片計算。</div>
         ${this.lineChart('chiplv', { xs: lv.map(l => 'Lv' + l), series: chipSeries, yFmt: v => '×' + f2(v), height: 280 })}
         ${this.table(['晶片', 'Lv1', 'Lv2', 'Lv3'], chipSeries.map(s => [s.name, ...s.values.map(v => '×' + f2(v))]))}</div>
+
+      <div class="viz"><h4>晶片價值：單晶片（每個點 = 一個晶片配一把武器）</h4>
+        <div class="cap">電腦照晶片的玩法打真正的戰鬥（一般戰＋精英戰，飛船不會死），同一組配裝比「那格空著」和「那格裝這個晶片」。
+          橫軸是清場快幾倍，縱軸是掉血是幾倍（反過來畫：越上面掉血越少），虛線是「跟空著一樣」；右上角 = 清得更快又少掉血。超出圖的點畫在邊上，滑鼠移上去看實際數字。
+          命中觸發器先不測。${V ? `模擬日期 ${V.date}。` : ''}</div>
+        ${cvHtml}</div>
+
+      <div class="viz"><h4>晶片價值：兩個晶片的組合（每個點 = 一組組合配一把武器）</h4>
+        <div class="cap">只有武器＋兩個晶片，和只有其中一個、兩個都沒有比。速度加乘 ×1 = 兩個一起裝剛好是各自效果相乘，大於 1 = 互相加乘、小於 1 = 互相抵銷；
+          多掉的血 = 一起裝多掉的血 − 各自多掉的血（以兩個都沒裝時的掉血為 1），負的 = 比預期少掉血，也是越上面越好。</div>
+        ${pairHtml}</div>
 
       <div class="viz"><h4>敵人數量成長（一場一般戰）</h4>
         <div class="cap">x 軸為「星區-層」（第 7 層是旗艦戰，不畫）。一場的敵人總量用「預算」表示（1 預算 ≈ 1 隻蟲群；噴吐者 3、刺殼 6、主題小兵 3～8）：
