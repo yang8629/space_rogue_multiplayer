@@ -393,7 +393,7 @@ const ENEMY_TYPES = {
   worm:     { name: '列隊蟲', hp: 14, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
   shield:   { name: '盾衛', hp: 110, speed: 55, radius: 20, dmg: 20, color: '#5ec8ff', credits: 4, shape: 6 },    // 出生時隨機決定盾的方向（120°），之後不轉；打到盾的子彈反彈回去（傷害 ×0.5，最多 25）
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 3, shape: 5 },   // 死掉時分成 3 隻碎裂體
-  splitling:{ name: '碎裂體', hp: 20, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },
+  splitling:{ name: '碎裂體', hp: 20, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 0, grow: 1, shape: 3 },  // 不掉晶體（分裂體本身已經掉 3 顆）；晶片成長照算 1
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
   hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9 },      // 不會動，每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不給成長）
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
