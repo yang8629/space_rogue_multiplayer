@@ -291,7 +291,7 @@ class Bullet {
       }
       return;
     }
-    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.22 && !(this.overT > 0)) {  // 迴旋已經打中、準備折返的不變地雷
+    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.25 && !(this.overT > 0)) {  // 飛 0.25 秒後停住（距離 = 子彈速度 × 0.25）；迴旋已經打中、準備折返的不變地雷
       this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return;
     }
     this.flyAge += dt;
