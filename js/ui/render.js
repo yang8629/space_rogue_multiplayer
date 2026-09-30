@@ -450,6 +450,10 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 20, hpW + 4, 18);
   ctx.fillStyle = p.hp / p.maxHp > 0.3 ? '#4cc9f0' : '#ff4d6d';
   ctx.fillRect(22, 22, hpW * p.hp / p.maxHp, 14);
+  if (p.drRec > 0 && p.hp < p.maxHp) {  // 修復無人機：之後還能補回來的血量（淡色接在血條後面）
+    ctx.fillStyle = 'rgba(157, 255, 107, 0.35)';
+    ctx.fillRect(22 + hpW * Math.max(0, p.hp) / p.maxHp, 22, hpW * Math.min(p.drRec, p.maxHp - Math.max(0, p.hp)) / p.maxHp, 14);
+  }
   ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
   ctx.fillText(`HP ${Math.ceil(p.hp)} / ${p.maxHp}`, 28, 33);
   // 衝刺冷卻
