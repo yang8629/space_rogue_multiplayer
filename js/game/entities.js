@@ -275,7 +275,14 @@ class Bullet {
     }
     if (this.mode === 'wait') {  // 佈雷：停住當地雷，敵人靠近就朝牠衝出去（×1.2）；時間到還沒被觸發就消失
       this.waitT -= dt; this.speed = 0;
-      const near = nearestEnemy(this.x, this.y, this.stasis >= 2 ? 70 : 50, null);
+      // 觸發範圍算到敵人的邊緣（大隻的刺殼、精英、旗艦在旁邊也會觸發；以前算到中心，貼著大隻的邊也不動，時間到就消失）
+      const R = this.stasis >= 2 ? 70 : 50;
+      let near = null, nb = Infinity;
+      for (const e of Game.enemies) {
+        if (e.dead || e.spawnT > 0) continue;
+        const gap = Math.hypot(e.x - this.x, e.y - this.y) - e.r;
+        if (gap < R && gap < nb) { nb = gap; near = e; }
+      }
       if (!near && this.waitT <= 0) { this.dead = true; burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
       if (near) {
         this.angle = Math.atan2(near.y - this.y, near.x - this.x);
