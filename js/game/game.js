@@ -986,7 +986,6 @@ const Game = {
         if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
         if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
         b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
-        if (b.starHome && (b.starHits = (b.starHits || 0) + 1) >= CFG.STAR_HOME_HITS) b.starHome = false;  // 星環：追打幾隻後直線飛（反彈也不重算）
         if (e.shieldA != null) {  // 盾衛：從盾的那一側（±60°）打過來的子彈反彈回去
           const ca = Math.atan2(b.py - e.y, b.px - e.x);
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.reflectShot(e, b, ca); break; }

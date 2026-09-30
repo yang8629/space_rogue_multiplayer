@@ -263,7 +263,7 @@ class Bullet {
         this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1) + quickBonus(this.quick); this.orbShot = true; this.flyDist = 0;  // 放出後命中也算環繞成長
         this.speed = this.baseSpeed * this.accelMul;
         this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
-        if (this.orbit >= 3) this.starHome = true;  // 星環：射出的子彈追蹤敵人（轉向固定、追打幾隻後停，見下面的追蹤）
+        if (this.orbit >= 3) this.homing = Math.max(this.homing, 1.5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;
         return;
       }
@@ -293,7 +293,7 @@ class Bullet {
     if (L && this.mode === 'fly') {  // 鎖定（感測器 2 層）：轉向剛剛打中的那一隻
       const turn = 2 * dt * Math.max(1, this.speed / 600);
       this.angle += clamp(angleDiff(this.angle, Math.atan2(L.y - this.y, L.x - this.x)), -turn, turn);
-    } else if ((this.homing > 0 || this.starHome) && this.mode !== 'return') {
+    } else if (this.homing > 0 && this.mode !== 'return') {
       // 追蹤：只找前方 ±70° 內、450 以內最近的敵人（身後的不追，往反方向射不會整個轉回去）
       let t = null, bd = 450 * 450;
       for (const e of Game.enemies) {
@@ -303,9 +303,7 @@ class Bullet {
         bd = d2; t = e;
       }
       if (t) {
-        // 快的子彈轉得跟著快：轉彎半徑跟 600 速度時一樣，不會繞圈追不到；
-        //   星環的追蹤另外算：固定每秒 1.5 弧度、不跟速度放大（環繞放出 ×2 速度，快的武器原本幾乎指哪打哪）
-        const turn = Math.max(this.homing * Math.max(1, this.speed / 600), this.starHome ? CFG.STAR_HOME_TURN : 0) * dt;
+        const turn = this.homing * dt * Math.max(1, this.speed / 600);  // 快的子彈轉得跟著快：轉彎半徑跟 600 速度時一樣，不會繞圈追不到
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }
