@@ -7,14 +7,14 @@
 //   行星  planet：實心大球，擋所有子彈；靠近的子彈被引力彎過去（越慢彎越多）；大小、耐久、引力隨機；只有旗艦的子彈打得掉（越打越小，打光就崩解）
 //   黑洞  hole  ：把附近所有東西往中心拉；核心吞掉子彈，敵人和飛船受傷（敵人走路會繞開，被打進去才會受傷）
 //   彗星  comet ：定時沿直線橫越（先有預警線）。撞到敵人、飛船都受傷；打爆後碎片往前炸（只傷敵人）
-//   小行星 rock ：一整條小行星帶（中間留 2 個縫），擋所有子彈和敵人（敵人會繞路或鑽縫）；擋住視野；只有單發 ≥ 30 的傷害打得動，打爆給電路上的晶片成長；
+//   小行星 rock ：一整條小行星帶（中間留 2 個縫），擋所有子彈和敵人（敵人會繞路或鑽縫）；擋住視野；只有單發 ≥ 30 的傷害打得動，打爆掉晶體；
 //                 旗艦的子彈、旗艦和滾動的刺殼撞上去也會打碎（不給成長）
 //   雙人：房主模擬，隊友只收同步（Game.objs）；飛船被拉、被擋由各自的電腦算
 // =====================================================================
 const OBJ = {
   PLANET_GM: 1.2e7, HOLE_GM: 2.4e7,  // 引力強度（加速度 = GM / 距離²）
-  HOLE_R: 280, HOLE_CORE: 34,
-  ROCK_MIN_DMG: 30, ROCK_GROW: 0.05,  // 小行星：單發至少 30 才打得動；打爆時電路上每個會成長的晶片 + Lv2 門檻的 5%
+  HOLE_R: 280, HOLE_CORE: 34, HOLE_BLOCK: 70,  // HOLE_BLOCK：核心外多少算擋住視線（敵人尋路繞開）
+  ROCK_MIN_DMG: 30, ROCK_CREDIT_HP: 32,  // 小行星：單發至少 30 才打得動；打爆掉晶體（耐久每 32 一顆）
   PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
   FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
   COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60, COMET_GRAV: 1.5,  // COMET_GRAV：彗星受引力影響的倍數
@@ -108,14 +108,16 @@ const Objects = {
   // ---------- 敵人尋路：看不到玩家（中間有行星或小行星）時，照路線圖繞過去或鑽縫 ----------
   //   場地切成 20×20 的格子，障礙物（外擴 12）佔的格子不能走；每 0.25 秒從每個玩家往外算一次步數（BFS）
   //   敵人往周圍 8 格裡步數最少的那一格走
-  blockers() { return Game.objs.filter(o => o.type === 'planet' || (o.type === 'rock' && !o.dead)); },
+  //   黑洞也算：核心外 70 內子彈最容易被吞掉或拉彎，敵人站在黑洞後面時玩家打不到，所以繞過去找看得到的位置
+  blockers() { return Game.objs.filter(o => o.type === 'planet' || o.type === 'hole' || (o.type === 'rock' && !o.dead)); },
+  blockR(o) { return o.type === 'hole' ? o.r + OBJ.HOLE_BLOCK : o.r; },
   buildFlow() {
     const B = this.blockers();
     this.fields = new Map();
     if (!B.length) return;
     const C = OBJ.FLOW_CELL, W = Math.ceil(CFG.WORLD_W / C), H = Math.ceil(CFG.WORLD_H / C), blk = new Uint8Array(W * H);
     for (const o of B) {
-      const R = o.r + OBJ.FLOW_PAD, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
+      const R = this.blockR(o) + OBJ.FLOW_PAD, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
       const y0 = Math.max(0, Math.floor((o.y - R) / C)), y1 = Math.min(H - 1, Math.floor((o.y + R) / C));
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
         if (dist2((x + 0.5) * C, (y + 0.5) * C, o.x, o.y) < R * R) blk[y * W + x] = 1;
@@ -139,8 +141,8 @@ const Objects = {
   // 從 (ax, ay) 到 (bx, by) 的直線有沒有被行星、小行星擋住（pad：線的半寬）；回傳擋住的那一個
   losBlocked(ax, ay, bx, by, pad) {
     for (const o of Game.objs) {
-      if (o.type !== 'planet' && (o.type !== 'rock' || o.dead)) continue;
-      if (segDist2(ax, ay, bx, by, o.x, o.y) < (o.r + pad) ** 2) return o;
+      if (o.type !== 'planet' && o.type !== 'hole' && (o.type !== 'rock' || o.dead)) continue;
+      if (segDist2(ax, ay, bx, by, o.x, o.y) < (this.blockR(o) + pad) ** 2) return o;
     }
     return null;
   },
@@ -276,7 +278,7 @@ const Objects = {
     floatText(o.x, o.y - o.r0, '行星崩解', '#9fb4ff', true);
     if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r0), '行星崩解', '#9fb4ff', 1]);
   },
-  // 小行星受傷：單發至少 30 才算；打爆時打的人電路上每個會成長的晶片 + 它 Lv2 門檻的 5%（每個晶片一樣值錢）
+  // 小行星受傷：單發至少 30 才算；打爆掉晶體
   //   byBoss：旗艦的子彈或撞擊、滾動的刺殼（沒有最低傷害，打碎不給成長）
   hitRock(o, dmg, owner, x, y, byBoss = false) {
     if (o.dead) return;
@@ -293,10 +295,12 @@ const Objects = {
     o.dead = true;
     burst(o.x, o.y, '#c9b79c', 24, 220, 0.6, 3);
     SFX.play('bigkill');
-    const G = Game, chain = owner ? owner.chain : G.chain, bases = new Set(chain.filter(Boolean).map(baseOf).filter(b => CHIPS[b] && CHIPS[b].grow));
-    for (const b of bases) G.grow(owner, b, growNeed(b, 1) * OBJ.ROCK_GROW);  // 可以是小數（門檻小的晶片不會被進位成一大截）
-    floatText(o.x, o.y - o.r, bases.size ? '晶片成長 +5%' : '小行星碎裂', '#9dff6b', true);
-    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r), bases.size ? '晶片成長 +5%' : '小行星碎裂', '#9dff6b', 1]);
+    // 掉晶體：耐久 ÷ 32（大約 2～4 顆，跟刺殼差不多）；晶體由房主產生，隨同步傳給隊友
+    const G = Game;
+    if (!G.isClient()) for (let i = 0, n = Math.max(1, Math.round(o.maxHp / OBJ.ROCK_CREDIT_HP)); i < n; i++)
+      G.pickups.push({ id: G.nextId++, x: o.x + rand(-10, 10), y: o.y + rand(-10, 10), vx: rand(-90, 90), vy: rand(-90, 90), life: 14 });
+    floatText(o.x, o.y - o.r, '小行星碎裂', '#9dff6b', true);
+    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r), '小行星碎裂', '#9dff6b', 1]);
   },
   // 爆炸波及小行星
   explodeRocks(x, y, r, dmg, att) {

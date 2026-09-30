@@ -556,14 +556,15 @@ const MechCheck = {
         return { ok: a.r === 60 && rb < 60 && rb > 30 && c.dead, got: `一般子彈後半徑 ${a.r}；旗艦 10 發後 ${Math.round(rb)}；60 發後${c.dead ? '崩解' : '還在（' + Math.round(c.r) + '）'}` };
       },
     ])],
-    ['地圖物件', '小行星帶', '10 傷害打不動；打爆時電路上的晶片成長 + Lv2 門檻的 5%；小行星後面的敵人看不到；感測器 4 層看得到；敵人不會穿過小行星，從帶子的縫鑽過來追到玩家', M => M.all([
+    ['地圖物件', '小行星帶', '10 傷害打不動；打爆掉晶體（耐久每 32 一顆），不給晶片成長；小行星後面的敵人看不到；感測器 4 層看得到；敵人不會穿過小行星，從帶子的縫鑽過來追到玩家', M => M.all([
       M => {  // 小行星：重武器才打得動
         M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
         const o = { type: 'rock', x: 0, y: 0, r: 20, hp: 80, maxHp: 80 };
-        Game.objs = [o];
+        Game.objs = [o]; Game.pickups = [];
         Objects.hitRock(o, 10, null, 0, 0); const hp1 = o.hp;
         Objects.hitRock(o, 100, null, 0, 0);
-        return { ok: hp1 === 80 && o.dead && Math.abs(Game.growth.boomerang - CHIPS.boomerang.grow.need[0] * 0.05) < 1e-9, got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，迴旋成長 ${Game.growth.boomerang || 0}` };
+        const drops = Game.pickups.length, want = Math.round(80 / 32);
+        return { ok: hp1 === 80 && o.dead && drops === want && !Game.growth.boomerang, got: `小彈後 HP ${hp1}，大彈後${o.dead ? '碎裂' : '還在'}，掉 ${drops} 顆晶體（應為 ${want}），迴旋成長 ${Game.growth.boomerang || 0}（應為 0）` };
       },
       M => {  // 小行星：擋住視野
         M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

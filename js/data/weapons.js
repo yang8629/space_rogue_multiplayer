@@ -44,7 +44,7 @@ const WEAPONS = {
           { name: '焚風', desc: '射程 ×1.6，彈丸 +2。', apply: p => { p.life *= 1.6; p.count += 2; } }] },
     } },
   plasma: { name: '電漿砲', short: '電漿', color: '#c77dff', desc: '慢速的大型電漿球，單發傷害高、可穿透。',
-    base: { interval: 0.45, count: 1, spread: 0, damage: 28, speed: 450, radius: 9, pierce: 2, life: 1.8, shape: 'orb', knock: 1.2 },
+    base: { interval: 0.45, count: 1, spread: 0, damage: 22, speed: 450, radius: 9, pierce: 2, life: 1.8, shape: 'orb', knock: 1.2 },
     paths: {
       A: { name: '分裂電漿', desc: '命中時分裂出 3 顆小電漿（每顆 35% 傷害）。', apply: p => { p.shards = { n: 3, ratio: 0.35 }; },
         next: [
@@ -61,7 +61,7 @@ const WEAPONS = {
           { name: '雙星', desc: '一次發射 2 顆電漿球。', apply: p => { p.count = 2; p.spread = 0.25; } }] },
     } },
   railgun: { name: '軌道砲', short: '軌道', color: '#ffd166', desc: '超高速穿甲彈，射速慢但一發貫穿一排。',
-    base: { interval: 0.6, count: 1, spread: 0, damage: 30, speed: 1500, radius: 4, pierce: 3, life: 0.7, shape: 'rail', knock: 2 },
+    base: { interval: 0.54, count: 1, spread: 0, damage: 30, speed: 1500, radius: 4, pierce: 3, life: 0.7, shape: 'rail', knock: 2 },
     paths: {
       A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
         next: [
@@ -79,7 +79,7 @@ const WEAPONS = {
     } },
   // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段
   blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 3 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
-    base: { interval: 0.3, count: 3, spread: 0.7, damage: 10, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
+    base: { interval: 0.3, count: 3, spread: 0.7, damage: 9, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
     paths: {
       A: { name: '巨刃', desc: '刃片 5 段、範圍更大。', apply: p => { p.count = 5; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
