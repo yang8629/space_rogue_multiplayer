@@ -287,12 +287,15 @@ class Bullet {
       if (near) {
         this.angle = Math.atan2(near.y - this.y, near.x - this.x);
         this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
-        this.mode = 'fly'; this.dashed = true; this.speed = this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = 1; this.accel0 = 1; this.flyDist = 0;
+        // 衝出去的速度倍率（= 傷害倍率）：加速接著停下來之前的倍率繼續加；疾射當成新的出手，重新 +1（Lv2 +1.25）再照衝出去的距離減
+        const m0 = (this.accel ? (this.waitMul || 1) : 1) + quickBonus(this.quick);
+        this.mode = 'fly'; this.dashed = true; this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = this.accel0 = m0; this.flyDist = 0;
+        this.speed = this.baseSpeed * m0;
       }
       return;
     }
     if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.25 && !(this.overT > 0)) {  // 飛 0.25 秒後停住（距離 = 子彈速度 × 0.25）；迴旋已經打中、準備折返的不變地雷
-      this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return;
+      this.waitMul = this.accelMul || 1; this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return;
     }
     this.flyAge += dt;
     if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
@@ -347,7 +350,7 @@ class Bullet {
     if (this.life <= 0) {
       if (this.boom && this.mode === 'fly' && this.shape === 'blade' && this.hitAny) { this.startReturn(); return; }  // 相刃＋迴旋：刃片揮到盡頭時，有砍到敵人就飛回來（相刃無限穿透，穿甲永遠用不完）
       // 佈雷：飛不到 0.25 秒就到盡頭的子彈（相刃的刃片），在消失前的最後一刻停住變地雷
-      if (this.stasis && !this.dashed && this.mode === 'fly' && !(this.overT > 0)) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; this.life = 1; return; }
+      if (this.stasis && !this.dashed && this.mode === 'fly' && !(this.overT > 0)) { this.waitMul = this.accelMul || 1; this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; this.life = 1; return; }
       {
         if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
         this.dead = true;
