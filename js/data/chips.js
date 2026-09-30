@@ -79,7 +79,7 @@ const CHIPS = {
     apply: (list, pw, o) => list.map(b => ({ ...b, infect: o.lv })) },
   pull: { name: '吸引', short: '吸引', type: 'impact', cost: 1, evo: '引力漩渦',
     grow: { what: '拉過後擊殺', need: [185, 555] },
-    desc: '命中時把附近的敵人往命中點拉（旗艦不會被拉）。',
+    desc: '命中時把附近的敵人往命中點拉（旗艦不會被拉；環繞還在繞圈的子彈不會拉，放出去之後才會）。',
     lvs: ['範圍 90', '範圍 130', '進化：每命中 8 次生成一個 1.5 秒的引力漩渦'],
     apply: (list, pw, o) => list.map(b => ({ ...b, pull: o.lv })) },
 
