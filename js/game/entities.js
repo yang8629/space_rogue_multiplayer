@@ -289,7 +289,8 @@ class Bullet {
         this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
         // 衝出去的速度倍率（= 傷害倍率）：加速接著停下來之前的倍率繼續加；疾射當成新的出手，重新 +1（Lv2 +1.25）再照衝出去的距離減
         const m0 = (this.accel ? (this.waitMul || 1) : 1) + quickBonus(this.quick);
-        this.mode = 'fly'; this.dashed = true; this.baseSpeed = 1100; this.life = 0.6; this.flyAge = 0; this.accelMul = this.accel0 = m0; this.flyDist = 0;
+        this.mode = 'fly'; this.dashed = true; this.baseSpeed = this.speed0; this.life = 0.6;  // 衝出去用武器原本的速度（以前固定 1100）
+        this.flyAge = 0; this.accelMul = this.accel0 = m0; this.flyDist = 0;
         this.speed = this.baseSpeed * m0;
       }
       return;
