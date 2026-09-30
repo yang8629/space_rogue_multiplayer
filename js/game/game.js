@@ -148,6 +148,7 @@ const Game = {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
+    for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
     this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
     this.kills = 0; this.banner = null; this.nextId = 1;
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
@@ -256,6 +257,7 @@ const Game = {
     this.credits += left;  // 沒吸完的晶體直接入帳（雙人時兩人都拿）
     this.pickups = [];
     const p = this.player;
+    if (!client) for (const q of this.players()) if (q && !q.dead && q.drRec > 0) { q.hp = Math.min(q.maxHp, q.hp + q.drRec); q.drRec = 0; }  // 修復無人機：沒補完的補回
     if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
     const type = this.node.type;
@@ -749,6 +751,7 @@ const Game = {
     }
     if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
+    if (M.module === 'drone' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.DRONE_CAP, (p.drRec || 0) + dmg * CFG.DRONE_SHARE);  // 修復無人機：這次傷害的一半之後可以補回來
     this.withLoadout(p.L, () => this.onPlayerHurt(p, sx, sy));
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
@@ -827,7 +830,12 @@ const Game = {
       if (p.shield < max) { p.shieldT = (p.shieldT || 0) + dt; if (p.shieldT >= (M.light ? 4 : 8)) { p.shield++; p.shieldT = 0; } }
       else p.shieldT = 0;
     } else p.shield = 0;
-    if (mod === 'drone' && p.calm >= (M.light ? 3 : 5)) p.hp = Math.min(p.maxHp, p.hp + (M.heavy ? 16 : 8) * dt);
+    // 修復無人機：只補「最近受的傷」存下來的可回復量（每次受傷的一半，最多最大 HP 的 30%），不會無限回；戰鬥結束時沒補完的直接補回（見 combatWon）
+    if (mod !== 'drone') p.drRec = 0;
+    else if (p.drRec > 0 && p.calm >= (M.light ? 3 : 5)) {
+      const h = Math.min(p.drRec, (M.heavy ? 16 : 8) * dt, Math.max(0, p.maxHp - p.hp));
+      p.hp += h; p.drRec = p.hp >= p.maxHp ? 0 : p.drRec - h;
+    }
     // 重力井：身邊的減速場，敵人移動 −40%（重裝甲加成 −60%），敵彈在場內也變慢（見 updateEnemyBullets）
     p.gravField = mod === 'gravity' ? { R: M.light ? 220 : 150, slow: M.heavy ? 0.6 : 0.4 } : null;
     if (p.gravField) {

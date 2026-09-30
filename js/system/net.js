@@ -825,7 +825,7 @@ const Net = {
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
         P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT)],
       me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0] : null,
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0)] : null,  // 最後一個：修復無人機的可回復量（畫血條用）
       gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
@@ -900,7 +900,7 @@ const Net = {
         G.shake(9); SFX.play(hp <= 0 ? 'death' : 'hurt');
         burst(P.x, P.y, '#ff4d6d', 16, 240, 0.4, 2);
       }
-      P.hp = hp; P.maxHp = num(s.me[1], P.maxHp);
+      P.hp = hp; P.maxHp = num(s.me[1], P.maxHp); P.drRec = num(s.me[10], 0);
       if (s.me[2] > 0) P.iframe = num(s.me[2]);
       if (typeof s.me[4] === 'string') G.lastHit = s.me[4].slice(0, 60);
       if (s.me[3] && !P.dead) { P.dead = true; Input.down = false; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); G.shake(20); }

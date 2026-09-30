@@ -35,7 +35,7 @@ const MODULES = {
   shield:   { name: '護盾產生器', icon: '⛨', eff: '擋下一次傷害，8 秒回復', cost: '移動速度 −10%', heavy: '2 層護盾', light: '4 秒回復' },
   blink:    { name: '相位跳躍', icon: '⤳', eff: '衝刺變成瞬移（距離 150）', cost: '衝刺冷卻 +50%', heavy: '瞬移落地放出震波', light: '沒有冷卻代價' },
   gravity:  { name: '重力井', icon: '◎', eff: '身邊 150 內的敵人和敵彈速度 −40%', cost: '射速 −10%', heavy: '減速 −60%', light: '範圍 220' },
-  drone:    { name: '修復無人機', icon: '✚', eff: '5 秒沒受傷後開始回血（每秒 8）', cost: '最大 HP −20%', heavy: '回血 ×2', light: '3 秒就開始回血' },
+  drone:    { name: '修復無人機', icon: '✚', eff: '每次受傷的一半之後可以補回（最多最大 HP 的 30%）：5 秒沒受傷後每秒補 8，戰鬥結束時沒補完的直接補回', cost: '最大 HP −20%', heavy: '回血 ×2', light: '3 秒就開始回血' },
   reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
   // 旗艦專屬（擊沉旗艦時可以裝上）
   swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 5 秒朝四周放出 12 發子彈（武器傷害）', cost: '最大 HP −10' },
