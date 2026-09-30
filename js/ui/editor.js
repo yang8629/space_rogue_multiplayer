@@ -156,7 +156,10 @@ const Editor = {
     const partCards = PART_IDS.map(id => partCard(id, free ? `<div class="bar"><button data-pick="part:${id}:-1">−1 層</button><button data-pick="part:${id}:1">+1 層</button></div>` : '')).join('');
     const modCards = (free ? Object.keys(MODULES) : Game.module ? [Game.module] : []).map(id =>
       moduleCard(id, free ? `<button data-pick="module:${id}">${Game.module === id ? '使用中' : '裝上'}</button>` : '')).join('');
-    const mech = `<h3>零件 ${partsUsed(Game.parts)} / ${Game.partSlots} 格${free ? '（沙盒／靶場不受格數限制）' : ''}</h3>
+    const SH = SHIPS[Game.shipId];  // 目前的飛船：名稱、特殊能力（遠征中也看得到）
+    const mech = (SH ? `<h3 style="color:${SH.color}">${SH.name}</h3>
+      <div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.abilityDesc}　·　船體 ${SH.hp}　·　速度 ${SH.speed}　·　衝刺冷卻 ${SH.dashCd} 秒　·　零件格 ${SH.partSlots}</div>` : '') +
+      `<h3>零件 ${partsUsed(Game.parts)} / ${Game.partSlots} 格${free ? '（沙盒／靶場不受格數限制）' : ''}</h3>
       <div class="sub">最大 HP ${Game.player.maxHp}　·　移動速度 ×${M.speed.toFixed(2)}　·　受到的傷害 ×${M.taken.toFixed(2)}　·　射速 ×${M.rate.toFixed(2)}　·　子彈速度 ×${M.bspeed.toFixed(2)}　·　衝刺冷卻 ×${M.dashCd.toFixed(2)}
         <br>已開啟的特性：${traits.length ? traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`).join('、') : '無'}${M.heavy ? '　·　<span style="color:#ffd166">模組裝甲加成</span>' : ''}${M.light ? '　·　<span style="color:#4cc9f0">模組加速加成</span>' : ''}</div>
       <div class="cards" style="margin:8px 0">${partCards}</div>
