@@ -13,7 +13,7 @@
 // =====================================================================
 const OBJ = {
   PLANET_GM: 1.2e7, HOLE_GM: 2.4e7,  // 引力強度（加速度 = GM / 距離²）
-  HOLE_R: 280, HOLE_CORE: 34, HOLE_BLOCK: 70,  // HOLE_BLOCK：核心外多少算擋住視線（敵人尋路繞開）
+  HOLE_R: 280, HOLE_CORE: 34, HOLE_BLOCK: 70, HOLE_PCT: 0.1,  // HOLE_PCT：核心每秒扣敵人最大 HP 的比例；  // HOLE_BLOCK：核心外多少算擋住視線（敵人尋路繞開）
   ROCK_MIN_DMG: 30, ROCK_CREDIT_HP: 32,  // 小行星：單發至少 30 才打得動；打爆掉晶體（耐久每 32 一顆）
   PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
   FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
@@ -79,7 +79,7 @@ const Objects = {
           if (d > o.R || d < 1) continue;
           const pull = 60 + 160 * (1 - d / o.R);
           e.x += (o.x - e.x) / d * pull * dt; e.y += (o.y - e.y) / d * pull * dt;
-          if (hurt && d < o.r + e.r) e.hurt(10, 0, 0, 'explode', e.lastAtt || null);
+          if (hurt && d < o.r + e.r) e.hurt(Math.max(10, e.maxHp * OBJ.HOLE_PCT * 0.25), 0, 0, 'explode', e.lastAtt || null);  // 核心每秒扣最大 HP 的 10%（至少每 0.25 秒 10）：掉進去的一定會死，不會卡住戰鬥
         }
       }
     }
