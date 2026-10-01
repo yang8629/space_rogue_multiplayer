@@ -1004,8 +1004,8 @@ const Game = {
         if (b.mode === 'return') this.tagGrow(e, own, 'boomerang');
         if (orbit || b.orbShot) this.tagGrow(e, own, 'orbit');
         if (b.stasis && b.dashed) this.tagGrow(e, own, 'stasis');
-        if (b.accel && b.accelMul >= 1.5) this.tagGrow(e, own, 'accel');
-        if (b.quick && b.accelMul >= 1.5) this.tagGrow(e, own, 'quick');
+        if (b.accel && b.accelMul >= 2) this.tagGrow(e, own, 'accel');
+        if (b.quick && b.accelMul >= 2) this.tagGrow(e, own, 'quick');
         if (b.bounced) this.tagGrow(e, own, 'wallbounce');
         if (b.full) this.tagGrow(e, own, 'charge');
         if (b.rear) this.tagGrow(e, own, 'rear');

@@ -188,7 +188,12 @@ class Player {
 // 環繞：Lv1 最多存 10 發、3 秒轉到 2 倍；Lv2 起 20 發、2 秒轉到 3 倍。「一發」= 一次開火（散彈一次的 5 顆算同一發）
 const orbCap = lv => lv >= 2 ? 20 : 10;
 let volleySeq = 0, curVolley = 0;  // 每次 spawnShots 算一發（環繞用來數存了幾發）
-const quickBonus = lv => !lv ? 0 : lv >= 2 ? 1.25 : 1;  // 疾射：出手時速度倍率 +1（Lv2 +1.25）
+// 速度倍率（加速、疾射）照「射程進度」算：p = 已飛距離 ÷ 射程（射程 = 出手速度 × 存活時間；加速 ×1.5），超過射程停在終點的值
+//   加速 0.5 → 3（Lv2 4）、疾射 3（Lv2 4）→ 0.5，兩個都裝時加在同一個倍率上；環繞放出時加速不扣起步的 0.5
+const SPD_CAP = 5;
+const spdTop = lv => lv >= 2 ? 4 : 3;
+const accelAdd = (lv, p, full) => !lv ? 0 : (full ? -0.5 : 0) + (spdTop(lv) - 0.5) * p;
+const quickAdd = (lv, p) => !lv ? 0 : spdTop(lv) - 1 - (spdTop(lv) - 0.5) * p;
 const orbSpinOf = (lv, held) => lv >= 2 ? 1 + 2 * Math.min(1, held / 2) : 1 + Math.min(1, held / 3);
 const orbSpinMax = lv => lv >= 2 ? 3 : 2;
 
@@ -214,11 +219,11 @@ class Bullet {
     this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.intercept = s.intercept; this.parry = s.parry; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
-    this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時傷害 × 這個倍率，最多 4）
-    if (this.accel || this.quick) {  // 速度倍率的起點：加速從 0.5 倍開始；疾射 +1（Lv2 +1.5）
-      this.accel0 = this.accelMul = (this.accel ? 0.5 : 1) + quickBonus(this.quick); this.flyDist = 0;
-      this.speed = this.baseSpeed * this.accelMul;
-    }
+    this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時加進傷害加成，最多 5）
+    if (this.accel) this.life *= 1.5;  // 加速：射程 ×1.5
+    // R：射程；dist：已飛距離（佈雷衝出去、迴旋回程都接著算，只有開火和環繞放出重新算）；mul0：起始倍率（環繞放出時是轉速倍率）
+    this.R = this.speed0 * this.life; this.dist = 0; this.mul0 = 1; this.accFull = true;
+    if (this.accel || this.quick) this.setMul();
     if (s.infect) this.att.inf = { tpl: s, lv: s.infect, gen: this.infGen };  // 感染：擊殺時照這個樣板爆出子彈
     if (this.orbit && depth > 0) this.orbit = 0;  // 觸發射出的子彈不進圈（不會瞬移回飛船）
     this.vid = curVolley;
@@ -230,6 +235,12 @@ class Bullet {
         this.life0 = this.life; this.life = 99;
       } else this.dead = true;  // 存滿了：多的子彈不射出去
     }
+  }
+  // 速度倍率 = 起始倍率 ＋ 加速 ＋ 疾射（照射程進度），0.5～5
+  setMul() {
+    const p = Math.min(1, this.dist / this.R);
+    this.accelMul = clamp(this.mul0 + accelAdd(this.accel, p, this.accFull) + quickAdd(this.quick, p), 0.5, SPD_CAP);
+    this.speed = this.baseSpeed * this.accelMul;
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
   copy(dAngle) {
@@ -260,9 +271,10 @@ class Bullet {
         const d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
         // 速度倍率 = 傷害倍率：轉速 1～3 倍 → 放出時速度倍率 1～2（Lv1 最多 1.5）；有加速時從這裡繼續加上去（不相乘）
-        this.accel0 = this.accelMul = 1 + 0.5 * (spin - 1) + quickBonus(this.quick); this.orbShot = true; this.flyDist = 0;  // 放出後命中也算環繞成長
-        this.speed = this.baseSpeed * this.accelMul;
-        this.life = this.life0; this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
+        // 射程也 × 轉速倍率（放出的子彈飛得比較快，存活時間不變）
+        this.mul0 = 1 + 0.5 * (spin - 1); this.accFull = false; this.dist = 0; this.R = this.speed0 * this.life0 * this.mul0;
+        this.orbShot = true;  // 放出後命中也算環繞成長
+        this.life = this.life0; this.setMul(); this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 1.5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;
         return;
@@ -276,27 +288,27 @@ class Bullet {
     if (this.mode === 'wait') {  // 佈雷：停住當地雷，敵人靠近就朝牠衝出去（×1.2）；時間到還沒被觸發就消失
       this.waitT -= dt; this.speed = 0;
       // 觸發範圍算到敵人的邊緣（大隻的刺殼、精英、旗艦在旁邊也會觸發；以前算到中心，貼著大隻的邊也不動，時間到就消失）
-      const R = this.stasis >= 2 ? 70 : 50;
+      const TR = this.stasis >= 2 ? 70 : 50;
       let near = null, nb = Infinity;
       for (const e of Game.enemies) {
         if (e.dead || e.spawnT > 0) continue;
         const gap = Math.hypot(e.x - this.x, e.y - this.y) - e.r;
-        if (gap < R && gap < nb) { nb = gap; near = e; }
+        if (gap < TR && gap < nb) { nb = gap; near = e; }
       }
       if (!near && this.waitT <= 0) { this.dead = true; burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
       if (near) {
         this.angle = Math.atan2(near.y - this.y, near.x - this.x);
         this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
-        // 衝出去的速度倍率（= 傷害倍率）：加速接著停下來之前的倍率繼續加；疾射當成新的出手，重新 +1（Lv2 +1.25）再照衝出去的距離減
-        const m0 = (this.accel ? (this.waitMul || 1) : 1) + quickBonus(this.quick);
-        this.mode = 'fly'; this.dashed = true; this.baseSpeed = this.speed0; this.life = 0.6;  // 衝出去用武器原本的速度（以前固定 1100）
-        this.flyAge = 0; this.accelMul = this.accel0 = m0; this.flyDist = 0;
-        this.speed = this.baseSpeed * m0;
+        // 衝出去用武器原本的速度，跑剩下的射程（至少觸發範圍 + 30，射程很短的相刃才碰得到）；
+        // 速度倍率接著停住前的射程進度繼續算（加速、疾射都不重新開始）
+        this.mode = 'fly'; this.dashed = true; this.baseSpeed = this.speed0;
+        this.life = Math.max(this.R - this.dist, TR + 30) / (this.speed0 * this.mul0);
+        this.flyAge = 0; this.setMul();
       }
       return;
     }
-    if (this.stasis && !this.dashed && this.mode === 'fly' && this.flyAge >= 0.25 && !(this.overT > 0)) {  // 飛 0.25 秒後停住（距離 = 子彈速度 × 0.25）；迴旋已經打中、準備折返的不變地雷
-      this.waitMul = this.accelMul || 1; this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return;
+    if (this.stasis && !this.dashed && this.mode === 'fly' && this.dist >= 0.5 * this.R && !(this.overT > 0)) {  // 飛到射程一半停住；迴旋已經打中、準備折返的不變地雷
+      this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; return;
     }
     this.flyAge += dt;
     if (this.overT > 0 && (this.overT -= dt) <= 0) this.startReturn();  // 迴旋：穿過打中的敵人後折返
@@ -318,11 +330,6 @@ class Bullet {
         this.angle += clamp(angleDiff(this.angle, Math.atan2(t.y - this.y, t.x - this.x)), -turn, turn);
       }
     }
-    if (this.accel || this.quick) {  // 速度倍率（= 傷害倍率）：加速每秒往上加、疾射照飛行距離往下減，全部加在同一個倍率上；0.5～4
-      const up = this.accel ? (this.accel >= 2 ? 4.5 : 3) * this.flyAge : 0;
-      const down = this.quick ? (this.flyDist || 0) / (this.quick >= 2 ? 250 : 200) : 0;
-      this.accelMul = clamp((this.accel0 || 1) + up - down, 0.5, 4); this.speed = this.baseSpeed * this.accelMul;
-    }
     if (this.mode === 'return') {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
@@ -331,8 +338,10 @@ class Bullet {
     }
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
-    if (this.quick) this.flyDist = (this.flyDist || 0) + this.speed * dt;  // 疾射：照飛行距離減速
-    this.life -= dt;
+    this.dist += this.speed * dt;
+    // 加速、疾射的子彈照飛行距離消耗存活時間：不管速度怎麼變，都剛好飛完射程（迴旋回程照秒數，追到飛船為止）
+    this.life -= (this.accel || this.quick) && this.mode === 'fly' ? dt * this.accelMul / this.mul0 : dt;
+    if (this.accel || this.quick) this.setMul();  // 速度倍率（= 傷害加成）照射程進度變化（移動完馬上更新，碰撞用的是這一幀到達位置的倍率）
     const W = CFG.WORLD_W, H = CFG.WORLD_H, outX = this.x < 0 || this.x > W, outY = this.y < 0 || this.y > H;
     if (outX || outY) {
       if (this.bounce > 0) {  // 牆反彈
@@ -350,8 +359,8 @@ class Bullet {
     }
     if (this.life <= 0) {
       if (this.boom && this.mode === 'fly' && this.shape === 'blade' && this.hitAny) { this.startReturn(); return; }  // 相刃＋迴旋：刃片揮到盡頭時，有砍到敵人就飛回來（相刃無限穿透，穿甲永遠用不完）
-      // 佈雷：飛不到 0.25 秒就到盡頭的子彈（相刃的刃片），在消失前的最後一刻停住變地雷
-      if (this.stasis && !this.dashed && this.mode === 'fly' && !(this.overT > 0)) { this.waitMul = this.accelMul || 1; this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; this.life = 1; return; }
+      // 佈雷：到盡頭前還沒停住的（例如迴旋準備折返時錯過了射程一半），在消失前的最後一刻停住變地雷
+      if (this.stasis && !this.dashed && this.mode === 'fly' && !(this.overT > 0)) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; this.life = 1; return; }
       {
         if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
         this.dead = true;

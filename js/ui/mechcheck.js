@@ -239,35 +239,48 @@ const MechCheck = {
       return { ok: sc === 50 && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
         got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發（散彈存了 ${sc} 顆 = 10 發）；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
     }],
-    ['電路晶片', '佈雷', '子彈停住變成地雷（不擋敵彈）；敵人靠近就衝出去打中（×1.2）', M => {
+    ['電路晶片', '佈雷', '子彈飛到射程一半停住變成地雷（不擋敵彈，相刃也停得住）；敵人靠近就衝出去打中（×1.2）', M => {
+      M.setup('sandbox', 'vanguard', 'blade', null, null, ['weapon', 'stasis', null, null]); M.targets([]);
+      M.run(1); const k = Game.bullets[0];
+      for (let f = 0; f < 60 && k.mode !== 'wait' && !k.dead; f++) Game.updateBullets(1 / 60);
+      const bladeOk = k.mode === 'wait';
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'stasis', null, null]); M.targets([]);
       M.run(1); const b = Game.bullets[0];
-      for (let f = 0; f < 20 && b.mode !== 'wait'; f++) Game.updateBullets(1 / 60);
-      const stopped = b.mode === 'wait', d0 = b.damage;
+      for (let f = 0; f < 120 && b.mode !== 'wait'; f++) Game.updateBullets(1 / 60);
+      const stopped = b.mode === 'wait', d0 = b.damage, half = b.dist / b.R;
       Game.eBullets = [{ x: b.x + 40, y: b.y, vx: -600, vy: 0, r: 5, dmg: 10, life: 2, from: 'test' }];
       for (let f = 0; f < 10; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
       const passed = !b.dead && b.mode === 'wait';
       const e = M.targets([[b.x - Game.player.x + 45, b.y - Game.player.y]])[0];
       for (let f = 0; f < 30 && e.hp === e.maxHp; f++) Game.updateBullets(1 / 60);
       const hit = e.maxHp - e.hp;
-      return { ok: stopped && passed && near1(hit, d0 * 1.2), got: `${stopped ? '停住' : '沒停住'}；敵彈${passed ? '穿過去（不擋）' : '被擋了'}；敵人靠近後被打 ${Math.round(hit)}（應為 ${d0 * 1.2}）` };
+      return { ok: bladeOk && stopped && Math.abs(half - 0.5) < 0.05 && passed && near1(hit, d0 * 1.2),
+        got: `相刃${bladeOk ? '停得住' : '沒停住'}；雷射${stopped ? `停在射程的 ${Math.round(half * 100)}%` : '沒停住'}；敵彈${passed ? '穿過去（不擋）' : '被擋了'}；敵人靠近後被打 ${Math.round(hit)}（應為 ${d0 * 1.2}）` };
     }],
-    ['電路晶片', '加速', '出手 0.5 倍速，越飛越快；打中時傷害 × 速度倍率（最多 ×4）', M => {
+    ['電路晶片', '加速', '出手 0.5 倍速，飛到射程盡頭 3 倍（射程 ×1.5，照射程進度算）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'accel', null, null]); M.targets([]);
-      M.run(1); const b = Game.bullets[0], m0 = b.accelMul;
-      for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+      M.run(1); const b = Game.bullets[0], m0 = b.accelMul, R0 = b.speed0 * Game.wp.life;
+      for (let f = 0; f < 300 && b.dist < b.R / 2; f++) Game.updateBullets(1 / 60);
       const m1 = b.accelMul;
-      return { ok: m0 >= 0.5 && m0 < 0.6 && near1(m1 - m0, 1.5), got: `出手 ${m0.toFixed(2)} 倍，0.5 秒後 ${m1.toFixed(2)} 倍` };
+      let m2 = 0;
+      for (let f = 0; f < 300 && !b.dead; f++) { m2 = b.accelMul; Game.updateBullets(1 / 60); }
+      const range = b.dist / R0;
+      return { ok: m0 >= 0.5 && m0 < 0.6 && Math.abs(m1 - 1.75) < 0.08 && m2 > 2.9 && Math.abs(range - 1.5) < 0.08,
+        got: `出手 ${m0.toFixed(2)} 倍，射程一半 ${m1.toFixed(2)} 倍（應為 1.75），盡頭 ${m2.toFixed(2)} 倍；射程 ×${range.toFixed(2)}` };
     }],
-    ['電路晶片', '疾射', '出手 ×2 速度與傷害，每飛 200 −1（最低 0.5）；跟加速一起裝時加在同一個倍率上', M => {
+    ['電路晶片', '疾射', '出手 3 倍，飛到射程盡頭 0.5 倍（射程不變）；跟加速一起裝時加在同一個倍率上', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'quick', null, null]); M.targets([]);
-      M.run(1); const b = Game.bullets[0], m0 = b.accelMul;
-      for (let f = 0; f < 60 && (b.flyDist || 0) < 200; f++) Game.updateBullets(1 / 60);
-      const m1 = b.accelMul, d1 = b.flyDist;
+      M.run(1); const b = Game.bullets[0], m0 = b.accelMul, R0 = b.speed0 * Game.wp.life;
+      for (let f = 0; f < 300 && b.dist < b.R / 2; f++) Game.updateBullets(1 / 60);
+      const m1 = b.accelMul;
+      for (let f = 0; f < 300 && !b.dead; f++) Game.updateBullets(1 / 60);
+      const range = b.dist / R0;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'quick', 'accel', null]); M.targets([]);
       M.run(1); const c = Game.bullets[0], c0 = c.accelMul;
-      return { ok: m0 > 1.9 && m0 <= 2 && Math.abs(m1 - (2 - d1 / 200)) < 0.12 && c0 > 1.5 && c0 < 1.6,
-        got: `出手 ${m0.toFixed(2)} 倍，飛了 ${Math.round(d1)} 後 ${m1.toFixed(2)} 倍；疾射＋加速出手 ${c0.toFixed(2)} 倍（0.5 + 1，不相乘）` };
+      for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60);
+      const c1 = c.accelMul;
+      return { ok: m0 > 2.8 && m0 <= 3 && Math.abs(m1 - 1.75) < 0.08 && Math.abs(range - 1) < 0.06 && Math.abs(c0 - 2.5) < 0.02 && Math.abs(c1 - 2.5) < 0.02,
+        got: `出手 ${m0.toFixed(2)} 倍，射程一半 ${m1.toFixed(2)} 倍（應為 1.75）；射程 ×${range.toFixed(2)}；疾射＋加速一直是 ${c0.toFixed(2)} → ${c1.toFixed(2)} 倍（應為 2.5）` };
     }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（Lv1 ×1.5＋0.1／發，最多 ×3）；會穿透的子彈每穿過一隻留一份', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
