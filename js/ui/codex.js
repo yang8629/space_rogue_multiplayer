@@ -444,7 +444,17 @@ const Codex = {
   },
 
   weapons() {
-    return Object.entries(WEAPONS).map(([id, W]) => {
+    // 基礎型數值表：射程 = 子彈速度 × 存活時間（加速、疾射、佈雷都照射程比例算）
+    const rows = Object.entries(WEAPONS).map(([id, W]) => {
+      const p = weaponParams({ id, path: null, final: null });
+      return `<tr><td style="color:${W.color}">${W.short}</td><td>${p.damage}</td><td>${p.count}</td><td>${p.damage * p.count}</td>
+        <td>${(1 / (p.interval * p.rate)).toFixed(2)}</td><td>${p.speed}${p.speedVar ? '（±8%）' : ''}</td><td>${p.life} 秒</td>
+        <td>${Math.round(p.speed * p.life)}</td><td>${p.pierce >= 99 ? '無限' : p.pierce}</td></tr>`;
+    }).join('');
+    const table = `<div class="codex-sec viz"><h3>基礎數值</h3>
+      <div class="sub" style="margin:0">沒升級、沒晶片、能量 0。射程 = 子彈速度 × 存活時間；加速、疾射、佈雷的效果都照「飛了射程的幾成」算。</div>
+      <div class="tbl"><table><tr><th>武器</th><th>單發傷害</th><th>發數</th><th>每次開火</th><th>每秒開火</th><th>子彈速度</th><th>存活時間</th><th>射程</th><th>穿透</th></tr>${rows}</table></div></div>`;
+    return table + Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
       const cur = this.hasRun() && Game.weapon.id === id ? '　<span class="pill">目前使用</span>' : '';
       const t = weaponDpsTree(id);
