@@ -276,10 +276,12 @@ const Editor = {
     const why = this.canPlug(C[h], id, grp.length - 1);
     if (why) return this.warn(why);
     if (src) src.arr[src.i] = null;
-    const pos = Math.max(...grp) + 1;
+    const pos = Math.max(...grp) + 1, SA = Game.slotAttr = Game.slotAttr || [];
+    while (SA.length < C.length) SA.push(null);
+    const move = (k, to) => { C.splice(k, 1); C.splice(to, 0, id); SA.splice(to, 0, SA.splice(k, 1)[0]); };  // 屬性跟著那個空格走
     let k = C.indexOf(null, pos);
-    if (k >= 0) { C.splice(k, 1); C.splice(pos, 0, id); }
-    else if ((k = C.lastIndexOf(null, pos - 1)) > 0) { C.splice(k, 1); C.splice(pos - 1, 0, id); }
+    if (k >= 0) move(k, pos);
+    else if ((k = C.lastIndexOf(null, pos - 1)) > 0) move(k, pos - 1);
     else { if (src) src.arr[src.i] = id; return this.warn('電路格滿了：組件也佔一格電路，先空出一格（或在補給站買插槽）'); }
     this.sel = null;
     this.changed();
@@ -295,7 +297,9 @@ const Editor = {
     }
     const A = blocks.findIndex(g => g[0] === a), B = blocks.findIndex(g => g[0] === b);
     [blocks[A], blocks[B]] = [blocks[B], blocks[A]];
+    const SA = Game.slotAttr || [];
     Game.chain = blocks.flatMap(g => g.map(j => C[j]));
+    Game.slotAttr = blocks.flatMap(g => g.map(j => SA[j] || null));  // 晶片連插件、連黑洞屬性一起換位置
     this.sel = null;
     this.changed();
   },
@@ -311,7 +315,7 @@ const Editor = {
     this.changed();
   },
   showDefaultInfo() {
-    this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b>（3 個插座）→ <b style="color:#5ef2d0">玩法晶片</b>依序改變子彈的玩法。' +
+    this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b>（插座開局 1 個，每打完一隻王 +1，最多 3 個）→ <b style="color:#5ef2d0">玩法晶片</b>依序改變子彈的玩法。' +
       '<b style="color:#ffd166">◇ 組件</b>（分裂、巨彈、穿甲、倍增、超頻、鏡像）插在<b>左邊最近</b>的武器／玩法晶片／觸發器上：插在武器上作用在全部子彈，插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。' +
       '<b style="color:#ff6b9d">觸發器</b>（命中／消失／定時）用武器再射一次回響（50%），右邊的晶片只作用在回響上。點晶片可看說明。';
   },
