@@ -368,3 +368,8 @@ body.detail .detail-hint button { background: #1c3a6e; }
 /* 電路編輯器：機體分頁的零件、模組、飛船、武器卡片，和倉庫格都靠左上 */
 #edShip .cards { justify-content: flex-start; align-items: flex-start; }
 .inv { align-items: flex-start; justify-content: flex-start; }
+
+/* 拖曳或選取時：放了會沒作用（或放不進去）的位置變灰，放得進去的亮起來 */
+.slot.nogo, .sock.nogo { opacity: .25; filter: grayscale(1); }
+.slot.go { box-shadow: 0 0 0 2px #4cc9f0, 0 0 10px #4cc9f066; }
+.sock.go { box-shadow: 0 0 0 3px #4cc9f0; }

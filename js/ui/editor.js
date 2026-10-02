@@ -106,7 +106,8 @@ const Editor = {
     });
     for (const id of Object.keys(CHIPS).filter(id => !CHIPS[id].hidden)) {
       const el = chipEl(id);
-      el.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'lib', id })));
+      el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'lib', id })); this.markTargets({ from: 'lib', id }); });
+      el.addEventListener('dragend', () => this.clearMarks());
       el.addEventListener('click', () => {  // 點選後再點插槽放入
         const same = this.sel && this.sel.from === 'lib' && this.sel.id === id;
         this.sel = same ? null : { from: 'lib', id };
@@ -120,11 +121,12 @@ const Editor = {
   },
   sel: null,
   lockedMsg(id) {  // 武器鎖定在第 1 格
+    if (this.dry) { this.dryOk = false; return; }
     this.sel = null;
     this.showInfo(id);
     this.render();
   },
-  warn(msg) { this.sel = null; this.render(); this.infoEl.innerHTML = `<b style="color:#ff8a8a">✖ ${msg}</b>`; },
+  warn(msg) { if (this.dry) { this.dryOk = false; return; } this.sel = null; this.render(); this.infoEl.innerHTML = `<b style="color:#ff8a8a">✖ ${msg}</b>`; },
   // 電路上的晶片拿走時，插座上的組件退回倉庫（倉庫放不下就不動，回傳 false）
   returnComps(i) {
     if (Game.mode === 'range') { Game.socks[i] = []; return true; }  // 靶場沒有倉庫：組件直接拿掉
@@ -270,7 +272,26 @@ const Editor = {
         加工過子彈的晶片（倍增、分裂、巨大化…）依它讓傷害變成幾倍，按比例分走多出來的傷害；超頻、冷卻管線依射速提升分攤。
         爆炸、碎片、電弧、燃燒跟著原本那顆子彈算。共振器的效果算在被共振的晶片上。${coop ? '雙人：傷害由房主計算，每秒同步一次。' : ''}</p>`;
   },
-  changed() { Game.recalc(); this.render(); },
+  changed() { if (this.dry) return; Game.recalc(); this.render(); },
+  // ---------- 拖曳或選取時，標出每個位置放不放得進去 ----------
+  // t = { arr, i }（電路格）或 { sock: h }（第 h 格晶片的插座）；d = 拖的東西。試放一次再全部還原
+  canDrop(t, d) {
+    const s = this.snap(), sel = this.sel;
+    this.dry = true; this.dryOk = true;
+    try { if (t.sock != null) this.plug(t.sock, d); else this.dropOn(t.arr, t.i, d); } catch (e) { this.dryOk = false; }
+    finally { this.dry = false; this.restore(s); this.sel = sel; Game.recalc(); }
+    return this.dryOk;
+  },
+  // 還原成 snap 的樣子（原地改，電路、倉庫的陣列不換：拖放登記的位置還指著它們）
+  restore(s) { Game.chain.splice(0, Infinity, ...s.chain); Game.inventory.splice(0, Infinity, ...s.inv); Game.socks = s.socks.map(x => x.slice()); },
+  markTargets(d) {
+    for (const { el, t } of this.targets || []) {
+      const same = t.sock == null ? d.from === 'slot' && d.index === t.i : d.from === 'sock' && d.h === t.sock;
+      const id = this.srcId(d), ok = same || (t.sock != null && !isComp(id) ? false : this.canDrop(t, d));  // 插座只收組件
+      el.classList.toggle('nogo', !ok); el.classList.toggle('go', ok && !same);
+    }
+  },
+  clearMarks() { for (const { el } of this.targets || []) el.classList.remove('nogo', 'go'); },
   // 拖放的來源：slot = 電路格、inv = 倉庫、sock = 第 h 格晶片的第 k 個插座、lib = 沙盒的晶片庫
   ref(d) {
     if (d.from === 'slot') return { arr: Game.chain, i: d.index };
@@ -332,9 +353,10 @@ const Editor = {
   },
   commit(snap) {
     const now = this.idleList();
+    if (this.dry) { if (now.length > snap.idle.length) this.dryOk = false; return; }
     if (now.length > snap.idle.length) {
       const why = now.find(w => !snap.idle.includes(w)) || now[now.length - 1];
-      Game.chain = snap.chain; Game.socks = snap.socks; Game.inventory = snap.inv;
+      this.restore(snap);
       Game.recalc();
       return this.warn(`這樣擺會沒有作用，不給放：${why}`);
     }
@@ -413,7 +435,8 @@ const Editor = {
       const fx = sockEffect(h, k);  // 插在這裡的實際效果
       el.title = `${CHIPS[id].name}（插在${h === 0 ? '武器' : CHIPS[C[h]].name}上）\n${fx}`;
       el.draggable = true;
-      el.addEventListener('dragstart', e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'sock', h, k })); });
+      el.addEventListener('dragstart', e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'sock', h, k })); this.markTargets({ from: 'sock', h, k }); });
+      el.addEventListener('dragend', () => this.clearMarks());
       el.addEventListener('mouseenter', () => {
         this.showInfo(id, -1, J);
         this.infoEl.innerHTML = `<b style="color:${J && J.idle ? '#ff8a8a' : '#ffd166'}">◆ ${CHIPS[id].name}插在${h === 0 ? '武器' : CHIPS[C[h]].name}上：${fx}</b><br>` + this.infoEl.innerHTML;
@@ -440,6 +463,7 @@ const Editor = {
     el.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('over'); });
     el.addEventListener('dragleave', () => el.classList.remove('over'));
     el.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('over'); const d = parseDrag(e); if (d) this.plug(h, d); });
+    (this.targets = this.targets || []).push({ el, t: { sock: h } });
     return el;
   },
 
@@ -452,7 +476,8 @@ const Editor = {
       const el = chipEl(id);
       if (idle) { el.classList.add('idle'); el.title = why; }
       if (this.sel && this.sel.from === from && this.sel.index === i) el.classList.add('sel');
-      el.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', JSON.stringify({ from, index: i })));
+      el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ from, index: i })); this.markTargets({ from, index: i }); });
+      el.addEventListener('dragend', () => this.clearMarks());
       if (from === 'slot') el.addEventListener('mouseenter', e => { e.stopImmediatePropagation(); Editor.showInfo(id, i); }, true);
       slot.appendChild(el);
     } else {
@@ -467,11 +492,14 @@ const Editor = {
       if (d) this.dropOn(arr, i, d);
     });
     slot.addEventListener('contextmenu', e => { e.preventDefault(); this.sel = null; this.quickMove(arr, i); });
+    if (from === 'slot') (this.targets = this.targets || []).push({ el: slot, t: { arr, i } });
     slot.addEventListener('click', () => this.tapSlot(arr, i, from));
     return slot;
   },
 
   render() {
+    if (this.dry) return;
+    this.targets = [];  // 拖曳時要標記的位置（makeSlot、sockEl 登記）
     const chain = Game.chain, info = this.slotInfo(chain);
     this.creditsEl.textContent = !Game.freePlay() ? `◆ ${Game.credits}` : Game.mode === 'range' ? '🎯 靶場' : '沙盒模式';
     this.recycleEl.innerHTML = !Game.freePlay() ? '♻ 回收<br>拖曳到這裡<br>換成晶體' : '✕ 移除<br>拖曳到這裡刪除';
@@ -485,7 +513,7 @@ const Editor = {
     chain.forEach((id, i) => {
       const I = info[i];
       if (i > 0) {
-        const trig = lastHost >= 0 && info[lastHost].trig, ar = document.createElement('div');
+        const trig = lastHost === i - 1 && info[lastHost].trig, ar = document.createElement('div');
         ar.className = 'arrow' + (trig ? ' trig' : '');
         ar.innerHTML = trig ? '⤷<br>' + (TRIG[CHIPS[chain[lastHost]].trig] || '') : '→';
         this.chainEl.appendChild(ar);
@@ -553,6 +581,7 @@ const Editor = {
         <button data-sel="recycle">${!Game.freePlay() ? `回收 ◆${sellPrice(selId)}` : '移除'}</button>
         <button data-sel="cancel">取消</button>`;
     } else this.selbarEl.innerHTML = '';
+    if (this.sel) this.markTargets(this.sel);  // 點選了晶片或組件：放不進去的位置變灰
   },
 };
 
