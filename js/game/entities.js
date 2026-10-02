@@ -244,7 +244,6 @@ class Bullet {
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
   copy(dAngle) {
-    if (Game.bullets.length >= CFG.MAX_LIVE_BULLETS) return null;
     const c = Object.assign(Object.create(Bullet.prototype), this, { hitSet: new Set(this.hitSet) });
     c.angle += dAngle;
     Game.bullets.push(c);
@@ -375,7 +374,6 @@ function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
   const B = Game.bullets, M = Game.mech;  // 射出這些子彈的人的機體：感測器（子彈速度、鎖定、弱點標記）
   curVolley = ++volleySeq;
   for (const s0 of list) {
-    if (B.length >= CFG.MAX_LIVE_BULLETS) break;
     const s = M.bspeed !== 1 ? { ...s0, speed: s0.speed * M.bspeed } : s0;
     const b = new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId);
     if (M.traits.mark) b.mark = true;
