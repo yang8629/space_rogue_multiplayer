@@ -98,12 +98,12 @@ const CHIPS = {
     apply: (list, pw, o) => list.map(b => ({ ...b, intercept: o.lv, damage: Game.fireMode === 'intercept' ? b.damage * (o.lv >= 2 ? 1 : 0.5) : b.damage })) },
 
   // ---------- 組件：插在武器、玩法晶片、觸發器的插座上（不會升級，拿到重複的就是多一個） ----------
-  //   插在武器（或觸發器 = 回響）上：作用在射出的全部子彈，加進武器層；插越多越打折（DIM）
-  //   插在玩法晶片上：只作用在那個晶片的「產物」（HOST_PRODUCT），加進宿主層，不打折
+  //   插在武器（或觸發器 = 回響）上：作用在射出的全部子彈，加進武器層
+  //   插在玩法晶片上：只作用在那個晶片的「產物」（HOST_PRODUCT），加進宿主層
   split: { name: '分裂模組', short: '分裂', type: 'mod', comp: true, cost: 2,
     desc: '每顆子彈分裂為 3 顆扇形彈，每顆傷害 ×0.4（3 顆合計 ×1.2）。插在玩法晶片上時，那個晶片的產物出現時才分裂（例：環繞放出時、迴旋折返時；黏著是爆炸時噴出 3 發碎片）。',
     apply: (list, pw) => {
-      const n = Math.max(2, Math.round(3 + 2 * (pw - 1)));  // 強度 ×1.5 → 4 顆，打折到 50% → 2 顆
+      const n = Math.max(2, Math.round(3 + 2 * (pw - 1)));  // 強度 ×1.5（黑洞）→ 4 顆，×0.7 → 2 顆
       return list.flatMap(b => Array.from({ length: n }, (_, k) =>
         ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.18, damage: b.damage * 0.4, splits: (b.splits || 0) + 1 })));
     } },
@@ -135,7 +135,7 @@ const CHIPS = {
   mirror: { name: '鏡像迴路', short: '鏡像', type: 'link', comp: true, cost: 2,
     desc: '複製同一個晶片上「前一個插座」的組件，再執行一次（不能複製超頻）。插在武器（或觸發器）的第一個插座 = 武器多射一次（兩個鏡像 = 射 3 次）；插在玩法晶片的第一個插座沒有效果。' },
 
-  // ---------- 觸發器：放在電路格；右邊的晶片只作用在回響上，插在觸發器上的組件作用在回響上（跟武器一樣打折） ----------
+  // ---------- 觸發器：放在電路格；右邊的晶片只作用在回響上，插在觸發器上的組件作用在回響上（跟插在武器上一樣） ----------
   trigger: { name: '命中觸發器', short: '命中', type: 'trigger', trig: 'hit', cost: 1,
     desc: '子彈命中敵人時，從命中點用武器再射一次（回響：傷害 50%，朝最近的另一隻敵人；附近沒有就沿子彈的方向），右邊的晶片只作用在回響上，開火時不執行。插在觸發器上的組件作用在回響上（跟插在武器上一樣）。最多巢狀 3 層。' },
   trigend: { name: '消失觸發器', short: '消失', type: 'trigger', trig: 'end', cost: 1,
@@ -209,12 +209,12 @@ const newChip = (base, sk) => isHost(base) && base !== 'weapon' ? chipId(base, 1
 const fullChip = id => !id || !isHost(id) || id === 'weapon' || socketsOf(id) ? id : chipId(baseOf(id), levelOf(id), CFG.MAX_SOCKETS);
 // 每個宿主的「產物」：插在它上面的組件只作用在這些東西上（電路總覽、編輯器說明用）
 const HOST_PRODUCT = {
-  weapon: '射出的全部子彈（插越多越打折）',
+  weapon: '射出的全部子彈（不包括觸發器的回響）',
   boomerang: '折返之後的子彈', orbit: '放出的那一波', stasis: '衝出去的地雷', accel: '速度到 1.5 倍之後的子彈',
   quick: '速度 1.5 倍以上的那一段（掉到 1.5 倍以下，倍增等傷害加成就失效）', wallbounce: '第一次反彈之後的子彈', rear: '往後射的那一份',
   charge: '蓄滿的那一發', sticky: '爆炸（分裂：噴出 3 發碎片；巨彈：波及周圍；穿甲：黏住前多穿 2 隻）', infect: '爆出來的子彈',
   pull: '拉力（只能插巨彈：範圍 ×1.5）', intercept: '回射的子彈', dashfire: '衝刺那一槍',
-  trigger: '回響（跟插在武器上一樣，插越多越打折）', trigend: '回響（跟插在武器上一樣，插越多越打折）', trigtime: '回響（跟插在武器上一樣，插越多越打折）',
+  trigger: '回響（跟插在武器上一樣）', trigend: '回響（跟插在武器上一樣）', trigtime: '回響（跟插在武器上一樣）',
 };
 // 武器層／宿主層：倍增、巨彈、超載・威力插在武器（或觸發器）上加進武器層（bonus），插在玩法晶片上加進宿主層（hb）；最終 = 基礎 ×（1 ＋ 武器層）×（1 ＋ 宿主層）
 function addHB(b, add) {

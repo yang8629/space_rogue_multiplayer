@@ -12,8 +12,6 @@
 // =====================================================================
 // 玩法晶片（彈道／發射／命中／機體）
 const PLAY_TYPES = ['path', 'launch', 'impact', 'body'];
-// 武器、回響的插座越多越打折：第 1 個 100%、第 2 個 75%、第 3 個起 50%
-const DIM = [1, 0.75, 0.5];
 // 不能放在觸發器右邊（回響那一段）的玩法晶片：回響不會進環繞的圈、沒有停火蓄力、不是衝刺那一槍
 const NO_ECHO = ['orbit', 'charge', 'dashfire'];
 // 組件在開火當下就套用（其餘的插在黏著上的組件等爆炸時才套用）
@@ -37,7 +35,7 @@ function compileChain(chain, attrs = Game.slotAttr || []) {
       if (seg > 0 && NO_ECHO.includes(baseOf(id))) return idle(I, `${CHIPS[baseOf(id)].name}不能放在觸發器右邊（回響不會進圈、沒有蓄力、不是衝刺那一槍）`);
       if (def.type === 'trigger' && seg >= CFG.MAX_TRIGGER_DEPTH) { dead = true; return idle(I, `已達觸發層數上限（${CFG.MAX_TRIGGER_DEPTH} 層）`); }
       g.o = { id, pw: def.lvMul || 1, lv: levelOf(id), slot: i, key: baseOf(id), comps: [], am, flaky,
-        wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層、會打折
+        wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層
       if (ov) g.o.comps.push(ov);
       ops.push(g.o);
       if (def.type === 'trigger') { I.trig = true; seg++; }
@@ -57,7 +55,7 @@ function compileChain(chain, attrs = Game.slotAttr || []) {
       const prev = real[real.length - 1];
       if (g.o.wlike && (!prev || prev.copySrc)) {  // 武器（或觸發器）前面還沒有其他組件：複製武器 = 多射一次（回響也一樣；兩個鏡像 = 射 3 次）
         (g.o.extra = g.o.extra || []).push({ slot: i, key: 'mirror', flaky });
-        g.o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true, flaky });  // 佔一個打折的順位；鏡像本身沒有 apply，runComps 會跳過
+        g.o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true, flaky });  // 佔一個插座；鏡像本身沒有 apply，runComps 會跳過
         return;
       }
       if (!prev) return idle(I, '前一個插座沒有可以複製的組件');
@@ -65,7 +63,7 @@ function compileChain(chain, attrs = Game.slotAttr || []) {
       cid = prev.id;
     }
     if (g.base === 'pull' && baseOf(cid) !== 'bigshot') return idle(I, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
-    const m = (g.o.wlike ? DIM[Math.min(real.length, DIM.length - 1)] : 1) * am * g.o.am;
+    const m = am * g.o.am;
     g.o.comps.push({ id: cid, m, slot: i, key: base, flaky });
     if (ov) g.o.comps.push(ov);
   });
