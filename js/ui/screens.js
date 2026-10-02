@@ -18,7 +18,7 @@ function chipCard(id, footer = '') {
 }
 // 插座說明：宿主顯示插座數與產物；組件顯示「插在左邊的晶片上」
 function sockLine(id) {
-  if (isComp(id)) return '<div class="ty sockln">◇ 組件：插在左邊最近的晶片上</div>';
+  if (isComp(id)) return '<div class="ty sockln">◆ 組件：拖進武器、玩法晶片或觸發器的插座（不佔電路格）</div>';
   if (!isHost(id) || id === 'weapon') return '';
   const n = socketsOf(id), P = HOST_PRODUCT[baseOf(id)] || '';
   return `<div class="ty sockln" title="插在它上面的組件只作用在：${P}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}<span class="det">　產物：${P}</span></div>`;
