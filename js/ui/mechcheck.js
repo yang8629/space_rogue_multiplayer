@@ -14,7 +14,8 @@ const MechCheck = {
     Game.newRun(mode, ship, weapon);
     Game.weapon = { id: weapon, path, final };
     Game.refreshWeapon();
-    Game.chain = chain.slice();
+    Game.chain = chain.map(fullChip);  // 宿主給滿插座
+    Game.slotAttr = [];
     Game.inventory = [...inv, null, null, null, null, null, null].slice(0, CFG.INV_SLOTS);
     Game.recalc();
     const p = Game.player;
@@ -325,7 +326,20 @@ const MechCheck = {
         return { ok: r.maxDepth === 3 && Game.stats.layers.length === 3, got: `實際最深第 ${r.maxDepth} 層` };
       },
     ])],
-    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈（沒有穿甲就消失），並用整條電路回射', M => {
+    ['電路晶片', '消失／定時觸發器', '消失：子彈飛完射程時射出 1 發回響；定時：雷射（0.85 秒）飛行中每 0.3 秒往兩側各射 1 發 = 4 發', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigend', null, null]); M.targets([]);
+      Game.player.fire();
+      for (let f = 0; f < 70; f++) Game.updateBullets(1 / 60);
+      const e = Game.bullets.filter(b => b.depth === 1).length;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigtime', null, null]); M.targets([]);
+      Game.player.fire();
+      let t = 0;
+      const orig = window.spawnShots;
+      window.spawnShots = (list, ...rest) => { if (rest[3] > 0) t += list.length; return orig(list, ...rest); };
+      try { for (let f = 0; f < 70; f++) Game.updateBullets(1 / 60); } finally { window.spawnShots = orig; }
+      return { ok: e === 1 && t === 4, got: `消失觸發 ${e} 發；定時觸發 ${t} 發` };
+    }],
+    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈（沒有穿甲就消失），並用整條電路回射；分裂插在攔截上：平常 1 發，只有回射分裂成 3 發', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'intercept', 'split', null]); M.targets([[300, 200]]);
       const gp = Game.player, gn = runOps(Game.stats.ops, 0).length;
       spawnShots([shot({ angle: 0, speed: 600, damage: 10, life: 1, intercept: 1 })], gp.x, gp.y, 0, 0, null);
@@ -333,7 +347,7 @@ const MechCheck = {
       Game.eBullets = [{ x: gp.x + 60, y: gp.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'test' }];
       for (let f = 0; f < 10 && Game.eBullets.length; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
       const back = Game.bullets.filter(b => b.depth === 1).length;
-      if (Game.eBullets.length || !mine.dead || back !== gn) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；回射 ${back} 發（整條電路一槍 ${gn} 發）` };
+      if (Game.eBullets.length || !mine.dead || back !== 3 || gn !== 1) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；回射 ${back} 發（平常一槍 ${gn} 發）` };
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
       const p = Game.player, n0 = runOps(Game.stats.ops, 0), d0 = n0[0].damage;
       p.aim = Math.PI / 2; p.dashT = 0.05; p.vx = 900; p.vy = 0;
@@ -342,15 +356,16 @@ const MechCheck = {
       return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
         got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
-    ['電路晶片', '鏡像迴路', '放在武器右邊 = 武器多射一次；接在玩法晶片（蓄力）後面沒有效果', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'mirror', null, null]); M.targets([]);
-      const r = M.run(30);
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', 'mirror', null]); M.targets([]);
-      const p = Game.player; p.chargeC = 0;
-      for (let f = 0; f < 120; f++) p.tickFire(1 / 60, false);
-      p.tickFire(1 / 60, true);
-      const d = Game.bullets[0] ? Game.bullets[0].damage : 0;
-      return { ok: r.created === r.fired * 2 && near1(d, 50), got: `開火 ${r.fired} 次，射出 ${r.created} 發；蓄力＋鏡像蓄滿一發 ${Math.round(d)}（應為 50，不是 250）` };
+    ['電路晶片', '鏡像迴路', '複製前一個插座的組件（武器［分裂、鏡像］= 9 發）；插在武器第一個插座 = 武器多射一次（2 發）；插在玩法晶片的第一個插座、接在超頻後面沒有效果', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'split', 'mirror', null]);
+      const a = Game.stats.count;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'mirror', null, null]);
+      const b = Game.stats.count;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', 'mirror', null]);
+      const idle1 = Game.stats.info[2].idle;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'overclock', 'mirror', null]);
+      const idle2 = Game.stats.info[2].idle;
+      return { ok: a === 9 && b === 2 && idle1 && idle2, got: `分裂＋鏡像 ${a} 發；只有鏡像 ${b} 發；黏著［鏡像］${idle1 ? '沒作用' : '有作用（錯誤）'}；超頻＋鏡像${idle2 ? '沒作用' : '有作用（錯誤）'}` };
     }],
     ['電路晶片', '沒有子彈上限', '散彈分裂兩次 = 45 發，全部射出', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'split', 'split', null]);
@@ -358,21 +373,26 @@ const MechCheck = {
       return { ok: a.count === 45 && near1(a.dmg, want), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${want.toFixed(1)}）` };
     }],
 
-    ['構築系統', '晶片合成升級', '拿到第 2 個分裂 → Lv2，分裂成 4 發', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'split', null, null]);
-      Game.acquire('split');
-      return { ok: Game.chain[1] === leveledId('split', 2) && Game.stats.count === 4, got: `${CHIPS[Game.chain[1]].name}，每次 ${Game.stats.count} 發` };
+    ['構築系統', '插座：玩法晶片的產物', '倍增插在迴旋上：去程 7（×0.7），只有回程 ×2 = 14；插座滿了多的組件沒作用；超頻插在玩法晶片上沒作用', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', 'amp', null]); M.targets([[150, 0]]);
+      const r = M.run(60), out = r.hits.some(h => near1(h, 7)), back = r.hits.some(h => near1(h, 14));
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.chain = ['weapon', chipId('sticky', 1, 1), 'amp', 'amp']; Game.recalc();
+      const full = !Game.stats.info[2].idle && Game.stats.info[3].idle;
+      Game.chain = ['weapon', chipId('sticky', 1, 2), 'overclock', null]; Game.recalc();
+      const oc = Game.stats.info[2].idle && !Game.stats.heatLimit;
+      return { ok: out && back && full && oc, got: `命中傷害 ${[...new Set(r.hits.map(h => Math.round(h)))].join('、')}；1 個插座插 2 個倍增：第 2 個${full ? '沒作用' : '有作用（錯誤）'}；超頻插在黏著上${oc ? '沒作用' : '有作用（錯誤）'}` };
     }],
     ['構築系統', '用量成長', '迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」；拿到重複的不會合成，獎勵也不再出現；照玩法打中後 1 秒內敵人死掉，晶片成長 + 牠的晶體值；散彈多顆打中同一隻只算一份；超過 1 秒不算', M => M.all([
       M => {  // 用量成長
         M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
         Game.acquire('boomerang');
-        const noMerge = Game.chain[1] === 'boomerang' && !Game.chipOffers().includes('boomerang') && Game.chipOffers().includes('amp');
+        const noMerge = baseOf(Game.chain[1]) === 'boomerang' && levelOf(Game.chain[1]) === 1 && !Game.chipOffers().includes('boomerang') && Game.chipOffers().includes('amp');
         if (!noMerge) return { ok: false, got: '改玩法的晶片拿到重複的還是會合成升級，或獎勵還會出現' };
         Game.inventory = Game.inventory.map(() => null);
         const G1 = CHIPS.boomerang.grow.need; Game.grow(null, 'boomerang', G1[0]); const a = Game.chain[1];
         Game.grow(null, 'boomerang', G1[1] - G1[0]); const b = Game.chain[1];
-        return { ok: a === leveledId('boomerang', 2) && b === leveledId('boomerang', 3), got: `${CHIPS[a].name} → ${CHIPS[b].name}` };
+        return { ok: levelOf(a) === 2 && levelOf(b) === 3 && socketsOf(b) === CFG.MAX_SOCKETS, got: `${CHIPS[a].name} → ${CHIPS[b].name}（插座 ${socketsOf(b)} 個）` };
       },
       M => {  // 用量成長：擊殺標記
         const kill = (weapon, type, wait) => {
@@ -425,32 +445,28 @@ const MechCheck = {
           got: '攔截回射 ' + ic + '、回響 ' + echo + '、攔截晶片 ' + icChip + '、攔截成長 +' + g + '；迴旋晶片 ' + bm };
       },
     ])],
-    ['構築系統', '倉庫被動', '穿甲放倉庫：受傷 -10%', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null], ['pierce']);
-      const p = Game.player; p.hp = p.maxHp; Game.state = 'play';
-      Game.hurtPlayer(20);
-      return { ok: p.maxHp === 100 && near1(p.maxHp - p.hp, 18), got: `最大 HP ${p.maxHp}，受 20 傷害實扣 ${(p.maxHp - p.hp).toFixed(1)}` };
+    ['構築系統', '黑洞：強化格子', '投入 1 個晶片 → 隨機一格得到屬性（晶片消失）；效果 ×1.5：武器上的倍增 +150%；能量歸零；不會成長', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null], ['split']);
+      Game.openBlackhole(); Game.bhToggle('inv:0'); Game.bhFuse();
+      const n = Game.slotAttr.filter(Boolean).length, gone = !Game.inventory[0], where = Game.slotAttr.findIndex(Boolean);
+      Game.state = 'map';
+      Game.slotAttr = [null, 'eff']; Game.recalc();
+      const d = Game.stats.dmg;
+      Game.slotAttr = [null, 'free']; Game.recalc();
+      const heat = Game.stats.heat;
+      Game.chain = ['weapon', 'boomerang', null, null]; Game.slotAttr = [null, 'nogrow']; Game.growth = {}; Game.recalc();
+      Game.grow(null, 'boomerang', 50);
+      const g = Game.growth.boomerang || 0;
+      return { ok: n === 1 && gone && where > 0 && near1(d, 25) && heat === 0 && g === 0,
+        got: `強化 ${n} 格（第 ${where + 1} 格）、晶片${gone ? '消失' : '還在'}；效果 ×1.5 傷害 ${d}（應為 25）；能量歸零 ⚡${heat}；不會成長 +${g}` };
     }],
-    ['構築系統', '黑洞融合（成功）', '兩個晶片合成一格，再加超載詞綴', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
-      const before = Object.keys(CHIPS).length;
-      const sg = fuseChips('split', 'amp');
-      Game.chain[1] = sg; Game.recalc();
-      const ok = Game.stats.count === 3 && Game.stats.dmg >= 10 * 0.4 * 3 * 2;
-      const got = `每次 ${Game.stats.count} 發，傷害 ${Game.stats.dmg.toFixed(1)}`;
-      Game.chain[1] = null; Game.recalc();  // 先從電路拿掉，再刪除測試用的奇異點，不留在這一場
-      delete CHIPS[sg]; singularityCount--;
-      return { ok: ok && Object.keys(CHIPS).length === before, got };
-    }],
-    ['構築系統', '廢鐵', '沒有效果、不能移動、維修站可拆除', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'scrap', null, null]);
-      const dmg = Game.stats.dmg;
-      Editor.dropOn(Game.chain, 1, { from: 'lib', id: 'amp' });
-      const stuck = Game.chain[1] === 'scrap';
-      Game.credits = 100; Game.state = 'repair';
-      Game.removeScrap();
-      return { ok: near1(dmg, 10) && stuck && Game.chain[1] === null && Game.credits === 100 - CFG.SCRAP_REMOVE,
-        got: `傷害 ${dmg}、放晶片${stuck ? '被擋下' : '成功（錯誤）'}、拆除後花 ◆${100 - Game.credits}` };
+    ['構築系統', '插座：武器與回響', '武器插 3 個倍增：+100%、+75%、+50%（10 → 32.5）；武器上的倍增不作用在回響；插在觸發器上的分裂只作用在回響（3 發 × 2）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', 'amp', 'amp']);
+      const d = Game.stats.dmg;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', 'trigger', 'split']);
+      const L = Game.stats.layers[0] || { count: 0, dmg: 0 };
+      return { ok: near1(d, 32.5) && Game.stats.count === 1 && L.count === 3 && near1(L.dmg, 6),
+        got: `武器 3 個倍增 ${d}；開火 ${Game.stats.count} 發，回響 ${L.count} 發共 ${L.dmg.toFixed(1)}（應為 3 發共 6）` };
     }],
     ['構築系統', '軍械台升級', '武器進入第一段、第二段', M => {
       M.setup('run', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]);

@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · game.js：Game：一局的流程、戰鬥、獎勵、商店、黑洞、傷害、主更新
+// 星環電路 雙人版 · game.js：Game：一局的流程、戰鬥、獎勵、商店、黑洞（強化格子）、傷害、主更新
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -7,7 +7,7 @@
 // =====================================================================
 const Game = {
   state: 'title', returnState: null, mode: null,
-  chain: [], inventory: [], credits: 0,
+  chain: [], inventory: [], slotAttr: [], credits: 0,
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0, shake: 0 },
@@ -63,7 +63,7 @@ const Game = {
     this.chain = mode === 'sandbox' ? ['weapon', 'split', null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
-    this.growth = {}; this.pullHits = 0;
+    this.growth = {}; this.pullHits = 0; this.slotAttr = [];  // slotAttr：黑洞強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
@@ -136,8 +136,7 @@ const Game = {
       case 'repair': {
         const p = this.player, heal = Math.round(p.maxHp * CFG.REPAIR_RATIO);
         p.hp = Math.min(p.maxHp, p.hp + heal);
-        if (this.findScrap()) { this.state = 'repair'; this.repairMsg = `維修完成：HP +${heal}`; Screen.repair(); }  // 有廢鐵：留在維修站拆除
-        else this.showMap(`維修完成：HP +${heal}`);
+        this.showMap(`維修完成：HP +${heal}`);
         break;
       }
     }
@@ -283,7 +282,7 @@ const Game = {
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
   rewardOptions() {
     const chips = pickN(this.chipOffers(), 3), parts = pickN(PART_IDS, 3);
-    return [0, 1, 2].map(i => Math.random() < 0.3 ? 'part:' + parts[i] : chips[i]);
+    return [0, 1, 2].map(i => Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i]));  // 晶片的插座數在這裡決定
   },
   // 花晶體刷新三選一（第一次 ◆15，之後每次多 ◆10）
   rerollReward() {
@@ -296,29 +295,13 @@ const Game = {
     const own = new Set([...this.chain, ...this.inventory].filter(Boolean).map(baseOf));
     return NORMAL_IDS.filter(id => !(CHIPS[id].grow && own.has(id)));
   },
-  // ---------- 取得晶片：已擁有同種晶片（且未滿級）就合成升級，否則放進倉庫 ----------
-  mergeTarget(id) {
-    if (!CHIPS[id] || !canLevelUp(id) || CHIPS[baseOf(id)].grow) return null;  // 改玩法的晶片只能靠用量成長升級，拿到重複的不會合成
-    const b = baseOf(id);
-    for (const arr of [this.chain, this.inventory])
-      for (let i = 0; i < arr.length; i++)
-        if (arr[i] && baseOf(arr[i]) === b && levelOf(arr[i]) < CFG.MAX_CHIP_LV) return { arr, i };
-    return null;
-  },
+  // ---------- 取得晶片：放進倉庫（不會合成：改玩法的晶片靠用量成長升級，組件、觸發器不會升級） ----------
   canAcquire(id) {
     if (String(id).startsWith('part:')) return partsUsed(this.parts) < this.partSlots;  // 零件：要有空的零件格
-    return !!this.mergeTarget(id) || this.inventory.includes(null);
+    return this.inventory.includes(null);
   },
   acquire(id) {
-    if (this.runStats) this.runStats.got.push(`${this.here()} ${CHIPS[id].name}`);
-    const t = this.mergeTarget(id);
-    if (t) {
-      const lv = levelOf(t.arr[t.i]) + 1;
-      t.arr[t.i] = leveledId(baseOf(id), lv);
-      this.recalc();
-      SFX.play('upgrade');
-      return `「${CHIPS[baseOf(id)].name}」合成升級為 Lv${lv}`;
-    }
+    if (this.runStats) this.runStats.got.push(`${this.here()} ${CHIPS[id].name}${socketsOf(id) ? `（插座 ${socketsOf(id)}）` : ''}`);
     const i = this.inventory.indexOf(null);
     if (i < 0) return null;
     this.inventory[i] = id;
@@ -379,7 +362,7 @@ const Game = {
     }
     // 電路有空格就直接裝上；只有放進倉庫（電路滿了）才打開電路編輯器
     let toInv = false;
-    if (id && !this.mergeTarget(id)) {
+    if (id) {
       const j = this.inventory.lastIndexOf(id), slot = this.chain.indexOf(null, 1);
       if (j >= 0 && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
       else toInv = j >= 0;
@@ -398,7 +381,7 @@ const Game = {
   shopPrice(base) { return Math.round(base * this.shopMul()); },
   shopHealHp(p = this.player) { return Math.ceil(p.maxHp * CFG.SHOP_REPAIR.ratio); },
   openShop() {
-    const items = pickN(this.chipOffers(), 4).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
+    const items = pickN(this.chipOffers(), 4).map(id => newChip(id)).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
     if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: this.shopPrice(chipPrice(id)), sold: false }); }
     this.shop = { items, slotBought: false, healed: false };
     this.state = 'shop';
@@ -532,7 +515,8 @@ const Game = {
     const R = this.runStats;
     const total = Object.values(R.dmg).reduce((a, b) => a + b, 0);
     const chips = Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]);
-    const name = id => id ? CHIPS[id].name : null;
+    // 晶片名稱＋插座數（◇2）；電路格另外標黑洞強化的屬性
+    const name = id => id ? CHIPS[id].name + (isHost(id) && id !== 'weapon' ? '◇' + socketsOf(id) : '') : null, A = this.slotAttr || [];
     // 打到哪：星區、層、節點種類、波次；王戰時再加上王剩多少血
     const node = this.node, C = this.combat, boss = (this.enemies || []).find(e => e.t.boss && !e.dead);
     let where = node ? `${this.isEndless() ? '無盡 · ' : ''}星區 ${this.sector} 第 ${node.L + 1} 層（${NODE_META[node.type].label}）` : `星區 ${this.sector} 航圖`;
@@ -549,7 +533,7 @@ const Game = {
       time: Math.round(R.time), kills: R.kills, dmg: Math.round(total), maxHit: Math.round(R.maxHit),
       dps: R.time > 0 ? Math.round(total / R.time) : 0,
       dmgBySource: Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])),
-      chipDmg: chips, chain: this.chain.map(name), inv: this.inventory.filter(Boolean).map(name),
+      chipDmg: chips, chain: this.chain.map((id, i) => A[i] ? (name(id) || '空') + '［' + SLOT_ATTRS[A[i]].name + '］' : name(id)), inv: this.inventory.filter(Boolean).map(name),
       // 最後的電路數值：插槽數、能量、射速、每發子彈數與傷害、編輯器的估算 DPS、倉庫被動
       stats: { slots: this.chain.length, heat: s.heat, rateCut: `-${Math.round((1 - heatRateMul(s.heat)) * 100)}%`, rps: +s.rps.toFixed(2),
         perFire: s.count, fireDmg: Math.round(s.dmg), estDps: Math.round(s.dpsEst), triggerLayers: s.layers.length, knock: this.wp.knock,
@@ -574,57 +558,41 @@ const Game = {
       traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
       growth: Object.fromEntries(Object.entries(this.growth).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, Math.round(v)])) };
   },
-  findScrap() {
-    for (const arr of [this.chain, this.inventory]) {
-      const i = arr.indexOf('scrap');
-      if (i >= 0) return { arr, i };
-    }
-    return null;
-  },
-  removeScrap() {
-    const s = this.findScrap(), price = this.shopPrice(CFG.SCRAP_REMOVE);
-    if (!s || this.credits < price) return;
-    this.pay(price, () => {
-      s.arr[s.i] = null;
-      this.recalc();
-      if (this.state === 'repair') Screen.repair('已拆除 1 塊廢鐵。');
-    });
-  },
-
-  // ---------- 黑洞 ----------
+  // ---------- 黑洞：投入 1 個晶片，隨機一個還沒強化過的電路格（武器格除外）抽一個屬性 ----------
+  //   好結果的機率照投入晶片的等級（BH_GOOD）；屬性留在格子上（換晶片也還在），每格只能強化一次
   ownedFusable() {  // 電路與倉庫中可以投入黑洞的晶片
     const out = [];
-    this.chain.forEach((id, i) => { if (canFuse(id)) out.push({ key: 'chain:' + i, arr: this.chain, i, id }); });
-    this.inventory.forEach((id, i) => { if (canFuse(id)) out.push({ key: 'inv:' + i, arr: this.inventory, i, id }); });
+    this.chain.forEach((id, i) => { if (i > 0 && canSacrifice(id)) out.push({ key: 'chain:' + i, arr: this.chain, i, id }); });
+    this.inventory.forEach((id, i) => { if (canSacrifice(id)) out.push({ key: 'inv:' + i, arr: this.inventory, i, id }); });
     return out;
   },
+  bhFreeSlots() { return this.chain.map((_, i) => i).filter(i => i > 0 && !(this.slotAttr || [])[i]); },
   openBlackhole() {
-    this.bh = { sel: [], result: null };
+    this.bh = { sel: null, result: null };
     this.state = 'blackhole';
     Screen.blackhole();
   },
   bhToggle(key) {
-    const S = this.bh.sel, k = S.indexOf(key);
-    if (k >= 0) S.splice(k, 1);
-    else if (S.length < 2) S.push(key);
+    this.bh.sel = this.bh.sel === key ? null : key;
     Screen.blackhole();
   },
   bhFuse() {
-    const owned = this.ownedFusable(), [a, b] = this.bh.sel.map(k => owned.find(o => o.key === k));
-    if (!a || !b) return;
-    const ok = Math.random() < CFG.FUSE_SUCCESS;
-    const result = ok ? fuseChips(a.id, b.id) : 'scrap';
-    if (this.runStats) this.runStats.got.push(`${this.here()} 黑洞融合 ${CHIPS[a.id].name}＋${CHIPS[b.id].name} → ${ok ? CHIPS[result].name : '廢鐵'}`);
-    a.arr[a.i] = result;   // 結果留在第一個素材的位置
-    b.arr[b.i] = null;
+    const a = this.ownedFusable().find(o => o.key === this.bh.sel), free = this.bhFreeSlots();
+    if (!a || !free.length) return;
+    const good = Math.random() < BH_GOOD[Math.min(levelOf(a.id), 3) - 1];
+    const attr = pick(good ? GOOD_ATTRS : BAD_ATTRS), slot = pick(free);
+    if (this.runStats) this.runStats.got.push(`${this.here()} 黑洞 投入${CHIPS[a.id].name} → 第 ${slot + 1} 格${SLOT_ATTRS[attr].name}`);
+    a.arr[a.i] = null;
+    this.slotAttr = this.slotAttr || [];
+    this.slotAttr[slot] = attr;
     this.recalc();
-    this.bh = { sel: [], result: { ok, id: result, where: a.arr === this.chain ? '電路' : '倉庫' }, fusing: true };
+    this.bh = { sel: null, result: { good, attr, slot, chip: CHIPS[a.id].name }, fusing: true };
     Screen.blackhole();
     SFX.play('fusing');
     setTimeout(() => {
       if (this.state !== 'blackhole') return;
       this.bh.fusing = false;
-      SFX.play(ok ? 'fuseok' : 'fusefail');
+      SFX.play(good ? 'fuseok' : 'fusefail');
       Screen.blackhole();
     }, 1200);
   },
@@ -657,11 +625,10 @@ const Game = {
       if (this.state === 'map') Screen.map();
       else if (this.state === 'reward') Screen.reward();
       else if (this.state === 'shop') Screen.shop();
-      else if (this.state === 'repair') Screen.repair();
       else if (this.state === 'blackhole') { this.bh.sel = []; Screen.blackhole(); }
       else if (this.state === 'armory') Screen.armory(this.armorySource || 'armory');
       else if (this.state === 'workshop') Screen.workshop();
-    } else if (['play', 'map', 'reward', 'shop', 'repair', 'blackhole', 'armory', 'workshop'].includes(this.state)) {
+    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'armory', 'workshop'].includes(this.state)) {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
@@ -691,7 +658,6 @@ const Game = {
       case 'map': Screen.map(); break;
       case 'reward': Screen.reward(); break;
       case 'shop': Screen.shop(); break;
-      case 'repair': Screen.repair(); break;
       case 'blackhole': Screen.blackhole(); break;
       case 'armory': Screen.armory(this.armorySource || 'armory'); break;
       case 'workshop': Screen.workshop(); break;
@@ -1019,8 +985,10 @@ const Game = {
           const ks = [b.orbShot && 'orbit', b.accel && 'accel', b.quick && 'quick'].filter(Boolean);
           for (const k of ks) att = attCredit(att, k, Math.pow(dmg / b.damage, 1 / ks.length));
         }
-        if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸
-          (e.stuck = e.stuck || []).push({ dmg, att, lv: b.sticky, owner: own });
+        if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
+          const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
+          (e.stuck = e.stuck || []).push({ dmg, att, lv: b.sticky, owner: own, hm: b.hm && b.hm.sticky, hb: b.hb, color: b.color, angle: b.angle,
+            end: P && { payload: P, depth: b.depth + 1 } });
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
         }
@@ -1038,20 +1006,22 @@ const Game = {
         if (b.explode) this.explode(b.x, b.y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att);
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
         if (b.arcs) this.arc(e, b);
-        if (b.payload && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
-          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner });
+        if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
+          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner, aim: true });
         if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
         else if (b.boom && b.mode === 'fly') { b.overT = (e.r * 2 + 30) / b.speed; b.overId = e.id; }  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
-        else b.dead = true;
+        else { b.dead = true; b.endTrig(e.id); }  // 穿甲用完：算消失（黏住的等引爆才算）
         break;
       }
     }
     this.updateVortices(dt);
     this.updateStasisArcs(dt);
-    for (const t of Q) {  // 命中觸發：從命中點展開子管線（用射出這顆子彈的人的武器與電路）
-      this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, t.angle, t.depth, t.ignore));
+    for (const t of Q) {  // 觸發器：從觸發點展開子管線（用射出這顆子彈的人的武器與電路）；命中、消失的回響朝最近的另一隻敵人，附近沒有就沿子彈的方向
+      const tg = t.aim && nearestEnemy(t.x, t.y, 700, t.ignore != null ? new Set([t.ignore]) : null, true);
+      const ang = tg ? Math.atan2(tg.y - t.y, tg.x - t.x) : t.angle;
+      this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, ang, t.depth, t.ignore));
       burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
     }
     Q.length = 0;
@@ -1082,7 +1052,7 @@ const Game = {
   // ---------- V2 改玩法的晶片（房主執行） ----------
   // 吸引：命中時把附近的敵人往命中點拉（旗艦不會被拉）；引力漩渦：每命中 8 次生成一個
   pullAt(b) {
-    const R = b.pull >= 2 ? 130 : 90;
+    const R = (b.pull >= 2 ? 130 : 90) * (b.pullMul || 1);  // 巨彈插在吸引上：範圍 ×1.5
     let n = 0;
     for (const o of this.enemies) {
       if (o.dead || o.t.boss || o.spawnT > 0) continue;
@@ -1155,8 +1125,9 @@ const Game = {
     if (!n || e.dead) return;
     // 爆炸倍率隨黏著發數往上加（Lv1 ×1.5＋0.1／發，最多 ×3；Lv2 起 ×2＋0.15／發，最多 ×4.5）；多出來的算黏著的
     const lv = S[0].lv, M = lv >= 2 ? Math.min(4.5, 2 + 0.15 * n) : Math.min(3, 1.5 + 0.1 * n);
-    const total = S.reduce((a, q) => a + q.dmg, 0) * M, x = e.x, y = e.y;
-    const att = attCredit(mergeAtt(S.map(q => ({ att: q.att, w: q.dmg }))), 'sticky', M);
+    let total = S.reduce((a, q) => a + q.dmg, 0) * M, att = attCredit(mergeAtt(S.map(q => ({ att: q.att, w: q.dmg }))), 'sticky', M);
+    const x = e.x, y = e.y, H = this.stickyHost(S, total, att);  // 插在黏著上的組件
+    total = H.total; att = H.att;
     this.tagGrow(e, S[0].owner, 'sticky');
     const ring = (r, c) => {
       if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color: c });
@@ -1175,6 +1146,43 @@ const Game = {
       }
       ring(90, '#f78cff');
     }
+    if (H.splash) {  // 巨彈插在黏著上：爆炸波及周圍（50%）
+      for (const o of this.enemies) {
+        if (o === e || o.dead || o.spawnT > 0 || dist2(x, y, o.x, o.y) > (H.splash + o.r) ** 2) continue;
+        o.hurt(total * 0.5, 0, 0, 'explode', att);
+      }
+      ring(H.splash, '#ffd166');
+    }
+    if (H.shards) {  // 分裂插在黏著上：爆炸時噴出碎片
+      const a0 = rand(0, TAU), q = S[0];
+      const list = Array.from({ length: H.shards }, (_, k) => shot({ angle: a0 + k / H.shards * TAU, speed: 650, damage: total * 0.2 * H.shardM, radius: 4,
+        life: 0.5, color: q.color || '#f78cff', shard: true, src: 'sticky', cr: att.cr }));
+      this.withLoadout(q.owner, () => spawnShots(list, x, y, 0, 0, e.id));
+    }
+    const T = S.find(q => q.end);  // 消失觸發器：黏住的子彈引爆時才算消失（一次爆炸觸發一次）
+    if (T && this.triggerQueue.length < CFG.MAX_TRIGGERS_PER_FRAME)
+      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: e.id, owner: T.owner, aim: true });
+  },
+  // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片
+  stickyHost(S, total, att) {
+    const comps = (S.find(q => q.hm) || {}).hm, out = { total, att, splash: 0, shards: 0, shardM: 0 };
+    if (!comps) return out;
+    const hb0 = S[0].hb || 0;
+    let add = 0;
+    for (const c of comps) {
+      if (c.flaky && flakyOff()) continue;
+      const b = baseOf(c.id);
+      if (b === 'amp') add += c.m;
+      else if (c.id === 'ov_power') add += 0.5;
+      else if (b === 'bigshot') { add += 0.3 * c.m; out.splash = Math.max(out.splash, 70 + 40 * c.m); }
+      else if (b === 'split') { out.shards += Math.max(2, Math.round(3 + 2 * (c.m - 1))); out.shardM = Math.max(out.shardM, c.m); }
+    }
+    if (add) {
+      const f = Math.max(0.1, 1 + hb0 + add) / Math.max(0.1, 1 + hb0);
+      out.total = total * f;
+      out.att = attCredit(att, 'sticky', f);
+    }
+    return out;
   },
   // 感染：被帶感染的子彈（或它造成的燃燒）擊殺的敵人爆出子彈
   infectBurst(e) {
@@ -1183,7 +1191,10 @@ const Game = {
     const n = inf.lv >= 2 ? 5 : 3, gen = inf.gen + 1, base = inf.tpl.infBase || inf.tpl.damage;
     const tpl = { ...inf.tpl, src: 'infect', damage: base * 1.5, infBase: base,  // 爆出的子彈算感染的（src） orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
       infect: inf.lv >= 3 && gen <= 2 ? inf.lv : 0, infGen: gen, color: '#c6ff8a' };
-    const a0 = rand(0, TAU), list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
+    const a0 = rand(0, TAU), comps = inf.tpl.hm && inf.tpl.hm.infect;
+    if (comps) tpl.hm = { ...tpl.hm, infect: undefined };
+    let list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
+    if (comps) list = runComps(list, comps, 'h');  // 插在感染上的組件：爆出來的子彈
     this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
   },
   // 攔截：帶攔截的子彈碰到敵彈就把它打掉（自己照常飛），從那裡用整條電路朝最近的敵人回射；反射鏡（Lv3）把敵彈反彈回去
@@ -1214,6 +1225,8 @@ const Game = {
   // 盾衛反彈：子彈照盾面的法線反彈，變成敵人的子彈（傷害 ×0.5，最多 25），我方子彈消失
   reflectShot(e, b, ca) {
     const nx = Math.cos(ca), ny = Math.sin(ca), vx = Math.cos(b.angle), vy = Math.sin(b.angle), dot = vx * nx + vy * ny;
+    // 攔截回射的子彈打到盾只會消失、不反彈：不然「反彈成敵彈 → 被攔截 → 整條電路回射 → 又打到盾」會無限放大（拿掉子彈上限之後）
+    if (b.att.src === 'intercept') { b.dead = true; burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 4, 120, 0.2, 2); return; }
     let rx = vx - 2 * dot * nx, ry = vy - 2 * dot * ny;
     if (rx * nx + ry * ny < 0.3) { rx = nx; ry = ny; }  // 擦邊的也往外彈
     const l = Math.hypot(rx, ry) || 1, spd = clamp(b.speed * 0.6, 200, 450), dmg = Math.min(25, hitDamage(b) * 0.5);
@@ -1234,8 +1247,11 @@ const Game = {
     e.growTags = null;
   },
   grow(owner, id, n = 1) {
-    const g = owner ? owner.growth : this.growth;
+    const L = owner || this, g = L.growth;
     if (!g || !(n > 0)) return;
+    const at = (L.slotAttr || [])[L.chain.findIndex(c => c && baseOf(c) === id)];  // 黑洞強化的格子：成長 ×2／不會成長
+    if (at === 'nogrow') return;
+    if (at === 'grow2') n *= 2;
     g[id] = (g[id] || 0) + n;
     if (!owner) this.checkGrowth();
   },
@@ -1244,11 +1260,11 @@ const Game = {
     const msgs = [];
     this.chain.forEach((id, i) => {
       const base = baseOf(id), g = id && CHIPS[base] && CHIPS[base].grow;
-      if (!g || CHIPS[id].type === 'singularity') return;
+      if (!g) return;
       let lv = levelOf(id);
       while (lv < CFG.MAX_CHIP_LV && (this.growth[base] || 0) >= growNeed(base, lv)) lv++;
       if (lv <= levelOf(id)) return;
-      this.chain[i] = leveledId(base, lv);
+      this.chain[i] = chipId(base, lv, socketsOf(id));  // 插座數不變
       msgs.push(lv >= CFG.MAX_CHIP_LV ? `${CHIPS[base].name} 進化 → ${CHIPS[base].evo}！` : `${CHIPS[base].name} 升到 Lv${lv}`);
     });
     if (!msgs.length) return;

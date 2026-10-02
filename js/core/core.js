@@ -6,11 +6,9 @@
 // CHIP DATABASE — 電路晶片定義
 //   source   : emit(pw)         → 產生新子彈，追加到清單
 //   mod/amp  : apply(list, pw)  → 加工目前清單中所有子彈
-//   trigger  : 右側晶片成為「命中時」的子管線
-//   link     : 不直接作用，影響相鄰插槽（共振 / 鏡像）
-//   composite: combo 內的晶片依序執行（佔 1 格）
-//   pw = 共振倍率（1 = 無共振）
-//   stored   : 放在倉庫時提供的被動效果
+//   trigger  : 右側晶片成為觸發時（命中／消失／定時）的子管線
+//   comp     : 組件，插在左邊最近的宿主（武器、玩法晶片、觸發器）的插座上（見 compileChain）
+//   pw = 強度（等級、插座打折、黑洞的效果 ×1.5／×0.7）
 // =====================================================================
 const TYPE_META = {
   source:    { label: '發射源', icon: '◉', color: '#4cc9f0' },
@@ -23,8 +21,6 @@ const TYPE_META = {
   trigger:   { label: '觸發器', icon: '◎', color: '#ff6b9d' },
   link:      { label: '連結器', icon: '⇄', color: '#2ee6a6' },
   composite: { label: '軍規複合', icon: '✦', color: '#ff9f1c' },
-  singularity: { label: '奇異點', icon: '✺', color: '#e0aaff' },
-  scrap:     { label: '廢鐵', icon: '✖', color: '#8a8f98' },
 };
 
 const PASSIVE_LABEL = {
@@ -100,7 +96,7 @@ function dmgKeyColor(key) {
 // 本局傷害統計的來源分類（結算畫面用）
 const DMG_SOURCES = [
   ['direct', '武器直擊', '#3987e5'],
-  ['echo', '命中觸發（回響）', '#d55181'],
+  ['echo', '觸發器（回響）', '#d55181'],
   ['counter', '攔截回射', '#9dff6b'],
   ['explode', '爆炸', '#d95926'],
   ['burn', '燃燒', '#c98500'],

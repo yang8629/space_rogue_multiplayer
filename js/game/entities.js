@@ -219,6 +219,9 @@ class Bullet {
     this.boom = s.boom; this.orbit = s.orbit; this.stasis = s.stasis; this.accel = s.accel; this.quick = s.quick; this.intercept = s.intercept; this.parry = s.parry; this.prism = s.prism;
     this.rear = s.rear; this.full = s.full; this.endBoom = s.endBoom; this.sticky = s.sticky; this.pull = s.pull;
     this.dashShot = s.dashShot; this.infGen = s.infGen || 0;
+    // 傷害加成：bonus = 武器層（倍增、蓄力、速度倍率…相加），hb = 宿主層（插在玩法晶片上的倍增…）；hm = 還沒出現的產物要套用的組件（見 hostFire）
+    this.bonus = s.bonus || 0; this.hb = s.hb || 0; this.qhb = s.qhb || 0; this.hm = s.hm || null; this.pullMul = s.pullMul || 1;
+    this.tAcc = 0; this.tN = 0;  // 定時觸發器：計時、已觸發次數
     this.mode = 'fly'; this.flyAge = 0; this.accelMul = 1; this.dashed = false;  // accelMul = 速度倍率（相對出手時；打中時加進傷害加成，最多 5）
     if (this.accel) this.life *= 1.5;  // 加速：射程 ×1.5
     // R：射程；dist：已飛距離（佈雷衝出去、迴旋回程都接著算，只有開火和環繞放出重新算）；mul0：起始倍率（環繞放出時是轉速倍率）
@@ -241,6 +244,29 @@ class Bullet {
     const p = Math.min(1, this.dist / this.R);
     this.accelMul = clamp(this.mul0 + accelAdd(this.accel, p, this.accFull) + quickAdd(this.quick, p), 0.5, SPD_CAP);
     this.speed = this.baseSpeed * this.accelMul;
+    if (this.hm && this.hm.accel && this.accelMul >= CFG.HOST_SPEED) hostFire(this, 'accel');  // 加速的產物：速度到 1.5 倍
+    if (this.qhb && this.accelMul < CFG.HOST_SPEED) {  // 疾射的產物只有高速段：掉到 1.5 倍以下，插在疾射上的傷害加成失效
+      const nb = this.hb - this.qhb;
+      this.damage = this.damage / Math.max(0.1, 1 + this.hb) * Math.max(0.1, 1 + nb);
+      this.hb = nb; this.qhb = 0;
+    }
+  }
+  // 消失觸發器：子彈消失時從這裡射出回響（朝最近的敵人）；ignore = 剛打中的那一隻
+  endTrig(ignore = null) {
+    const P = this.payload, Q = Game.triggerQueue;
+    if (!P || P[0].trig !== 'end' || this.endDone || Q.length >= CFG.MAX_TRIGGERS_PER_FRAME) return;
+    this.endDone = true;
+    Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle, depth: this.depth + 1, ignore, owner: this.owner, aim: true });
+  }
+  // 定時觸發器：飛行中每 0.3 秒往左右兩側各射一次回響（每顆最多 5 次；停住的地雷不算）
+  tickTimer(dt) {
+    const P = this.payload;
+    if (!P || P[0].trig !== 'time' || this.tN >= CFG.TIMER_MAX || this.mode === 'wait') return;
+    if ((this.tAcc += dt) < CFG.TIMER_TRIG) return;
+    this.tAcc -= CFG.TIMER_TRIG; this.tN++;
+    const Q = Game.triggerQueue;
+    for (const sd of [-1, 1]) if (Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
+      Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle + sd * Math.PI / 2, depth: this.depth + 1, ignore: null, owner: this.owner });
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
   copy(dAngle) {
@@ -259,9 +285,11 @@ class Bullet {
     this.att = { ...this.att, src: 'boomerang' };  // 傷害統計：回程打中的基礎傷害算迴旋的
     if (this.boom >= 2) { this.damage *= 1.5; this.att = attCredit(this.att, 'boomerang', 1.5); }
     if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
+    hostFire(this, 'boomerang');  // 插在迴旋上的組件：折返之後的子彈
   }
   update(dt) {
     this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
+    this.tickTimer(dt);
     if (this.mode === 'orbit') {  // 環繞：按住射擊時繞著飛船轉，越轉越快；放開射擊時朝準星射出
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
@@ -276,6 +304,7 @@ class Bullet {
         this.life = this.life0; this.setMul(); this.flyAge = 0; this.hitSet.clear(); this.sx = this.x; this.sy = this.y;
         if (this.orbit >= 3) this.homing = Math.max(this.homing, 1.5);  // 星環：射出的子彈追蹤敵人
         this.orbit = 0;
+        hostFire(this, 'orbit');  // 插在環繞上的組件：放出的那一波
         return;
       }
       (o.orbV || (o.orbV = new Set())).add(this.vid);
@@ -294,7 +323,7 @@ class Bullet {
         const gap = Math.hypot(e.x - this.x, e.y - this.y) - e.r;
         if (gap < TR && gap < nb) { nb = gap; near = e; }
       }
-      if (!near && this.waitT <= 0) { this.dead = true; burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
+      if (!near && this.waitT <= 0) { this.dead = true; this.endTrig(); burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
       if (near) {
         this.angle = Math.atan2(near.y - this.y, near.x - this.x);
         this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
@@ -303,6 +332,7 @@ class Bullet {
         this.mode = 'fly'; this.dashed = true; this.baseSpeed = this.speed0;
         this.life = Math.max(this.R - this.dist, TR + 30) / (this.speed0 * this.mul0);
         this.flyAge = 0; this.setMul();
+        hostFire(this, 'stasis');  // 插在佈雷上的組件：衝出去的地雷
       }
       return;
     }
@@ -333,7 +363,7 @@ class Bullet {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
       this.angle += clamp(angleDiff(this.angle, Math.atan2(o.y - this.y, o.x - this.x)), -9 * dt, 9 * dt);
-      if (dist2(this.x, this.y, o.x, o.y) < 20 * 20) { this.dead = true; return; }
+      if (dist2(this.x, this.y, o.x, o.y) < 20 * 20) { this.dead = true; this.endTrig(); return; }  // 飛回飛船：算消失
     }
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
@@ -350,6 +380,7 @@ class Bullet {
         this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
         this.bounced = true;  // 成長：反彈過的子彈打中才貼標記
         if (this.prism) { this.copy(0.4); this.angle -= 0.2; }  // 稜鏡：反彈時分裂
+        hostFire(this, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後
       } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
       else {
         if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
@@ -363,6 +394,7 @@ class Bullet {
       {
         if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
         this.dead = true;
+        this.endTrig();  // 飛完射程：算消失
       }
     }
   }

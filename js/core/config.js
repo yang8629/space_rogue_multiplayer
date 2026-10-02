@@ -18,7 +18,10 @@ const CFG = {
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   //   成長需求 ×COOP_GROW（兩人都能打到同一隻，每人拿到的不是剛好一半，照雙人模擬實測）
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3], COOP_GROW: 1.25,
-  MAX_TRIGGER_DEPTH: 3,     // 命中觸發巢狀上限
+  MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限
+  WEAPON_SOCKETS: 3, MAX_SOCKETS: 3,  // 武器固定 3 個插座；掉落的晶片 1～3 個（見 rollSockets）
+  HOST_SPEED: 1.5,          // 加速／疾射的產物：速度倍率 1.5 以上
+  TIMER_TRIG: 0.3, TIMER_MAX: 5,  // 定時觸發器：每 0.3 秒一次，每顆子彈最多 5 次
   MAX_TRIGGERS_PER_FRAME: 80,  // 同一幀最多處理的觸發次數（防止無限連鎖卡住）；子彈數量本身沒有上限
   BASE_INTERVAL: 0.16, MIN_INTERVAL: 0.06,
   HEAT_RATE: 0.05,          // 能量負載：每 1 點 ⚡ 射速 -5%（所有武器相同）
@@ -31,12 +34,11 @@ const CFG = {
   // 刺殼：距離 range 內開始縮球 windup 秒（最後 lock 秒鎖定方向）→ 以 rollSpeed 滾 rollT 秒 → 暈眩 stunT 秒 → 冷卻 cooldown 秒
   BRUTE: { range: 350, windup: 0.7, lock: 0.3, rollSpeed: 520, rollT: 0.9, stunT: 1, cooldown: 1.5 },
   BOSS_KNOCK: 30,          // 推王：每超過抗擊退 1 點，每次命中推 30（王會慢慢拉回自己的速度）
-  REPAIR_RATIO: 0.5, SCRAP_REMOVE: 25,  // 維修站修復 50% 最大 HP
+  REPAIR_RATIO: 0.5,        // 維修站修復 50% 最大 HP
   SHOP_REPAIR: { price: 40, ratio: 0.2 },  // 補給站補血：回復最大 HP 的 20%，每間只能補一次
-  SHOP_PRICE_UP: 0.35,      // 所有花晶體的價格 ×（1 ＋ 0.35 ×（星區 − 1）²），跟晶體收入的成長一樣（整局模擬實測）：第 2 星區 ×1.35、第 3 ×2.4、第 4 ×4.15；補給站、刷新獎勵、換零件、拆廢鐵
+  SHOP_PRICE_UP: 0.35,      // 所有花晶體的價格 ×（1 ＋ 0.35 ×（星區 − 1）²），跟晶體收入的成長一樣（整局模擬實測）：第 2 星區 ×1.35、第 3 ×2.4、第 4 ×4.15；補給站、刷新獎勵、換零件
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
-  FUSE_SUCCESS: 0.5,
   REVIVE: { range: 70, time: 2, iframe: 1.5 },  // 雙人救援：活著的隊友待在倒下位置 70 內滿 2 秒；救起後無敵 1.5 秒
   VERSION: 'mp-2.4.1（2026-10-01 03:30）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   CAMPAIGN_SECTORS: 3,     // 固定三關；打完可選擇繼續無盡模式

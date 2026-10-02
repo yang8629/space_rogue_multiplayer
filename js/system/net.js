@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'inventory', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
+const LOADOUT_KEYS = ['chain', 'inventory', 'slotAttr', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -67,7 +67,7 @@ const Net = {
     }
   },
   // ---------- 傷害統計：房主記兩人各自的傷害，同步給隊友 ----------
-  // nm：每個晶片的顯示名稱與顏色（用那個人自己的武器、飛船、奇異點算），對方畫面的「隊友傷害」直接用
+  // nm：每個晶片的顯示名稱與顏色（用那個人自己的武器、飛船算），對方畫面的「隊友傷害」直接用
   dmgPack(R, L = null) {
     if (!R) return null;
     const rd = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v)]));
@@ -80,12 +80,10 @@ const Net = {
     this.send({ t: 'dmg', ...this.team });
   },
   onDmg(m) {  // 隊友：收到兩人的傷害；自己那份寫進自己的 runStats（結算、紀錄都用它）
-    // 房主那邊隊友的奇異點 id 前面多一個 m（msg_1 = 隊友的 sg_1），換回自己的 id 才不會被當成不認得的晶片丟掉
-    const own = k => (k[0] === 'm' && CHIPS[k.slice(1)] && !CHIPS[k] ? k.slice(1) : k);
     const esc = s => String(s).slice(0, 40).replace(/[<>&"]/g, '');
     const clean = (p, mine) => (p && typeof p === 'object' ? {
       dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, num(p.dmg && p.dmg[k])])),
-      chips: Object.fromEntries(Object.entries(p.chips || {}).map(([k, v]) => [mine ? own(k) : String(k).slice(0, 40), num(v)])
+      chips: Object.fromEntries(Object.entries(p.chips || {}).map(([k, v]) => [String(k).slice(0, 40), num(v)])
         .filter(([k]) => !mine || CHIPS[k] || k === 'weapon' || k === 'ship')),
       nm: Object.fromEntries(Object.entries(p.nm && typeof p.nm === 'object' ? p.nm : {}).slice(0, 60)
         .map(([k, v]) => [String(k).slice(0, 40), Array.isArray(v) ? [esc(v[0]), /^#[0-9a-f]{3,8}$/i.test(v[1]) ? v[1] : '#8fa3d9'] : [esc(k), '#8fa3d9']])),
@@ -333,13 +331,10 @@ const Net = {
   // 房主：把目前這一局的狀態打包給重新連線的隊友
   resumePayload() {
     const G = Game, mate = G.mate, L = mate.L;
-    const back = id => (typeof id === 'string' && /^msg_\d+$/.test(id) ? id.slice(1) : id), sg = {};
-    for (const id of [...L.chain, ...L.inventory])
-      if (id && /^msg_\d+$/.test(id)) sg[id.slice(1)] = { name: CHIPS[id].name, cost: CHIPS[id].cost, combo: CHIPS[id].combo };
     const C = G.combat;
     return {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state,
-      you: { pick: this.matePick, weapon: L.weapon, chain: L.chain.map(back), inventory: L.inventory.map(back), sg,
+      you: { pick: this.matePick, weapon: L.weapon, chain: L.chain, inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
         parts: L.parts, module: L.module, ps: L.partSlots, growth: L.growth },
       map: this.packMap(G.map), sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
@@ -360,9 +355,9 @@ const Net = {
       this.myPick = this.cleanPick(Y.pick || {});
       this.resetStats();
       G.newRun('coop', this.myPick.ship, this.myPick.weapon, null);
-      const lo = this.sanitizeLoadout(Y, '');
+      const lo = this.sanitizeLoadout(Y);
       if (lo.weapon && lo.weapon.id === G.weapon.id) G.weapon = lo.weapon;
-      G.chain = lo.chain; G.inventory = lo.inventory;
+      G.chain = lo.chain; G.inventory = lo.inventory; G.slotAttr = lo.slotAttr;
       const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與用量成長也以房主記住的為準
       G.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(YP[id])), 0, 20)]));
       G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
@@ -572,7 +567,7 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null), growth: {}, pullHits: 0,
+      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null), slotAttr: [], growth: {}, pullHits: 0,
       parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
@@ -679,48 +674,30 @@ const Net = {
   // 配裝：隊友改了電路／倉庫／武器就傳給房主（房主模擬隊友的子彈要用）
   sendLoadout() {
     if (this.role !== 'client' || !this.linked) return;
-    const G = Game, sg = {};
-    for (const id of [...G.chain, ...G.inventory])
-      if (id && CHIPS[id] && CHIPS[id].type === 'singularity') sg[id] = { name: CHIPS[id].name, cost: CHIPS[id].cost, combo: CHIPS[id].combo };
-    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sg, hp: G.player.hp, cr: G.credits,
+    const G = Game;
+    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
       parts: G.parts, module: G.module, ps: G.partSlots });
   },
-  // 檢查對方傳來的電路、倉庫、武器：不認得的晶片變空格；奇異點（動態產生的晶片）登記成 sgPrefix + 原本的 id
-  sanitizeLoadout(m, sgPrefix) {
-    const sgMap = {};
-    const fix = (id, depth = 0) => {
-      if (typeof id !== 'string') return null;
-      if (id === 'scrap' || NORMAL_IDS.includes(id) || COMPOSITE_IDS.includes(id) || (depth && OVERLOADS.includes(id))) return id;
-      const lv = /^([a-z_]+)#([23])$/.exec(id);
-      if (lv && NORMAL_IDS.includes(lv[1]) && lv[1] !== 'mirror') return leveledId(lv[1], +lv[2]);
-      if (!depth && /^sg_\d+$/.test(id) && m.sg && m.sg[id]) {
-        if (sgMap[id]) return sgMap[id];
-        const d = m.sg[id], combo = (Array.isArray(d.combo) ? d.combo : []).slice(0, 8).map(c => fix(c, 1)).filter(Boolean);
-        if (!combo.length) return null;
-        const hid = sgPrefix + id;
-        CHIPS[hid] = { name: String(d.name || '奇異點').slice(0, 30), short: '奇異', type: 'singularity', cost: clamp(num(d.cost), 0, 20), combo,
-          desc: '一格內依序執行：' + combo.filter(c => !CHIPS[c].hidden).map(c => CHIPS[c].name).join(' → ') + '。' };
-        if (!sgPrefix) singularityCount = Math.max(singularityCount, +id.slice(3));  // 之後自己融合的編號不要撞到
-        return (sgMap[id] = hid);
-      }
-      return null;
-    };
+  // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶等級 #2、插座數 ~2，見 parseChipId）
+  sanitizeLoadout(m) {
+    const fix = id => parseChipId(id);
     const chain = (Array.isArray(m.chain) ? m.chain : []).slice(0, CFG.MAX_SLOTS).map((id, i) => (i === 0 ? 'weapon' : fix(id)));
     while (chain.length < CFG.START_SLOTS) chain.push(null);
     chain[0] = 'weapon';
     const inventory = Array.from({ length: CFG.INV_SLOTS }, (_, i) => fix(Array.isArray(m.inventory) ? m.inventory[i] : null));
     const W = m.weapon && WEAPONS[m.weapon.id] ? m.weapon : null, path = W && W.path && WEAPONS[W.id].paths[W.path] ? W.path : null;
     const weapon = W ? { id: W.id, path, final: path && (W.final === 0 || W.final === 1) ? W.final : null } : null;
-    return { chain, inventory, weapon };
+    const slotAttr = chain.map((_, i) => (i > 0 && Array.isArray(m.sa) && SLOT_ATTRS[m.sa[i]] ? m.sa[i] : null));
+    return { chain, inventory, weapon, slotAttr };
   },
   applyMateLoadout(m) {  // 房主：檢查後套用到隊友的配裝
     const mate = Game.mate;
     if (!mate || !mate.L) return;
-    const { chain, inventory, weapon } = this.sanitizeLoadout(m, 'm'), L = mate.L;  // 奇異點在房主這邊登記成 m + id
+    const { chain, inventory, weapon, slotAttr } = this.sanitizeLoadout(m), L = mate.L;
     if (weapon && weapon.id === L.weapon.id) L.weapon = weapon;
     L.credits = Math.max(0, num(m.cr, L.credits || 0));  // 隊友的錢包（重新連線時還原用）
     L.lootAtLo = this.lootTotal || 0;  // 之後撿到的掉落另外算
-    L.chain = chain; L.inventory = inventory; L.wp = weaponParams(L.weapon);
+    L.chain = chain; L.inventory = inventory; L.slotAttr = slotAttr; L.wp = weaponParams(L.weapon);
     // 機體：零件層數（0～20）、零件格、背包模組（不認得的模組當作沒有）
     const P = m.parts && typeof m.parts === 'object' ? m.parts : {};
     L.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(P[id])), 0, 20)]));
