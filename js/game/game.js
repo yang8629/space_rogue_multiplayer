@@ -998,7 +998,9 @@ const Game = {
         }
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
-          (e.stuck = e.stuck || []).push({ dmg, att, lv: b.sticky, owner: own, hm: b.hm && b.hm.sticky, hb: b.hb, color: b.color, angle: b.angle,
+          // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
+          const wb = b.wsb || 0, sd = wb > 0 ? dmg * Math.max(0.1, b.bonus - wb + (b.accelMul || 1)) / Math.max(0.1, b.bonus + (b.accelMul || 1)) : dmg;
+          (e.stuck = e.stuck || []).push({ dmg: sd, att, lv: b.sticky, owner: own, hm: b.hm && b.hm.sticky, hb: b.hb, color: b.color, angle: b.angle,
             end: P && { payload: P, depth: b.depth + 1 } });
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
@@ -1200,8 +1202,10 @@ const Game = {
     const A = e.killAtt, inf = A && A.inf;
     if (!inf) return;
     const n = inf.lv >= 2 ? 5 : 3, gen = inf.gen + 1, base = inf.tpl.infBase || inf.tpl.damage;
-    const tpl = { ...inf.tpl, src: 'infect', damage: base * 1.5, infBase: base,  // 爆出的子彈算感染的（src） orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
+    const tpl0 = { ...inf.tpl, src: 'infect', damage: base * 1.5, infBase: base,  // 爆出的子彈算感染的（src） orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
       infect: inf.lv >= 3 && gen <= 2 ? inf.lv : 0, infGen: gen, color: '#c6ff8a' };
+    const tpl = stripW(tpl0);  // 爆出來的子彈是產物：不算武器插座的傷害加成
+    tpl.infBase = tpl.damage / 1.5;  // 下一代也照拿掉之後的算
     const a0 = rand(0, TAU), comps = inf.tpl.hm && inf.tpl.hm.infect;
     if (comps) tpl.hm = { ...tpl.hm, infect: undefined };
     let list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
