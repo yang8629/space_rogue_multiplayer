@@ -460,12 +460,12 @@ const MechCheck = {
       return { ok: n === 1 && gone && where > 0 && near1(d, 25) && heat === 0 && g === 0,
         got: `強化 ${n} 格（第 ${where + 1} 格）、晶片${gone ? '消失' : '還在'}；效果 ×1.5 傷害 ${d}（應為 25）；能量歸零 ⚡${heat}；不會成長 +${g}` };
     }],
-    ['構築系統', '插座：武器與回響', '武器插 3 個倍增：+100%、+75%、+50%（10 → 32.5）；武器上的倍增不作用在回響；插在觸發器上的分裂只作用在回響（3 發 × 2）', M => {
+    ['構築系統', '插座：武器與回響', '武器插 3 個倍增：+300%（10 → 40，不打折）；武器上的倍增不作用在回響；插在觸發器上的分裂只作用在回響（3 發 × 2）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', 'amp', 'amp']);
       const d = Game.stats.dmg;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', 'trigger', 'split']);
       const L = Game.stats.layers[0] || { count: 0, dmg: 0 };
-      return { ok: near1(d, 32.5) && Game.stats.count === 1 && L.count === 3 && near1(L.dmg, 6),
+      return { ok: near1(d, 40) && Game.stats.count === 1 && L.count === 3 && near1(L.dmg, 6),
         got: `武器 3 個倍增 ${d}；開火 ${Game.stats.count} 發，回響 ${L.count} 發共 ${L.dmg.toFixed(1)}（應為 3 發共 6）` };
     }],
     ['構築系統', '軍械台升級', '武器進入第一段、第二段', M => {
