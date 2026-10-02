@@ -592,7 +592,8 @@ function recordText(r) {
   L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '雙人 ' : ''}${C.result[r.result] || r.result} ${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
   L.push(`武器 ${r.weapon.replace('・', '+')}`);
   const S = r.stats;
-  L.push(`電路 ${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（熱${S.heat} 射速${S.rateCut} ${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
+  const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的組件
+  L.push(`電路 ${wsk ? '武器' + wsk[0] + '｜' : ''}${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（熱${S.heat} 射速${S.rateCut} ${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
   const M = r.mech;
   if (M) {
     L.push(`機體 ${Object.entries(M.parts).map(([k, v]) => k.slice(0, 2) + v).join(' ') || '無零件'}${M.module ? `｜${M.module}${M.traits.length ? `(${M.traits.join(' ')})` : ''}` : M.traits.length ? `(${M.traits.join(' ')})` : ''} HP${r.hp}/${r.maxHp} 晶${r.credits}`);

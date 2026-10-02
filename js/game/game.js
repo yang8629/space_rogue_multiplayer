@@ -286,7 +286,15 @@ const Game = {
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
   rewardOptions() {
     const chips = pickN(this.chipOffers(), 3), parts = pickN(PART_IDS, 3);
-    return [0, 1, 2].map(i => Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i]));  // 晶片的插座數在這裡決定
+    const out = [0, 1, 2].map(i => Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i]));  // 晶片的插座數在這裡決定
+    return this.withComp(out);
+  },
+  // 至少一格是組件（組件才填得滿插座）：沒抽到就隨機把一格換成組件
+  withComp(ids) {
+    if (ids.some(id => isComp(id))) return ids;
+    const pool = NORMAL_IDS.filter(id => isComp(id) && !ids.includes(id));
+    if (pool.length) ids[Math.floor(Math.random() * ids.length)] = pick(pool);
+    return ids;
   },
   // 花晶體刷新三選一（第一次 ◆15，之後每次多 ◆10）
   rerollReward() {
@@ -389,7 +397,7 @@ const Game = {
   shopPrice(base) { return Math.round(base * this.shopMul()); },
   shopHealHp(p = this.player) { return Math.ceil(p.maxHp * CFG.SHOP_REPAIR.ratio); },
   openShop() {
-    const items = pickN(this.chipOffers(), 4).map(id => newChip(id)).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
+    const items = this.withComp(pickN(this.chipOffers(), 4).map(id => newChip(id))).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
     if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: this.shopPrice(chipPrice(id)), sold: false }); }
     this.shop = { items, slotBought: false, healed: false };
     this.state = 'shop';
