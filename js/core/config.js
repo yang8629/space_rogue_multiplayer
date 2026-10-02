@@ -19,7 +19,7 @@ const CFG = {
   //   成長需求 ×COOP_GROW（兩人都能打到同一隻，每人拿到的不是剛好一半，照雙人模擬實測）
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3], COOP_GROW: 1.25,
   MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限
-  WEAPON_SOCKETS: 3, START_WSOCK: 1, MAX_SOCKETS: 3,  // 武器插座開局 1 個、每打完一隻王 +1、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
+  WEAPON_SOCKETS: 3, START_WSOCK: 0, MAX_SOCKETS: 3,  // 武器插座開局 0 個、每打完一隻王 +1（打第三關的王時是 2 個）、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
   HOST_SPEED: 1.5,          // 加速／疾射的產物：速度倍率 1.5 以上
   TIMER_TRIG: 0.3, TIMER_MAX: 5,  // 定時觸發器：每 0.3 秒一次，每顆子彈最多 5 次
   MAX_TRIGGERS_PER_FRAME: 80,  // 同一幀最多處理的觸發次數（防止無限連鎖卡住）；子彈數量本身沒有上限

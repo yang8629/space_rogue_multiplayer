@@ -7,7 +7,7 @@
 // =====================================================================
 const Game = {
   state: 'title', returnState: null, mode: null,
-  chain: [], inventory: [], slotAttr: [], credits: 0,
+  chain: [], socks: [], inventory: [], slotAttr: [], credits: 0,  // socks[i]：插在第 i 格晶片上的組件
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0, shake: 0 },
@@ -60,11 +60,12 @@ const Game = {
     const S = SHIPS[shipId];
     // 先換上新的電路、倉庫、飛船，再計算數值（不能拿上一場的電路來算）
     // 遠征／雙人：開局三選一的起始晶片直接裝在電路上（武器右邊）；飛船不再自帶晶片
-    this.chain = mode === 'sandbox' ? ['weapon', 'split', null, null]
+    this.chain = mode === 'sandbox' ? ['weapon', null, null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
+    this.socks = mode === 'sandbox' ? [['split']] : [];
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
     this.growth = {}; this.pullHits = 0; this.slotAttr = [];
-    this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1  // slotAttr：黑洞強化過的電路格（index 跟 chain 一樣）
+    this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
@@ -131,7 +132,7 @@ const Game = {
       case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1 }); break;
       case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
       case 'shop':   this.openShop(); break;
-      case 'blackhole': this.openBlackhole(); break;
+      case 'blackhole': this.openBlackhole(); break;  // 航圖節點「奇異點」（程式代號沿用 blackhole）
       case 'workshop': this.openWorkshop(); break;
       case 'armory': this.state = 'armory'; this.armorySource = 'armory'; Screen.armory('armory'); break;
       case 'repair': {
@@ -295,7 +296,7 @@ const Game = {
   },
   // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
   chipOffers() {
-    const own = new Set([...this.chain, ...this.inventory].filter(Boolean).map(baseOf));
+    const own = new Set([...this.chain, ...this.socks.flat(), ...this.inventory].filter(Boolean).map(baseOf));
     return NORMAL_IDS.filter(id => !(CHIPS[id].grow && own.has(id)));
   },
   // ---------- 取得晶片：放進倉庫（不會合成：改玩法的晶片靠用量成長升級，組件、觸發器不會升級） ----------
@@ -367,7 +368,10 @@ const Game = {
     let toInv = false;
     if (id) {
       const j = this.inventory.lastIndexOf(id), slot = this.chain.indexOf(null, 1);
-      if (j >= 0 && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
+      // 組件：插進武器或電路上還有空插座的晶片
+      const h = isComp(id) ? this.chain.findIndex((c, i) => c && (this.socks[i] || []).length < socketsOf(c) && (baseOf(id) !== 'overclock' || i === 0) && (baseOf(c) !== 'pull' || baseOf(id) === 'bigshot')) : -1;
+      if (j >= 0 && h >= 0) { (this.socks[h] = this.socks[h] || []).push(id); this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已插在${CHIPS[this.chain[h]].name}上`; }
+      else if (j >= 0 && !isComp(id) && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
       else toInv = j >= 0;
     }
     this.showMap(msg);
@@ -518,8 +522,9 @@ const Game = {
     const R = this.runStats;
     const total = Object.values(R.dmg).reduce((a, b) => a + b, 0);
     const chips = Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]);
-    // 晶片名稱＋插座數（◇2）；電路格另外標黑洞強化的屬性
+    // 晶片名稱＋插座數（◇2）；電路格另外標奇異點強化的屬性
     const name = id => id ? CHIPS[id].name + (isHost(id) && id !== 'weapon' ? '◇' + socketsOf(id) : '') : null, A = this.slotAttr || [];
+    const withSock = (id, i) => id && (this.socks[i] || []).length ? `${name(id)}［${this.socks[i].map(c => CHIPS[c].name).join('、')}］` : name(id);
     // 打到哪：星區、層、節點種類、波次；王戰時再加上王剩多少血
     const node = this.node, C = this.combat, boss = (this.enemies || []).find(e => e.t.boss && !e.dead);
     let where = node ? `${this.isEndless() ? '無盡 · ' : ''}星區 ${this.sector} 第 ${node.L + 1} 層（${NODE_META[node.type].label}）` : `星區 ${this.sector} 航圖`;
@@ -536,7 +541,7 @@ const Game = {
       time: Math.round(R.time), kills: R.kills, dmg: Math.round(total), maxHit: Math.round(R.maxHit),
       dps: R.time > 0 ? Math.round(total / R.time) : 0,
       dmgBySource: Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])),
-      chipDmg: chips, chain: this.chain.map((id, i) => A[i] ? (name(id) || '空') + '［' + SLOT_ATTRS[A[i]].name + '］' : name(id)), inv: this.inventory.filter(Boolean).map(name),
+      chipDmg: chips, chain: this.chain.map((id, i) => A[i] ? (withSock(id, i) || '空') + '｛' + SLOT_ATTRS[A[i]].name + '｝' : withSock(id, i)), inv: this.inventory.filter(Boolean).map(name),
       // 最後的電路數值：插槽數、能量、射速、每發子彈數與傷害、編輯器的估算 DPS、倉庫被動
       stats: { slots: this.chain.length, heat: s.heat, rateCut: `-${Math.round((1 - heatRateMul(s.heat)) * 100)}%`, rps: +s.rps.toFixed(2),
         perFire: s.count, fireDmg: Math.round(s.dmg), estDps: Math.round(s.dpsEst), triggerLayers: s.layers.length, knock: this.wp.knock,
@@ -561,15 +566,16 @@ const Game = {
       traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
       growth: Object.fromEntries(Object.entries(this.growth).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, Math.round(v)])) };
   },
-  // ---------- 黑洞：投入 1 個晶片，隨機一個還沒強化過的電路格（武器格除外）抽一個屬性 ----------
+  // ---------- 奇異點：投入 1 個晶片，隨機一個還沒強化過的電路格（武器格也可以）抽一個屬性 ----------
   //   好結果的機率照投入晶片的等級（BH_GOOD）；屬性留在格子上（換晶片也還在），每格只能強化一次
-  ownedFusable() {  // 電路與倉庫中可以投入黑洞的晶片
+  ownedFusable() {  // 電路、倉庫、插座中可以投入奇異點的晶片
     const out = [];
     this.chain.forEach((id, i) => { if (i > 0 && canSacrifice(id)) out.push({ key: 'chain:' + i, arr: this.chain, i, id }); });
     this.inventory.forEach((id, i) => { if (canSacrifice(id)) out.push({ key: 'inv:' + i, arr: this.inventory, i, id }); });
+    this.socks.forEach((S, h) => (S || []).forEach((id, k) => out.push({ key: `sock:${h}:${k}`, arr: S, i: k, id, sock: h })));
     return out;
   },
-  bhFreeSlots() { return this.chain.map((_, i) => i).filter(i => i > 0 && !(this.slotAttr || [])[i]); },
+  bhFreeSlots() { return this.chain.map((_, i) => i).filter(i => !(this.slotAttr || [])[i]); },  // 武器格也可以
   openBlackhole() {
     this.bh = { sel: null, result: null };
     this.state = 'blackhole';
@@ -584,8 +590,10 @@ const Game = {
     if (!a || !free.length) return;
     const good = Math.random() < BH_GOOD[Math.min(levelOf(a.id), 3) - 1];
     const attr = pick(good ? GOOD_ATTRS : BAD_ATTRS), slot = pick(free);
-    if (this.runStats) this.runStats.got.push(`${this.here()} 黑洞 投入${CHIPS[a.id].name} → 第 ${slot + 1} 格${SLOT_ATTRS[attr].name}`);
-    a.arr[a.i] = null;
+    if (this.runStats) this.runStats.got.push(`${this.here()} 奇異點 投入${CHIPS[a.id].name} → 第 ${slot + 1} 格${SLOT_ATTRS[attr].name}`);
+    if (a.arr === this.chain) for (const c of this.socks[a.i] || []) { const k = this.inventory.indexOf(null); if (k >= 0) this.inventory[k] = c; }  // 投入電路上的晶片：插座上的組件退回倉庫（放不下的一起被吞掉）
+    if (a.arr === this.chain) this.socks[a.i] = [];
+    if (a.sock != null) a.arr.splice(a.i, 1); else a.arr[a.i] = null;
     this.slotAttr = this.slotAttr || [];
     this.slotAttr[slot] = attr;
     this.recalc();
@@ -1252,7 +1260,7 @@ const Game = {
   grow(owner, id, n = 1) {
     const L = owner || this, g = L.growth;
     if (!g || !(n > 0)) return;
-    const at = (L.slotAttr || [])[L.chain.findIndex(c => c && baseOf(c) === id)];  // 黑洞強化的格子：成長 ×2／不會成長
+    const at = (L.slotAttr || [])[L.chain.findIndex(c => c && baseOf(c) === id)];  // 奇異點強化的格子：成長 ×2／不會成長
     if (at === 'nogrow') return;
     if (at === 'grow2') n *= 2;
     g[id] = (g[id] || 0) + n;

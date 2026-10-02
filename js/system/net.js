@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
+const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -334,7 +334,7 @@ const Net = {
     const C = G.combat;
     return {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state,
-      you: { pick: this.matePick, weapon: L.weapon, chain: L.chain, inventory: L.inventory, sa: L.slotAttr || [],
+      you: { pick: this.matePick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
         parts: L.parts, module: L.module, ps: L.partSlots, ws: L.wSock, growth: L.growth },
       map: this.packMap(G.map), sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
@@ -357,7 +357,7 @@ const Net = {
       G.newRun('coop', this.myPick.ship, this.myPick.weapon, null);
       const lo = this.sanitizeLoadout(Y);
       if (lo.weapon && lo.weapon.id === G.weapon.id) G.weapon = lo.weapon;
-      G.chain = lo.chain; G.inventory = lo.inventory; G.slotAttr = lo.slotAttr;
+      G.chain = lo.chain; G.socks = lo.socks; G.inventory = lo.inventory; G.slotAttr = lo.slotAttr;
       const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與用量成長也以房主記住的為準
       G.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(YP[id])), 0, 20)]));
       G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
@@ -568,7 +568,7 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null), slotAttr: [], growth: {}, pullHits: 0,
+      chain: startChain(p.chip), socks: [], inventory: Array(CFG.INV_SLOTS).fill(null), slotAttr: [], growth: {}, pullHits: 0,
       parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
@@ -676,7 +676,7 @@ const Net = {
   sendLoadout() {
     if (this.role !== 'client' || !this.linked) return;
     const G = Game;
-    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
+    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
       parts: G.parts, module: G.module, ps: G.partSlots, ws: G.wSock });
   },
   // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶等級 #2、插座數 ~2，見 parseChipId）
@@ -689,16 +689,19 @@ const Net = {
     const W = m.weapon && WEAPONS[m.weapon.id] ? m.weapon : null, path = W && W.path && WEAPONS[W.id].paths[W.path] ? W.path : null;
     const weapon = W ? { id: W.id, path, final: path && (W.final === 0 || W.final === 1) ? W.final : null } : null;
     const slotAttr = chain.map((_, i) => (i > 0 && Array.isArray(m.sa) && SLOT_ATTRS[m.sa[i]] ? m.sa[i] : null));
-    return { chain, inventory, weapon, slotAttr };
+    // 插座：只收組件，每格最多插座上限個（多的丟掉）
+    const socks = chain.map((id, i) => !id || !Array.isArray(m.sk) || !Array.isArray(m.sk[i]) ? []
+      : m.sk[i].slice(0, CFG.MAX_SOCKETS).map(fix).filter(c => c && isComp(c)));
+    return { chain, socks, inventory, weapon, slotAttr };
   },
   applyMateLoadout(m) {  // 房主：檢查後套用到隊友的配裝
     const mate = Game.mate;
     if (!mate || !mate.L) return;
-    const { chain, inventory, weapon, slotAttr } = this.sanitizeLoadout(m), L = mate.L;
+    const { chain, socks, inventory, weapon, slotAttr } = this.sanitizeLoadout(m), L = mate.L;
     if (weapon && weapon.id === L.weapon.id) L.weapon = weapon;
     L.credits = Math.max(0, num(m.cr, L.credits || 0));  // 隊友的錢包（重新連線時還原用）
     L.lootAtLo = this.lootTotal || 0;  // 之後撿到的掉落另外算
-    L.chain = chain; L.inventory = inventory; L.slotAttr = slotAttr; L.wp = weaponParams(L.weapon);
+    L.chain = chain; L.socks = socks; L.inventory = inventory; L.slotAttr = slotAttr; L.wp = weaponParams(L.weapon);
     // 機體：零件層數（0～20）、零件格、背包模組（不認得的模組當作沒有）
     const P = m.parts && typeof m.parts === 'object' ? m.parts : {};
     L.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(P[id])), 0, 20)]));
@@ -751,7 +754,7 @@ const Net = {
       ship: SHIPS[G.shipId].name, weapon: weaponTitle(G.weapon),
       time: Math.round(R ? R.time : 0), kills: R ? R.kills : 0, dmg: Math.round(total), maxHit: Math.round(R ? R.maxHit : 0),
       dmgBySource: R ? Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])) : {},
-      chain: G.chain.map(name), inv: G.inventory.filter(Boolean).map(name),
+      chain: G.chain.map((id, i) => id && (G.socks[i] || []).length ? `${name(id)}［${G.socks[i].map(name).join('、')}］` : name(id)), inv: G.inventory.filter(Boolean).map(name),
       chipDmg: R ? Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]) : [],
       credits: G.credits, hp: Math.max(0, Math.ceil(G.player.hp)), maxHp: G.player.maxHp, mech: G.mechRecord(),
       cause: G.player.dead ? G.lastHit : '',

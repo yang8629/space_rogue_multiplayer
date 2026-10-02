@@ -8,7 +8,7 @@
 //   mod/amp  : apply(list, pw)  → 加工目前清單中所有子彈
 //   trigger  : 右側晶片成為觸發時（命中／消失／定時）的子管線
 //   comp     : 組件，插在左邊最近的宿主（武器、玩法晶片、觸發器）的插座上（見 compileChain）
-//   pw = 強度（等級、黑洞的效果 ×1.5／×0.7）
+//   pw = 強度（等級、奇異點的效果 ×1.5／×0.7）
 // =====================================================================
 const TYPE_META = {
   source:    { label: '發射源', icon: '◉', color: '#4cc9f0' },
@@ -16,10 +16,8 @@ const TYPE_META = {
   launch:    { label: '發射', icon: '✧', color: '#ffb347' },
   impact:    { label: '命中', icon: '✷', color: '#f78cff' },
   body:      { label: '機體', icon: '⬢', color: '#9dff6b' },
-  mod:       { label: '變形器', icon: '◇', color: '#b388ff' },
-  amp:       { label: '增幅器', icon: '▲', color: '#ffd166' },
   trigger:   { label: '觸發器', icon: '◎', color: '#ff6b9d' },
-  link:      { label: '連結器', icon: '⇄', color: '#2ee6a6' },
+  comp:      { label: '組件', icon: '◆', color: '#ffd166' },  // 插在晶片插座裡的分裂、巨彈、穿甲、倍增、超頻、鏡像
   composite: { label: '軍規複合', icon: '✦', color: '#ff9f1c' },
 };
 

@@ -471,7 +471,7 @@ function drawHUD() {
   };
   if (s.charge) bar(T ? 180 : 250, p.chargeC >= 1 ? '蓄滿' : '蓄力', p.chargeC || 0, p.chargeC >= 1 ? '#ffffff' : '#ffb347');
   if (s.heatLimit) bar(T ? 250 : 330, p.ohLock > 0 ? '過熱！' : '熱度', p.ohLock > 0 ? 1 : heat, p.ohLock > 0 ? '#ff4d6d' : '#ff9f1c');
-  // 黑洞「間歇失效」的格子：失效的那 2 秒標出來
+  // 奇異點「間歇失效」的格子：失效的那 2 秒標出來
   const fk = (Game.slotAttr || []).map((a, i) => a === 'flaky' && Game.chain[i] ? i : -1).filter(i => i >= 0);
   if (fk.length && flakyOff()) {
     ctx.font = 'bold 11px Microsoft JhengHei'; ctx.fillStyle = '#ff6b6b';

@@ -17,55 +17,51 @@ const NO_ECHO = ['orbit', 'charge', 'dashfire'];
 // 組件在開火當下就套用（其餘的插在黏著上的組件等爆炸時才套用）
 const STICKY_NOW = ['pierce', 'ov_pierce', 'ov_seek'];
 
-function compileChain(chain, attrs = Game.slotAttr || []) {
-  const info = chain.map(() => ({ role: null, host: -1, idle: false, why: '', seg: 0, trig: false }));
+// chain：電路格（武器、玩法晶片、觸發器、空格）；socks[i]：插在第 i 格晶片上的組件（由左到右）；attrs[i]：第 i 格的黑洞屬性（只強化那一格的晶片）
+//   ops.info[i]：每一格的狀態（role 'host'、seg 在第幾層觸發、idle 沒有作用、why 原因）；ops.info.socks[i][k]：第 i 格第 k 個插座的狀態
+function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || []) {
+  const info = chain.map(() => ({ role: null, idle: false, why: '', seg: 0, trig: false }));
+  info.socks = chain.map(() => []);
   const ops = [];
   const idle = (I, why) => Object.assign(I, { idle: true, why });
-  let seg = 0, dead = false, g = null;  // g：目前的宿主（右邊的組件插在它上面）
+  let seg = 0, dead = false;
   chain.forEach((id, i) => {
-    const I = info[i];
+    const I = info[i], S = (id && socks[i]) || [];
     I.seg = seg;
+    S.forEach(() => info.socks[i].push({ idle: false, why: '' }));
     if (!id || !CHIPS[id]) return;
     const def = CHIPS[id], at = attrs[i], am = at === 'eff' ? 1.5 : at === 'weak' ? 0.7 : 1, flaky = at === 'flaky';
-    const ov = OVERLOADS.includes(at) ? { id: at, m: 1, slot: i, key: at, hidden: true, flaky } : null;  // 黑洞的超載：當成多插一個組件（不佔插座）
-    if (!def.comp) {  // 宿主
-      I.role = 'host';
-      g = { slot: i, id, base: baseOf(id), n: 0, cap: socketsOf(id), o: null };
-      if (dead) return idle(I, '前面的觸發器超過層數上限，這格不會執行');
-      if (seg > 0 && NO_ECHO.includes(baseOf(id))) return idle(I, `${CHIPS[baseOf(id)].name}不能放在觸發器右邊（回響不會進圈、沒有蓄力、不是衝刺那一槍）`);
-      if (def.type === 'trigger' && seg >= CFG.MAX_TRIGGER_DEPTH) { dead = true; return idle(I, `已達觸發層數上限（${CFG.MAX_TRIGGER_DEPTH} 層）`); }
-      g.o = { id, pw: def.lvMul || 1, lv: levelOf(id), slot: i, key: baseOf(id), comps: [], am, flaky,
-        wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層
-      if (ov) g.o.comps.push(ov);
-      ops.push(g.o);
-      if (def.type === 'trigger') { I.trig = true; seg++; }
-      return;
-    }
-    // 組件：插在左邊最近的宿主上（中間的空格不影響）
-    I.role = 'comp';
-    I.host = g ? g.slot : -1;
-    if (!g) return idle(I, '左邊沒有可以插的晶片');
-    if (!g.o) return idle(I, `它插的「${CHIPS[g.id].name}」沒有作用`);
-    if (g.n >= g.cap) return idle(I, `插座已滿：${CHIPS[g.id].name}只有 ${g.cap} 個插座`);
-    g.n++;
-    const base = baseOf(id), real = g.o.comps.filter(c => !c.hidden);
-    if (base === 'overclock' && g.base !== 'weapon') return idle(I, '超頻是整條電路的射速，只能插在武器上');
-    let cid = id;
-    if (base === 'mirror') {
-      const prev = real[real.length - 1];
-      if (g.o.wlike && (!prev || prev.copySrc)) {  // 武器（或觸發器）前面還沒有其他組件：複製武器 = 多射一次（回響也一樣；兩個鏡像 = 射 3 次）
-        (g.o.extra = g.o.extra || []).push({ slot: i, key: 'mirror', flaky });
-        g.o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true, flaky });  // 佔一個插座；鏡像本身沒有 apply，runComps 會跳過
-        return;
+    if (def.comp) return idle(I, '組件要插在晶片的插座上，放在電路格沒有作用');
+    I.role = 'host';
+    const sockIdle = why => info.socks[i].forEach(J => idle(J, why));
+    if (dead) { sockIdle('它插的晶片沒有作用'); return idle(I, '前面的觸發器超過層數上限，這格不會執行'); }
+    if (seg > 0 && NO_ECHO.includes(baseOf(id))) { sockIdle('它插的晶片沒有作用'); return idle(I, `${CHIPS[baseOf(id)].name}不能放在觸發器右邊（回響不會進圈、沒有蓄力、不是衝刺那一槍）`); }
+    if (def.type === 'trigger' && seg >= CFG.MAX_TRIGGER_DEPTH) { dead = true; sockIdle('它插的晶片沒有作用'); return idle(I, `已達觸發層數上限（${CFG.MAX_TRIGGER_DEPTH} 層）`); }
+    const o = { id, pw: def.lvMul || 1, lv: levelOf(id), slot: i, key: baseOf(id), comps: [], am, flaky,
+      wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層
+    if (OVERLOADS.includes(at)) o.comps.push({ id: at, m: 1, slot: i, key: at, hidden: true });  // 奇異點的超載：這格的晶片多插一個（不佔插座）
+    ops.push(o);
+    if (def.type === 'trigger') { I.trig = true; seg++; }
+    const cap = socketsOf(id), base = baseOf(id);
+    S.forEach((cid0, k) => {  // 插座上的組件（強化只看晶片那一格，組件本身不吃屬性）
+      const J = info.socks[i][k], cb = baseOf(cid0), real = o.comps.filter(c => !c.hidden);
+      if (k >= cap) return idle(J, `插座不夠：${CHIPS[id].name}只有 ${cap} 個插座`);
+      if (cb === 'overclock' && id !== 'weapon') return idle(J, '超頻是整條電路的射速，只能插在武器上');
+      let cid = cid0;
+      if (cb === 'mirror') {
+        const prev = real[real.length - 1];
+        if (o.wlike && (!prev || prev.copySrc)) {  // 武器（或觸發器）前面還沒有其他組件：複製武器 = 多射一次（回響也一樣；兩個鏡像 = 射 3 次）
+          (o.extra = o.extra || []).push({ slot: i, key: 'mirror' });
+          o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true });  // 佔一個插座；鏡像本身沒有 apply，runComps 會跳過
+          return;
+        }
+        if (!prev) return idle(J, '前一個插座沒有可以複製的組件');
+        if (baseOf(prev.id) === 'overclock') return idle(J, '鏡像不能複製超頻');
+        cid = prev.id;
       }
-      if (!prev) return idle(I, '前一個插座沒有可以複製的組件');
-      if (baseOf(prev.id) === 'overclock') return idle(I, '鏡像不能複製超頻');
-      cid = prev.id;
-    }
-    if (g.base === 'pull' && baseOf(cid) !== 'bigshot') return idle(I, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
-    const m = am * g.o.am;
-    g.o.comps.push({ id: cid, m, slot: i, key: base, flaky });
-    if (ov) g.o.comps.push(ov);
+      if (base === 'pull' && baseOf(cid) !== 'bigshot') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
+      o.comps.push({ id: cid, m: am, slot: i, key: cb });  // 效果 ×1.5／×0.7：那一格晶片上的組件跟著放大
+    });
   });
   ops.info = info;
   return ops;
@@ -75,7 +71,6 @@ function compileChain(chain, attrs = Game.slotAttr || []) {
 function runComps(list, comps, layer) {
   for (const c of comps) {
     if (!list.length) break;
-    if (c.flaky && flakyOff()) continue;
     const def = CHIPS[c.id];
     if (!def.apply) continue;
     let before = 0, after = 0;
@@ -118,7 +113,7 @@ function runOps(ops, depth) {
   let list = [];
   for (let i = 0; i < ops.length; i++) {
     const o = ops[i], def = CHIPS[o.id];
-    if (o.flaky && flakyOff()) continue;  // 黑洞：間歇失效
+    if (o.flaky && flakyOff()) continue;  // 奇異點：間歇失效
     if (def.type === 'source') {
       const src = o.key || 'weapon';
       list.push(...def.emit(o.pw).map(b => Object.assign(b, { src, cr: null })));
@@ -166,13 +161,14 @@ function hostFire(b, base) {
 
 // 能量負載 → 射速倍率（1 = 不變；5 點能量 = 0.75，也就是射速 -25%）
 const heatRateMul = heat => Math.max(CFG.HEAT_RATE_FLOOR, 1 - heat * CFG.HEAT_RATE);
-// 一格的能量負載（黑洞：能量歸零 → 0、能量 +2）
+// 一格的能量負載（奇異點：能量歸零 → 0、能量 +2）
 const slotHeat = (id, at) => !id ? 0 : at === 'free' ? 0 : CHIPS[id].cost + (at === 'heavy' ? 2 : 0);
 
 function analyzeChain(chain) {
   const attrs = Game.slotAttr || [];
   let heat = 0, rate = 1;
   chain.forEach((id, i) => { heat += slotHeat(id, attrs[i]); });
+  for (const S of Game.socks || []) for (const c of S || []) heat += CHIPS[c].cost;  // 組件照算能量（不吃奇異點屬性）
   const ops = compileChain(chain, attrs);
   // 射速類組件（超頻模組、超載・頻率）：整條電路的射速
   const rateCr = {};
