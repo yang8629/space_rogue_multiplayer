@@ -120,6 +120,7 @@ function runOps(ops, depth) {
       for (const x of o.extra || []) if (!(x.flaky && flakyOff()))  // 鏡像插在第一個插座：武器多射一次（基礎傷害算鏡像的）
         list.push(...def.emit(o.pw).map(b => Object.assign(b, { src: 'mirror', cr: null })));
       list = runComps(list, o.comps || [], 'w');  // 武器、回響的插座
+      for (const b of list) b.wsb = b.bonus || 0;  // 武器插座上的傷害加成：只算直擊，產物出現時拿掉（見 stripW）
     } else if (def.type === 'trigger') {
       if (list.length && depth < CFG.MAX_TRIGGER_DEPTH) {
         // 子電路 = 武器回響（50% 傷害，插在觸發器上的組件作用在回響上）＋ 觸發器右側的晶片；回響的基礎傷害算在觸發器上
@@ -134,10 +135,49 @@ function runOps(ops, depth) {
       list = def.apply(list, o.pw, o);
       for (const b of list) after += b.damage;
       if (before > 0 && !def.copyCredit) creditFactor(list, o.key, after / before);  // copyCredit：多射出來的子彈自己記在晶片上（反向）
+      list = productNow(list, o, n0);
       list = attachHost(list, o, n0);
     }
   }
   return list;
+}
+
+// ---------- 武器插座的傷害加成只算直擊 ----------
+// 產物出現時，拿掉子彈身上「武器插座給的傷害加成」（wsb）；傷害統計也從那幾個組件扣回來。wsbOff 記著拿掉多少（疾射減速回來時加回去）
+function stripW(b) {
+  const w = b.wsb || 0;
+  if (!(w > 0)) return b;
+  const old = b.bonus || 0, f = Math.max(0.1, 1 + old - w) / Math.max(0.1, 1 + old);
+  b.damage *= f; b.bonus = old - w; b.wsb = 0; b.wsbOff = (b.wsbOff || 0) + w;
+  shiftCr(b, Math.log(f));
+  return b;
+}
+function restoreW(b) {
+  const w = b.wsbOff || 0;
+  if (!(w > 0)) return b;
+  const old = b.bonus || 0, f = Math.max(0.1, 1 + old + w) / Math.max(0.1, 1 + old);
+  b.damage *= f; b.bonus = old + w; b.wsb = w; b.wsbOff = 0;
+  shiftCr(b, Math.log(f));
+  return b;
+}
+// 傷害統計：倍增、巨彈、超載・威力的 ln 倍率照比例加減
+function shiftCr(b, lf) {
+  const cr = b.att ? b.att.cr : b.cr, ks = ['amp', 'bigshot', 'ov_power'].filter(k => cr && cr[k] > 0);
+  const tot = ks.reduce((a, k) => a + cr[k], 0);
+  if (!tot) return;
+  const n = { ...cr };
+  for (const k of ks) n[k] = Math.max(0, cr[k] + lf * cr[k] / tot);
+  if (b.att) b.att = { ...b.att, cr: n }; else b.cr = n;
+}
+// 開火當下就出現的產物：反向往後那份、蓄滿那發、衝刺那一槍、攔截回射 → 拿掉武器插座的傷害加成
+function productNow(list, o, n0) {
+  switch (o.key) {
+    case 'rear': return [...list.slice(0, n0), ...list.slice(n0).map(b => stripW({ ...b }))];
+    case 'charge': return Game.chargeC >= 0.999 ? list.map(b => stripW({ ...b })) : list;
+    case 'dashfire': return Game.fireMode === 'dashfire' ? list.map(b => stripW({ ...b })) : list;
+    case 'intercept': return Game.fireMode === 'intercept' ? list.map(b => stripW({ ...b })) : list;
+    default: return list;
+  }
 }
 
 // 玩法晶片的產物出現了（迴旋折返、環繞放出、地雷衝出去、加速到 1.5 倍、第一次反彈）：把插在那個晶片上的組件套用到這顆子彈
