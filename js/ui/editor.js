@@ -391,10 +391,14 @@ const Editor = {
       el.className = 'sock' + (J && J.idle ? ' idle' : '') + (on ? ' sel' : '');
       el.style.setProperty('--c', m.color);
       el.innerHTML = `<span>${CHIPS[id].short || CHIPS[id].name}</span>`;
-      el.title = `${CHIPS[id].name}：${chipBrief(id)}${J && J.idle ? `\n✖ 沒有作用：${J.why}` : ''}`;
+      const fx = sockEffect(h, k);  // 插在這裡的實際效果
+      el.title = `${CHIPS[id].name}（插在${h === 0 ? '武器' : CHIPS[C[h]].name}上）\n${fx}`;
       el.draggable = true;
       el.addEventListener('dragstart', e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'sock', h, k })); });
-      el.addEventListener('mouseenter', () => this.showInfo(id, -1, J));
+      el.addEventListener('mouseenter', () => {
+        this.showInfo(id, -1, J);
+        this.infoEl.innerHTML = `<b style="color:${J && J.idle ? '#ff8a8a' : '#ffd166'}">◆ ${CHIPS[id].name}插在${h === 0 ? '武器' : CHIPS[C[h]].name}上：${fx}</b><br>` + this.infoEl.innerHTML;
+      });
       el.addEventListener('contextmenu', e => {  // 右鍵：拔回倉庫
         e.preventDefault(); e.stopPropagation();
         if (Game.mode === 'range') { (Game.socks[h] || []).splice(k, 1); return this.changed(); }  // 靶場：右鍵直接拔掉
@@ -533,6 +537,31 @@ const Editor = {
   },
 };
 
+
+// 插座上的組件「插在這裡」的實際效果（滑鼠移到插座上時顯示）：h = 第幾格的晶片，k = 第幾個插座
+function sockEffect(h, k) {
+  const C = Game.chain, host = C[h], id = (Game.socks[h] || [])[k];
+  if (!host || !id) return '';
+  const J = ((compileChain(C).info.socks || [])[h] || [])[k];
+  if (J && J.idle) return `✖ 沒有作用：${J.why}`;
+  const at = (Game.slotAttr || [])[h], m = at === 'eff' ? 1.5 : at === 'weak' ? 0.7 : 1, hb = baseOf(host), b = baseOf(id);
+  const mtxt = m !== 1 ? `（奇異點 ×${m}）` : '', n = Math.max(2, Math.round(3 + 2 * (m - 1)));
+  const wlike = host === 'weapon' || CHIPS[host].type === 'trigger', dmg = b === 'amp' || b === 'bigshot';
+  if (b === 'overclock') return '整條電路射速 ×2，連射 3 秒過熱、停火 1.5 秒';
+  if (b === 'mirror') {
+    const prev = (Game.socks[h] || []).slice(0, k).filter(c => baseOf(c) !== 'mirror').pop();
+    if (wlike && !prev) return host === 'weapon' ? '武器多射一次（基礎傷害算鏡像的）' : '回響多射一次';
+    return prev ? `再執行一次前面的「${CHIPS[prev].name}」` : '前面沒有可以複製的組件';
+  }
+  const fx = { amp: `傷害 +${Math.round(100 * m)}%`, split: `分成 ${n} 顆（每顆 ×0.4）`, pierce: `穿透 +${Math.round(2 * m)}`, bigshot: `兩兩合併、變大，傷害 +${Math.round(30 * m)}%` }[b] + mtxt;
+  if (host === 'weapon') return `武器射出的全部子彈：${fx}${dmg ? '（傷害加成只算直擊：迴旋回程、環繞放出、黏著爆炸這些產物不吃）' : ''}`;
+  if (wlike) return `回響（武器 50%）：${fx}${dmg ? '（傷害加成只算回響的直擊）' : ''}`;
+  if (hb === 'sticky') return '黏著的爆炸：' + { amp: `爆炸傷害 +${Math.round(100 * m)}%（宿主層，跟武器層相乘）`,
+    split: `爆炸時噴出 ${n} 發碎片（每發是爆炸傷害的 ${Math.round(20 * m)}%）`, pierce: `黏住前多穿 ${Math.round(2 * m)} 隻（多留 ${Math.round(2 * m)} 份）`,
+    bigshot: `爆炸波及周圍 ${Math.round(70 + 40 * m)}（50% 傷害），爆炸 +${Math.round(30 * m)}%` }[b] + mtxt;
+  if (hb === 'pull') return `吸引的拉力範圍 ×${(1 + 0.5 * m).toFixed(2)}`;
+  return `只作用在${CHIPS[hb].name}的產物（${HOST_PRODUCT[hb] || ''}）：${fx}${dmg ? '，加進宿主層（跟武器層相乘）' : ''}`;
+}
 
 // 奇異點強化的格子：這一格現在實際的效果（編輯器說明欄、奇異點結果畫面用）
 function slotAttrLine(i) {
