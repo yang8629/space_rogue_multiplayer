@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · editor.js：電路編輯器（Tab）：拖放、晶片傷害統計分頁
+// 星環電路 雙人版 · editor.js：電路編輯器（Tab）：拖放、插座、晶片傷害統計分頁
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -28,7 +28,7 @@ const Editor = {
       const ref = this.ref(this.sel);
       if (b.dataset.sel === 'move' && ref) { this.sel = null; this.quickMove(ref.arr, ref.i); }
       if (b.dataset.sel === 'lv' && ref && ref.arr[ref.i]) {  // 沙盒／靶場：改等級，保持選取
-        ref.arr[ref.i] = leveledId(baseOf(ref.arr[ref.i]), +b.dataset.lv);
+        ref.arr[ref.i] = chipId(baseOf(ref.arr[ref.i]), +b.dataset.lv, socketsOf(ref.arr[ref.i]));
         this.showInfo(ref.arr[ref.i]);
         this.changed();
       }
@@ -85,7 +85,7 @@ const Editor = {
       this.render();
     });
     document.querySelectorAll('[data-preset]').forEach(btn => {
-      btn.onclick = () => { Game.chain = PRESETS[btn.dataset.preset].slice(); this.changed(); };
+      btn.onclick = () => { Game.chain = PRESETS[btn.dataset.preset].map(fullChip); this.changed(); };
     });
 
     this.libChips = {};
@@ -103,7 +103,7 @@ const Editor = {
     }
   },
   sel: null,
-  lockedMsg(id) {  // 武器與廢鐵都鎖定在原位
+  lockedMsg(id) {  // 武器鎖定在第 1 格
     this.sel = null;
     this.showInfo(id);
     this.render();
@@ -239,10 +239,10 @@ const Editor = {
     return null;
   },
   dropOn(arr, i, d) {
-    if (arr[i] && CHIPS[arr[i]].locked) return this.lockedMsg(arr[i]);  // 武器格、廢鐵格不能放東西
-    if (d.from === 'lib') {  // 沙盒：放到同種晶片上 = 升一級
-      if (arr[i] && baseOf(arr[i]) === d.id && canLevelUp(arr[i])) arr[i] = leveledId(d.id, levelOf(arr[i]) + 1);
-      else arr[i] = d.id;
+    if (arr[i] && CHIPS[arr[i]].locked) return this.lockedMsg(arr[i]);  // 武器格不能放東西
+    if (d.from === 'lib') {  // 沙盒：放到同種玩法晶片上 = 升一級；新放的宿主插座給滿
+      if (arr[i] && baseOf(arr[i]) === d.id && canLevelUp(arr[i])) arr[i] = chipId(d.id, levelOf(arr[i]) + 1, socketsOf(arr[i]));
+      else arr[i] = newChip(d.id, CFG.MAX_SOCKETS);
     } else {
       const s = this.ref(d);
       if (s.arr === arr && s.i === i) return;
@@ -261,13 +261,15 @@ const Editor = {
     this.changed();
   },
   showDefaultInfo() {
-    this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b> → ' +
-      '<b style="color:#b388ff">變形器</b>/<b style="color:#ffd166">增幅器</b>加工武器射出的子彈 → ' +
-      '<b style="color:#ff6b9d">觸發器</b>讓子彈命中時用武器再射一次（50%），並套用右側晶片。<b style="color:#2ee6a6">連結器</b>強化或複製相鄰的晶片。點晶片可看說明。';
+    this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b>（3 個插座）→ <b style="color:#5ef2d0">玩法晶片</b>依序改變子彈的玩法。' +
+      '<b style="color:#ffd166">◇ 組件</b>（分裂、巨彈、穿甲、倍增、超頻、鏡像）插在<b>左邊最近</b>的武器／玩法晶片／觸發器上：插在武器上作用在全部子彈（插越多越打折），插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。' +
+      '<b style="color:#ff6b9d">觸發器</b>（命中／消失／定時）用武器再射一次回響（50%），右邊的晶片只作用在回響上。點晶片可看說明。';
   },
   showInfo(id) {
     const d = CHIPS[id], m = TYPE_META[d.type];
-    const ps = d.stored ? `<br><span style="color:#2ee6a6">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</span>` : '';
+    const P = HOST_PRODUCT[baseOf(id)];
+    const ps = isComp(id) ? '<br><span style="color:#ffd166">◇ 組件：插在左邊最近的武器／玩法晶片／觸發器上，佔一格電路。</span>'
+      : P ? `<br><span style="color:#ffd166">◇ 插座 ${socketsOf(id)} 個　插在它上面的組件只作用在：${P}</span>` : '';
     const price = !Game.freePlay() ? `　回收價 ◆${sellPrice(id)}` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
       `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span><br>${d.desc}` +
@@ -275,40 +277,8 @@ const Editor = {
       (CHIPS[baseOf(id)].grow ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '');
   },
 
-  // 分析每格狀態：所在區段（第幾層命中）、是否生效
-  slotInfo(chain) {
-    const info = chain.map(() => ({ seg: 0, idle: false, why: '', trig: false }));
-    chain.forEach((id, i) => {
-      if (id === 'scrap') Object.assign(info[i], { idle: true, why: '廢鐵：沒有任何效果，只能在維修站拆除' });
-      if (baseOf(id) === 'resonator' && ![i - 1, i + 1].some(j => chain[j] && !['link', 'scrap'].includes(CHIPS[chain[j]].type)))
-        Object.assign(info[i], { idle: true, why: '左右沒有可共振的晶片' });
-      if (id === 'mirror' && (!chain[i - 1] || CHIPS[chain[i - 1]].type === 'link'))
-        Object.assign(info[i], { idle: true, why: '左側沒有可複製的晶片' });
-      else if (id === 'mirror' && PLAY_TYPES.includes(CHIPS[chain[i - 1]].type))
-        Object.assign(info[i], { idle: true, why: '無效：鏡像不能複製玩法晶片（只能複製武器和數值晶片）' });
-    });
-    const active = chain.map(() => false), reason = chain.map(() => '');
-    let seg = 0, hasSrc = false, dead = false;
-    for (const o of compileChain(chain)) {
-      const s = o.slot, t = CHIPS[o.id].type;
-      if (dead) { reason[s] = reason[s] || 'dead'; continue; }
-      if (t === 'source') { hasSrc = true; active[s] = true; }
-      else if (t === 'trigger') {
-        // 觸發後的子電路開頭會自動用武器再射一次，所以右側一定有子彈可處理
-        if (hasSrc && seg < CFG.MAX_TRIGGER_DEPTH) { active[s] = true; info[s].trig = true; seg++; hasSrc = true; }
-        else { dead = true; reason[s] = reason[s] || (hasSrc ? 'depth' : 'nosrc'); }
-      } else if (hasSrc) active[s] = true;
-      else reason[s] = reason[s] || 'nosrc';
-    }
-    const WHY = { dead: '前方的觸發器無效，這格不會執行', nosrc: '左側（同一層）沒有發射源，沒有子彈可處理', depth: '已達觸發層數上限' };
-    let running = 0;
-    chain.forEach((id, i) => {
-      info[i].seg = Math.min(3, running);
-      if (info[i].trig) running++;
-      if (id && !['link', 'scrap'].includes(CHIPS[id].type) && !active[i]) Object.assign(info[i], { idle: true, why: WHY[reason[i]] || '' });
-    });
-    return info;
-  },
+  // 每格狀態（見 compileChain）：role 宿主／組件、host 插在第幾格、seg 在第幾層觸發、idle 沒有作用（why 原因）
+  slotInfo(chain) { return compileChain(chain).info; },
 
   makeSlot(arr, i, from, label, cls, idle, why) {
     const slot = document.createElement('div');
@@ -340,16 +310,28 @@ const Editor = {
     this.recycleEl.innerHTML = !Game.freePlay() ? '♻ 回收<br>拖曳到這裡<br>換成晶體' : '✕ 移除<br>拖曳到這裡刪除';
 
     this.chainEl.innerHTML = '';
+    const TRIG = { hit: '命中時', end: '消失時', time: '每 0.3 秒' }, A = Game.slotAttr || [], sockN = {};
+    let lastHost = -1, trigShown = false;  // 觸發器那一組（觸發器＋它的插座）之後的第一個晶片前面標觸發時機
     chain.forEach((id, i) => {
+      const I = info[i];
       if (i > 0) {
         const ar = document.createElement('div');
-        if (info[i - 1].trig) { ar.className = 'arrow trig'; ar.innerHTML = '⤷<br>命中時'; }
+        if (I.role === 'comp' && I.host >= 0) { ar.className = 'arrow sock'; ar.textContent = '◇'; }
+        else if (lastHost >= 0 && info[lastHost].trig && !trigShown) { trigShown = true; ar.className = 'arrow trig'; ar.innerHTML = '⤷<br>' + (TRIG[CHIPS[chain[lastHost]].trig] || ''); }
         else { ar.className = 'arrow'; ar.textContent = '→'; }
         this.chainEl.appendChild(ar);
       }
-      const I = info[i];
-      this.chainEl.appendChild(this.makeSlot(chain, i, 'slot',
-        `${i + 1}${I.seg ? ' · 命中第' + I.seg + '層' : ''}`, I.seg ? 'seg' + I.seg : '', I.idle, I.why));
+      if (I.role === 'host') { lastHost = i; trigShown = false; }
+      let label = `${i + 1}`;
+      if (I.role === 'comp' && I.host >= 0) { sockN[I.host] = (sockN[I.host] || 0) + 1; label += ` · 插座${sockN[I.host]}/${socketsOf(chain[I.host])}`; }
+      else if (I.role === 'host' && i > 0) label += ` · ${'◇'.repeat(socketsOf(id)) || '無插座'}`;
+      if (I.seg) label += ` · 第${I.seg}層`;
+      const slot = this.makeSlot(chain, i, 'slot', label, [I.seg ? 'seg' + I.seg : '', I.role === 'comp' && I.host >= 0 ? 'socked' : ''].join(' ').trim(), I.idle, I.why);
+      if (A[i]) {
+        const S = SLOT_ATTRS[A[i]];
+        slot.insertAdjacentHTML('beforeend', `<span class="sattr ${S.good ? 'good' : 'bad'}" title="${S.desc.replace(/<[^>]+>/g, '')}">${S.good ? '✺' : '✖'} ${S.name}</span>`);
+      }
+      this.chainEl.appendChild(slot);
     });
 
     this.invEl.innerHTML = '';
@@ -364,9 +346,9 @@ const Editor = {
       stat('估算 DPS（含命中效果）', s.dpsEst.toFixed(0)) +
       stat('總能量負載', `⚡ ${s.heat}<span style="display:block;font-size:11px;color:${s.heat ? '#ff9dbd' : '#8fa3d9'};margin-top:2px">射速 -${Math.round((1 - heatRateMul(s.heat)) * 100)}%</span>`);
     this.layersEl.innerHTML = s.layers.map((l, i) =>
-      `◎ 命中第 ${i + 1} 層：每次命中展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　');
-    const pl = Object.entries(P).filter(([, v]) => v > 0).map(([k, v]) => PASSIVE_LABEL[k](+v.toFixed(2)));
-    this.passEl.textContent = pl.length ? '倉庫被動生效中：' + pl.join('、') : '倉庫被動：無';
+      `◎ 第 ${i + 1} 層（${TRIG[l.trig] || ''}）：每次觸發展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　');
+    const sa = Game.chain.map((_, i) => A[i] && `第 ${i + 1} 格 ${SLOT_ATTRS[A[i]].name}`).filter(Boolean);
+    this.passEl.textContent = sa.length ? '黑洞強化的格子：' + sa.join('、') : '黑洞強化的格子：無';
 
     if (Game.freePlay()) {
       const W = WEAPONS[Game.weapon.id], st = Game.weapon;
@@ -387,7 +369,7 @@ const Editor = {
     } else if (selId) {
       const inChain = ref.arr === Game.chain, base = baseOf(selId);
       // 沙盒／靶場：直接切換晶片等級
-      const lvs = Game.freePlay() && NORMAL_IDS.includes(base) && base !== 'mirror'
+      const lvs = Game.freePlay() && CHIPS[base].grow
         ? '<span class="hint" style="margin:0">等級</span>' + [1, 2, 3].slice(0, CFG.MAX_CHIP_LV).map(l =>
           `<button data-sel="lv" data-lv="${l}" style="${levelOf(selId) === l ? 'border-color:#9dff6b;color:#9dff6b' : ''}">Lv${l}</button>`).join('') : '';
       this.selbarEl.innerHTML = `<span class="hint" style="margin:0">已選取「${CHIPS[selId].name}」：點其他插槽移動或交換</span>
@@ -405,7 +387,8 @@ function chipEl(id) {
   const el = document.createElement('div');
   el.className = 'chip t-' + d.type;
   el.draggable = !d.locked;
-  el.innerHTML = `<div class="top"><span>${m.icon} ${m.label}</span><span>⚡${d.cost}</span></div><div class="nm">${d.name}</div>`;
+  const sk = isHost(id) && id !== 'weapon' ? `<span class="sk">${'◇'.repeat(socketsOf(id))}</span>` : isComp(id) ? '<span class="sk">◇組件</span>' : '';
+  el.innerHTML = `<div class="top"><span>${m.icon} ${m.label}</span><span>⚡${d.cost}</span></div><div class="nm">${d.name}</div>${sk}`;
   el.addEventListener('mouseenter', () => Editor.showInfo(id));
   return el;
 }

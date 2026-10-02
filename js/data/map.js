@@ -12,15 +12,15 @@ const NODE_META = {
   workshop: { label: '改裝廠', icon: '🔧', color: '#9fe8ff', desc: () => `零件三選一（佔 1 個零件格）；也可以付 ◆${Game.shopPrice(PART_SWAP_PRICE)} 把 1 層零件換成另一種（價格隨星區上漲）。` },
   shop:   { label: '補給站', icon: '◆', color: '#2ee6a6',
     desc: () => `買晶片、補血（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）、電路擴充（◆${Game.shopPrice(CFG.SHOP_SLOT)}）。不賣武器升級。價格隨星區上漲（第 2 星區 ×${+(1 + CFG.SHOP_PRICE_UP).toFixed(2)}、第 3 星區 ×${+(1 + 4 * CFG.SHOP_PRICE_UP).toFixed(2)}）。` },
-  repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP；可以拆除廢鐵（每塊 ◆${Game.shopPrice(CFG.SCRAP_REMOVE)}，價格隨星區上漲）。` },
-  blackhole: { label: '黑洞', icon: '◐', color: '#b388ff', desc: () => `投入 2 個晶片：${CFG.FUSE_SUCCESS * 100}% 融合成奇異點（兩個效果合一格＋超載詞綴），否則變成廢鐵。也可以不投入直接離開。之後至少有一條路通往維修站；一條路線最多一個黑洞。` },
+  repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP。` },
+  blackhole: { label: '黑洞', icon: '◐', color: '#b388ff', desc: () => `投入 1 個晶片：隨機一個還沒強化過的電路格得到一個屬性（好結果 70%～90%，看晶片等級；也可能是壞的）。也可以不投入直接離開。一條路線最多一個黑洞。` },
   armory: { label: '軍械台', icon: '⚒', color: '#ff9f1c', desc: () => `武器升級（每張圖只有 1 個）。武器升滿後改選「插槽 +1」或 ◆${CFG.ARMORY_BONUS.credits}＋HP ${CFG.ARMORY_BONUS.hp}。` },
   boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場可能有行星、小行星帶、彗星；旗艦的子彈會削掉行星、打碎小行星）。勝利後插槽 +1、零件格 +1、◆50，可以裝上這隻旗艦的專屬模組；進入下一關時修復 30% HP。' },
 };
 
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）
 //   精英、黑洞、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
-//   每個精英的下一步至少有一條路通維修站；黑洞之後的路上走得到維修站就好（融合失敗的廢鐵要能拆，但不用馬上）；
+//   每個精英的下一步至少有一條路通維修站；黑洞之後的路上走得到維修站；
 //   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
 //   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站
 const NEED_REPAIR_AFTER = ['elite'];  // 下一步就要有維修站的節點

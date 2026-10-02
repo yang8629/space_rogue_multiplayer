@@ -1,16 +1,17 @@
-// 星環電路 雙人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO、用量成長、合成升級、黑洞融合、起始電路
+// 星環電路 雙人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO、用量成長、插座與組件、黑洞強化格子、起始電路
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // V2 晶片池：
 //   改玩法的晶片（彈道／發射／命中／機體）：照著它的玩法打就會成長（grow），Lv3 進化（evo，改名、玩法再變一次）
-//   數值晶片（分裂、巨彈、穿甲、倍增、超頻模組）與觸發器、鏡像：只能靠合成（撿到重複的）升級
-//   所有晶片都遵守順序規則：只作用在「它左邊」已經產生的子彈
+//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像）：插在左邊最近的武器／玩法晶片／觸發器的插座上，不會升級
+//   觸發器（命中、消失、定時）：放在電路格，右邊的晶片只作用在它的回響上
+//   玩法晶片照順序作用在「它左邊」已經產生的子彈
 const CHIPS = {
   // ---------- 武器（固定在電路第 1 格，內容依目前武器與升級而定） ----------
   weapon: { name: '武器', short: '武器', type: 'source', cost: 0, locked: true, hidden: true, desc: '',
     emit: pw => weaponEmit(Game.wp, pw) },
-  // 命中觸發器的子電路開頭：用武器再射一次，傷害 50%
+  // 觸發器的子電路開頭：用武器再射一次，傷害 50%（插在觸發器上的組件見 runOps）
   echo: { name: '武器回響', short: '回響', type: 'source', cost: 0, hidden: true, desc: '',
     emit: pw => weaponEmit(Game.wp, pw * 0.5) },
 
@@ -96,77 +97,70 @@ const CHIPS = {
     lvs: ['回射傷害 ×0.5', '回射傷害 ×1', '進化：打掉的敵彈也反彈回去（敵彈傷害 ×2）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, intercept: o.lv, damage: Game.fireMode === 'intercept' ? b.damage * (o.lv >= 2 ? 1 : 0.5) : b.damage })) },
 
-  // ---------- 數值晶片（只能靠合成升級） ----------
-  split: { name: '分裂模組', short: '分裂', type: 'mod', cost: 2,
-    desc: '目前每顆子彈分裂為 3 顆扇形彈，每顆傷害 ×0.4（3 顆合計 ×1.2）。子彈變多，搭感染、黏著、稜鏡。',
+  // ---------- 組件：插在武器、玩法晶片、觸發器的插座上（不會升級，拿到重複的就是多一個） ----------
+  //   插在武器（或觸發器 = 回響）上：作用在射出的全部子彈，加進武器層；插越多越打折（DIM）
+  //   插在玩法晶片上：只作用在那個晶片的「產物」（HOST_PRODUCT），加進宿主層，不打折
+  split: { name: '分裂模組', short: '分裂', type: 'mod', comp: true, cost: 2,
+    desc: '每顆子彈分裂為 3 顆扇形彈，每顆傷害 ×0.4（3 顆合計 ×1.2）。插在玩法晶片上時，那個晶片的產物出現時才分裂（例：環繞放出時、迴旋折返時；黏著是爆炸時噴出 3 發碎片）。',
     apply: (list, pw) => {
-      const n = Math.round(3 + 2 * (pw - 1));  // Lv2 → 4 顆，Lv3 → 5 顆
+      const n = Math.max(2, Math.round(3 + 2 * (pw - 1)));  // 強度 ×1.5 → 4 顆，打折到 50% → 2 顆
       return list.flatMap(b => Array.from({ length: n }, (_, k) =>
         ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.18, damage: b.damage * 0.4, splits: (b.splits || 0) + 1 })));
     } },
-  bigshot: { name: '巨彈', short: '巨彈', type: 'mod', cost: 1,
-    desc: '子彈數量減半（兩兩合併，最少 1 發），合併的傷害加總後再 +30%；子彈體積 ×1.8、擊退變強。跟分裂方向相反，兩個都裝時照順序算。',
-    apply: (list, pw) => {
+  bigshot: { name: '巨彈', short: '巨彈', type: 'mod', comp: true, cost: 1,
+    desc: '子彈數量減半（兩兩合併，最少 1 發），合併的傷害加總後再 +30%；子彈體積 ×1.8、擊退變強。插在玩法晶片上只作用在它的產物（黏著：爆炸波及周圍；吸引：範圍 ×1.5）。',
+    apply: (list, pw, o) => {
       const out = [];
       for (let i = 0; i < list.length; i += 2) {
         const g = list.slice(i, i + 2), f = g[0];
         let dmg = 0, bonus = 0;
         for (const b of g) { dmg += b.damage; bonus += b.damage * (b.bonus || 0); }
         const ang = g.reduce((a, b) => a + b.angle, 0) / g.length;
-        out.push(addBonus({ ...f, angle: ang, damage: dmg, bonus: dmg ? bonus / dmg : 0,
+        out.push(addLayer({ ...f, angle: ang, damage: dmg, bonus: dmg ? bonus / dmg : 0,
           pierce: Math.max(...g.map(b => b.pierce)), ...sizeUp(f, 0.8 * pw),
-          knock: (f.knock == null ? 1 : f.knock) + 0.5 * pw }, 0.3 * pw));
+          knock: (f.knock == null ? 1 : f.knock) + 0.5 * pw }, 0.3 * pw, o));
       }
       return out;
     } },
-  pierce: { name: '穿甲塗層', short: '穿甲', type: 'mod', cost: 1, stored: { armor: 0.1 },
-    desc: '目前所有子彈穿透 +2。同一發子彈不會連續打同一隻敵人（撞牆反彈後可以再打）。',
+  pierce: { name: '穿甲塗層', short: '穿甲', type: 'mod', comp: true, cost: 1,
+    desc: '子彈穿透 +2。同一發子彈不會連續打同一隻敵人（撞牆反彈後可以再打）。插在玩法晶片上只作用在它的產物（例：迴旋的回程、牆反彈之後；黏著：黏住前多穿 2 隻、多留 2 份）。',
     apply: (list, pw) => list.map(b => ({ ...b, pierce: b.pierce + Math.round(2 * pw) })) },
-  amp: { name: '威力倍增器', short: '倍增', type: 'amp', cost: 3,
-    desc: '目前所有子彈傷害 +100%。增幅加成彼此相加（兩個倍增器是 ×3，不是 ×4）。只影響「它左邊」已產生的子彈。',
-    apply: (list, pw) => list.map(b => addBonus(b, pw)) },
-  overclock: { name: '超頻模組', short: '超頻', type: 'amp', cost: 2, rate: 0.5, rateFixed: true,
-    desc: `整條電路${rateTxt(0.5)}，但連續射擊一段時間後會過熱，停火 1.5 秒。停止射擊時會慢慢散熱。`,
+  amp: { name: '威力倍增器', short: '倍增', type: 'amp', comp: true, cost: 3,
+    desc: '傷害 +100%。插在武器（或觸發器）上加進武器層，跟蓄力、速度倍率、其他武器上的倍增相加；插在玩法晶片上加進宿主層，只作用在它的產物，再跟武器層相乘。',
+    apply: (list, pw, o) => list.map(b => addLayer(b, pw, o)) },
+  overclock: { name: '超頻模組', short: '超頻', type: 'amp', comp: true, cost: 2, rate: 0.5, rateFixed: true,
+    desc: `整條電路${rateTxt(0.5)}，但連續射擊 3 秒後會過熱，停火 1.5 秒。停止射擊時會慢慢散熱。只能插在武器上。`,
     heatLimit: [3, 4, 5],
     apply: list => list },
+  mirror: { name: '鏡像迴路', short: '鏡像', type: 'link', comp: true, cost: 2,
+    desc: '複製同一個晶片上「前一個插座」的組件，再執行一次（不能複製超頻）。插在武器（或觸發器）的第一個插座 = 武器多射一次（兩個鏡像 = 射 3 次）；插在玩法晶片的第一個插座沒有效果。' },
 
-  // ---------- 觸發器 ----------
-  trigger: { name: '命中觸發器', short: '觸發', type: 'trigger', cost: 1,
-    desc: '子彈命中敵人時，從命中點用武器再射一次（傷害 50%，升級會提高），並套用觸發器右側的晶片。右側晶片不會在開火時執行。最多巢狀 3 層。' },
+  // ---------- 觸發器：放在電路格；右邊的晶片只作用在回響上，插在觸發器上的組件作用在回響上（跟武器一樣打折） ----------
+  trigger: { name: '命中觸發器', short: '命中', type: 'trigger', trig: 'hit', cost: 1,
+    desc: '子彈命中敵人時，從命中點用武器再射一次（回響：傷害 50%，朝最近的另一隻敵人；附近沒有就沿子彈的方向），右邊的晶片只作用在回響上，開火時不執行。插在觸發器上的組件作用在回響上（跟插在武器上一樣）。最多巢狀 3 層。' },
+  trigend: { name: '消失觸發器', short: '消失', type: 'trigger', trig: 'end', cost: 1,
+    desc: '子彈消失時，從消失的位置射出回響（傷害 50%，朝最近的敵人）：飛完射程、穿甲用完、黏著引爆、地雷時間到、迴旋飛回飛船都算；被盾反彈、被地圖物件擋住、飛出場地不算。右邊的晶片只作用在回響上。最多巢狀 3 層。' },
+  trigtime: { name: '定時觸發器', short: '定時', type: 'trigger', trig: 'time', cost: 1,
+    desc: '子彈飛行中每 0.3 秒往左右兩側各射一次回響（傷害 50%），每顆子彈最多 5 次（10 發）；停住的地雷不算。右邊的晶片只作用在回響上。最多巢狀 3 層。' },
 
-  // ---------- 連結器 ----------
-  mirror: { name: '鏡像迴路', short: '鏡像', type: 'link', cost: 2,
-    desc: '複製「左側相鄰」晶片的效果，在這一格再執行一次（放在武器右邊 = 武器多射一次）。只能複製武器和數值晶片；接在玩法晶片（彈道、發射、命中、機體）後面沒有效果。' },
-
-  // ---------- 黑洞融合相關 ----------
-  scrap: { name: '廢鐵', short: '廢鐵', type: 'scrap', cost: 0, locked: true, hidden: true,
-    desc: '融合失敗的殘骸。卡住插槽、沒有任何效果，無法移動或回收，只能在維修站花錢拆除。' },
-  // 奇異點超載詞綴（隱藏晶片，只會出現在融合結果裡）
-  ov_power:  { name: '超載・威力', type: 'amp', cost: 0, hidden: true, desc: '傷害 +50%',
-    apply: list => list.map(b => addBonus(b, 0.5)) },
-  ov_rate:   { name: '超載・頻率', type: 'amp', cost: 0, hidden: true, rate: 0.8, desc: '整條電路' + rateTxt(0.8),
+  // ---------- 超載（黑洞強化格子的好結果；隱藏晶片，當成那一格多插一個組件） ----------
+  ov_power:  { name: '超載・威力', type: 'amp', comp: true, cost: 0, hidden: true, desc: '傷害 +50%',
+    apply: (list, pw, o) => list.map(b => addLayer(b, 0.5, o)) },
+  ov_rate:   { name: '超載・頻率', type: 'amp', comp: true, cost: 0, hidden: true, rate: 0.8, desc: '整條電路' + rateTxt(0.8),
     apply: list => list },
-  ov_pierce: { name: '超載・貫穿', type: 'mod', cost: 0, hidden: true, desc: '穿透 +1',
+  ov_pierce: { name: '超載・貫穿', type: 'mod', comp: true, cost: 0, hidden: true, desc: '穿透 +1',
     apply: list => list.map(b => ({ ...b, pierce: b.pierce + 1 })) },
-  ov_seek:   { name: '超載・導引', type: 'mod', cost: 0, hidden: true, desc: '子彈追蹤敵人',
+  ov_seek:   { name: '超載・導引', type: 'mod', comp: true, cost: 0, hidden: true, desc: '子彈追蹤敵人',
     apply: list => list.map(b => ({ ...b, homing: b.homing + 3 })) },
 };
 
-// 「強度」＝晶片效果的倍率（Lv2 ×1.5、Lv3 ×2）。這裡寫出每種數值晶片各等級的實際數值；改玩法的晶片用 lvs
-const LV_INFO = {
-  split:     ['分裂數量', ['3 顆', '4 顆', '5 顆']],
-  bigshot:   ['傷害加成／體積', ['+30%／×1.8', '+45%／×2.2', '+60%／×2.6']],
-  pierce:    ['穿透', ['+2', '+3', '+4']],
-  amp:       ['傷害加成', ['+100%', '+150%', '+200%']],
-  overclock: ['連續射擊多久過熱', ['3 秒', '4 秒', '5 秒']],
-  trigger:   ['命中時武器回響傷害', ['50%', '75%', '100%']],
-};
+// 改玩法的晶片每一級的效果（卡片、說明用）
+const LV_INFO = {};
 for (const [id, d] of Object.entries(CHIPS)) if (d.lvs) LV_INFO[id] = ['等級', d.lvs];
 const lvLine = (base, cur) => {
   const L = LV_INFO[base];
   if (!L) return '';
-  return `${L[0]}：` + L[1].map((v, i) => i + 1 === cur ? `<b style="color:#9dff6b">Lv${i + 1} ${v}</b>` : `Lv${i + 1} ${v}`).join(' → ') +
-    (CHIPS[base].stored ? '<br><span style="color:#6a79ad">倉庫被動也會 ×1.5／×2。</span>' : '');
+  return `${L[0]}：` + L[1].map((v, i) => i + 1 === cur ? `<b style="color:#9dff6b">Lv${i + 1} ${v}</b>` : `Lv${i + 1} ${v}`).join(' → ');
 };
 
 // 卡片上的一行精簡說明（按住 Shift／Alt 才顯示完整說明）
@@ -187,10 +181,12 @@ const CHIP_BRIEF = {
   split: '每顆子彈分成 3 顆（每顆 ×0.4）',
   bigshot: '子彈數量減半，合併成更大更痛的',
   pierce: '子彈穿透 +2',
-  amp: '左邊的子彈傷害 +100%',
-  overclock: '射速 ×2，但連射會過熱',
+  amp: '傷害 +100%',
+  overclock: '射速 ×2，但連射會過熱（只能插武器）',
+  mirror: '複製前一個插座的組件；插武器第一格 = 多射一次',
   trigger: '命中時從命中點再射一次（右邊的晶片）',
-  mirror: '複製左邊那一格（武器、數值晶片）',
+  trigend: '子彈消失時從那裡再射一次（右邊的晶片）',
+  trigtime: '飛行中每 0.3 秒往兩側射一次（右邊的晶片）',
 };
 const chipBrief = id => CHIP_BRIEF[baseOf(id)] || String(CHIPS[id].desc).split(/[。；]/)[0];
 // 子彈體積加成（巨彈、蓄力）：加成彼此相加，照原本大小算（順序不影響），最大半徑 60
@@ -198,31 +194,84 @@ const sizeUp = (b, add) => { const r0 = b.r0 || b.radius, sb = (b.sizeB || 0) + 
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => CHIPS[id].type !== 'composite' && !CHIPS[id].hidden);
 const COMPOSITE_IDS = [];  // V2 拿掉了軍規複合晶片（精英改給背包模組）
 const OVERLOADS = ['ov_power', 'ov_rate', 'ov_pierce', 'ov_seek'];
-const chipPrice = id => {
-  const t = CHIPS[id].type;
-  return t === 'scrap' ? 0 : t === 'composite' || t === 'singularity' ? 90 : (30 + CHIPS[id].cost * 8) * levelOf(id);
-};
+const chipPrice = id => (30 + CHIPS[id].cost * 8) * levelOf(id) + 6 * socketsOf(id);
 
-// ---------- 晶片等級：再拿到同種晶片時自動合成 Lv2 → Lv3；改玩法的晶片也會照用量成長 ----------
+// ---------- 插座 ----------
+// 宿主 = 武器、玩法晶片、觸發器；組件（comp）插在左邊最近的宿主上，佔一格電路，超過插座數就沒有作用
+const HOST_TYPES = ['path', 'launch', 'impact', 'body', 'trigger'];
+const isComp = id => !!(id && CHIPS[id] && CHIPS[id].comp);
+const isHost = id => !!(id && CHIPS[id] && (id === 'weapon' || HOST_TYPES.includes(CHIPS[id].type)));
+const socketsOf = id => !id || !CHIPS[id] ? 0 : id === 'weapon' ? CFG.WEAPON_SOCKETS : CHIPS[id].sk || 0;
+// 掉落時隨機決定插座數：1 個 50%、2 個 35%、3 個 15%；沙盒／靶場一律 3 個
+function rollSockets() { const r = Math.random(); return r < 0.5 ? 1 : r < 0.85 ? 2 : 3; }
+const newChip = (base, sk) => isHost(base) && base !== 'weapon' ? chipId(base, 1, sk != null ? sk : Game.freePlay && Game.freePlay() ? CFG.MAX_SOCKETS : rollSockets()) : base;
+// 沙盒、預設電路、機制檢查用：宿主一律給滿插座
+const fullChip = id => !id || !isHost(id) || id === 'weapon' || socketsOf(id) ? id : chipId(baseOf(id), levelOf(id), CFG.MAX_SOCKETS);
+// 每個宿主的「產物」：插在它上面的組件只作用在這些東西上（電路總覽、編輯器說明用）
+const HOST_PRODUCT = {
+  weapon: '射出的全部子彈（插越多越打折）',
+  boomerang: '折返之後的子彈', orbit: '放出的那一波', stasis: '衝出去的地雷', accel: '速度到 1.5 倍之後的子彈',
+  quick: '速度 1.5 倍以上的那一段（掉到 1.5 倍以下，倍增等傷害加成就失效）', wallbounce: '第一次反彈之後的子彈', rear: '往後射的那一份',
+  charge: '蓄滿的那一發', sticky: '爆炸（分裂：噴出 3 發碎片；巨彈：波及周圍；穿甲：黏住前多穿 2 隻）', infect: '爆出來的子彈',
+  pull: '拉力（只能插巨彈：範圍 ×1.5）', intercept: '回射的子彈', dashfire: '衝刺那一槍',
+  trigger: '回響（跟插在武器上一樣，插越多越打折）', trigend: '回響（跟插在武器上一樣，插越多越打折）', trigtime: '回響（跟插在武器上一樣，插越多越打折）',
+};
+// 武器層／宿主層：倍增、巨彈、超載・威力插在武器（或觸發器）上加進武器層（bonus），插在玩法晶片上加進宿主層（hb）；最終 = 基礎 ×（1 ＋ 武器層）×（1 ＋ 宿主層）
+function addHB(b, add) {
+  const old = b.hb || 0, nb = old + add;
+  return { ...b, hb: nb, damage: b.damage / Math.max(0.1, 1 + old) * Math.max(0.1, 1 + nb) };
+}
+const addLayer = (b, add, o) => (o && o.layer === 'h' ? addHB(b, add) : addBonus(b, add));
+
+// ---------- 黑洞：強化格子（每格只能強化一次；屬性留在格子上，換晶片也還在） ----------
+const SLOT_ATTRS = {
+  eff:       { good: true, name: '效果 ×1.5', desc: '這格的組件效果 ×1.5；放玩法晶片時，插在它上面的組件效果 ×1.5' },
+  grow2:     { good: true, name: '成長 ×2', desc: '這格的玩法晶片用量成長 ×2' },
+  free:      { good: true, name: '能量歸零', desc: '這格的晶片不算能量負載' },
+  ov_power:  { good: true, name: '超載・威力', desc: '這格的晶片多插一個「傷害 +50%」（不佔插座）' },
+  ov_rate:   { good: true, name: '超載・頻率', desc: '這格有晶片時，整條電路' + rateTxt(0.8) },
+  ov_pierce: { good: true, name: '超載・貫穿', desc: '這格的晶片多插一個「穿透 +1」（不佔插座）' },
+  ov_seek:   { good: true, name: '超載・導引', desc: '這格的晶片多插一個「子彈追蹤敵人」（不佔插座）' },
+  weak:      { good: false, name: '效果 ×0.7', desc: '這格的組件效果 ×0.7；放玩法晶片時，插在它上面的組件效果 ×0.7' },
+  nogrow:    { good: false, name: '不會成長', desc: '這格的玩法晶片不會用量成長' },
+  heavy:     { good: false, name: '能量 +2', desc: '這格的晶片能量負載 +2' },
+  flaky:     { good: false, name: '間歇失效', desc: '這格的晶片每 8 秒有 2 秒沒有作用' },
+};
+const GOOD_ATTRS = Object.keys(SLOT_ATTRS).filter(k => SLOT_ATTRS[k].good);
+const BAD_ATTRS = Object.keys(SLOT_ATTRS).filter(k => !SLOT_ATTRS[k].good);
+const BH_GOOD = [0.7, 0.8, 0.9];  // 投入的晶片等級 Lv1／Lv2／Lv3 → 好結果的機率
+const flakyOff = () => Game.time % 8 >= 6;  // 間歇失效：每 8 秒的最後 2 秒沒有作用
+const canSacrifice = id => !!id && !CHIPS[id].locked;  // 可以投入黑洞的晶片（武器以外都可以）
+
+// ---------- 晶片 id：base、#等級（Lv2／Lv3，改玩法的晶片照用量成長）、~插座數 ----------
 const LV_MARK = ['', '', '²', '³'];
 const lvMulOf = lv => 1 + 0.5 * (lv - 1);
-function leveledId(base, lv) {  // 動態建立 Lv2 / Lv3 版本的晶片定義
-  if (lv <= 1) return base;
-  const id = base + '#' + lv;
+function chipId(base, lv = 1, sk = 0) {  // 動態建立 Lv2 / Lv3、有插座的晶片定義
+  const id = base + (lv > 1 ? '#' + lv : '') + (sk > 0 ? '~' + sk : '');
   if (!CHIPS[id]) {
     const B = CHIPS[base], m = lvMulOf(lv), evo = lv >= 3 && B.evo;
-    CHIPS[id] = { ...B, name: evo ? `${B.evo}（${B.name} Lv3）` : `${B.name} Lv${lv}`, short: evo ? B.evo.slice(0, 2) + '³' : B.short + LV_MARK[lv],
-      base, lv, lvMul: m,
-      desc: B.desc + `<br>${lvLine(base, lv)}`,
-      stored: B.stored && Object.fromEntries(Object.entries(B.stored).map(([k, v]) => [k, +(v * m).toFixed(3)])) };
+    CHIPS[id] = { ...B, base, lv, lvMul: m, sk };
+    if (lv > 1) Object.assign(CHIPS[id], { name: evo ? `${B.evo}（${B.name} Lv3）` : `${B.name} Lv${lv}`, short: evo ? B.evo.slice(0, 2) + '³' : B.short + LV_MARK[lv],
+      desc: B.desc + `<br>${lvLine(base, lv)}` });
   }
   return id;
 }
+const leveledId = (base, lv) => chipId(base, lv, 0);
+// 對方傳來的晶片 id：認得的才收（不認得的回傳 null）
+function parseChipId(id) {
+  if (typeof id !== 'string') return null;
+  if (NORMAL_IDS.includes(id)) return id;
+  const m = /^([a-z_]+)(?:#([23]))?(?:~([1-9]))?$/.exec(id);
+  if (!m || !NORMAL_IDS.includes(m[1])) return null;
+  const lv = m[2] ? +m[2] : 1, sk = m[3] ? Math.min(CFG.MAX_SOCKETS, +m[3]) : 0;
+  if (lv > 1 && !CHIPS[m[1]].grow) return null;
+  if (sk && !isHost(m[1])) return null;
+  return chipId(m[1], lv, sk);
+}
 const baseOf = id => (id && CHIPS[id].base) || id;
 const levelOf = id => (id && CHIPS[id].lv) || 1;
-const canLevelUp = id => !!id && NORMAL_IDS.includes(baseOf(id)) && baseOf(id) !== 'mirror' && levelOf(id) < CFG.MAX_CHIP_LV;
+const canLevelUp = id => !!id && !!CHIPS[baseOf(id)].grow && levelOf(id) < CFG.MAX_CHIP_LV;
 const sellPrice = id => Math.floor(chipPrice(id) * 0.4);
-const canFuse = id => id && !CHIPS[id].locked && !['link', 'scrap'].includes(CHIPS[id].type);
 
 // 成長需求：雙人（隊友在線）×COOP_GROW
 const growNeed = (base, lv) => Math.round(CHIPS[base].grow.need[lv - 1] * (Game.coopOn && Game.coopOn() ? CFG.COOP_GROW : 1));
@@ -236,25 +285,13 @@ function growLine(id, growth, minutes) {
   return `<span style="color:#9dff6b">成長：${g.what} ${have} / ${growNeed(base, lv)}</span>${rate}　到了自動升 Lv${lv + 1}${lv + 1 >= 3 ? '（進化）' : ''}`;
 }
 
-// 黑洞融合成功：兩個晶片的效果合進一格，再附加一個隨機超載詞綴（融合後不會再照用量成長）
-let singularityCount = 0;
-function fuseChips(a, b) {
-  const A = CHIPS[a], B = CHIPS[b], affix = pick(OVERLOADS);
-  const combo = [...(A.combo || [a]), ...(B.combo || [b]), affix];
-  const id = 'sg_' + (++singularityCount);
-  CHIPS[id] = { name: `奇異點・${A.short}${B.short}`, short: '奇異', type: 'singularity',
-    cost: Math.ceil((A.cost + B.cost) * 0.6), combo,
-    desc: '一格內依序執行：' + combo.filter(c => !CHIPS[c].hidden).map(c => CHIPS[c].name).join(' → ') +
-      `。附加 <b style="color:#e0aaff">${CHIPS[affix].name}</b>（${CHIPS[affix].desc}）。` };
-  return id;
-}
-
 // 開局電路：武器＋三選一的起始晶片（沒選就空著）
-const startChain = chip => ['weapon', NORMAL_IDS.includes(chip) ? chip : null, ...Array(CFG.START_SLOTS - 2).fill(null)];
+const startChain = chip => ['weapon', NORMAL_IDS.includes(chip) ? newChip(chip) : null, ...Array(CFG.START_SLOTS - 2).fill(null)];
 
+// 沙盒的預設電路（宿主給滿插座，見 fullChip）
 const PRESETS = {
   basic: ['weapon', 'split', 'amp', null],
-  multi: ['weapon', 'mirror', 'split', 'amp'],
+  multi: ['weapon', 'split', 'mirror', 'amp'],
   focus: ['weapon', 'split', 'bigshot', 'pierce'],
   chain: ['weapon', 'trigger', 'split', 'trigger', 'amp', null],
   reso:  ['weapon', 'wallbounce', 'pierce', 'accel', null, null],

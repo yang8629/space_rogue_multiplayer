@@ -295,7 +295,7 @@ function drawBullet(b, fa = 1) {  // fa：整體透明度（飛船附近變淡�
     ctx.globalAlpha = a0;
     arc(b.x, b.y, w);
     if (b.splits) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; arc(b.x, b.y, w * 0.7); }
-    if (b.payload) {  // 帶命中觸發：刃的中心與兩端點上粉紅點（不用大圈，免得把刃整個包住看不出形狀）
+    if (b.payload) {  // 帶觸發器：刃的中心與兩端點上粉紅點（不用大圈，免得把刃整個包住看不出形狀）
       ctx.fillStyle = '#ff6b9d';
       for (const [px, py, pr] of [[b.x + cos * w * 0.45, b.y + sin * w * 0.45, 2.6], [b.x - sin * w, b.y + cos * w, 2], [b.x + sin * w, b.y - cos * w, 2]]) {
         ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
@@ -321,7 +321,7 @@ function drawBullet(b, fa = 1) {  // fa：整體透明度（飛船附近變淡�
     }
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
   }
-  if (b.payload) {  // 帶有命中觸發的子彈：粉色外環
+  if (b.payload) {  // 帶觸發器的子彈：粉色外環
     ctx.strokeStyle = '#ff6b9d'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 4, 0, TAU); ctx.stroke();
   }

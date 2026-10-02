@@ -12,8 +12,16 @@ function chipCard(id, footer = '') {
   return `<div class="card t-${d.type}">
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
     <div class="ttl">${d.name}</div>
+    ${sockLine(id)}
     <div class="ds brief">${chipBrief(id)}</div>
     <div class="det"><div class="ds">${d.desc}</div>${lv}${ps}</div>${footer}</div>`;
+}
+// 插座說明：宿主顯示插座數與產物；組件顯示「插在左邊的晶片上」
+function sockLine(id) {
+  if (isComp(id)) return '<div class="ty sockln">◇ 組件：插在左邊最近的晶片上</div>';
+  if (!isHost(id) || id === 'weapon') return '';
+  const n = socketsOf(id), P = HOST_PRODUCT[baseOf(id)] || '';
+  return `<div class="ty sockln" title="插在它上面的組件只作用在：${P}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}<span class="det">　產物：${P}</span></div>`;
 }
 
 // 背包模組卡片
@@ -93,7 +101,6 @@ const Screen = {
       case 'slot': Game.expandSlot(arg); break;
       case 'bhpick': Game.bhToggle(arg); break;
       case 'bhfuse': Game.bhFuse(); break;
-      case 'scrap': Game.removeScrap(); break;
       case 'next': Game.nextSector(); break;
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
@@ -230,35 +237,41 @@ const Screen = {
   },
 
   blackhole() {
-    const B = Game.bh, owned = Game.ownedFusable();
+    const B = Game.bh, owned = Game.ownedFusable(), free = Game.bhFreeSlots(), A = Game.slotAttr || [];
+    const attrTag = k => `<b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}" title="${SLOT_ATTRS[k].desc.replace(/<[^>]+>/g, '')}">${SLOT_ATTRS[k].name}</b>`;
+    // 電路每一格目前的強化狀態
+    const slots = Game.chain.map((id, i) => i === 0 ? '<span class="bh-slot">1 武器（不能強化）</span>'
+      : `<span class="bh-slot">${i + 1} ${id ? CHIPS[id].short || CHIPS[id].name : '空格'}　${A[i] ? attrTag(A[i]) : '<span style="color:#8fa3d9">未強化</span>'}</span>`).join('');
     let body;
     if (B.result && B.fusing) {
       body = `<div class="bh-core fusing"></div><div class="result" style="color:#b388ff">晶片正在被吞噬……</div>`;
     } else if (B.result) {
-      const R = B.result;
-      body = `<div class="result" style="color:${R.ok ? '#e0aaff' : '#8a8f98'}">
-          ${R.ok ? '✺ 融合成功！誕生奇異點超載晶片' : '✖ 融合失敗……只剩下一塊廢鐵'}</div>
-        <div class="cards">${chipCard(R.id)}</div>
-        <div class="sub" style="text-align:center">結果已放在原本第一個素材的位置（${R.where}）。${R.ok ? '' : '廢鐵會卡住插槽，只能在維修站拆除。'}</div>
+      const R = B.result, S = SLOT_ATTRS[R.attr];
+      body = `<div class="result" style="color:${R.good ? '#9dff6b' : '#ff6b6b'}">
+          ${R.good ? '✺ 強化成功' : '✖ 黑洞反噬'}：電路第 ${R.slot + 1} 格 → ${S.name}</div>
+        <div class="sub" style="text-align:center">${S.desc}。屬性留在格子上，換晶片也還在。（投入：${R.chip}）</div>
+        <div class="sub bh-slots">${slots}</div>
         <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
     } else {
       const cards = owned.map(o => {
-        const on = B.sel.includes(o.key);
-        return chipCard(o.id, `<div class="ty">位置：${o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}</div>
-          <button data-act="bhpick" data-arg="${o.key}" ${!on && B.sel.length >= 2 ? 'disabled' : ''}>${on ? '已選取（點擊取消）' : '選為素材'}</button>`)
+        const on = B.sel === o.key, odds = Math.round(BH_GOOD[Math.min(levelOf(o.id), 3) - 1] * 100);
+        return chipCard(o.id, `<div class="ty">位置：${o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}　好結果 ${odds}%</div>
+          <button data-act="bhpick" data-arg="${o.key}">${on ? '已選取（點擊取消）' : '投入這個'}</button>`)
           .replace('class="card', `class="card${on ? ' picked' : ''}`);
       }).join('');
       body = `<div class="bh-core"></div>
-        <div class="sub" style="text-align:center">選 2 個晶片投入黑洞：<b style="color:#e0aaff">50% 融合成奇異點</b>（兩個效果合進一格，再加一個超載詞綴），
-          <b style="color:#8a8f98">50% 變成廢鐵</b>卡住插槽。連結器與廢鐵不能投入。</div>
+        <div class="sub" style="text-align:center">投入 1 個晶片（晶片會消失）：隨機一個<b>還沒強化過</b>的電路格（武器格除外）得到一個屬性，每格只能強化一次。<br>
+          好結果的機率看投入晶片的等級：Lv1 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。<br>
+          好：${GOOD_ATTRS.map(attrTag).join('、')}<br>壞：${BAD_ATTRS.map(attrTag).join('、')}</div>
+        <div class="sub bh-slots">${slots}</div>
         <div class="cards">${cards || '<div class="sub">目前沒有可投入的晶片。</div>'}</div>
         <div class="row" style="justify-content:center">
-          <button class="big" data-act="bhfuse" ${B.sel.length === 2 ? '' : 'disabled'}>投入黑洞（${B.sel.length} / 2）</button>
+          <button class="big" data-act="bhfuse" ${B.sel && free.length ? '' : 'disabled'}>${free.length ? '投入黑洞' : '電路格都強化過了'}</button>
           <button data-act="leave">不冒險，離開</button></div>`;
     }
     this.show(`<div class="scr">
       <div class="between"><div><h2 style="color:#b388ff">◐ 黑洞事件</h2>
-        <div class="sub">高風險、高回報的晶片融合。</div></div>${this.status()}</div>${body}</div>`);
+        <div class="sub">犧牲一個晶片，賭一個電路格的屬性。</div></div>${this.status()}</div>${body}</div>`);
   },
 
   title() {
@@ -362,8 +375,7 @@ const Screen = {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
         return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`);
       }
-      const t = Game.mergeTarget(id), ok = Game.canAcquire(id);
-      const label = t ? `選擇（合成 Lv${levelOf(t.arr[t.i]) + 1}）` : ok ? '選擇' : '倉庫已滿';
+      const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
     }).join('');
     this.show(`<div class="scr">
@@ -379,10 +391,10 @@ const Screen = {
   shop(toast = '') {
     const full = !Game.inventory.includes(null);  // 補給站不賣武器升級；補血每間限 1 次
     const cards = Game.shop.items.map((it, i) => {
-      const t = !it.sold && Game.mergeTarget(it.id), can = Game.canAcquire(it.id);
+      const can = Game.canAcquire(it.id);
       const ok = !it.sold && Game.credits >= it.price && can;
       const label = it.sold ? '已售出' : !can ? '倉庫已滿'
-        : `購買 ◆ ${it.price}${t ? `（合成 Lv${levelOf(t.arr[t.i]) + 1}）` : ''}`;
+        : `購買 ◆ ${it.price}`;
       return chipCard(it.id, `<button ${ok ? '' : 'disabled'} data-act="buy" data-arg="${i}">${label}</button>`)
         .replace('class="card', `class="card${it.sold ? ' sold' : ''}`);
     }).join('');
@@ -395,17 +407,6 @@ const Screen = {
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
           ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">⚡ 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>
-      <div class="toast" style="text-align:center">${toast}</div></div>`);
-  },
-
-  // 維修站：修復後，有廢鐵時可以花錢拆除
-  repair(toast = '') {
-    const n = [...Game.chain, ...Game.inventory].filter(id => id === 'scrap').length;
-    this.show(`<div class="scr">
-      <div class="between"><div><h2>✚ 維修站</h2><div class="sub">${Game.repairMsg || ''}。電路或倉庫裡還有 ${n} 塊廢鐵，可以在這裡拆除。</div></div>${this.status()}</div>
-      <div class="row" style="justify-content:center">
-        ${n ? `<button ${Game.credits >= Game.shopPrice(CFG.SCRAP_REMOVE) ? '' : 'disabled'} data-act="scrap">拆除 1 塊廢鐵（◆ ${Game.shopPrice(CFG.SCRAP_REMOVE)}）</button>` : ''}
-        <button data-act="leave">離開維修站</button></div>
       <div class="toast" style="text-align:center">${toast}</div></div>`);
   },
 
@@ -579,11 +580,12 @@ function recordText(r) {
   // 晶片名稱 → 短名：「超頻模組 Lv2」→ 超頻2；「全向（反向 Lv3）」→ 全向
   const short = {};
   for (const id in CHIPS) if (!/Lv\d|（/.test(CHIPS[id].name)) short[CHIPS[id].name] = CHIPS[id].short;
-  const chip = n => {
-    if (!n) return '空';
-    if (/（.+ Lv3）$/.test(n)) return n.replace(/（.+）$/, '');
+  const chip = n0 => {
+    if (!n0) return '空';
+    const mm = /^(.*?)(◇\d)?(［.+］)?$/.exec(n0), n = mm[1], tail = (mm[2] || '') + (mm[3] || '');  // 插座數、黑洞強化的屬性照原樣接在後面
+    if (/（.+ Lv3）$/.test(n)) return n.replace(/（.+）$/, '') + tail;
     const m = /^(.+) Lv(\d)$/.exec(n);
-    return m ? (short[m[1]] || m[1]) + m[2] : short[n] || n;
+    return (m ? (short[m[1]] || m[1]) + m[2] : short[n] || n) + tail;
   };
   const sec = t => { const m = /^(\d+)秒$/.exec(t); return m ? +m[1] : 0; };
   // 第 1 行：版本｜結果、打到哪｜飛船、操作｜時間、擊殺
