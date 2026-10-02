@@ -14,7 +14,9 @@ const MechCheck = {
     Game.newRun(mode, ship, weapon);
     Game.weapon = { id: weapon, path, final };
     Game.refreshWeapon();
-    Game.chain = chain.map(fullChip);  // 宿主給滿插座
+    const r = splitChain(chain.map(fullChip));  // 宿主給滿插座；組件寫在晶片後面 = 插在它的插座上（不佔電路格，電路維持原本格數）
+    while (r.chain.length < chain.length) { r.chain.push(null); r.socks.push([]); }
+    Game.chain = r.chain; Game.socks = r.socks;
     Game.slotAttr = [];
     Game.inventory = [...inv, null, null, null, null, null, null].slice(0, CFG.INV_SLOTS);
     Game.recalc();
@@ -362,9 +364,9 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'mirror', null, null]);
       const b = Game.stats.count;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', 'mirror', null]);
-      const idle1 = Game.stats.info[2].idle;
+      const idle1 = Game.stats.info.socks[1][0].idle;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'overclock', 'mirror', null]);
-      const idle2 = Game.stats.info[2].idle;
+      const idle2 = Game.stats.info.socks[0][1].idle;
       return { ok: a === 9 && b === 2 && idle1 && idle2, got: `分裂＋鏡像 ${a} 發；只有鏡像 ${b} 發；黏著［鏡像］${idle1 ? '沒作用' : '有作用（錯誤）'}；超頻＋鏡像${idle2 ? '沒作用' : '有作用（錯誤）'}` };
     }],
     ['電路晶片', '沒有子彈上限', '散彈分裂兩次 = 45 發，全部射出', M => {
@@ -377,10 +379,10 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', 'amp', null]); M.targets([[150, 0]]);
       const r = M.run(60), out = r.hits.some(h => near1(h, 7)), back = r.hits.some(h => near1(h, 14));
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
-      Game.chain = ['weapon', chipId('sticky', 1, 1), 'amp', 'amp']; Game.recalc();
-      const full = !Game.stats.info[2].idle && Game.stats.info[3].idle;
-      Game.chain = ['weapon', chipId('sticky', 1, 2), 'overclock', null]; Game.recalc();
-      const oc = Game.stats.info[2].idle && !Game.stats.heatLimit;
+      Game.chain = ['weapon', chipId('sticky', 1, 1), null, null]; Game.socks = [[], ['amp', 'amp']]; Game.recalc();
+      const SI = Game.stats.info.socks[1], full = !SI[0].idle && SI[1].idle;
+      Game.chain = ['weapon', chipId('sticky', 1, 2), null, null]; Game.socks = [[], ['overclock']]; Game.recalc();
+      const oc = Game.stats.info.socks[1][0].idle && !Game.stats.heatLimit;
       return { ok: out && back && full && oc, got: `命中傷害 ${[...new Set(r.hits.map(h => Math.round(h)))].join('、')}；1 個插座插 2 個倍增：第 2 個${full ? '沒作用' : '有作用（錯誤）'}；超頻插在黏著上${oc ? '沒作用' : '有作用（錯誤）'}` };
     }],
     ['構築系統', '用量成長', '迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」；拿到重複的不會合成，獎勵也不再出現；照玩法打中後 1 秒內敵人死掉，晶片成長 + 牠的晶體值；散彈多顆打中同一隻只算一份；超過 1 秒不算', M => M.all([
@@ -445,20 +447,20 @@ const MechCheck = {
           got: '攔截回射 ' + ic + '、回響 ' + echo + '、攔截晶片 ' + icChip + '、攔截成長 +' + g + '；迴旋晶片 ' + bm };
       },
     ])],
-    ['構築系統', '黑洞：強化格子', '投入 1 個晶片 → 隨機一格得到屬性（晶片消失）；效果 ×1.5：武器上的倍增 +150%；能量歸零；不會成長', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null], ['split']);
+    ['構築系統', '奇異點：強化格子', '投入 1 個晶片 → 隨機一格得到屬性（晶片消失）；效果 ×1.5 放在觸發器那格：插在觸發器上的倍增 +150%（回響 5 → 12.5）；能量歸零；不會成長', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'amp', null], ['split']);
       Game.openBlackhole(); Game.bhToggle('inv:0'); Game.bhFuse();
       const n = Game.slotAttr.filter(Boolean).length, gone = !Game.inventory[0], where = Game.slotAttr.findIndex(Boolean);
       Game.state = 'map';
       Game.slotAttr = [null, 'eff']; Game.recalc();
-      const d = Game.stats.dmg;
+      const d = (Game.stats.layers[0] || { dmg: 0 }).dmg;
       Game.slotAttr = [null, 'free']; Game.recalc();
-      const heat = Game.stats.heat;
-      Game.chain = ['weapon', 'boomerang', null, null]; Game.slotAttr = [null, 'nogrow']; Game.growth = {}; Game.recalc();
+      const heat = Game.stats.heat;  // 觸發器不算，插在上面的倍增照算 3
+      Game.chain = ['weapon', 'boomerang', null, null]; Game.socks = []; Game.slotAttr = [null, 'nogrow']; Game.growth = {}; Game.recalc();
       Game.grow(null, 'boomerang', 50);
       const g = Game.growth.boomerang || 0;
-      return { ok: n === 1 && gone && where > 0 && near1(d, 25) && heat === 0 && g === 0,
-        got: `強化 ${n} 格（第 ${where + 1} 格）、晶片${gone ? '消失' : '還在'}；效果 ×1.5 傷害 ${d}（應為 25）；能量歸零 ⚡${heat}；不會成長 +${g}` };
+      return { ok: n === 1 && gone && where > 0 && near1(d, 12.5) && heat === 3 && g === 0,
+        got: `強化 ${n} 格（第 ${where + 1} 格）、晶片${gone ? '消失' : '還在'}；效果 ×1.5 回響 ${d}（應為 12.5）；能量歸零 ⚡${heat}；不會成長 +${g}` };
     }],
     ['構築系統', '插座：武器與回響', '武器插 3 個倍增：+300%（10 → 40，不打折）；武器上的倍增不作用在回響；插在觸發器上的分裂只作用在回響（3 發 × 2）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', 'amp', 'amp']);

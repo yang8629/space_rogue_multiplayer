@@ -240,37 +240,36 @@ const Screen = {
     const B = Game.bh, owned = Game.ownedFusable(), free = Game.bhFreeSlots(), A = Game.slotAttr || [];
     const attrTag = k => `<b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}" title="${SLOT_ATTRS[k].desc.replace(/<[^>]+>/g, '')}">${SLOT_ATTRS[k].name}</b>`;
     // 電路每一格目前的強化狀態
-    const slots = Game.chain.map((id, i) => i === 0 ? '<span class="bh-slot">1 武器（不能強化）</span>'
-      : `<span class="bh-slot">${i + 1} ${id ? CHIPS[id].short || CHIPS[id].name : '空格'}　${A[i] ? attrTag(A[i]) : '<span style="color:#8fa3d9">未強化</span>'}</span>`).join('');
+    const slots = Game.chain.map((id, i) => `<span class="bh-slot">${i + 1} ${id ? (i === 0 ? '武器' : CHIPS[id].short || CHIPS[id].name) : '空格'}　${A[i] ? attrTag(A[i]) : '<span style="color:#8fa3d9">未強化</span>'}</span>`).join('');
     let body;
     if (B.result && B.fusing) {
       body = `<div class="bh-core fusing"></div><div class="result" style="color:#b388ff">晶片正在被吞噬……</div>`;
     } else if (B.result) {
       const R = B.result, S = SLOT_ATTRS[R.attr];
       body = `<div class="result" style="color:${R.good ? '#9dff6b' : '#ff6b6b'}">
-          ${R.good ? '✺ 強化成功' : '✖ 黑洞反噬'}：電路第 ${R.slot + 1} 格 → ${S.name}</div>
+          ${R.good ? '✺ 強化成功' : '✖ 奇異點反噬'}：電路第 ${R.slot + 1} 格 → ${S.name}</div>
         <div class="sub" style="text-align:center">${S.desc}。屬性留在格子上，換晶片也還在。（投入：${R.chip}）${slotAttrLine(R.slot)}<br>電路編輯器（Tab）裡強化過的格子有綠框／紅框，滑鼠移上去看現在的效果。</div>
         <div class="sub bh-slots">${slots}</div>
         <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
     } else {
       const cards = owned.map(o => {
         const on = B.sel === o.key, odds = Math.round(BH_GOOD[Math.min(levelOf(o.id), 3) - 1] * 100);
-        return chipCard(o.id, `<div class="ty">位置：${o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}　好結果 ${odds}%</div>
+        return chipCard(o.id, `<div class="ty">位置：${o.sock != null ? `插在${CHIPS[Game.chain[o.sock]].name}上` : o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}　好結果 ${odds}%</div>
           <button data-act="bhpick" data-arg="${o.key}">${on ? '已選取（點擊取消）' : '投入這個'}</button>`)
           .replace('class="card', `class="card${on ? ' picked' : ''}`);
       }).join('');
       body = `<div class="bh-core"></div>
-        <div class="sub" style="text-align:center">投入 1 個晶片（晶片會消失）：隨機一個<b>還沒強化過</b>的電路格（武器格除外）得到一個屬性，每格只能強化一次。<br>
+        <div class="sub" style="text-align:center">投入 1 個晶片（晶片會消失）：隨機一個<b>還沒強化過</b>的電路格（武器格也可能）得到一個屬性，每格只能強化一次。<br>
           好結果的機率看投入晶片的等級：Lv1 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。<br>
           好：${GOOD_ATTRS.map(attrTag).join('、')}<br>壞：${BAD_ATTRS.map(attrTag).join('、')}</div>
         <div class="sub bh-slots">${slots}</div>
         <div class="cards">${cards || '<div class="sub">目前沒有可投入的晶片。</div>'}</div>
         <div class="row" style="justify-content:center">
-          <button class="big" data-act="bhfuse" ${B.sel && free.length ? '' : 'disabled'}>${free.length ? '投入黑洞' : '電路格都強化過了'}</button>
+          <button class="big" data-act="bhfuse" ${B.sel && free.length ? '' : 'disabled'}>${free.length ? '投入奇異點' : '電路格都強化過了'}</button>
           <button data-act="leave">不冒險，離開</button></div>`;
     }
     this.show(`<div class="scr">
-      <div class="between"><div><h2 style="color:#b388ff">◐ 黑洞事件</h2>
+      <div class="between"><div><h2 style="color:#b388ff">◐ 奇異點</h2>
         <div class="sub">犧牲一個晶片，賭一個電路格的屬性。</div></div>${this.status()}</div>${body}</div>`);
   },
 
@@ -567,7 +566,7 @@ const Screen = {
 // ---------- 精簡紀錄文字（「複製這局／這筆紀錄」用；代號對照表在 README「遊玩紀錄的代號」） ----------
 //   完整資料還是存在瀏覽器裡（紀錄頁「展開細節」、「複製全部紀錄」是完整 JSON）
 const REC_CODE = {
-  node: { 戰鬥: '戰', 精英: '精', 旗艦: '王', 改裝廠: '改', 軍械台: '軍', 維修站: '修', 補給站: '補', 黑洞: '洞' },
+  node: { 戰鬥: '戰', 精英: '精', 旗艦: '王', 改裝廠: '改', 軍械台: '軍', 維修站: '修', 補給站: '補', 奇異點: '奇', 黑洞: '洞' },
   enemy: { 蟲群: '蟲', 刺殼: '刺', 噴吐者: '噴', 虛空獵手: '獵', 星噬母艦: '母', 裂界獵艦: '裂', 終焉核心: '核', 彗星: '彗', 黑洞核心: '洞',
     彈幕艇: '艇', 列隊蟲: '列', 盾衛: '盾', 分裂體: '分', 碎裂體: '碎', 潛伏者: '潛', 母巢: '巢' },
   result: { dead: '死', cleared: '通', retired: '退', disconnect: '斷線', in_progress: '進行中' },

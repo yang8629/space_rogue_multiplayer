@@ -3,7 +3,7 @@
 'use strict';
 
 // =====================================================================
-// CODEX — 電路總覽（規則 / 晶片 / 插座與黑洞 / 武器 / 目前配置）
+// CODEX — 電路總覽（規則 / 晶片 / 插座與奇異點 / 武器 / 目前配置）
 // =====================================================================
 const Codex = {
   el: document.getElementById('codex'),
@@ -29,7 +29,7 @@ const Codex = {
   close() { this.el.classList.add('hidden'); },
 
   render() {
-    const tabs = [['rules', '規則'], ['chips', '晶片'], ['body', '機體與地圖'], ['special', '插座與黑洞'], ['weapons', '武器']];
+    const tabs = [['rules', '規則'], ['chips', '晶片'], ['body', '機體與地圖'], ['special', '插座與奇異點'], ['weapons', '武器']];
     if (this.hasRun()) tabs.push(['current', '目前配置']);
     tabs.push(['charts', '數值圖表'], ['mech', '機制檢查']);
     this._charts = {};
@@ -375,11 +375,11 @@ const Codex = {
         <span style="color:${TYPE_META.launch.color}">${TYPE_META.launch.icon} 發射</span>（從哪裡、朝哪裡射）、
         <span style="color:${TYPE_META.impact.color}">${TYPE_META.impact.icon} 命中</span>（打中之後）、
         <span style="color:${TYPE_META.body.color}">${TYPE_META.body.icon} 機體</span>（跟衝刺連動）。掉落時隨機有 1～3 個<b>插座</b>。<br>
-        <span style="color:#ffd166">◇ 組件</span>：分裂、巨彈、穿甲、倍增、超頻模組、鏡像。插在<b>左邊最近</b>的武器、玩法晶片或觸發器上（佔一格電路），不會升級，拿到重複的就是多一個。<br>
+        <span style="color:#ffd166">◇ 組件</span>：分裂、巨彈、穿甲、倍增、超頻模組、鏡像。插進武器、玩法晶片或觸發器的插座（不佔電路格），不會升級，拿到重複的就是多一個。<br>
         <span style="color:${TYPE_META.trigger.color}">◎ 觸發器</span>：命中、消失、定時三種，放在電路格。觸發時用武器再射一次回響（50%），右邊的晶片只作用在回響上，最多巢狀 ${CFG.MAX_TRIGGER_DEPTH} 層。也有插座：插在上面的組件作用在回響上。`)}
-      ${R('插座', `武器插座開局 ${CFG.START_WSOCK} 個，每打完一隻王 +1，最多 ${CFG.WEAPON_SOCKETS} 個；其他晶片掉落時隨機 1～3 個（沙盒、靶場一律 ${CFG.MAX_SOCKETS} 個）。組件插在左邊最近的晶片上，超過插座數的組件沒有作用（變灰）。<br>
+      ${R('插座', `武器插座開局 ${CFG.START_WSOCK} 個，每打完一隻王 +1，最多 ${CFG.WEAPON_SOCKETS} 個；其他晶片掉落時隨機 1～3 個（沙盒、靶場一律 ${CFG.MAX_SOCKETS} 個）。組件拖進晶片的插座（不佔電路格），超過插座數的組件沒有作用（變灰）；黑洞屬性只強化放在那一格的晶片（效果 ×1.5 = 它插座上的組件 ×1.5）。<br>
         <b>插在武器上</b>：作用在射出的全部子彈。觸發器的插座也一樣（作用在回響上），武器插座的組件<b>不會</b>作用在回響上。<br>
-        <b>插在玩法晶片上</b>：只作用在那個晶片的「產物」（例：插在環繞上 = 放出的那一波；插在黏著上 = 爆炸）。每個晶片的產物見「插座與黑洞」分頁。<br>
+        <b>插在玩法晶片上</b>：只作用在那個晶片的「產物」（例：插在環繞上 = 放出的那一波；插在黏著上 = 爆炸）。每個晶片的產物見「插座與奇異點」分頁。<br>
         超頻模組只能插在武器上；鏡像複製同一個晶片上前一個插座的組件；吸引只能插巨彈。`)}
       ${R('用量成長與進化', '改變玩法的晶片裝在電路上，照著它的玩法打（例如迴旋的回程命中、環繞命中、反彈次數）就會累積成長，到了自動升到 Lv2、Lv3；Lv3 是<b>進化</b>，改名、玩法再變一次。撿到重複的不會合成（獎勵、補給站也不再出現已經有的）。電路編輯器點晶片可以看目前的成長進度和本局每分鐘成長多少。打爆小行星時，電路上每個會成長的晶片 +8。雙人：各算各的。')}
       ${R('能量負載與射速', `每個晶片右上角的 ⚡ 是能量負載。電路上所有晶片的 ⚡ 加起來，<b>每 1 點讓射速 -${CFG.HEAT_RATE * 100}%</b>，每把武器都一樣。<br>
@@ -391,13 +391,13 @@ const Codex = {
       ${R('子彈數量', `子彈數量<b>沒有上限</b>：分裂、觸發疊多少就射多少（手機可能會卡）。只有一個防止無限連鎖的上限：同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次觸發，超過的那幾次不會觸發。`)}
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格，放暫時不用的晶片。不要的晶片可以回收，拿回 40% 售價。`)}
       ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT} 起，隨星區上漲）、精英戰獎勵、武器升滿後的軍械台。`)}
-      ${R('黑洞', `投入 1 個晶片（晶片會消失）：隨機一個還沒強化過的電路格（武器格除外）得到一個屬性，每格只能強化一次，屬性留在格子上（換晶片也還在）。好結果的機率看投入晶片的等級：Lv1 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。也可以不投入直接離開。屬性見「插座與黑洞」分頁。`)}
+      ${R('奇異點（航圖）', `投入 1 個晶片（晶片會消失）：隨機一個還沒強化過的電路格（武器格也可能）得到一個屬性，每格只能強化一次，屬性留在格子上（換晶片也還在）。好結果的機率看投入晶片的等級：Lv1 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。也可以不投入直接離開。屬性見「插座與奇異點」分頁。`)}
       ${R('機體與地圖', '零件（改裝廠）、背包模組（精英、旗艦）、4 艘飛船與地圖物件，見「機體與地圖」分頁。')}
     </div>`;
   },
 
   chips() {
-    const groups = ['path', 'launch', 'impact', 'body', 'mod', 'amp', 'trigger', 'link'];
+    const groups = ['path', 'launch', 'impact', 'body', 'trigger', 'comp'];
     return groups.map(t => {
       const ids = NORMAL_IDS.filter(id => CHIPS[id].type === t);
       if (!ids.length) return '';
@@ -432,16 +432,16 @@ const Codex = {
       </div></div>`;
   },
 
-  // 插座與黑洞：每個晶片的產物（插在它上面的組件作用在哪裡）、黑洞的格子屬性
+  // 插座與奇異點：每個晶片的產物（插在它上面的組件作用在哪裡）、奇異點的格子屬性
   special() {
     const hosts = ['weapon', ...NORMAL_IDS.filter(id => isHost(id))];
     const name = id => id === 'weapon' ? '武器' : CHIPS[id].name;
     const rows = hosts.map(id => `<tr><td><b style="color:${id === 'weapon' ? '#4cc9f0' : TYPE_META[CHIPS[id].type].color}">${name(id)}</b></td><td>${HOST_PRODUCT[id] || ''}</td></tr>`).join('');
     const attr = k => `<div><b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}">${SLOT_ATTRS[k].name}</b>：${SLOT_ATTRS[k].desc}</div>`;
     return `<div class="codex-sec"><h3 style="color:#ffd166">◇ 每個晶片的產物（插在它上面的組件只作用在這裡）</h3>
-        <div class="sub">組件插在左邊最近的晶片上。插在武器、觸發器上加進武器層；插在玩法晶片上加進宿主層。</div>
+        <div class="sub">組件插在晶片的插座裡。插在武器、觸發器上加進武器層；插在玩法晶片上加進宿主層。</div>
         <table class="dmg-table"><thead><tr><th>晶片</th><th>產物</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="codex-sec"><h3 style="color:#b388ff">◐ 黑洞的格子屬性</h3>
+      <div class="codex-sec"><h3 style="color:#b388ff">◐ 奇異點的格子屬性</h3>
         <div class="sub">好結果的機率：投入 Lv1 晶片 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。好結果、壞結果各自平均抽一個。</div>
         <div class="rules"><div><b style="color:#9dff6b">好</b>${GOOD_ATTRS.map(attr).join('')}</div><div><b style="color:#ff6b6b">壞</b>${BAD_ATTRS.map(attr).join('')}</div></div></div>`;
   },
@@ -478,12 +478,11 @@ const Codex = {
     const rows = Game.chain.map((id, i) => {
       if (!id) return `<div class="slotrow idle"><div class="no">第 ${i + 1} 格</div><div>空插槽</div></div>`;
       const d = CHIPS[id], m = TYPE_META[d.type], I = info[i], A = (Game.slotAttr || [])[i];
-      const comp = ops.flatMap(o => o.comps).find(c => c.slot === i && !c.hidden);
       const notes = [];
       if (i === 0) notes.push(`武器：${weaponTitle(Game.weapon)}`);
-      if (I.role === 'host' && i > 0) notes.push(`插座 ${socketsOf(id)} 個（產物：${HOST_PRODUCT[baseOf(id)] || ''}）`);
-      if (I.role === 'comp' && I.host >= 0) notes.push(`插在第 ${I.host + 1} 格「${CHIPS[Game.chain[I.host]].name}」上${comp && comp.m !== 1 ? `，效果 ×${+comp.m.toFixed(2)}` : ''}`);
-      if (A) notes.push(`<span style="color:${SLOT_ATTRS[A].good ? '#9dff6b' : '#ff8a8a'}">黑洞：${SLOT_ATTRS[A].name}</span>`);
+      const S = Game.socks[i] || [], SI = info.socks[i] || [];
+      notes.push(`插座 ${S.length} / ${socketsOf(id)}：${S.length ? S.map((c, k) => SI[k] && SI[k].idle ? `<span style="color:#ff8a8a">${CHIPS[c].name}（沒作用：${SI[k].why}）</span>` : `<b>${CHIPS[c].name}</b>`).join('、') : '空'}${i > 0 ? `（產物：${HOST_PRODUCT[baseOf(id)] || ''}）` : ''}`);
+      if (A) notes.push(`<span style="color:${SLOT_ATTRS[A].good ? '#9dff6b' : '#ff8a8a'}">奇異點：${SLOT_ATTRS[A].name}</span>`);
       if (I.seg) notes.push(`觸發第 ${I.seg} 層才執行`);
       if (info[i].idle) notes.push(`<span style="color:#ff8a8a">不會生效：${info[i].why}</span>`);
       const color = id === 'weapon' ? Game.wp.color : m.color;
