@@ -18,10 +18,8 @@ const CFG = {
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   //   成長需求 ×COOP_GROW（兩人都能打到同一隻，每人拿到的不是剛好一半，照雙人模擬實測）
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3], COOP_GROW: 1.25,
-  MAX_SHOTS_PER_FIRE: 32,   // 單次開火子彈上限，超過的轉為傷害
   MAX_TRIGGER_DEPTH: 3,     // 命中觸發巢狀上限
-  MAX_LIVE_BULLETS: 700,
-  MAX_TRIGGERS_PER_FRAME: 80,
+  MAX_TRIGGERS_PER_FRAME: 80,  // 同一幀最多處理的觸發次數（防止無限連鎖卡住）；子彈數量本身沒有上限
   BASE_INTERVAL: 0.16, MIN_INTERVAL: 0.06,
   HEAT_RATE: 0.05,          // 能量負載：每 1 點 ⚡ 射速 -5%（所有武器相同）
   HEAT_RATE_FLOOR: 0.25,    // 射速最多降到 25%（15 點能量以上不再更慢）

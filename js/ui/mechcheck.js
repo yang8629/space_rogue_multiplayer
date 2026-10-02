@@ -352,10 +352,10 @@ const MechCheck = {
       const d = Game.bullets[0] ? Game.bullets[0].damage : 0;
       return { ok: r.created === r.fired * 2 && near1(d, 50), got: `開火 ${r.fired} 次，射出 ${r.created} 發；蓄力＋鏡像蓄滿一發 ${Math.round(d)}（應為 50，不是 250）` };
     }],
-    ['電路晶片', '子彈上限 32 發', '超過的數量換算成傷害，總傷害不變', M => {
+    ['電路晶片', '沒有子彈上限', '散彈分裂兩次 = 45 發，全部射出', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'split', 'split', null]);
       const a = Game.stats, want = WEAPONS.scatter.base.damage * 5 * 0.16 * 9;  // 5 顆 × 分裂兩次（×0.4 × 3，兩次）
-      return { ok: a.count === 32 && near1(a.dmg, want), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${want.toFixed(1)}）` };
+      return { ok: a.count === 45 && near1(a.dmg, want), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${want.toFixed(1)}）` };
     }],
 
     ['構築系統', '晶片合成升級', '拿到第 2 個分裂 → Lv2，分裂成 4 發', M => {

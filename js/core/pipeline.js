@@ -36,15 +36,6 @@ function compileChain(chain) {
   return ops;
 }
 
-function capShots(list) {
-  const n = list.length, cap = CFG.MAX_SHOTS_PER_FIRE, ratio = n / cap, out = [];
-  for (let k = 0; k < cap; k++) {
-    const b = list[Math.floor(k * n / cap)];
-    out.push({ ...b, damage: b.damage * ratio });  // 超出的數量轉換為傷害
-  }
-  return out;
-}
-
 function runOps(ops, depth) {
   let list = [];
   for (let i = 0; i < ops.length; i++) {
@@ -66,7 +57,6 @@ function runOps(ops, depth) {
       for (const b of list) after += b.damage;
       if (before > 0 && !def.copyCredit) creditFactor(list, o.key, after / before);  // copyCredit：多射出來的子彈自己記在晶片上（反向）
     }
-    if (list.length > CFG.MAX_SHOTS_PER_FIRE) list = capShots(list);
   }
   return list;
 }
