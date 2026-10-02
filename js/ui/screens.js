@@ -249,7 +249,7 @@ const Screen = {
       const R = B.result, S = SLOT_ATTRS[R.attr];
       body = `<div class="result" style="color:${R.good ? '#9dff6b' : '#ff6b6b'}">
           ${R.good ? '✺ 強化成功' : '✖ 黑洞反噬'}：電路第 ${R.slot + 1} 格 → ${S.name}</div>
-        <div class="sub" style="text-align:center">${S.desc}。屬性留在格子上，換晶片也還在。（投入：${R.chip}）</div>
+        <div class="sub" style="text-align:center">${S.desc}。屬性留在格子上，換晶片也還在。（投入：${R.chip}）${slotAttrLine(R.slot)}<br>電路編輯器（Tab）裡強化過的格子有綠框／紅框，滑鼠移上去看現在的效果。</div>
         <div class="sub bh-slots">${slots}</div>
         <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
     } else {

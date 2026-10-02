@@ -115,10 +115,27 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .slot .empty { font-size: 11px; color: #3e4c80; }
 .arrow { color: #4c5a8f; font-size: 18px; width: 22px; text-align: center; }
 .arrow.trig { color: #ff6b9d; font-size: 11px; width: 38px; line-height: 1.1; }
-/* 插座：組件接在宿主後面（縮小、虛線框改成金色） */
+/* 插座：宿主卡片下面一排大圓，組件插在裡面（滑鼠移上去看是什麼） */
+.hgroup { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.socks { display: flex; gap: 6px; justify-content: center; min-height: 46px; }
+.sock { position: relative; width: 46px; height: 46px; border-radius: 50%; border: 3px solid #ffd166; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; background: #0d1430; cursor: grab; text-align: center; line-height: 1.05; user-select: none; }
+.sock.empty { border-style: dashed; border-color: #6b5c25; color: #8a7a3a; font-size: 22px; font-weight: 400; cursor: pointer; background: #0a0e1f; }
+.sock.over { box-shadow: 0 0 0 3px #4cc9f0; }
+.sock.sel { box-shadow: 0 0 0 3px #fff; }
+.sock.idle { opacity: .45; border-color: #ff6b6b !important; }
+.sock.ag { box-shadow: 0 0 0 3px #9dff6b, 0 0 10px #9dff6b; }
+.sock.ab { box-shadow: 0 0 0 3px #ff6b6b, 0 0 10px #ff6b6b; }
+.sock .sa { position: absolute; top: -6px; right: -6px; font-style: normal; font-size: 12px; }
+.sock .sa.good { color: #9dff6b; } .sock .sa.bad { color: #ff6b6b; }
+.socks .nosock { font-size: 11px; color: #4c5a8f; align-self: center; }
+.chaincount { font-size: 12px; color: #8fa3d9; margin-left: 10px; align-self: center; text-align: center; }
+.chaincount span { font-size: 10px; color: #6a79ad; }
+.slot.ag { border: 2px solid #9dff6b; box-shadow: 0 0 12px #9dff6b66; }
+.slot.ab { border: 2px solid #ff6b6b; box-shadow: 0 0 12px #ff6b6b66; }
 .arrow.sock { color: #ffd166; font-size: 12px; width: 14px; margin: 0 -2px; }
 .slot.socked { width: 92px; border-color: #7a6a2f; background: #15130a; }
-.slot .sattr { position: absolute; bottom: -9px; left: 6px; font-size: 10px; padding: 0 4px; background: #070b1a; white-space: nowrap; border-radius: 4px; }
+.slot .sattr { position: absolute; bottom: -10px; left: 6px; font-size: 12px; font-weight: 700; padding: 0 4px; background: #070b1a; white-space: nowrap; border-radius: 4px; }
 .slot .sattr.good { color: #9dff6b; border: 1px solid #3f6b2a; }
 .slot .sattr.bad { color: #ff6b6b; border: 1px solid #6b2a2a; }
 .card .sockln { color: #ffd166; }
@@ -318,6 +335,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
   .arrow { width: 14px; font-size: 14px; }
   .arrow.trig { width: 30px; font-size: 9px; }
   .slot.socked { width: 74px; }
+  .sock { width: 38px; height: 38px; font-size: 10px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .dock { flex-direction: column; }
   .recycle { width: 100%; min-height: 56px; }
