@@ -364,3 +364,7 @@ body.detail .detail-hint button { background: #1c3a6e; }
 #rangeBar button.on { background: #1c3a6e; border-color: #4cc9f0; color: #fff; }
 #rangeBar button.live.on { background: #5a1f2e; border-color: #ff4d6d; }
 #rangeBar .sep { width: 1px; height: 18px; background: #2a3a7a; margin: 0 2px; }
+
+/* 電路編輯器：機體分頁的零件、模組、飛船、武器卡片，和倉庫格都靠左上 */
+#edShip .cards { justify-content: flex-start; align-items: flex-start; }
+.inv { align-items: flex-start; justify-content: flex-start; }
