@@ -369,7 +369,8 @@ const Game = {
     if (id) {
       const j = this.inventory.lastIndexOf(id), slot = this.chain.indexOf(null, 1);
       // 組件：插進武器或電路上還有空插座的晶片
-      const h = isComp(id) ? this.chain.findIndex((c, i) => c && (this.socks[i] || []).length < socketsOf(c) && (baseOf(id) !== 'overclock' || i === 0) && (baseOf(c) !== 'pull' || baseOf(id) === 'bigshot')) : -1;
+      const h = isComp(id) ? this.chain.findIndex((c, i) => c && (this.socks[i] || []).length < socketsOf(c) && (baseOf(id) !== 'overclock' || i === 0) && (baseOf(c) !== 'pull' || baseOf(id) === 'bigshot')
+        && (baseOf(id) !== 'mirror' || i === 0 || CHIPS[c].type === 'trigger' || (this.socks[i] || []).length > 0))  // 不會沒作用的地方才自動插 : -1;
       if (j >= 0 && h >= 0) { (this.socks[h] = this.socks[h] || []).push(id); this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已插在${CHIPS[this.chain[h]].name}上`; }
       else if (j >= 0 && !isComp(id) && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
       else toInv = j >= 0;

@@ -287,26 +287,27 @@ const Editor = {
     if (arr === C) {
       if (isComp(id)) return cur && isHost(cur) ? this.plug(i, d) : this.warn('組件要插在晶片上：拖到武器、玩法晶片或觸發器（或它下面的插座）');
       if (cur && CHIPS[cur].locked) return this.lockedMsg(cur);  // 武器格不能放別的晶片
+      const snap = this.snap();
       if (r && r.arr === C) {  // 電路上換位置：插座上的組件跟著晶片走，奇異點屬性留在格子上
         if (CHIPS[id].locked) return this.lockedMsg(id);
         [C[i], C[r.i]] = [C[r.i], C[i]];
         [Game.socks[i], Game.socks[r.i]] = [Game.socks[r.i] || [], Game.socks[i] || []];
-        return this.changed();
+        return this.commit(snap);
       }
       // 從倉庫／晶片庫換上來：原本那格的晶片回倉庫，插座上的組件留著插在新的晶片上
       const nid = d.from === 'lib' ? (cur && baseOf(cur) === d.id && canLevelUp(cur) ? chipId(d.id, levelOf(cur) + 1, socketsOf(cur)) : newChip(d.id, CFG.MAX_SOCKETS)) : id;
       if (d.from !== 'lib') r.arr[r.i] = cur || null;
       C[i] = nid;
-      return this.changed();
+      return this.commit(snap);
     }
     // 放到倉庫
     if (r && r.arr === C) {  // 電路上的晶片拿回倉庫：插座上的組件也退回倉庫
       if (CHIPS[id].locked) return this.lockedMsg(id);
       if (cur && isComp(cur)) return this.warn('倉庫那格是組件，不能換到電路格上');
-      const back = Game.socks[r.i] || [];
+      const back = Game.socks[r.i] || [], snap = this.snap();
       if (back.length > inv.filter((x, j) => !x && j !== i).length) return this.warn(`倉庫放不下${CHIPS[id].name}插座上的 ${back.length} 個組件，先清出倉庫`);
       C[r.i] = cur || null; inv[i] = id;
-      if (cur) return this.changed();  // 換上去的晶片接手插座上的組件
+      if (cur) return this.commit(snap);  // 換上去的晶片接手插座上的組件
       Game.socks[r.i] = [];
       for (const c of back) inv[inv.indexOf(null)] = c;
       return this.changed();
@@ -320,6 +321,23 @@ const Editor = {
     }
     if (d.from === 'lib') inv[i] = newChip(d.id, CFG.MAX_SOCKETS);
     else [inv[i], r.arr[r.i]] = [r.arr[r.i], inv[i]];
+    this.changed();
+  },
+  // 會變成「沒有作用」的擺法不給放：先記下配裝和沒作用的項目，做完如果多了，就還原並說明原因（拿掉、拔掉這類移除動作不檢查）
+  snap() { return { chain: Game.chain.slice(), socks: (Game.socks || []).map(x => (x || []).slice()), inv: Game.inventory.slice(), idle: this.idleList() }; },
+  idleList() {
+    const info = compileChain(Game.chain).info, out = [];
+    info.forEach((I, i) => { if (I.idle) out.push(I.why); for (const J of info.socks[i] || []) if (J.idle) out.push(J.why); });
+    return out;
+  },
+  commit(snap) {
+    const now = this.idleList();
+    if (now.length > snap.idle.length) {
+      const why = now.find(w => !snap.idle.includes(w)) || now[now.length - 1];
+      Game.chain = snap.chain; Game.socks = snap.socks; Game.inventory = snap.inv;
+      Game.recalc();
+      return this.warn(`這樣擺會沒有作用，不給放：${why}`);
+    }
     this.changed();
   },
   canPlug(h, compId, used) {  // 不能插的原因（可以插回傳空字串）
@@ -337,10 +355,11 @@ const Editor = {
     if (same) return this.render();
     const why = this.canPlug(h, id, S.length);
     if (why) return this.warn(why);
+    const snap = this.snap();
     if (d.from !== 'lib') this.takeOut(d);
     S.push(id);
     this.sel = null;
-    this.changed();
+    this.commit(snap);
   },
   quickMove(arr, i) {  // 右鍵：電路 ⇄ 倉庫
     const id = arr[i];
