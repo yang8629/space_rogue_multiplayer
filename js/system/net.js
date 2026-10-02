@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'inventory', 'slotAttr', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
+const LOADOUT_KEYS = ['chain', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'mech'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -336,7 +336,7 @@ const Net = {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state,
       you: { pick: this.matePick, weapon: L.weapon, chain: L.chain, inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
-        parts: L.parts, module: L.module, ps: L.partSlots, growth: L.growth },
+        parts: L.parts, module: L.module, ps: L.partSlots, ws: L.wSock, growth: L.growth },
       map: this.packMap(G.map), sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
       lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
@@ -361,6 +361,7 @@ const Net = {
       const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與用量成長也以房主記住的為準
       G.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(YP[id])), 0, 20)]));
       G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
+      G.wSock = clamp(Math.floor(num(Y.ws, G.wSock)), 1, CFG.WEAPON_SOCKETS);
       G.module = typeof Y.module === 'string' && MODULES[Y.module] ? Y.module : null;
       G.growth = {};
       if (Y.growth && typeof Y.growth === 'object') for (const k in Y.growth) if (CHIPS[k] && CHIPS[k].grow) G.growth[k] = Math.max(0, num(Y.growth[k]));
@@ -568,7 +569,7 @@ const Net = {
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
       chain: startChain(p.chip), inventory: Array(CFG.INV_SLOTS).fill(null), slotAttr: [], growth: {}, pullHits: 0,
-      parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots,
+      parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module); });
@@ -676,7 +677,7 @@ const Net = {
     if (this.role !== 'client' || !this.linked) return;
     const G = Game;
     this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
-      parts: G.parts, module: G.module, ps: G.partSlots });
+      parts: G.parts, module: G.module, ps: G.partSlots, ws: G.wSock });
   },
   // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶等級 #2、插座數 ~2，見 parseChipId）
   sanitizeLoadout(m) {
@@ -702,6 +703,7 @@ const Net = {
     const P = m.parts && typeof m.parts === 'object' ? m.parts : {};
     L.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(P[id])), 0, 20)]));
     L.partSlots = clamp(Math.floor(num(m.ps, L.partSlots || 6)), 1, 20);
+    L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
     L.module = typeof m.module === 'string' && MODULES[m.module] ? m.module : null;
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);

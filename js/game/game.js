@@ -63,7 +63,8 @@ const Game = {
     this.chain = mode === 'sandbox' ? ['weapon', 'split', null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.inventory = Array(CFG.INV_SLOTS).fill(null);
-    this.growth = {}; this.pullHits = 0; this.slotAttr = [];  // slotAttr：黑洞強化過的電路格（index 跟 chain 一樣）
+    this.growth = {}; this.pullHits = 0; this.slotAttr = [];
+    this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1  // slotAttr：黑洞強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
@@ -265,9 +266,11 @@ const Game = {
       if (slot) this.chain.push(null);
       this.credits += 50;  // 雙人：兩人各自拿
       this.partSlots++;    // 零件格 +1
+      const ws = (this.wSock || CFG.START_WSOCK) < CFG.WEAPON_SOCKETS;
+      if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
-      this.victory = { slot, boss: this.bossId, module: bossModuleOf(this.bossId), took: false };
+      this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false };
       this.state = 'victory';
       Screen.victory();
       return;

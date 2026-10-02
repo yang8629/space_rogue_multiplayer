@@ -201,7 +201,7 @@ const chipPrice = id => (30 + CHIPS[id].cost * 8) * levelOf(id) + 6 * socketsOf(
 const HOST_TYPES = ['path', 'launch', 'impact', 'body', 'trigger'];
 const isComp = id => !!(id && CHIPS[id] && CHIPS[id].comp);
 const isHost = id => !!(id && CHIPS[id] && (id === 'weapon' || HOST_TYPES.includes(CHIPS[id].type)));
-const socketsOf = id => !id || !CHIPS[id] ? 0 : id === 'weapon' ? CFG.WEAPON_SOCKETS : CHIPS[id].sk || 0;
+const socketsOf = id => !id || !CHIPS[id] ? 0 : id === 'weapon' ? (Game.wSock || CFG.WEAPON_SOCKETS) : CHIPS[id].sk || 0;
 // 掉落時隨機決定插座數：1 個 50%、2 個 35%、3 個 15%；沙盒／靶場一律 3 個
 function rollSockets() { const r = Math.random(); return r < 0.5 ? 1 : r < 0.85 ? 2 : 3; }
 const newChip = (base, sk) => isHost(base) && base !== 'weapon' ? chipId(base, 1, sk != null ? sk : Game.freePlay && Game.freePlay() ? CFG.MAX_SOCKETS : rollSockets()) : base;
