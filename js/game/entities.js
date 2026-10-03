@@ -253,12 +253,12 @@ class Bullet {
       this.hb = nb; this.qhb = 0;
     }
   }
-  // 消失觸發器：子彈消失時從這裡射出回響（朝最近的敵人）；ignore = 剛打中的那一隻
-  endTrig(ignore = null) {
+  // 消失觸發器：子彈消失時從這裡沿原本的方向射出回響
+  endTrig() {
     const P = this.payload, Q = Game.triggerQueue;
     if (!P || P[0].trig !== 'end' || this.endDone || Q.length >= CFG.MAX_TRIGGERS_PER_FRAME) return;
     this.endDone = true;
-    Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle, depth: this.depth + 1, ignore, owner: this.owner, aim: true });
+    Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle, depth: this.depth + 1, ignore: null, owner: this.owner });
   }
   // 定時觸發器：飛行中每 0.3 秒往左右兩側各射一次回響（每顆最多 5 次；停住的地雷不算）
   tickTimer(dt) {

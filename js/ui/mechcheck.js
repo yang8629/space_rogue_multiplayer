@@ -322,10 +322,10 @@ const MechCheck = {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', null, null]); M.targets(M.cone);
         const r = M.run(90);
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'orbit', null]); M.targets([[200, 0]]);
-        Game.player.wantFire = true; M.run(40);
-        const trig = Game.bullets.filter(b => b.depth > 0), inRing = trig.filter(b => b.mode === 'orbit').length;
-        return { ok: r.created > r.fired && r.hits.some(h => near1(h, 5)) && trig.length > 0 && inRing === 0,
-          got: `開火 ${r.fired} 次，回響 ${r.created - r.fired} 發，回響傷害 5；接環繞時觸發 ${trig.length} 發、進圈 ${inRing} 發` };
+        Game.player.wantFire = true; const r2 = M.run(40);  // 回響可以打到被命中的那一隻，常常一出來就打中消失：數射出過幾發，不數場上剩的
+        const trig = r2.created - r2.fired, inRing = Game.bullets.filter(b => b.depth > 0 && b.mode === 'orbit').length;
+        return { ok: r.created > r.fired && r.hits.some(h => near1(h, 5)) && trig > 0 && inRing === 0,
+          got: `開火 ${r.fired} 次，回響 ${r.created - r.fired} 發，回響傷害 5；接環繞時觸發 ${trig} 發、進圈 ${inRing} 發` };
       },
       M => {  // 觸發巢狀上限
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'trigger', 'trigger', 'trigger', null]); M.targets(M.cone);
@@ -346,7 +346,7 @@ const MechCheck = {
       try { for (let f = 0; f < 70; f++) Game.updateBullets(1 / 60); } finally { window.spawnShots = orig; }
       return { ok: e === 1 && t === 4, got: `消失觸發 ${e} 發；定時觸發 ${t} 發` };
     }],
-    ['電路晶片', '觸發器：消失時機與方向', '消失觸發器：黏著引爆、地雷時間到、迴旋飛回飛船都會觸發；定時觸發器：停住的地雷不觸發（雷射飛到射程一半前只觸發 1 次 = 2 發）；命中觸發器的回響朝最近的另一隻敵人', M => {
+    ['電路晶片', '觸發器：消失時機與方向', '消失觸發器：黏著引爆、地雷時間到、迴旋飛回飛船都會觸發；定時觸發器：停住的地雷不觸發（雷射飛到射程一半前只觸發 1 次 = 2 發）；命中觸發器的回響沿子彈方向射、打得到被命中的那一隻', M => {
       const echoes = (flat, targets, frames) => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, flat); M.targets(targets);
         const got = [], orig = window.spawnShots;
@@ -360,9 +360,11 @@ const MechCheck = {
       const back = bm.some(e => Math.hypot(e.x - p.x, e.y - p.y) < 40);
       const tm = echoes(['weapon', 'stasis', 'trigtime'], [], 360).reduce((a, e) => a + e.n, 0);
       const aim = echoes(['weapon', 'trigger'], [[150, 0], [150, 200]], 30);
-      const aimOk = aim.length > 0 && Math.abs(angleDiff(aim[0].ang, Math.PI / 2)) < 0.3;
+      const one = M.targets([[150, 0]])[0], h1 = one.hp; Game.player.fire(); SockCheck.step(30);  // 只有一隻：回響打得到被命中的那一隻
+      const hitSelf = (h1 - one.hp) > 10 * 1.4;  // 雷射 10 ＋ 回響 5
+      const aimOk = aim.length > 0 && Math.abs(angleDiff(aim[0].ang, 0)) < 0.1 && hitSelf;
       return { ok: st.length > 0 && mine.length > 0 && back && tm === 2 && aimOk,
-        got: `黏著引爆 ${st.length} 次、地雷時間到 ${mine.length} 次、迴旋飛回飛船${back ? '有' : '沒有'}觸發；定時（地雷）${tm} 發；回響方向 ${aim.length ? Math.round(aim[0].ang * 180 / Math.PI) + '°' : '沒有'}（應朝 90° 的另一隻）` };
+        got: `黏著引爆 ${st.length} 次、地雷時間到 ${mine.length} 次、迴旋飛回飛船${back ? '有' : '沒有'}觸發；定時（地雷）${tm} 發；回響方向 ${aim.length ? Math.round(aim[0].ang * 180 / Math.PI) + '°' : '沒有'}（應為 0°，沿子彈方向）、只有一隻時受傷 ${(h1 - one.hp).toFixed(1)}（雷射 10 ＋ 回響 5 應 > 14）` };
     }],
     ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈（沒有穿甲就消失），並用整條電路回射；分裂插在攔截上：平常 1 發，只有回射分裂成 3 發', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'intercept', 'split', null]); M.targets([[300, 200]]);
