@@ -115,25 +115,37 @@ const Objects = {
     const B = this.blockers();
     this.fields = new Map();
     if (!B.length) return;
-    const C = OBJ.FLOW_CELL, W = Math.ceil(CFG.WORLD_W / C), H = Math.ceil(CFG.WORLD_H / C), blk = new Uint8Array(W * H);
+    const C = OBJ.FLOW_CELL, W = Math.ceil(CFG.WORLD_W / C), H = Math.ceil(CFG.WORLD_H / C), N = W * H;
+    // 陣列重複使用（每 0.25 秒就算一次，不要每次配新的記憶體）；col[c] = 第 c 格在第幾欄（不用每格做除法）
+    let S = this._flowBuf;
+    if (!S || S.N !== N) {
+      S = this._flowBuf = { N, blk: new Uint8Array(N), q: new Int32Array(N), col: new Int32Array(N), dists: [] };
+      for (let c = 0; c < N; c++) S.col[c] = c % W;
+    }
+    const blk = S.blk, q = S.q, col = S.col;
+    blk.fill(0);
     for (const o of B) {
       const R = this.blockR(o) + OBJ.FLOW_PAD, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
       const y0 = Math.max(0, Math.floor((o.y - R) / C)), y1 = Math.min(H - 1, Math.floor((o.y + R) / C));
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
         if (dist2((x + 0.5) * C, (y + 0.5) * C, o.x, o.y) < R * R) blk[y * W + x] = 1;
     }
+    let k = 0;
     for (const p of Game.players()) {
       if (!p || p.dead) continue;
-      const dist = new Int32Array(W * H).fill(-1), q = new Int32Array(W * H);
+      const dist = S.dists[k] || (S.dists[k] = new Int32Array(N));  // 每個玩家一份（上一次算的這時已經用不到了）
+      k++;
+      dist.fill(-1);
       const px = clamp(Math.floor(p.x / C), 0, W - 1), py = clamp(Math.floor(p.y / C), 0, H - 1);
       let head = 0, tail = 0;
       dist[py * W + px] = 0; q[tail++] = py * W + px;
+      const last = N - W;  // c >= W：不是第一列；c < last：不是最後一列
       while (head < tail) {
-        const c = q[head++], x = c % W, y = (c - x) / W, d = dist[c] + 1;
+        const c = q[head++], x = col[c], d = dist[c] + 1;
         if (x > 0 && dist[c - 1] < 0 && !blk[c - 1]) { dist[c - 1] = d; q[tail++] = c - 1; }
         if (x < W - 1 && dist[c + 1] < 0 && !blk[c + 1]) { dist[c + 1] = d; q[tail++] = c + 1; }
-        if (y > 0 && dist[c - W] < 0 && !blk[c - W]) { dist[c - W] = d; q[tail++] = c - W; }
-        if (y < H - 1 && dist[c + W] < 0 && !blk[c + W]) { dist[c + W] = d; q[tail++] = c + W; }
+        if (c >= W && dist[c - W] < 0 && !blk[c - W]) { dist[c - W] = d; q[tail++] = c - W; }
+        if (c < last && dist[c + W] < 0 && !blk[c + W]) { dist[c + W] = d; q[tail++] = c + W; }
       }
       this.fields.set(p, { dist, W, H });
     }
