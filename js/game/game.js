@@ -1310,7 +1310,9 @@ const Game = {
         let list;
         try { list = runOps(this.stats.ops, 0); } finally { this.fireMode = null; }
         for (const s of list) s.src = 'intercept';  // 回射的子彈算攔截的
+        const n0 = this.bullets.length;
         if (list.length) spawnShots(list, eb.x, eb.y, t ? Math.atan2(t.y - eb.y, t.x - eb.x) : b.angle, 1, null);  // 第 1 層：不會進環繞的圈
+        for (let i = n0; i < this.bullets.length; i++) this.bullets[i].fromIntercept = true;  // 永久標記（迴旋折返會把來源改成迴旋，盾要靠這個認）
         if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
           life: 2, color: '#9dff6b', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);
       });
@@ -1323,7 +1325,7 @@ const Game = {
   reflectShot(e, b, ca) {
     const nx = Math.cos(ca), ny = Math.sin(ca), vx = Math.cos(b.angle), vy = Math.sin(b.angle), dot = vx * nx + vy * ny;
     // 攔截回射的子彈打到盾只會消失、不反彈：不然「反彈成敵彈 → 被攔截 → 整條電路回射 → 又打到盾」會無限放大（拿掉子彈上限之後）
-    if (b.att.src === 'intercept') { b.dead = true; burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 4, 120, 0.2, 2); return; }
+    if (b.att.src === 'intercept' || b.fromIntercept) { b.dead = true; burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 4, 120, 0.2, 2); return; }
     let rx = vx - 2 * dot * nx, ry = vy - 2 * dot * ny;
     if (rx * nx + ry * ny < 0.3) { rx = nx; ry = ny; }  // 擦邊的也往外彈
     const l = Math.hypot(rx, ry) || 1, spd = clamp(b.speed * 0.6, 200, 450), dmg = Math.min(25, hitDamage(b) * 0.5);
@@ -1405,7 +1407,8 @@ const Game = {
   },
   updateEnemyBullets(dt) {
     const ps = this.players();
-    const I = this.bullets.filter(b => !b.dead && (b.intercept || b.parry) && b.mode !== 'wait');  // 攔截晶片、相位刃的格擋：打掉敵彈
+    // 攔截晶片、相位刃的格擋：打掉敵彈。飛回來途中的迴旋不能攔截（攔截會用整條電路重射，裡面又有迴旋 → 飛回飛船附近又攔截，子彈一直翻倍）
+    const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return') || b.parry) && b.mode !== 'wait');
     const fields = ps.filter(p => p.gravField);  // 重力井：場內的敵彈變慢
     for (const b of this.eBullets) {
       let k = 1;
