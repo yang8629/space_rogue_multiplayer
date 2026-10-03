@@ -29,11 +29,11 @@ const Codex = {
   close() { this.el.classList.add('hidden'); },
 
   render() {
-    const tabs = [['rules', '規則'], ['chips', '晶片'], ['body', '機體與地圖'], ['special', '插座與奇異點'], ['weapons', '武器']];
+    const tabs = [['rules', '規則'], ['chips', '晶片'], ['comps', '組件'], ['body', '機體與地圖'], ['special', '插座與奇異點'], ['weapons', '武器']];
     if (this.hasRun()) tabs.push(['current', '目前配置']);
     tabs.push(['charts', '數值圖表'], ['mech', '機制檢查']);
     this._charts = {};
-    const content = { rules: this.rules, chips: this.chips, body: this.bodyTab, special: this.special, weapons: this.weapons, current: this.current,
+    const content = { rules: this.rules, chips: this.chips, comps: this.comps, body: this.bodyTab, special: this.special, weapons: this.weapons, current: this.current,
       charts: this.charts, mech: this.mech }[this.tab].call(this);
     this.body.innerHTML = `<div class="between"><h2>📖 電路總覽</h2><button data-cx="close">關閉 (Esc)</button></div>
       <div class="tabs">${tabs.map(([k, l]) => `<button data-cx="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
@@ -398,8 +398,8 @@ const Codex = {
     </div>`;
   },
 
-  chips() {
-    const groups = ['path', 'launch', 'impact', 'body', 'trigger', 'comp'];
+  // 晶片：改變玩法的晶片和觸發器（組件另外一頁）
+  chips(groups = ['path', 'launch', 'impact', 'body', 'trigger']) {
     return groups.map(t => {
       const ids = NORMAL_IDS.filter(id => CHIPS[id].type === t);
       if (!ids.length) return '';
@@ -410,6 +410,10 @@ const Codex = {
       }).join('');
       return `<div class="codex-sec"><h3 style="color:${m.color}">${m.icon} ${m.label}（${ids.length}）</h3><div class="cards" style="justify-content:flex-start;margin:0">${cards}</div></div>`;
     }).join('');
+  },
+  // 組件：不佔電路格，插在晶片（或武器、觸發器）的插座上；插在哪裡作用在哪裡，見「插座與奇異點」
+  comps() {
+    return `<div class="sub" style="margin:6px 0 10px">組件不佔電路格，拖到晶片、武器或觸發器的<b>插座</b>上才有作用（超過插座數的變灰）。插在武器上作用在射出的子彈；插在玩法晶片上只作用在那個晶片的產物。每個晶片的產物見「插座與奇異點」分頁。</div>` + this.chips(['comp']);
   },
 
   // 機體與地圖：飛船、零件、背包模組、地圖物件
@@ -427,7 +431,7 @@ const Codex = {
         <div class="cards" style="justify-content:flex-start;margin:0">${mods}</div></div>
       <div class="codex-sec"><h3>🪐 地圖物件</h3><div class="rules">
         ${R('大地圖', '一般戰、精英戰是一張不規則的大地圖，分成 2～3 個區域（一區一波），區域之間用通道相連、通道中間有閘門。牆擋住飛船、敵人和雙方的子彈：牆反彈的子彈照牆面的角度彈開，其他子彈打到牆就消失（敵人的子彈也一樣，牆可以當掩護）。閘門在這一區清完才打開，穿過去就開始下一區，不能回頭（雙人：一個人穿過去就開始，另一個人之後自己飛過去）。右上角有小地圖。沙盒、靶場是方形場地。旗艦戰是一區的王關場地，形狀照王（母艦：圓形大廳＋凹室；獵艦：細長菱形；核心：中間四根柱子），終焉核心會在你身邊標紅圈轟炸。')}
-        ${R('擺放', '大地圖的每個區域各自抽：一半機率沒有，有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）。行星、黑洞放在空地上，不擋閘門；小行星帶從一邊的牆拉到另一邊的牆；彗星只在你所在的區域出現。旗艦戰 1～2 種（行星、小行星帶、彗星）。沙盒、靶場沒有。')}
+        ${R('擺放', '大地圖的每個區域各自抽：一半機率沒有，有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）。行星、黑洞放在空地上，不擋閘門；小行星帶從一邊的牆拉到另一邊的牆；彗星只在你所在的區域出現。旗艦戰沒有（王關場地本身就有凹室、柱子這些地形）。沙盒、靶場沒有。')}
         ${R('行星', '實心大球，擋住雙方的子彈。周圍的虛線圈是引力範圍：經過的子彈會被彎過去（彈弓），越慢的子彈彎越多（電漿砲最明顯、軌道砲幾乎不彎）。牆反彈的子彈會從行星表面反彈。')}
         ${R('黑洞', '把附近所有東西（敵人、雙方子彈、飛船）往中心拉；核心吞掉子彈，敵人和飛船碰到核心會受傷。旗艦不會被拉。')}
         ${R('彗星', '定時從場外（大地圖：從這一區的牆邊）沿直線橫越，進場前 1.5 秒有藍白色預警線（敵人的預警線是紅色）。撞到的敵人受 40、飛船受 20 傷害；打爆後碎片沿原本的方向炸出 10 發，敵人和飛船都會被打到（飛船每片 ${CFG.COMET_SHARD_DMG}）；撞到牆會爆炸。行星讓它彎軌道，黑洞吞掉它時會爆炸。')}

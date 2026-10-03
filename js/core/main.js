@@ -18,7 +18,7 @@ if (matchMedia('(pointer: coarse)').matches) setTouchMode(true);
 Screen.title();
 SFX.setMuted(SFX.muted);  // 依記住的設定更新靜音按鈕文字
 // 網址帶 #charts 或 #mech 時直接打開對應的總覽分頁（方便分享、檢查）
-if (['#charts', '#mech', '#rules', '#chips', '#weapons'].includes(location.hash)) Codex.open(location.hash.slice(1));
+if (['#charts', '#mech', '#rules', '#chips', '#comps', '#weapons'].includes(location.hash)) Codex.open(location.hash.slice(1));
 
 let last = performance.now();
 function frame(now) {
