@@ -1070,7 +1070,7 @@ const Game = {
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
           const wb = b.wsb || 0, sd = wb > 0 ? dmg * Math.max(0.1, b.bonus - wb + (b.accelMul || 1)) / Math.max(0.1, b.bonus + (b.accelMul || 1)) : dmg;
           (e.stuck = e.stuck || []).push({ dmg: sd, att, lv: b.sticky, owner: own, hm: b.hm && b.hm.sticky, hb: b.hb, color: b.color, angle: b.angle,
-            end: P && { payload: P, depth: b.depth + 1 } });
+            end: P && { payload: P, depth: b.depth + 1 }, fi: b.fromIntercept });
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
         }
@@ -1085,7 +1085,7 @@ const Game = {
         if (b.lifesteal) this.healPlayer(b.lifesteal, b.owner ? this.mate : this.player);
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
         if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
-          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner });  // 回響可以打到被命中的這一隻
+          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner, fi: b.fromIntercept });  // 回響可以打到被命中的這一隻
         if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
@@ -1098,7 +1098,9 @@ const Game = {
     this.updateStasisArcs(dt);
     for (const t of Q) {  // 觸發器：從觸發點展開子管線（用射出這顆子彈的人的武器與電路）；回響沿子彈原本的方向射（定時觸發器是往兩側）
       const ang = t.angle;
+      const n0 = B.length;
       this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, ang, t.depth, t.ignore));
+      if (t.fi) for (let i = n0; i < B.length; i++) B[i].fromIntercept = true;  // 攔截重射的子彈觸發的回響：一樣算攔截重射（不能再攔截）
       burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
     }
     Q.length = 0;
@@ -1253,7 +1255,7 @@ const Game = {
     }
     const T = S.find(q => q.end);  // 消失觸發器：黏住的子彈引爆時才算消失（一次爆炸觸發一次）
     if (T && this.triggerQueue.length < CFG.MAX_TRIGGERS_PER_FRAME)
-      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: null, owner: T.owner });
+      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: null, owner: T.owner, fi: T.fi });
   },
   // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片；鏡像 → 再爆一次（傷害、碎片都多一份）
   stickyHost(S, total, att) {
@@ -1303,7 +1305,7 @@ const Game = {
       eb.life = 0;
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
-      if (!b.intercept) return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射
+      if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
       this.withLoadout(b.owner, () => {
         const t = nearestEnemy(eb.x, eb.y, 900, null);
         this.fireMode = 'intercept'; this.chargeC = null;
@@ -1408,7 +1410,8 @@ const Game = {
   updateEnemyBullets(dt) {
     const ps = this.players();
     // 攔截晶片、相位刃的格擋：打掉敵彈。飛回來途中的迴旋不能攔截（攔截會用整條電路重射，裡面又有迴旋 → 飛回飛船附近又攔截，子彈一直翻倍）
-    const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return') || b.parry) && b.mode !== 'wait');
+    //   攔截重射出來的子彈（和它們觸發的回響）也不能再攔截：不然「攔截 → 重射 → 再攔截」會一直滾大
+    const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return' && !b.fromIntercept) || b.parry) && b.mode !== 'wait');
     const fields = ps.filter(p => p.gravField);  // 重力井：場內的敵彈變慢
     for (const b of this.eBullets) {
       let k = 1;

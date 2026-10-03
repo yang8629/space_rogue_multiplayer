@@ -269,7 +269,7 @@ class Bullet {
     const P = this.payload, Q = Game.triggerQueue;
     if (!P || P[0].trig !== 'end' || this.endDone || Q.length >= CFG.MAX_TRIGGERS_PER_FRAME) return;
     this.endDone = true;
-    Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle, depth: this.depth + 1, ignore: null, owner: this.owner });
+    Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept });
   }
   // 定時觸發器：飛行中每 0.3 秒往左右兩側各射一次回響（每顆最多 5 次；停住的地雷不算）
   tickTimer(dt) {
@@ -279,7 +279,7 @@ class Bullet {
     this.tAcc -= CFG.TIMER_TRIG; this.tN++;
     const Q = Game.triggerQueue;
     for (const sd of [-1, 1]) if (Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
-      Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle + sd * Math.PI / 2, depth: this.depth + 1, ignore: null, owner: this.owner });
+      Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle + sd * Math.PI / 2, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept });
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
   copy(dAngle) {

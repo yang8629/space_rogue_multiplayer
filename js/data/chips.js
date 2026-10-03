@@ -93,7 +93,7 @@ const CHIPS = {
       : list.map(b => ({ ...addBonus(b, o.lv >= 3 ? 1 : 0.5), dashShot: true, pierce: o.lv >= 3 ? 99 : b.pierce })) },
   intercept: { name: '攔截', short: '攔截', type: 'impact', cost: 1, evo: '反射鏡',
     grow: { what: '回射擊殺', need: [100, 330] },
-    desc: '子彈碰到敵彈時把它打掉，並從那裡用整條電路朝最近的敵人回射一次（不會用掉停火蓄力）。打掉一發敵彈跟打中敵人一樣扣 1 穿甲，沒有穿甲就消失。子彈越多、越大越會攔：散彈、相位刃（無限穿透）特別好用。',
+    desc: '子彈碰到敵彈時把它打掉，並從那裡用整條電路朝最近的敵人回射一次（不會用掉停火蓄力；回射出來的子彈、飛回來的迴旋只會格擋，不會再回射）。打掉一發敵彈跟打中敵人一樣扣 1 穿甲，沒有穿甲就消失。子彈越多、越大越會攔：散彈、相位刃（無限穿透）特別好用。',
     lvs: ['回射傷害 ×0.5', '回射傷害 ×1', '進化：打掉的敵彈也反彈回去（敵彈傷害 ×2）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, intercept: o.lv, damage: Game.fireMode === 'intercept' ? b.damage * (o.lv >= 2 ? 1 : 0.5) : b.damage })) },
 
