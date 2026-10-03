@@ -24,6 +24,7 @@ const Objects = {
 
   // ---------- 產生：每場戰鬥一半機率完全沒有；有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）、旗艦戰 1～2 種（行星 1～2 顆、小行星帶、彗星，沒有黑洞）；沙盒／靶場沒有 ----------
   gen(C, node) {
+    if (C && C.boss) return [];  // 旗艦戰：王關場地本身就有地形（凹室、柱子），不放行星、小行星帶、黑洞、彗星
     if (C && !C.sandbox && !Arena.rect) return this.genAreas(C);
     if (!C || C.sandbox || Math.random() < 0.5) return [];
     const kinds = C.boss ? pickN(['planet', 'belt', 'comet'], randInt(1, 2)) : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
@@ -68,7 +69,7 @@ const Objects = {
     const out = [];
     for (let k = 0; k < Arena.areas.length; k++) {
       if (Math.random() < 0.5) continue;
-      const kinds = C.boss ? pickN(['planet', 'belt', 'comet'], randInt(1, 2)) : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
+      const kinds = C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
       if (kinds.includes('comet') && !kinds.includes('planet')) kinds.push('planet');
       const entry = Arena.entryOf(k), gate = Arena.gates[k];
       const spot = (minD, r, margin) => {
@@ -82,7 +83,7 @@ const Objects = {
         return null;
       };
       for (const kd of kinds) {
-        if (kd === 'planet') for (let pn = C.boss ? randInt(1, 2) : 1; pn > 0; pn--) {  // 旗艦戰 1～2 顆
+        if (kd === 'planet') {
           const r = randInt(55, 95), p = spot(300, r, r + 90);
           if (p) out.push({ type: 'planet', ...p, r, r0: r, hp: r * OBJ.PLANET_HP, maxHp: r * OBJ.PLANET_HP, gm: +rand(0.7, 1.3).toFixed(2), area: k });
         }
@@ -318,7 +319,7 @@ const Objects = {
         return false;
       }
       b.x = o.x + nx * (o.r + b.r); b.y = o.y + ny * (o.r + b.r);
-      if (b.boom && b.mode === 'fly') { b.x += nx; b.y += ny; b.startReturn(); return false; }  // 迴旋：撞到行星、小行星折返
+      if (b.boom && b.mode === 'fly') { b.x += nx; b.y += ny; b.startReturn(false); return false; }  // 迴旋：撞到行星、小行星折返
       if (b.endBoom) G.explode(b.x, b.y, 90, b.damage, b.color, null, b.att);
       b.dead = true;
       return true;

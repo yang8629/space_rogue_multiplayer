@@ -543,7 +543,9 @@ function drawHUD() {
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
-  Arena.drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));  // 大地圖：右上角小地圖
+  // 大地圖：小地圖（電腦在右上角；手機的右邊有按鈕，放在左上角 HP 下面）
+  if (T) Arena.drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
+  else Arena.drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
 
   // 電路鏈縮圖（觸控時移到上方，避開拇指）
   const n = Game.chain.length, w = T ? 40 : 54, gap = T ? 5 : 8, total = n * w + (n - 1) * gap;

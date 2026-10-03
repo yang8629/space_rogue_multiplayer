@@ -464,10 +464,12 @@ const MechCheck = {
             if (b.bounced && !bounced) {
               bounced = true;
               if (nearGate(b.x, b.y)) continue;  // 打到閘門（閘門也會反彈，法線是閘門的方向，這裡只檢查牆）
+              const g0 = Arena.grad(b.x, b.y);  // 兩個圓接起來的凹角：附近的牆面方向變很快，量不準，不算
+              if ([[10, 0], [-10, 0], [0, 10], [0, -10]].some(([ox, oy]) => { const g = Arena.grad(b.x + ox, b.y + oy); return g[0] * g0[0] + g[1] * g0[1] < 0.95; })) continue;
               nRef++;
               const [nx, ny] = Arena.grad(b.x, b.y), ix = Math.cos(prevA), iy = Math.sin(prevA), ox = Math.cos(b.angle), oy = Math.sin(b.angle);
               const nIn = ix * nx + iy * ny, nOut = ox * nx + oy * ny, tIn = -ix * ny + iy * nx, tOut = -ox * ny + oy * nx;
-              if (nIn < 0 && Math.abs(nIn + nOut) < 0.12 && Math.abs(tIn - tOut) < 0.12) okRef++;
+              if (nIn < 0 && Math.abs(nIn + nOut) < 0.3 && Math.abs(tIn - tOut) < 0.3) okRef++;  // 容許約 17°：牆的場地值是 20 格點內插的，凹凸的牆面上法線每幾像素就差幾度
             }
           }
           if (chain[1] === null && b.dead && !b.bounced && !nearGate(b.x, b.y) && b.life > 0) { nDie++; if (Arena.f(b.x, b.y) < 2) diesOk++; }  // 射程用完才消失的不算
@@ -493,6 +495,22 @@ const MechCheck = {
       const shardHit = P.hp < hp0 && /彗星（碎片）/.test(Game.lastHit || '');
       return { ok: tries >= 3 && nRef >= 3 && okRef === nRef && nDie >= 3 && diesOk === nDie && worst > -40 && seenE > 100 && inWall === 0 && ebBad === 0 && shardHit,
         got: `反彈 ${okRef} / ${nRef} 次角度正確，沒反彈的子彈 ${diesOk} / ${nDie} 撞牆消失（最深進牆 ${(-worst).toFixed(0)}）；敵人 ${inWall ? inWall + ' 次在牆裡或別區（錯誤）' : '沒有穿牆'}（${seenE} 隻·幀），敵彈 ${eb} 個·幀 ${ebBad ? '有 ' + ebBad + ' 個在牆裡（錯誤）' : '沒有穿牆'}；彗星碎片${shardHit ? `打到飛船（-${Math.round(hp0 - P.hp)}）` : '沒打到飛船（錯誤）'}` };
+    }],
+    ['航圖與戰鬥', '選單（Esc）', '戰鬥中按 Esc：跳出選單、單人時暫停（時間、敵人都不動）；再按一次繼續；選「離開遊戲」：這一局中途結束，顯示結算畫面', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0 });
+      for (let f = 0; f < 120; f++) Game.update(1 / 60);
+      Game.togglePauseMenu(true);
+      const t0 = Game.time, menu = /繼續/.test(Screen.el.innerHTML) && /離開遊戲/.test(Screen.el.innerHTML);
+      for (let f = 0; f < 120; f++) Game.update(1 / 60);
+      const paused = Game.time === t0;
+      Game.togglePauseMenu(false);
+      for (let f = 0; f < 30; f++) Game.update(1 / 60);
+      const resumed = Game.time > t0;
+      Game.togglePauseMenu(true); Game.quitRun();
+      const ended = Game.state === 'ended' && !Game.inArena && /中途結束/.test(Screen.el.innerHTML) && /傷害|這一局還沒有造成傷害/.test(Screen.el.innerHTML);
+      Game.state = 'title';
+      return { ok: menu && paused && resumed && ended, got: `${menu ? '選單有「繼續」「離開遊戲」' : '選單不對'}；${paused ? '開著時暫停' : '開著時沒暫停（錯誤）'}；${resumed ? '繼續後照常進行' : '繼續後沒動'}；離開：${ended ? '顯示「中途結束」結算' : '沒有顯示結算（錯誤）'}` };
     }],
     ['航圖與戰鬥', '王關場地', '三隻王各有自己的場地形狀（母艦：圓形大廳＋凹室；獵艦：細長菱形；核心：中間四根柱子），只有一區、沒有閘門，大小跟方形場地差不多、整區連得通；王不會卡進牆裡；王的子彈打到牆會消失', M => {
       const out = [];
