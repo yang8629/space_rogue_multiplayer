@@ -56,6 +56,7 @@ const Game = {
   newRun(mode, shipId = this.shipId || 'vanguard', weaponId = this.weapon.id, startChip = null) {
     this.mode = mode;
     this.shipId = shipId;
+    Arena.reset();
     this.weapon = { id: weaponId, path: null, final: null };
     const S = SHIPS[shipId];
     // 先換上新的電路、倉庫、飛船，再計算數值（不能拿上一場的電路來算）
@@ -152,6 +153,7 @@ const Game = {
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
     this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
     this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
+    if (this.usesAreas() && !this.isClient()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal); else Arena.reset();  // 大地圖（雙人：隊友收到種子才產生，之前先用方形場地）
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
     // 雙人：房主在左、隊友在右（隊友的位置由隊友自己的電腦決定）
@@ -210,19 +212,23 @@ const Game = {
   },
   spawnEnemy(type) {
     const C = this.combat, p = this.player, a = rand(0, TAU), d = rand(520, 780);
-    const x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
-    const y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
+    let x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
+    let y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
+    const zone = Math.max(0, C.wave - 1);
+    if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 520, 780, 60);  // 大地圖：出生在這一波的區域裡（離在這一區的玩家 520～780）
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
       (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
       (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）
     const e = new Enemy(type, x, y, scale);
+    if (!Arena.rect) e.zone = zone;
     this.enemies.push(e);
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
     if (type === 'worm') {  // 列隊蟲：再往外排 5 節，每節跟著前一節
       const ux = (x - p.x) / (Math.hypot(x - p.x, y - p.y) || 1), uy = (y - p.y) / (Math.hypot(x - p.x, y - p.y) || 1);
       let prev = e;
       for (let i = 1; i < 6; i++) {
-        const w = new Enemy('worm', clamp(x + ux * 22 * i, 20, CFG.WORLD_W - 20), clamp(y + uy * 22 * i, 20, CFG.WORLD_H - 20), scale);
+        const w = new Enemy('worm', ...Arena.clampIn(x + ux * 22 * i, y + uy * 22 * i, 20), scale);
+        if (!Arena.rect) w.zone = zone;
         w.ahead = prev; prev = w; this.enemies.push(w);
       }
     }
@@ -247,10 +253,10 @@ const Game = {
         SFX.play('clear');
         return;
       }
-      // 一場戰鬥分成幾個區域（一區一波）：清完出現出口，有人飛進去才到下一區
+      // 一場戰鬥分成幾個區域（一區一波）：清完打開閘門，有人穿過閘門就開始下一區（另一個人之後自己飛過去加入）
       if (C.wave >= 1 && this.usesAreas() && C.exitUsed !== C.wave) {
         if (!this.exit) this.openExit();
-        else for (const p of this.players()) if (dist2(p.x, p.y, this.exit.x, this.exit.y) < (this.exit.r + p.r) ** 2) { this.nextArea(); break; }
+        else if (this.players().some(p => p.zone >= C.wave)) this.nextArea();
         return;
       }
       C.waveTimer -= dt;
@@ -262,35 +268,28 @@ const Game = {
     const C = this.combat;
     return !!C && !C.sandbox && !C.range && !C.boss && isFinite(C.wavesTotal) && C.wavesTotal > 1;
   },
-  // 出口：離飛船 450～800、不在行星／黑洞／小行星上，而且從飛船直線飛得到（不會被小行星帶整片擋住）
-  //   找不到就放近一點（250～450），再不行就 120～800 裡任何直線飛得到的地方；都沒有就放在飛船身上（直接換區，不會卡住）
+  // 打開這一區的閘門（exit = 閘門中央，畫箭頭、同步用）
   openExit() {
-    const p = this.player, B = Objects.blockers(), M = 140;
-    let x = p.x, y = p.y;
-    search: for (const [d0, d1] of [[450, 800], [250, 450], [120, 800]]) for (let i = 0; i < 40; i++) {
-      const a = rand(0, TAU), d = rand(d0, d1), tx = p.x + Math.cos(a) * d, ty = p.y + Math.sin(a) * d;
-      if (tx < M || ty < M || tx > CFG.WORLD_W - M || ty > CFG.WORLD_H - M) continue;
-      if (B.some(o => dist2(tx, ty, o.x, o.y) < (Objects.blockR(o) + 70) ** 2)) continue;
-      if (Objects.losBlocked(p.x, p.y, tx, ty, p.r + 8)) continue;
-      x = tx; y = ty; break search;
-    }
-    this.exit = { x, y, r: 40 };
-    this.banner = { text: '區域肅清', sub: '飛進出口，前往下一區', t: 2 };
+    const g = Arena.gates[this.combat.wave - 1];
+    if (!g) { this.combat.exitUsed = this.combat.wave; return; }  // 不該發生（大地圖的閘門數 = 區域數 - 1）：直接開始下一波
+    g.open = true;
+    this.exit = { x: g.x, y: g.y, r: 40, gate: true };
+    this.banner = { text: '區域肅清', sub: '閘門已開啟，穿過閘門前往下一區', t: 2 };
     SFX.play('clear');
   },
-  // 換區：地上的晶體直接收下、子彈清掉、重新產生地圖物件，飛船回到中央，下一波照常倒數
+  // 換區：地上的晶體直接收下；倒下的人如果留在後面的區域，搬到新區域的入口（閘門不能回頭，不搬隊友救不到）；下一波照常倒數
   nextArea() {
     const C = this.combat, n = this.pickups.length;
     this.credits += n;
     if (this.mode === 'coop') Net.lootTotal += n;
-    this.pickups = []; this.bullets = []; this.eBullets = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
+    this.pickups = [];
     this.exit = null; C.exitUsed = C.wave; C.areaN = (C.areaN || 0) + 1; C.waveTimer = 1.2;
-    this.player.resetPos();
-    if (Net.role === 'host') this.player.x -= 50;
-    if (this.mate) { this.mate.resetPos(); this.mate.x += Net.role === 'host' ? 50 : -50; }
-    this.objs = Objects.gen(C, this.node);
-    Objects.flowT = 0;  // 尋路馬上照新的地圖重算
-    this.cam.x = this.player.x - ZW / 2; this.cam.y = this.player.y - ZH / 2;
+    for (const p of [this.player, this.mate]) if (p && p.dead && !p.gone) this.toEntry(p, C.wave);
+  },
+  toEntry(p, k) {
+    if (Arena.rect || (p.zone || 0) >= k) return;
+    const E = Arena.entryOf(k);
+    p.x = E.x; p.y = E.y; p.vx = p.vy = 0; p.zone = k;
   },
   combatWon() {
     const client = this.isClient();  // 雙人的隊友：地上剩下的晶體由房主算好數量傳過來
@@ -735,8 +734,8 @@ const Game = {
     if (!this.isClient()) {
       this.infectBurst(e); this.payGrowTags(e);
       if (e.type === 'splitter') for (let i = 0; i < 3; i++) {  // 分裂體：分成 3 隻碎裂體
-        const a = i / 3 * TAU + rand(0, 1), k = new Enemy('splitling', clamp(e.x + Math.cos(a) * 20, 20, CFG.WORLD_W - 20), clamp(e.y + Math.sin(a) * 20, 20, CFG.WORLD_H - 20), e.hpScale);
-        k.spawnT = 0.15; k.vx = Math.cos(a) * 200; k.vy = Math.sin(a) * 200; this.enemies.push(k);
+        const a = i / 3 * TAU + rand(0, 1), k = new Enemy('splitling', ...Arena.clampIn(e.x + Math.cos(a) * 20, e.y + Math.sin(a) * 20, 20), e.hpScale);
+        k.zone = e.zone; k.spawnT = 0.15; k.vx = Math.cos(a) * 200; k.vy = Math.sin(a) * 200; this.enemies.push(k);
       }
     }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
@@ -996,6 +995,7 @@ const Game = {
         }
       }
     }
+    if (!Arena.rect) for (const e of E) if (!e.dead && Arena.f(e.x, e.y) < e.r) Arena.collide(e, e.r, null);  // 大地圖：被擠進牆裡的推回來
     this.enemies = E.filter(e => !e.dead);
   },
   updateBullets(dt) {
@@ -1009,6 +1009,7 @@ const Game = {
       if (b.dead) continue;
       b.update(dt);
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
+      if (b.comet && this.cometShardHit(b)) continue;  // 彗星碎片：也會打到飛船
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
       if (b.overT > 0) continue;  // 迴旋：正在穿過打中的敵人，準備折返
@@ -1374,6 +1375,15 @@ const Game = {
     p.healed += add;
     p.hp = Math.min(p.maxHp, p.hp + add);
   },
+  // 彗星打爆後的碎片打到飛船：每片 10，碎片消失
+  cometShardHit(b) {
+    for (const p of this.players()) {
+      if (p.invuln || dist2(b.x, b.y, p.x, p.y) >= (b.r + p.r) ** 2) continue;
+      this.hurtPlayer(CFG.COMET_SHARD_DMG, '彗星（碎片）', p, b.px, b.py);
+      b.dead = true; return true;
+    }
+    return false;
+  },
   updateEnemyBullets(dt) {
     const ps = this.players();
     const I = this.bullets.filter(b => !b.dead && (b.intercept || b.parry) && b.mode !== 'wait');  // 攔截晶片、相位刃的格擋：打掉敵彈
@@ -1383,6 +1393,7 @@ const Game = {
       for (const p of fields) if (dist2(b.x, b.y, p.x, p.y) < p.gravField.R ** 2) k = Math.min(k, 1 - p.gravField.slow);
       b.x += b.vx * dt * k; b.y += b.vy * dt * k; b.life -= dt;
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
+      if (!Arena.rect && (Arena.f(b.x, b.y) < 0 || Arena.gateCross(b.x - b.vx * dt * k, b.y - b.vy * dt * k, b.x, b.y))) { b.life = 0; continue; }  // 大地圖：敵彈打到牆、閘門就消失
       if (Objects.eBulletHit(b)) continue;
       if (I.length && this.interceptHit(b, I)) continue;
       for (const p of ps) {
@@ -1398,6 +1409,7 @@ const Game = {
       const p = this.nearestPlayer(c.x, c.y), range = CFG.MAGNET_RANGE * (1 + this.passivesOf(p).magnet);  // 晶體飛向最近的玩家（雙人：撿到的人和隊友都 +1）
       const d2 = dist2(c.x, c.y, p.x, p.y);
       stepPickup(c, p, range, d2, dt);
+      if (!Arena.rect && !c.vacuum && Arena.f(c.x, c.y) < 6) [c.x, c.y] = Arena.clampIn(c.x, c.y, 6);  // 大地圖：晶體不會飛進牆裡（全場吸取時直接穿過）
       if (d2 < 20 * 20) {
         c.life = 0; this.credits++; SFX.play('pickup');
         if (this.mode === 'coop') Net.lootTotal++;  // 雙人：不管誰撿到，隊友也 +1（透過同步傳過去）
@@ -1418,8 +1430,8 @@ const Game = {
   },
   updateCamera(dt) {
     const p = this.player.dead && this.mate && !this.mate.dead ? this.mate : this.player, c = this.cam;  // 自己被擊墜時看隊友
-    const tx = clamp(p.x - ZW / 2, -80, CFG.WORLD_W - ZW + 80);
-    const ty = clamp(p.y - ZH / 2, -80, CFG.WORLD_H - ZH + 80);
+    const tx = clamp(p.x - ZW / 2, -80, Arena.W - ZW + 80);
+    const ty = clamp(p.y - ZH / 2, -80, Arena.H - ZH + 80);
     c.x += (tx - c.x) * Math.min(1, dt * 8);
     c.y += (ty - c.y) * Math.min(1, dt * 8);
     c.shake = Math.max(0, c.shake - dt * 40);

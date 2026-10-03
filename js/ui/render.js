@@ -65,7 +65,7 @@ function drawSticks() {
 }
 
 function drawWorld() {
-  const c = Game.cam, W = CFG.WORLD_W, H = CFG.WORLD_H;
+  const c = Game.cam, W = Arena.W, H = Arena.H;
   ctx.strokeStyle = 'rgba(60, 90, 180, 0.12)';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -73,9 +73,11 @@ function drawWorld() {
   for (let x = Math.max(0, Math.floor(c.x / g) * g); x <= Math.min(W, c.x + ZW); x += g) { ctx.moveTo(x, Math.max(0, c.y)); ctx.lineTo(x, Math.min(H, c.y + ZH)); }
   for (let y = Math.max(0, Math.floor(c.y / g) * g); y <= Math.min(H, c.y + ZH); y += g) { ctx.moveTo(Math.max(0, c.x), y); ctx.lineTo(Math.min(W, c.x + ZW), y); }
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(76, 201, 240, 0.6)';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(0, 0, W, H);
+  if (Arena.rect) {
+    ctx.strokeStyle = 'rgba(76, 201, 240, 0.6)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0, 0, W, H);
+  } else Arena.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 大地圖：牆、閘門
 
   Objects.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
   drawExit();
@@ -171,6 +173,12 @@ function drawExit() {
   const X = Game.exit;
   if (!X) return;
   const t = Game.time, pulse = 1 + 0.08 * Math.sin(t * 5);
+  if (X.gate) {  // 大地圖：閘門本身由 Arena.draw 畫，這裡只寫字＋畫箭頭（已經穿過去的人不畫）
+    const me = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, g = Arena.gates[me.zone];
+    if (!g || !g.open) return;
+    ctx.globalAlpha = 1; ctx.fillStyle = '#c9fff3'; ctx.font = 'bold 14px Microsoft JhengHei'; ctx.textAlign = 'center';
+    ctx.fillText('閘門', g.x - g.nx * 30, g.y - g.ny * 30 - 10);
+  } else {
   ctx.strokeStyle = '#2ee6a6'; ctx.lineWidth = 4; ctx.globalAlpha = 0.9;
   ctx.beginPath(); ctx.arc(X.x, X.y, X.r * pulse, 0, TAU); ctx.stroke();
   ctx.lineWidth = 2;
@@ -178,9 +186,11 @@ function drawExit() {
   ctx.globalAlpha = 0.15; ctx.fillStyle = '#2ee6a6'; ctx.beginPath(); ctx.arc(X.x, X.y, X.r * pulse, 0, TAU); ctx.fill();
   ctx.globalAlpha = 1; ctx.fillStyle = '#c9fff3'; ctx.font = 'bold 14px Microsoft JhengHei'; ctx.textAlign = 'center';
   ctx.fillText('出口', X.x, X.y - X.r - 10);
+  }
   const p = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, c = Game.cam;
   if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;  // 看得到就不畫箭頭
-  const a = Math.atan2(X.y - p.y, X.x - p.x), ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
+  const dir = X.gate ? Arena.exitDir(p.x, p.y, p.zone) : null;  // 大地圖：箭頭照繞牆的路線指
+  const a = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x), ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
   ctx.fillStyle = '#2ee6a6'; ctx.globalAlpha = 0.6 + 0.3 * Math.sin(t * 6);
   ctx.beginPath(); ctx.moveTo(ax + Math.cos(a) * 12, ay + Math.sin(a) * 12);
   ctx.lineTo(ax + Math.cos(a + 2.5) * 10, ay + Math.sin(a + 2.5) * 10); ctx.lineTo(ax + Math.cos(a - 2.5) * 10, ay + Math.sin(a - 2.5) * 10);
@@ -521,6 +531,7 @@ function drawHUD() {
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
+  Arena.drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));  // 大地圖：右上角小地圖
 
   // 電路鏈縮圖（觸控時移到上方，避開拇指）
   const n = Game.chain.length, w = T ? 40 : 54, gap = T ? 5 : 8, total = n * w + (n - 1) * gap;

@@ -6,7 +6,7 @@
 // 地圖物件：場上固定存在、會改變走位和子彈路線（不是可以撿的東西）
 //   行星  planet：實心大球，擋所有子彈；靠近的子彈被引力彎過去（越慢彎越多）；大小、耐久、引力隨機；只有旗艦的子彈打得掉（越打越小，打光就崩解）
 //   黑洞  hole  ：把附近所有東西往中心拉；核心吞掉子彈，敵人和飛船受傷（敵人走路會繞開，被打進去才會受傷）
-//   彗星  comet ：定時沿直線橫越（先有預警線）。撞到敵人、飛船都受傷；打爆後碎片往前炸（只傷敵人）
+//   彗星  comet ：定時沿直線橫越（先有預警線）。撞到敵人、飛船都受傷；打爆後碎片往前炸（敵人、飛船都會被打到）
 //   小行星 rock ：一整條小行星帶（中間留 2 個縫），擋所有子彈和敵人（敵人會繞路或鑽縫）；擋住視野；只有單發 ≥ 30 的傷害打得動，打爆掉晶體；
 //                 旗艦的子彈、旗艦和滾動的刺殼撞上去也會打碎（不給成長）
 //   雙人：房主模擬，隊友只收同步（Game.objs）；飛船被拉、被擋由各自的電腦算
@@ -24,6 +24,7 @@ const Objects = {
 
   // ---------- 產生：每場戰鬥一半機率完全沒有；有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）、旗艦戰 1～2 種（行星 1～2 顆、小行星帶、彗星，沒有黑洞）；沙盒／靶場沒有 ----------
   gen(C, node) {
+    if (C && !C.sandbox && !Arena.rect) return this.genAreas(C);
     if (!C || C.sandbox || Math.random() < 0.5) return [];
     const kinds = C.boss ? pickN(['planet', 'belt', 'comet'], randInt(1, 2)) : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
     if (kinds.includes('comet') && !kinds.includes('planet')) kinds.push('planet');  // 有彗星就配一顆行星：彗星會被引力彎過去
@@ -59,15 +60,74 @@ const Objects = {
     }
     return out;
   },
+  // 大地圖：每個區域各自抽（規則跟方形場地一樣：一半機率沒有；一般戰 1～2 種、精英戰 1 種），開場一次放好
+  //   行星：放在空地，周圍至少留飛船過得去的寬度；黑洞：核心離牆至少 200、離入口至少 420；兩者都不能擋住閘門
+  //   小行星帶：從一邊的牆拉到另一邊的牆（挑比較窄的地方），一樣留 2 個縫；不擋入口和閘門
+  //   彗星：只在玩家所在的區域出現，從那一區的牆邊飛進來
+  genAreas(C) {
+    const out = [];
+    for (let k = 0; k < Arena.areas.length; k++) {
+      if (Math.random() < 0.5) continue;
+      const kinds = C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
+      if (kinds.includes('comet') && !kinds.includes('planet')) kinds.push('planet');
+      const entry = Arena.entryOf(k), gate = Arena.gates[k];
+      const spot = (minD, r, margin) => {
+        for (let i = 0; i < 60; i++) {
+          const [x, y] = Arena.randomIn(k, margin);
+          if (Math.hypot(x - entry.x, y - entry.y) < minD + r) continue;
+          if (gate && Math.hypot(x - gate.x, y - gate.y) < r + 260) continue;
+          if (out.some(o => o.type !== 'rock' && o.type !== 'cometgen' && Math.hypot(o.x - x, o.y - y) < (o.R || o.r) + r + 160)) continue;
+          return { x, y };
+        }
+        return null;
+      };
+      for (const kd of kinds) {
+        if (kd === 'planet') {
+          const r = randInt(55, 95), p = spot(300, r, r + 90);
+          if (p) out.push({ type: 'planet', ...p, r, r0: r, hp: r * OBJ.PLANET_HP, maxHp: r * OBJ.PLANET_HP, gm: +rand(0.7, 1.3).toFixed(2), area: k });
+        }
+        if (kd === 'hole') { const p = spot(420, OBJ.HOLE_R * 0.6, 200 + OBJ.HOLE_CORE); if (p) out.push({ type: 'hole', ...p, r: OBJ.HOLE_CORE, R: OBJ.HOLE_R, tick: 0, area: k }); }
+        if (kd === 'comet') out.push({ type: 'cometgen', t: rand(4, 7), area: k });
+        if (kd === 'belt') this.genBelt(k, entry, gate, out);
+      }
+    }
+    return out;
+  },
+  genBelt(k, entry, gate, out) {
+    let best = null;
+    for (let t = 0; t < 30; t++) {
+      const [qx, qy] = Arena.randomIn(k, 160), a = rand(0, TAU), ux = Math.cos(a), uy = Math.sin(a);
+      const reach = sg => { let d = 0; while (d < 1600 && Arena.f(qx + ux * sg * d, qy + uy * sg * d) > 0) d += 20; return d; };
+      const d1 = reach(1), d2 = reach(-1), len = d1 + d2;
+      if (len < 360 || len > 1500) continue;
+      const ax = qx - ux * d2, ay = qy - uy * d2, bx = qx + ux * d1, by = qy + uy * d1;
+      if (segDist2(ax, ay, bx, by, entry.x, entry.y) < 220 ** 2) continue;
+      if (gate && segDist2(ax, ay, bx, by, gate.x, gate.y) < 260 ** 2) continue;
+      if (out.some(o => (o.type === 'planet' || o.type === 'hole') && segDist2(ax, ay, bx, by, o.x, o.y) < ((o.R || o.r) + 60) ** 2)) continue;
+      if (!best || len < best.len) best = { ax, ay, ux, uy, len };
+    }
+    if (!best) return;
+    const m = Math.max(6, Math.round(best.len / 58)), step = best.len / m;
+    const g1 = randInt(1, Math.floor(m / 2) - 1), g2 = randInt(Math.ceil(m / 2) + 1, m - 1), gap = i => i === g1 || i === g2, edge = i => gap(i - 1) || gap(i + 1);
+    for (let i = 0; i <= m; i++) {
+      if (gap(i)) continue;
+      const e = edge(i), j = e ? 0 : rand(-22, 22), r = e ? 18 : randInt(18, 32);
+      const x = best.ax + best.ux * (i * step + j) - best.uy * rand(-12, 12), y = best.ay + best.uy * (i * step + j) + best.ux * rand(-12, 12);
+      if (Arena.f(x, y) < -r * 0.3) continue;  // 太深入牆裡的不放
+      const hp = r * 4;
+      out.push({ type: 'rock', x, y, r, hp, maxHp: hp, area: k });
+    }
+  },
   list(type) { return Game.objs.filter(o => o.type === type); },
 
   // ---------- 每幀（房主）：彗星、黑洞對敵人／敵彈、敵人撞行星 ----------
   update(dt) {
     this.dt = dt;
     const G = Game;
-    if (!G.objs.length) return;
+    if (!G.objs.length) { if (!Arena.rect && (this.flowT = (this.flowT || 0) - dt) <= 0) { this.flowT = OBJ.FLOW_EVERY; this.buildFlow(); } return; }  // 大地圖：沒有物件也要尋路（繞牆）
+    const cur = G.combat ? Math.max(0, G.combat.wave - 1) : 0;
     for (const o of G.objs) {
-      if (o.type === 'cometgen' && (o.t -= dt) <= 0) { o.t = rand(...OBJ.COMET_EVERY); this.spawnComet(); }
+      if (o.type === 'cometgen' && (o.area == null || o.area === cur) && (o.t -= dt) <= 0) { o.t = rand(...OBJ.COMET_EVERY); this.spawnComet(o.area); }  // 大地圖：只有玩家所在的區域會來彗星
       if (o.type === 'comet') this.updateComet(o, dt);
       if (o.type === 'hole') {
         o.tick -= dt;
@@ -114,8 +174,8 @@ const Objects = {
   buildFlow() {
     const B = this.blockers();
     this.fields = new Map();
-    if (!B.length) return;
-    const C = OBJ.FLOW_CELL, W = Math.ceil(CFG.WORLD_W / C), H = Math.ceil(CFG.WORLD_H / C), N = W * H;
+    if (!B.length && Arena.rect) return;
+    const C = OBJ.FLOW_CELL, W = Math.ceil(Arena.W / C), H = Math.ceil(Arena.H / C), N = W * H;
     // 陣列重複使用（每 0.25 秒就算一次，不要每次配新的記憶體）；col[c] = 第 c 格在第幾欄（不用每格做除法）
     let S = this._flowBuf;
     if (!S || S.N !== N) {
@@ -123,7 +183,7 @@ const Objects = {
       for (let c = 0; c < N; c++) S.col[c] = c % W;
     }
     const blk = S.blk, q = S.q, col = S.col;
-    blk.fill(0);
+    if (Arena.rect) blk.fill(0); else blk.set(Arena.wallMask(C, W, H, OBJ.FLOW_PAD + 8));  // 大地圖：牆（離牆不到 20 的格子）和閘門不能走
     for (const o of B) {
       const R = this.blockR(o) + OBJ.FLOW_PAD, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
       const y0 = Math.max(0, Math.floor((o.y - R) / C)), y1 = Math.min(H - 1, Math.floor((o.y + R) / C));
@@ -222,6 +282,7 @@ const Objects = {
       if (ax || ay) b.angle += (-Math.sin(b.angle) * ax + Math.cos(b.angle) * ay) / b.speed * this.dt;
     }
     for (const o of G.objs) {
+      if (o.dead) continue;  // 這一幀剛被打爆的（例如彗星：碎片不會打到自己的彗星）
       if (o.type === 'hole') {
         if (dist2(b.x, b.y, o.x, o.y) < o.r * o.r) { b.dead = true; return true; }  // 核心吞掉子彈
         continue;
@@ -320,10 +381,17 @@ const Objects = {
   },
 
   // ---------- 彗星 ----------
-  spawnComet() {
+  spawnComet(area) {
     const W = CFG.WORLD_W, H = CFG.WORLD_H, side = randInt(0, 3);
-    const edge = [[rand(200, W - 200), -40], [W + 40, rand(200, H - 200)], [rand(200, W - 200), H + 40], [-40, rand(200, H - 200)]][side];
-    const tx = rand(W * 0.3, W * 0.7), ty = rand(H * 0.3, H * 0.7), a = Math.atan2(ty - edge[1], tx - edge[0]);
+    let edge = [[rand(200, W - 200), -40], [W + 40, rand(200, H - 200)], [rand(200, W - 200), H + 40], [-40, rand(200, H - 200)]][side];
+    let tx = rand(W * 0.3, W * 0.7), ty = rand(H * 0.3, H * 0.7);
+    if (!Arena.rect) {  // 大地圖：從這一區裡隨機一點往隨機方向找到牆邊，從那裡朝那一點飛過去
+      const [qx, qy] = Arena.randomIn(area || 0, 150), b = rand(0, TAU);
+      let d = 0;
+      while (d < 2000 && Arena.f(qx + Math.cos(b) * (d + 20), qy + Math.sin(b) * (d + 20)) > 30) d += 20;
+      edge = [qx + Math.cos(b) * d, qy + Math.sin(b) * d]; tx = qx; ty = qy;
+    }
+    const a = Math.atan2(ty - edge[1], tx - edge[0]);
     // 大小隨機：越大飛越慢、越耐打、爆炸越大（半徑 12～30；速度 520～230）
     const r = randInt(12, 30), k = r / 18, spd = OBJ.COMET_SPEED / k;
     Game.objs.push({ type: 'comet', id: Game.nextId++, x: edge[0], y: edge[1], vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
@@ -336,7 +404,8 @@ const Objects = {
     const [ax, ay] = this.gravity(o.x, o.y);  // 行星讓彗星彎軌道，黑洞把彗星吸偏
     o.vx += ax * dt * OBJ.COMET_GRAV; o.vy += ay * dt * OBJ.COMET_GRAV;
     o.x += o.vx * dt; o.y += o.vy * dt; o.age += dt;
-    if (o.age > 1 && (o.x < -80 || o.y < -80 || o.x > CFG.WORLD_W + 80 || o.y > CFG.WORLD_H + 80)) { o.dead = true; return; }
+    if (o.age > 1 && (o.x < -80 || o.y < -80 || o.x > Arena.W + 80 || o.y > Arena.H + 80)) { o.dead = true; return; }
+    if (!Arena.rect && o.age > 0.3 && (Arena.f(o.x, o.y) < o.r * 0.3 || Arena.gateCross(o.x - o.vx * dt, o.y - o.vy * dt, o.x, o.y))) { this.cometBoom(o, 100, 40); return; }  // 大地圖：撞牆爆炸
     for (const h of G.objs) {
       if (h.type === 'hole' && dist2(o.x, o.y, h.x, h.y) < (h.r + o.r) ** 2) { this.cometBoom(o, 120, 60); return; }  // 被黑洞吞掉時爆炸
       if (h.type === 'planet' && dist2(o.x, o.y, h.x, h.y) < (h.r + o.r) ** 2) { this.cometBoom(o, 100, 40); return; }
@@ -355,14 +424,16 @@ const Objects = {
       G.hurtPlayer(20, '彗星（撞擊）', p, o.x, o.y);
     }
   },
-  // 打爆：碎片沿原本的飛行方向炸出去（只傷敵人，算打爆的人的）
+  // 打爆：碎片沿原本的飛行方向炸出去（敵人和飛船都會被打到；打到敵人算打爆的人的，打到飛船每片 CFG.COMET_SHARD_DMG）
   breakComet(o) {
     if (o.dead) return;
     o.dead = true;
     const a = Math.atan2(o.vy, o.vx), owner = o.lastAtt ? o.lastAtt.owner : null;
     const list = Array.from({ length: 10 }, (_, i) => shot({ angle: (i / 9 - 0.5) * 1.2, speed: 620, damage: 25, radius: 4, life: 0.7,
       color: '#bfe9ff', shape: 'dot', src: 'ship', shard: true }));
+    const n0 = Game.bullets.length;
     Game.withLoadout(owner, () => spawnShots(list, o.x, o.y, a, 0, null));
+    for (let i = n0; i < Game.bullets.length; i++) Game.bullets[i].comet = true;
     burst(o.x, o.y, '#bfe9ff', 30, 260, 0.6, 3);
     SFX.play('explode');
   },
@@ -436,7 +507,8 @@ const Objects = {
       const [ax, ay] = this.gravity(x, y);
       vx += ax * dt * OBJ.COMET_GRAV; vy += ay * dt * OBJ.COMET_GRAV; x += vx * dt; y += vy * dt;
       pts.push([x, y]);
-      if (x < -100 || y < -100 || x > CFG.WORLD_W + 100 || y > CFG.WORLD_H + 100) break;
+      if (x < -100 || y < -100 || x > Arena.W + 100 || y > Arena.H + 100) break;
+      if (!Arena.rect && i > 8 && Arena.f(x, y) < 0) break;  // 大地圖：預警線畫到牆為止
       if (Game.objs.some(h => (h.type === 'planet' || h.type === 'hole' || (h.type === 'rock' && !h.dead)) && dist2(x, y, h.x, h.y) < (h.r + o.r) ** 2)) break;
     }
     return pts;
