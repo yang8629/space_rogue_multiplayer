@@ -81,6 +81,14 @@ function drawWorld() {
 
   Objects.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
   drawExit();
+  for (const z of Game.zones) {  // 王的落點轟炸：紅圈，裡面的實心圓越長越大，滿了就爆炸
+    const k = 1 - Math.max(0, z.t) / z.max;
+    ctx.globalAlpha = 0.5 + 0.4 * Math.sin(Game.time * 20) ** 2; ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.18 + 0.2 * k; ctx.fillStyle = '#ff2a2a';
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r * k, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
   ctx.fillStyle = '#ffd166';
   for (const p of Game.pickups) {
     if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;

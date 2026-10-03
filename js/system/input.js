@@ -5,7 +5,7 @@
 // =====================================================================
 // INPUT
 // =====================================================================
-const Input = { keys: new Set(), mx: 0, my: 0, down: false, dash: false,
+const Input = { keys: new Set(), mx: 0, my: 0, down: false, dash: false, dashHeld: false,  // dashHeld：衝刺鍵按住中（冷卻好就自動再衝；不靠系統的按鍵重複，按別的鍵也不會斷）
   touch: false,                    // 偵測到觸控後切換為雙搖桿操作
   autoFire: true,                  // 手機自動攻擊（可切換，記在瀏覽器）
   joy: null, aimStick: null };     // { id, bx, by, x, y }
@@ -20,7 +20,7 @@ addEventListener('keydown', e => {
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
   if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k)) return;
-  if (k === ' ') { e.preventDefault(); if (Game.state === 'play') Input.dash = true; return; }
+  if (k === ' ') { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
   if (k === 'escape' && !e.repeat) {  // Esc：按下畫面上標了 data-back 的返回鍵（只有不會造成損失的返回，例如選武器 → 選飛船）
@@ -32,9 +32,10 @@ addEventListener('keydown', e => {
   if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();
 });
 addEventListener('keyup', e => {
+  if (e.key === ' ') Input.dashHeld = false;
   Input.keys.delete(e.key.toLowerCase());
 });
-addEventListener('blur', () => { Input.keys.clear(); Input.down = false; });
+addEventListener('blur', () => { Input.keys.clear(); Input.down = false; Input.dashHeld = false; });
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -43,9 +44,9 @@ addEventListener('mousemove', e => { const p = canvasPos(e); Input.mx = p.x; Inp
 canvas.addEventListener('mousedown', e => {
   if (Game.state !== 'play' || Input.touch) return;
   if (e.button === 0) Input.down = true;
-  if (e.button === 2) Input.dash = true;
+  if (e.button === 2) { Input.dash = true; Input.dashHeld = true; }
 });
-addEventListener('mouseup', e => { if (e.button === 0) Input.down = false; });
+addEventListener('mouseup', e => { if (e.button === 0) Input.down = false; if (e.button === 2) Input.dashHeld = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // ---- 觸控：左半邊移動搖桿、右半邊瞄準射擊（輕觸不拖曳 = 自動瞄準最近敵人） ----
@@ -86,7 +87,8 @@ const TouchUI = {
     const dash = document.getElementById('tDash'), edit = document.getElementById('tEdit');
     this.autoBtn = document.getElementById('tAuto');
     try { if (localStorage.getItem('autoFire') === '0') Input.autoFire = false; } catch (e) {}
-    dash.addEventListener('pointerdown', e => { e.preventDefault(); if (Game.state === 'play') Input.dash = true; });
+    dash.addEventListener('pointerdown', e => { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) dash.addEventListener(ev, () => { Input.dashHeld = false; });
     edit.addEventListener('click', () => Game.toggleEditor());
     this.autoBtn.addEventListener('click', () => {
       Input.autoFire = !Input.autoFire;

@@ -38,7 +38,7 @@ const MODULES = {
   drone:    { name: '修復無人機', icon: '✚', eff: '每次受傷的 65% 之後可以補回（最多最大 HP 的 35%）：5 秒沒受傷後每秒補 8，戰鬥結束時沒補完的直接補回', cost: '最大 HP −20%', heavy: '回血 ×2', light: '3 秒就開始回血' },
   reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
   // 旗艦專屬（擊沉旗艦時可以裝上）
-  swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 5 秒朝四周放出 12 發子彈（武器傷害）', cost: '最大 HP −10' },
+  swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 6 秒朝四周 6 個方向各開一槍（用你的電路射，吃全部晶片效果；有環繞時直接射出不存彈）', cost: '最大 HP −10' },
   thruster:  { name: '裂界推進器', icon: '➹', boss: 'boss2', eff: '衝刺距離 ×2、衝刺冷卻 −30%', cost: '衝刺後 0.5 秒不能射擊' },
   endshell:  { name: '終焉護殼', icon: '⬡', boss: 'boss3', eff: '受到致命傷害時留 1 HP 並無敵 2 秒（每場戰鬥 1 次）', cost: '受到的傷害 +10%' },
 };

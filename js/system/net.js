@@ -812,6 +812,7 @@ const Net = {
       gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
+      zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 王的落點轟炸（紅圈）
       pp: [...PART_IDS.map(id => G.parts[id] || 0), G.module || ''],  // 房主的零件與模組（隊友那邊畫房主的船用）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
@@ -823,7 +824,7 @@ const Net = {
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       mg: r(CFG.MAGNET_RANGE * (1 + G.passives.magnet)),  // 房主的拾取範圍（隊友那邊模擬晶體飛向房主時用）
       pal, lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r, G.exit.gate ? 1 : 0] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
-      as: Arena.rect ? 0 : [Arena.seed, Arena.n], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
+      as: Arena.rect ? 0 : [Arena.seed, Arena.n, Arena.bossId || 0], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
       bn: G.banner ? [G.banner.text, G.banner.sub || '', r2(G.banner.t)] : null,
       fx: this.fxBuf,
     });
@@ -914,13 +915,15 @@ const Net = {
     });
     if (Array.isArray(s.as)) {  // 大地圖：第一次收到（或換了一張）就照種子產生，自己的飛船放到出生點
       if (Arena.rect || Arena.seed !== num(s.as[0])) {
-        Arena.gen(num(s.as[0]), clamp(Math.floor(num(s.as[1], 2)), 2, 5));
+        if (ENEMY_TYPES[s.as[2]] && ENEMY_TYPES[s.as[2]].boss) Arena.genBoss(num(s.as[0]), s.as[2]);  // 旗艦戰
+        else Arena.gen(num(s.as[0]), clamp(Math.floor(num(s.as[1], 2)), 2, 5));
         G.player.resetPos(); G.player.x += 50;
         G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2;
       }
     } else if (s.as === 0 && !Arena.rect) Arena.reset();
     Arena.gates.forEach((g, i) => { g.open = i < num(s.go); });
     G.objs = Objects.unpack(s.ob);
+    G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
     if (m && Array.isArray(s.pp)) { m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(s.pp[i]), 0, 20)])); m.module = MODULES[s.pp[5]] ? s.pp[5] : null; }
     G.eBullets = arr(s.eb).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2]), vy: num(a[3]), r: num(a[4], 5) }));
