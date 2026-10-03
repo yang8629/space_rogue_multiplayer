@@ -78,6 +78,7 @@ function drawWorld() {
   ctx.strokeRect(0, 0, W, H);
 
   Objects.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
+  drawExit();
   ctx.fillStyle = '#ffd166';
   for (const p of Game.pickups) {
     if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;
@@ -165,6 +166,26 @@ function drawWorld() {
 }
 
 // 衝鋒／滾球預警線：跟敵方子彈一起畫在我方子彈之上，一律紅色
+// 區域出口：旋轉的綠色光環；出口不在畫面裡時，飛船旁邊畫一個箭頭指過去
+function drawExit() {
+  const X = Game.exit;
+  if (!X) return;
+  const t = Game.time, pulse = 1 + 0.08 * Math.sin(t * 5);
+  ctx.strokeStyle = '#2ee6a6'; ctx.lineWidth = 4; ctx.globalAlpha = 0.9;
+  ctx.beginPath(); ctx.arc(X.x, X.y, X.r * pulse, 0, TAU); ctx.stroke();
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) { const a = t * 2 + i * TAU / 3; ctx.beginPath(); ctx.arc(X.x, X.y, X.r * 0.6, a, a + 1.2); ctx.stroke(); }
+  ctx.globalAlpha = 0.15; ctx.fillStyle = '#2ee6a6'; ctx.beginPath(); ctx.arc(X.x, X.y, X.r * pulse, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = '#c9fff3'; ctx.font = 'bold 14px Microsoft JhengHei'; ctx.textAlign = 'center';
+  ctx.fillText('出口', X.x, X.y - X.r - 10);
+  const p = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, c = Game.cam;
+  if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;  // 看得到就不畫箭頭
+  const a = Math.atan2(X.y - p.y, X.x - p.x), ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
+  ctx.fillStyle = '#2ee6a6'; ctx.globalAlpha = 0.6 + 0.3 * Math.sin(t * 6);
+  ctx.beginPath(); ctx.moveTo(ax + Math.cos(a) * 12, ay + Math.sin(a) * 12);
+  ctx.lineTo(ax + Math.cos(a + 2.5) * 10, ay + Math.sin(a + 2.5) * 10); ctx.lineTo(ax + Math.cos(a - 2.5) * 10, ay + Math.sin(a - 2.5) * 10);
+  ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+}
 function drawTelegraph(e) {
   if (e.mode !== 'windup') return;
   let len, alpha, w = e.r * 1.6;
