@@ -108,20 +108,8 @@ const CHIPS = {
         ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.18, damage: b.damage * 0.4, splits: (b.splits || 0) + 1 })));
     } },
   bigshot: { name: '巨彈', short: '巨彈', type: 'comp', comp: true, cost: 1,
-    desc: '子彈數量減半（兩兩合併，最少 1 發），合併的傷害加總後再 +30%；子彈體積 ×1.8、擊退變強。插在玩法晶片上只作用在它的產物（黏著：爆炸波及周圍；吸引：範圍 ×1.5）。',
-    apply: (list, pw, o) => {
-      const out = [];
-      for (let i = 0; i < list.length; i += 2) {
-        const g = list.slice(i, i + 2), f = g[0];
-        let dmg = 0, bonus = 0;
-        for (const b of g) { dmg += b.damage; bonus += b.damage * (b.bonus || 0); }
-        const ang = g.reduce((a, b) => a + b.angle, 0) / g.length;
-        out.push(addLayer({ ...f, angle: ang, damage: dmg, bonus: dmg ? bonus / dmg : 0,
-          pierce: Math.max(...g.map(b => b.pierce)), ...sizeUp(f, 0.8 * pw),
-          knock: (f.knock == null ? 1 : f.knock) + 0.5 * pw }, 0.3 * pw, o));
-      }
-      return out;
-    } },
+    desc: '每發子彈傷害 +30%、體積 ×1.8、擊退變強（子彈數量不變）。插在玩法晶片上只作用在它的產物（黏著：爆炸波及周圍；吸引：範圍 ×1.5）。',
+    apply: (list, pw, o) => list.map(b => addLayer({ ...b, ...sizeUp(b, 0.8 * pw), knock: (b.knock == null ? 1 : b.knock) + 0.5 * pw }, 0.3 * pw, o)) },
   pierce: { name: '穿甲塗層', short: '穿甲', type: 'comp', comp: true, cost: 1,
     desc: '子彈穿透 +2。同一發子彈不會連續打同一隻敵人（撞牆反彈後可以再打）。插在玩法晶片上只作用在它的產物（例：迴旋的回程、牆反彈之後；黏著：黏住前多穿 2 隻、多留 2 份）。',
     apply: (list, pw) => list.map(b => ({ ...b, pierce: b.pierce + Math.round(2 * pw) })) },
@@ -133,7 +121,9 @@ const CHIPS = {
     heatLimit: [3, 4, 5],
     apply: list => list },
   mirror: { name: '鏡像迴路', short: '鏡像', type: 'comp', comp: true, cost: 2,
-    desc: '複製同一個晶片上「前一個插座」的組件，再執行一次（不能複製超頻）。插在武器（或觸發器）的第一個插座 = 武器多射一次（兩個鏡像 = 射 3 次）；插在玩法晶片的第一個插座沒有效果。' },
+    desc: '再來一次：插在武器（或觸發器）上 = 武器多射一次（回響多一份）；插在玩法晶片上 = 它的產物多一份（例：迴旋折返時多一發、環繞放出的那一波多一份、黏著爆炸兩次）。插在哪個插座都一樣；兩個鏡像 = 3 份。吸引不能插。',
+    apply: (list, pw, o) => { const n = 1 + (o.n || 1);  // 產物多 n 份，左右微微錯開
+      return list.flatMap(b => Array.from({ length: n }, (_, k) => ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.08 }))); } },
 
   // ---------- 觸發器：放在電路格；右邊的晶片只作用在回響上，插在觸發器上的組件作用在回響上（跟插在武器上一樣） ----------
   trigger: { name: '命中觸發器', short: '命中', type: 'trigger', trig: 'hit', cost: 1,
@@ -179,11 +169,11 @@ const CHIP_BRIEF = {
   dashfire: '衝刺結束時額外開一槍',
   intercept: '子彈打掉敵彈，並回射一次',
   split: '每顆子彈分成 3 顆（每顆 ×0.4）',
-  bigshot: '子彈數量減半，合併成更大更痛的',
+  bigshot: '子彈變大、傷害 +30%',
   pierce: '子彈穿透 +2',
   amp: '傷害 +100%',
   overclock: '射速 ×2，但連射會過熱（只能插武器）',
-  mirror: '複製前一個插座的組件；插武器第一格 = 多射一次',
+  mirror: '再來一次：武器多射一次／產物多一份',
   trigger: '命中時從命中點再射一次（右邊的晶片）',
   trigend: '子彈消失時從那裡再射一次（右邊的晶片）',
   trigtime: '飛行中每 0.3 秒往兩側射一次（右邊的晶片）',

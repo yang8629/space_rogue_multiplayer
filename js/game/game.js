@@ -377,8 +377,7 @@ const Game = {
     if (id) {
       const j = this.inventory.lastIndexOf(id), slot = this.chain.indexOf(null, 1);
       // 組件：插進武器或電路上還有空插座的晶片
-      const h = isComp(id) ? this.chain.findIndex((c, i) => c && (this.socks[i] || []).length < socketsOf(c) && (baseOf(id) !== 'overclock' || i === 0) && (baseOf(c) !== 'pull' || baseOf(id) === 'bigshot')
-        && (baseOf(id) !== 'mirror' || i === 0 || CHIPS[c].type === 'trigger' || (this.socks[i] || []).length > 0)) : -1;  // 不會沒作用的地方才自動插
+      const h = isComp(id) ? this.chain.findIndex((c, i) => c && (this.socks[i] || []).length < socketsOf(c) && (baseOf(id) !== 'overclock' || i === 0) && (baseOf(c) !== 'pull' || baseOf(id) === 'bigshot')) : -1;  // 不會沒作用的地方才自動插
       if (j >= 0 && h >= 0) { (this.socks[h] = this.socks[h] || []).push(id); this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已插在${CHIPS[this.chain[h]].name}上`; }
       else if (j >= 0 && !isComp(id) && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
       else toInv = j >= 0;
@@ -1185,12 +1184,12 @@ const Game = {
     if (T && this.triggerQueue.length < CFG.MAX_TRIGGERS_PER_FRAME)
       this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: e.id, owner: T.owner, aim: true });
   },
-  // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片
+  // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片；鏡像 → 再爆一次（傷害、碎片都多一份）
   stickyHost(S, total, att) {
     const comps = (S.find(q => q.hm) || {}).hm, out = { total, att, splash: 0, shards: 0, shardM: 0 };
     if (!comps) return out;
     const hb0 = S[0].hb || 0;
-    let add = 0;
+    let add = 0, rep = 1;
     for (const c of comps) {
       if (c.flaky && flakyOff()) continue;
       const b = baseOf(c.id);
@@ -1198,12 +1197,14 @@ const Game = {
       else if (c.id === 'ov_power') add += 0.5;
       else if (b === 'bigshot') { add += 0.3 * c.m; out.splash = Math.max(out.splash, 70 + 40 * c.m); }
       else if (b === 'split') { out.shards += Math.max(2, Math.round(3 + 2 * (c.m - 1))); out.shardM = Math.max(out.shardM, c.m); }
+      else if (b === 'mirror') rep += c.n || 1;
     }
     if (add) {
       const f = Math.max(0.1, 1 + hb0 + add) / Math.max(0.1, 1 + hb0);
       out.total = total * f;
       out.att = attCredit(att, 'sticky', f);
     }
+    if (rep > 1) { out.total *= rep; out.att = attCredit(out.att, 'mirror', rep); out.shards *= rep; }
     return out;
   },
   // 感染：被帶感染的子彈（或它造成的燃燒）擊殺的敵人爆出子彈
