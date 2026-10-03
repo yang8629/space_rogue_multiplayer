@@ -10,6 +10,31 @@ const Range = {
   LAYOUTS: { single: '單一標靶', line: '一排（看穿透）', pack: '密集群（看爆炸、分裂）', wide: '散開（看彈射、追蹤、電弧）' },
   KEYS: ['single', 'line', 'pack', 'wide'],
   SLOW: 0.25,
+  // 手動生成敵人：種類、會不會動、打不打得死、難度（血量照這個難度的第 1 波）
+  spawnType: 'swarmer', spawnMove: false, spawnKill: true, spawnLv: 1,
+  SPAWN_LV: [1, 3, 6, 10, 17],
+  spawnTypes() { return Object.keys(ENEMY_TYPES).filter(k => !ENEMY_TYPES[k].dummy && k !== 'splitling'); },
+  // 在 (x, y) 生 n 隻（n > 1 時散在周圍 80 內）；不動 = 跟標靶一樣不移動也不攻擊；打不死 = 血量歸零自動補滿
+  spawn(n, x, y) {
+    const G = Game, type = this.spawnType, scale = enemyHpMul(this.spawnLv, 1);
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), d = n > 1 ? rand(20, 80) : 0;
+      const [ex, ey] = Arena.clampIn(x + Math.cos(a) * d, y + Math.sin(a) * d, ENEMY_TYPES[type].radius + 4);
+      const e = new Enemy(type, ex, ey, scale);
+      e.manual = true; e.spawnT = 0.3;
+      if (!this.spawnMove) {
+        e.t = { ...e.t, dmg: 0 }; e.frozen = true; e.hx = ex; e.hy = ey; e.cloak = 0;  // 不跑 AI（跟標靶一樣被打退會彈回原位）；潛伏者不隱形
+      }
+      if (!this.spawnKill) e.immortal = true;
+      G.enemies.push(e);
+    }
+  },
+  // 生成的位置：鍵盤 G = 滑鼠指的地方；按鈕（手機）= 飛船前方 300
+  spawnAt(n, atMouse) {
+    const p = Game.player, c = Game.cam;
+    const [x, y] = atMouse ? [c.x + Input.mx / ZOOM, c.y + Input.my / ZOOM] : [p.x + Math.cos(p.aim) * 300, p.y + Math.sin(p.aim) * 300];
+    this.spawn(n, x, y);
+  },
   reset(layout = this.layout) {
     this.layout = layout; this.live = false;
     const G = Game, p = G.player;
@@ -69,17 +94,33 @@ const Range = {
       this.bar.addEventListener('click', ev => {
         const b = ev.target.closest('[data-rk]');
         if (!b) return;
-        this.key(b.dataset.rk); b.blur();
+        if (b.dataset.rk === 'g') this.spawnAt(1, false);  // 按鈕：生在飛船前方（滑鼠在按鈕上）
+        else this.key(b.dataset.rk);
+        b.blur();
       });
+      const ty = document.getElementById('rgType'), lv = document.getElementById('rgLv');
+      if (ty && lv) {
+        ty.innerHTML = this.spawnTypes().map(k => `<option value="${k}">${ENEMY_TYPES[k].name}${ENEMY_TYPES[k].boss ? '（王）' : ''}</option>`).join('');
+        lv.innerHTML = this.SPAWN_LV.map(l => `<option value="${l}">難度 ${l}</option>`).join('');
+        ty.value = this.spawnType; lv.value = String(this.spawnLv);
+        ty.addEventListener('change', () => { this.spawnType = ty.value; ty.blur(); });  // 選完就離開選單（不然按鍵會改到選項）
+        lv.addEventListener('change', () => { this.spawnLv = +lv.value; lv.blur(); });
+      }
     }
     const show = Game.mode === 'range' && Game.state === 'play';
     this.bar.classList.toggle('hidden', !show);
     if (!show) return;
+    for (const b of this.bar.querySelectorAll('[data-rk="move"]')) b.textContent = this.spawnMove ? '會動' : '不動';
+    for (const b of this.bar.querySelectorAll('[data-rk="kill"]')) b.textContent = this.spawnKill ? '打得死' : '打不死';
     const cur = this.live ? '5' : String(this.KEYS.indexOf(this.layout) + 1);
     for (const b of this.bar.querySelectorAll('[data-rk]'))
       b.classList.toggle('on', b.dataset.rk === cur || (b.dataset.rk === 't' && this.slow));
   },
-  key(k) {  // 靶場快捷鍵：1～4 換標靶、5 實戰、R 清除數據、T 慢動作
+  key(k, shift = false) {  // 靶場快捷鍵：1～4 換標靶、5 實戰、R 清除數據、T 慢動作、G 生成敵人（Shift：5 隻）、C 清除手動生的敵人
+    if (k === 'g') { this.spawnAt(shift ? 5 : 1, true); return true; }
+    if (k === 'c') { Game.enemies = Game.enemies.filter(e => !e.manual); return true; }
+    if (k === 'move') { this.spawnMove = !this.spawnMove; return true; }
+    if (k === 'kill') { this.spawnKill = !this.spawnKill; return true; }
     const i = '1234'.indexOf(k);
     if (i >= 0) { this.reset(this.KEYS[i]); return true; }
     if (k === '5') { if (!this.live) this.goLive(); return true; }

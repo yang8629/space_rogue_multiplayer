@@ -19,7 +19,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
-  if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k)) return;
+  if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k, e.shiftKey)) return;
   if (k === ' ') { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
