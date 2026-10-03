@@ -571,7 +571,7 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', 'mirror', null]);
       const pl = Game.stats.info.socks[1][0].idle;
       return { ok: a === 2 && b === 6 && c === 6 && ch.length === 2 && ch.every(x => near1(x.hb, 1)) && st && pl,
-        got: `鏡像 ${a} 發；分裂＋鏡像 ${b}、鏡像＋分裂 ${c} 發；蓄滿 ${ch.length} 發（宿主層 ${ch.map(x => '+' + Math.round(x.hb * 100) + '%').join('、')}）；黏著［鏡像］${st ? '有作用' : '沒作用（錯誤）'}；吸引［鏡像］${pl ? '沒作用' : '有作用（錯誤）'}` };
+        got: `鏡像 ${a} 發；分裂＋鏡像 ${b}、鏡像＋分裂 ${c} 發；蓄滿 ${ch.length} 發（晶片加成 ${ch.map(x => '+' + Math.round(x.hb * 100) + '%').join('、')}）；黏著［鏡像］${st ? '有作用' : '沒作用（錯誤）'}；吸引［鏡像］${pl ? '沒作用' : '有作用（錯誤）'}` };
     }],
     ['電路晶片', '沒有子彈上限', '散彈分裂兩次 = 45 發，全部射出', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'split', 'split', null]);
@@ -1238,7 +1238,7 @@ const SockCheck = {
     check('迴旋', () => { this.setup('laser', ['weapon', 'amp', 'boomerang']); this.targets([[150, 0]]); const H = this.hurtLog(null, () => { P().fire(); this.step(60); }).map(x => Math.round(x.d));
       return { ok: H.includes(14) && H.includes(7), got: `去程／回程 ${[...new Set(H)].join('、')}（應有 14 和 7）` }; });
     const after = (name, flat, run, pick) => check(name, () => { this.setup('laser', flat); run(); const b = Game.bullets.find(pick);
-      return { ok: !!b && Math.abs(b.bonus) < 0.01, got: b ? `產物的武器層加成 ${b.bonus.toFixed(2)}` : '找不到產物' }; });
+      return { ok: !!b && Math.abs(b.bonus) < 0.01, got: b ? `產物的武器加成 ${b.bonus.toFixed(2)}` : '找不到產物' }; });
     after('環繞', ['weapon', 'amp', 'orbit'], () => { P().wantFire = true; this.step(20, true); P().wantFire = false; this.step(3); }, b => b.orbShot);
     after('加速', ['weapon', 'amp', 'accel'], () => { P().fire(); this.step(40); }, b => b.accelMul >= 1.5);
     after('牆反彈', ['weapon', 'amp', 'wallbounce'], () => { P().x = CFG.WORLD_W - 60; P().fire(); this.step(20); }, b => b.bounced);
@@ -1262,7 +1262,7 @@ const SockCheck = {
     const evoSplit = (name, flat, pre, pick, want) => check(name, () => { this.setup('laser', flat); pre();
       for (let f = 0; f < 90 && !Game.bullets.some(pick); f++) this.step(1);
       const L = Game.bullets.filter(pick), bad = L.filter(b => Math.abs(b.bonus) > 0.01);
-      return { ok: L.length === want && !bad.length, got: `產物 ${L.length} 發（應為 ${want}），吃到武器層加成的 ${bad.length} 發` }; });
+      return { ok: L.length === want && !bad.length, got: `產物 ${L.length} 發（應為 ${want}），吃到武器加成的 ${bad.length} 發` }; });
     evoSplit('迴旋風暴＋分裂', ['weapon', 'amp', chipId('boomerang', 3, 1), 'split'], () => { this.targets([[150, 0]]); P().fire(); }, b => b.mode === 'return', 9);
     evoSplit('稜鏡＋分裂', ['weapon', 'amp', chipId('wallbounce', 3, 1), 'split'], () => { P().x = CFG.WORLD_W - 60; P().fire(); }, b => b.bounced, 6);
     check('觸發器（回響的迴旋）', () => { this.setup('laser', ['weapon', 'trigger', 'amp', 'boomerang']); this.targets([[120, 0], [320, 0]]);

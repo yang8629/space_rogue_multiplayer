@@ -604,12 +604,12 @@ function sockEffect(h, k) {
   const fx = { amp: `傷害 +${Math.round(100 * m)}%`, split: `分成 ${n} 顆（每顆 ×0.4）`, pierce: `穿透 +${Math.round(2 * m)}`, bigshot: `變大、擊退變強，傷害 +${Math.round(30 * m)}%`, blast: `命中時爆炸（半徑 60，${Math.round(50 * m)}% 傷害；跟武器的爆炸相加）`, ignite: `命中燃燒 3 秒，每秒 ${Math.round(30 * m)}% 傷害`, frost: `命中減速 ${Math.round(40 * m)}%（2 秒）`, shock: `命中時 ${Math.max(1, Math.round(m))} 道電弧（50% 傷害）`, shred: `命中的敵人 3 秒內受傷 +${Math.round(25 * m)}%` }[b] + mtxt;
   if (host === 'weapon') return `武器射出的全部子彈：${fx}${dmg ? '（傷害加成只算直擊：迴旋回程、環繞放出、黏著爆炸這些產物不吃）' : ''}`;
   if (wlike) return `回響（武器 50%）：${fx}${dmg ? '（傷害加成只算回響的直擊）' : ''}`;
-  if (hb === 'sticky') return '黏著的爆炸：' + { amp: `爆炸傷害 +${Math.round(100 * m)}%（宿主層，跟武器層相乘）`,
+  if (hb === 'sticky') return '黏著的爆炸：' + { amp: `爆炸傷害 +${Math.round(100 * m)}%（晶片加成，跟武器加成相乘）`,
     split: `爆炸時噴出 ${n} 發碎片（每發是爆炸傷害的 ${Math.round(20 * m)}%）`, pierce: `黏住前多穿 ${Math.round(2 * m)} 隻（多留 ${Math.round(2 * m)} 份）`,
     bigshot: `爆炸波及周圍 ${Math.round(70 + 40 * m)}（50% 傷害），爆炸 +${Math.round(30 * m)}%`,
     blast: `再炸一圈（半徑 60，爆炸傷害的 ${Math.round(50 * m)}%）`, ignite: `被炸的敵人燃燒 3 秒，每秒 ${Math.round(30 * m)}% 爆炸傷害`, frost: `被炸的敵人減速 ${Math.round(40 * m)}%`, shock: `放出 ${Math.max(1, Math.round(m))} 道電弧（爆炸傷害的 50%）`, shred: `被炸的敵人 3 秒內受傷 +${Math.round(25 * m)}%` }[b] + mtxt;
   if (hb === 'pull') return `吸引的拉力範圍 ×${(1 + 0.5 * m).toFixed(2)}`;
-  return `只作用在${CHIPS[hb].name}的產物（${HOST_PRODUCT[hb] || ''}）：${fx}${dmg ? '，加進宿主層（跟武器層相乘）' : ''}`;
+  return `只作用在${CHIPS[hb].name}的產物（${HOST_PRODUCT[hb] || ''}）：${fx}${dmg ? '，算進晶片加成（跟武器加成相乘）' : ''}`;
 }
 
 // 奇異點強化的格子：這一格現在實際的效果（編輯器說明欄、奇異點結果畫面用）

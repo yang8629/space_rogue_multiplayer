@@ -114,7 +114,7 @@ const CHIPS = {
     desc: '子彈穿透 +2。同一發子彈不會連續打同一隻敵人（撞牆反彈後可以再打）。插在玩法晶片上只作用在它的產物（例：迴旋的回程、牆反彈之後；黏著：黏住前多穿 2 隻、多留 2 份）。',
     apply: (list, pw) => list.map(b => ({ ...b, pierce: b.pierce + Math.round(2 * pw) })) },
   amp: { name: '威力倍增器', short: '倍增', type: 'comp', comp: true, cost: 3,
-    desc: '傷害 +100%。插在武器（或觸發器）上加進武器層，跟蓄力、速度倍率、其他武器上的倍增相加；插在玩法晶片上加進宿主層，只作用在它的產物，再跟武器層相乘。',
+    desc: '傷害 +100%。插在武器（或觸發器）上算進武器加成，跟蓄力、速度倍率、其他武器上的倍增相加；插在玩法晶片上算進晶片加成，只作用在它的產物，再跟武器加成相乘。',
     apply: (list, pw, o) => list.map(b => addLayer(b, pw, o)) },
   overclock: { name: '超頻模組', short: '超頻', type: 'comp', comp: true, cost: 2, rate: 0.5, rateFixed: true,
     desc: `整條電路${rateTxt(0.5)}，但連續射擊 3 秒後會過熱，停火 1.5 秒。停止射擊時會慢慢散熱。只能插在武器上。`,

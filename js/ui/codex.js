@@ -391,7 +391,7 @@ const Codex = {
         放在倉庫的晶片不算能量；插在插座上的組件照算。超頻模組讓射速 ×2，但連續射擊太久會過熱停火 1.5 秒；散熱片零件每層射速 +6%。`)}
       ${R('擊退', `每把武器的擊退值不同：${Object.values(WEAPONS).map(W => `${W.name} ${W.base.knock}`).join('、')}（鋼珠、攻城砲 ×2）。巨彈每級擊退 +0.5。<br>
         一般敵人都會被推。旗艦有抗擊退，子彈的擊退值<b>超過</b>抗性才推得動，力道只看超過的部分：${CFG.BOSS_ORDER.map(id => `${ENEMY_TYPES[id].name} ${ENEMY_TYPES[id].knockResist}`).join('、')}。爆炸、震波、電弧不會推王。被擊退撞上行星的敵人多受 20 傷害。`)}
-      ${R('傷害分兩層', '<b>武器層</b>：插在武器（或觸發器）上的倍增、巨彈的 +30%，加上蓄力、速度倍率（加速、疾射、環繞放出）、衝刺射擊，全部<b>相加</b>：兩個倍增器是 +100% +100% = ×3，不是 ×4。<br><b>宿主層</b>：插在玩法晶片上的倍增、巨彈，作用在同一下命中的全部相加。<br>最終傷害 ＝ 基礎 ×（1 ＋ 武器層）×（1 ＋ 宿主層）。分裂（每顆 ×0.4）、迴旋（×0.7）、武器升級照舊相乘。')}
+      ${R('傷害加成分兩種', '<b>武器加成</b>：插在武器（或觸發器）上的倍增、巨彈的 +30%，加上蓄力、速度倍率（加速、疾射、環繞放出）、衝刺射擊，全部<b>相加</b>：兩個倍增器是 +100% +100% = ×3，不是 ×4。<br><b>晶片加成</b>：插在玩法晶片上的倍增、巨彈，作用在同一下命中的全部相加。<br>最終傷害 ＝ 基礎 ×（1 ＋ 武器加成）×（1 ＋ 晶片加成）。分裂（每顆 ×0.4）、迴旋（×0.7）、武器升級照舊相乘。')}
       ${R('子彈數量', `子彈數量<b>沒有上限</b>：分裂、觸發疊多少就射多少（手機可能會卡）。只有一個防止無限連鎖的上限：同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次觸發，超過的那幾次不會觸發。`)}
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格，放暫時不用的晶片。不要的晶片可以回收，拿回 40% 售價。`)}
       ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT} 起，隨星區上漲）、精英戰獎勵、武器升滿後的軍械台。`)}
@@ -448,7 +448,7 @@ const Codex = {
     const rows = hosts.map(id => `<tr><td><b style="color:${id === 'weapon' ? '#4cc9f0' : TYPE_META[CHIPS[id].type].color}">${name(id)}</b></td><td>${HOST_PRODUCT[id] || ''}</td></tr>`).join('');
     const attr = k => `<div><b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}">${SLOT_ATTRS[k].name}</b>：${SLOT_ATTRS[k].desc}</div>`;
     return `<div class="codex-sec"><h3 style="color:#ffd166">◇ 每個晶片的產物（插在它上面的組件只作用在這裡）</h3>
-        <div class="sub">組件插在晶片的插座裡。插在武器、觸發器上加進武器層；插在玩法晶片上加進宿主層。</div>
+        <div class="sub">組件插在晶片的插座裡。插在武器、觸發器上算進武器加成；插在玩法晶片上算進晶片加成。</div>
         <table class="dmg-table"><thead><tr><th>晶片</th><th>產物</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="codex-sec"><h3 style="color:#b388ff">◐ 奇異點的格子屬性</h3>
         <div class="sub">好結果的機率：投入 Lv1 晶片 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。好結果、壞結果各自平均抽一個。</div>
