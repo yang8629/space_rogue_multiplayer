@@ -179,7 +179,7 @@ const Screen = {
       chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>
-        <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選好的晶片直接裝在電路第 2 格（武器右邊）。</div></div>
+        <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選好的晶片直接裝在電路第 2 格（武器右邊）；組件開局沒有插座可插，會放進倉庫。</div></div>
         <button data-act="ship" data-arg="${mode}:${shipId}" data-back>返回 (Esc)</button></div>
       <div class="cards">${cards}</div></div>`);
   },

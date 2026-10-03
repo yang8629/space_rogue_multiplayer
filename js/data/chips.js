@@ -313,8 +313,9 @@ function growLine(id, growth, minutes) {
   return `<span style="color:#9dff6b">成長：${g.what} ${have} / ${growNeed(base, lv)}</span>${rate}　到了自動升 Lv${lv + 1}${lv + 1 >= 3 ? '（進化）' : ''}`;
 }
 
-// 開局電路：武器＋三選一的起始晶片（沒選就空著）
-const startChain = chip => ['weapon', NORMAL_IDS.includes(chip) ? newChip(chip) : null, ...Array(CFG.START_SLOTS - 2).fill(null)];
+// 開局電路：武器＋三選一的起始晶片（沒選就空著）；組件不佔電路格，開局又沒有插座可插 → 放進倉庫（startInv）
+const startChain = chip => ['weapon', NORMAL_IDS.includes(chip) && !isComp(chip) ? newChip(chip) : null, ...Array(CFG.START_SLOTS - 2).fill(null)];
+const startInv = chip => { const inv = Array(CFG.INV_SLOTS).fill(null); if (NORMAL_IDS.includes(chip) && isComp(chip)) inv[0] = newChip(chip); return inv; };
 
 // 沙盒的預設電路（宿主給滿插座，見 fullChip）
 const PRESETS = {
