@@ -108,7 +108,7 @@ const CHIPS = {
         ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.18, damage: b.damage * 0.4, splits: (b.splits || 0) + 1 })));
     } },
   bigshot: { name: '巨彈', short: '巨彈', type: 'comp', comp: true, cost: 1,
-    desc: '每發子彈傷害 +30%、體積 ×1.8、擊退變強（子彈數量不變）。插在玩法晶片上只作用在它的產物（黏著：爆炸波及周圍；吸引：範圍 ×1.5）。',
+    desc: '每發子彈傷害 +30%、體積 ×1.8、擊退變強。插在玩法晶片上只作用在它的產物（黏著：爆炸波及周圍；吸引：範圍 ×1.5）。',
     apply: (list, pw, o) => list.map(b => addLayer({ ...b, ...sizeUp(b, 0.8 * pw), knock: (b.knock == null ? 1 : b.knock) + 0.5 * pw }, 0.3 * pw, o)) },
   pierce: { name: '穿甲塗層', short: '穿甲', type: 'comp', comp: true, cost: 1,
     desc: '子彈穿透 +2。同一發子彈不會連續打同一隻敵人（撞牆反彈後可以再打）。插在玩法晶片上只作用在它的產物（例：迴旋的回程、牆反彈之後；黏著：黏住前多穿 2 隻、多留 2 份）。',

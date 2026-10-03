@@ -166,6 +166,12 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
   background: repeating-linear-gradient(45deg, #1a1c22 0 6px, #23262e 6px 12px); }
 .card.t-source, .card.t-path, .card.t-launch, .card.t-impact, .card.t-body, .card.t-mod, .card.t-amp, .card.t-trigger, .card.t-link, .card.t-comp, .card.t-composite,
 .card.t-singularity, .card.t-scrap { border-width: 1px; border-style: solid; }
+/* 卡片大類：外框＋頂端色帶（見 screens.js 的 CARD_CAT） */
+.card.cat-chip, .card.cat-comp, .card.cat-mech { padding-top: 0; overflow: hidden; border-width: 2px; border-style: solid; }
+.card .cat { margin: 0 -14px; padding: 3px 14px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #070b1a; }
+.card.cat-chip { border-color: #4cc9f0; } .cat-chip .cat { background: #4cc9f0; }
+.card.cat-comp { border-color: #ffd166; } .cat-comp .cat { background: #ffd166; }
+.card.cat-mech { border-color: #cfe8ff; } .cat-mech .cat { background: #cfe8ff; }
 .card.picked { outline: 2px solid #e0aaff; outline-offset: 3px; }
 .bh-core { width: 120px; height: 120px; margin: 8px auto 0; border-radius: 50%;
   background: radial-gradient(circle, #000 38%, #3a1d5c 55%, #b388ff 62%, transparent 72%);

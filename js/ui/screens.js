@@ -5,11 +5,15 @@
 // =====================================================================
 // SCREENS — DOM 畫面（標題 / 航圖 / 獎勵 / 商店 / 結算）
 // =====================================================================
+// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、組件金、機體強化（零件、背包模組）銀白
+const CARD_CAT = { chip: '晶片', comp: '組件', mech: '機體強化' };
+const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
+
 function chipCard(id, footer = '') {
-  const d = CHIPS[id], m = TYPE_META[d.type];
+  const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip';
   const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
   const lv = !d.lv && LV_INFO[id] ? `<div class="ty" style="line-height:1.6">${lvLine(id, 1)}</div>` : '';  // Lv2+ 的說明已寫在 desc 裡
-  return `<div class="card t-${d.type}">
+  return `<div class="card cat-${cat}">${catBand(cat)}
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
     <div class="ttl">${d.name}</div>
     ${sockLine(id)}
@@ -27,7 +31,7 @@ function sockLine(id) {
 // 背包模組卡片
 function moduleCard(id, footer = '') {
   const M = MODULES[id];
-  return `<div class="card" style="border-color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">
+  return `<div class="card cat-mech">${catBand('mech')}
     <div class="ty" style="color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">${M.icon} 背包模組${M.boss ? '・旗艦專屬' : ''}</div>
     <div class="ttl">${M.name}</div><div class="ds brief">${M.eff}</div><div class="ds det">${moduleLine(id)}</div>${footer}</div>`;
 }
@@ -35,7 +39,7 @@ function moduleCard(id, footer = '') {
 function partCard(id, footer = '', parts = Game.parts) {
   const P = PARTS[id], n = (parts && parts[id]) || 0;
   const tr = (t, need) => `<div class="ds" style="opacity:${n >= need ? 1 : 0.6}"><b style="color:${n >= need ? '#9dff6b' : P.color}">${need} 層・${t.name}</b>${n >= need ? '（已開啟）' : ''}：${t.desc}</div>`;
-  return `<div class="card" style="border-color:${P.color}">
+  return `<div class="card cat-mech">${catBand('mech')}
     <div class="ty" style="color:${P.color}">⚙ 零件　目前 ${n} 層</div>
     <div class="ttl">${P.name}</div><div class="ds">${partLine(id)}</div><div class="det">${tr(P.t2, 2)}${tr(P.t4, 4)}</div>${footer}</div>`;
 }
