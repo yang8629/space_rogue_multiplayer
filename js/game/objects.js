@@ -319,7 +319,7 @@ const Objects = {
         return false;
       }
       b.x = o.x + nx * (o.r + b.r); b.y = o.y + ny * (o.r + b.r);
-      if (b.boom && b.mode === 'fly') { b.x += nx; b.y += ny; b.startReturn(false); return false; }  // 迴旋：撞到行星、小行星折返
+      if (b.boom && b.mode === 'fly') { b.x += nx; b.y += ny; b.startReturn(); return false; }  // 迴旋：撞到行星、小行星折返
       if (b.endBoom) G.explode(b.x, b.y, 90, b.damage, b.color, null, b.att);
       b.dead = true;
       return true;

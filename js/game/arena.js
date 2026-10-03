@@ -197,6 +197,22 @@ const Arena = {
         if (v < val[k]) { val[k] = v; if (v <= 0) owner[k] = -1; }
       }
     }
+    // 7. 牆裡面的值：離形狀很遠的地方原本都是 -999（平的，推回去的方向會錯），用距離變換（chamfer，兩趟）換成「離空地多遠」的負值
+    const D = new Float32Array(N), W1 = NX + 1, dg = CELL * Math.SQRT2;
+    for (let k = 0; k < N; k++) D[k] = val[k] > 0 ? 0 : val[k] > -900 ? -val[k] : 1e9;
+    for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+      const k = j * W1 + i; let d = D[k];
+      if (i > 0) d = Math.min(d, D[k - 1] + CELL);
+      if (j > 0) { d = Math.min(d, D[k - W1] + CELL); if (i > 0) d = Math.min(d, D[k - W1 - 1] + dg); if (i < NX) d = Math.min(d, D[k - W1 + 1] + dg); }
+      D[k] = d;
+    }
+    for (let j = NY; j >= 0; j--) for (let i = NX; i >= 0; i--) {
+      const k = j * W1 + i; let d = D[k];
+      if (i < NX) d = Math.min(d, D[k + 1] + CELL);
+      if (j < NY) { d = Math.min(d, D[k + W1] + CELL); if (i < NX) d = Math.min(d, D[k + W1 + 1] + dg); if (i > 0) d = Math.min(d, D[k + W1 - 1] + dg); }
+      D[k] = d;
+    }
+    for (let k = 0; k < N; k++) if (val[k] <= 0) val[k] = -D[k];
     this.start = { x: areas[0].cx + (areas[0].sx || 0), y: areas[0].cy + (areas[0].sy || 0) };
     this.exitFlow = null;
     this.buildPath();
@@ -208,7 +224,10 @@ const Arena = {
   f(x, y) {
     if (this.rect) return Math.min(x, y, this.W - x, this.H - y);
     const CELL = ARENA.CELL, gx = x / CELL, gy = y / CELL;
-    if (gx < 0 || gy < 0 || gx >= this.NX || gy >= this.NY) return -100;
+    if (gx < 0 || gy < 0 || gx >= this.NX || gy >= this.NY) {  // 地圖外：越遠越負（推回去的方向朝地圖裡面；以前固定 -100，法線變成預設往右，被推出去的東西會一直往右飛）
+      const ox = x < 0 ? -x : x > this.W - CELL ? x - (this.W - CELL) : 0, oy = y < 0 ? -y : y > this.H - CELL ? y - (this.H - CELL) : 0;
+      return -100 - Math.hypot(ox, oy);
+    }
     const i = Math.floor(gx), j = Math.floor(gy), tx = gx - i, ty = gy - j, W = this.NX + 1, k = j * W + i, v = this.val;
     return (v[k] * (1 - tx) + v[k + 1] * tx) * (1 - ty) + (v[k + W] * (1 - tx) + v[k + W + 1] * tx) * ty;
   },

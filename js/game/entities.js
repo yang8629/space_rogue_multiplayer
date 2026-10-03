@@ -289,7 +289,7 @@ class Bullet {
     return c;
   }
   // 迴旋：去程穿甲用完（先穿過去再折返，回程會再打牠一次）、撞到牆（或行星、小行星）、飛到盡頭都會折返，追著射出它的飛船飛回來
-  startReturn(hit = true) {  // hit：打中敵人才折返的（撞牆、飛到盡頭 = false：只飛回來，迴旋風暴不分裂）
+  startReturn() {
     const o = this.ownerP;
     this.mode = 'return'; this.life = 4; this.hitSet.clear(); this.flyAge = 0; this.speed = (this.dashed ? this.speed0 : this.baseSpeed) * this.accelMul; this.overT = 0;  // 回程一直追到飛船為止（最多 4 秒）；地雷衝出去的用武器原本的速度飛回
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
@@ -298,7 +298,7 @@ class Bullet {
     this.att = { ...this.att, src: 'boomerang' };  // 傷害統計：回程打中的基礎傷害算迴旋的
     if (this.boom >= 2) { this.damage *= 1.5; this.att = attCredit(this.att, 'boomerang', 1.5); }
     stripW(this);  // 產物：武器插座的傷害加成只算直擊
-    const cs = this.boom >= 3 && hit ? [-0.7, 0.7].map(off => this.copy(off)) : [];  // 迴旋風暴：打中敵人折返時分裂成 3 發（沒打中折返不分裂：不然配觸發器的回響會一直翻倍）
+    const cs = this.boom >= 3 ? [-0.7, 0.7].map(off => this.copy(off)) : [];  // 迴旋風暴：折返時分裂成 3 發（打中、撞牆、飛到盡頭都一樣）
     for (const b of [this, ...cs]) hostFire(b, 'boomerang');  // 插在迴旋上的組件：折返之後的每一發（風暴＋分裂 = 9 發）
   }
   update(dt) {
@@ -396,7 +396,7 @@ class Bullet {
           if (dot < 0) this.angle = Math.atan2(vy - 2 * dot * hit.ny, vx - 2 * dot * hit.nx);
           this.x = hit.x; this.y = hit.y;
           this.afterBounce();
-        } else if (this.boom && this.mode === 'fly') { this.x = hit.x; this.y = hit.y; this.startReturn(false); }  // 迴旋：撞牆折返
+        } else if (this.boom && this.mode === 'fly') { this.x = hit.x; this.y = hit.y; this.startReturn(); }  // 迴旋：撞牆折返
         else {
           if (this.endBoom) Game.explode(hit.x, hit.y, 90, this.damage, this.color, null, this.att);
           this.dead = true; return;
@@ -410,7 +410,7 @@ class Bullet {
           if (outX) { this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
           if (outY) { this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
           this.afterBounce();
-        } else if (this.boom && this.mode === 'fly') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); this.startReturn(false); }  // 迴旋：撞到場地邊緣折返
+        } else if (this.boom && this.mode === 'fly') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); this.startReturn(); }  // 迴旋：撞到場地邊緣折返
         else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
         else {
           if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
@@ -421,7 +421,7 @@ class Bullet {
     if (this.life <= 0) {
       // 佈雷：到盡頭前還沒停住的（例如迴旋準備折返時錯過了射程一半），在消失前的最後一刻停住變地雷
       if (this.stasis && !this.dashed && this.mode === 'fly' && !(this.overT > 0)) { this.mode = 'wait'; this.waitT = this.stasis >= 2 ? 6 : 4; this.speed = 0; this.life = 1; return; }
-      if (this.boom && this.mode === 'fly') { this.startReturn(!!this.hitAny); return; }  // 迴旋：飛到盡頭折返（相刃的刃片揮到盡頭也一樣；有砍到才算打中）
+      if (this.boom && this.mode === 'fly') { this.startReturn(); return; }  // 迴旋：飛到盡頭折返（相刃的刃片揮到盡頭也一樣）
       {
         if (this.endBoom) Game.explode(this.x, this.y, 90, this.damage, this.color, null, this.att);  // 過載砲：飛到盡頭爆炸
         this.dead = true;
