@@ -63,7 +63,7 @@ const Game = {
     this.chain = mode === 'sandbox' ? ['weapon', null, null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.socks = mode === 'sandbox' ? [['split']] : [];
-    this.inventory = Array(CFG.INV_SLOTS).fill(null);
+    this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
     this.growth = {}; this.pullHits = 0; this.slotAttr = [];
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定

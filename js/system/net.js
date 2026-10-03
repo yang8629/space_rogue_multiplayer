@@ -568,7 +568,7 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), socks: [], inventory: Array(CFG.INV_SLOTS).fill(null), slotAttr: [], growth: {}, pullHits: 0,
+      chain: startChain(p.chip), socks: [], inventory: startInv(p.chip), slotAttr: [], growth: {}, pullHits: 0,
       parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
