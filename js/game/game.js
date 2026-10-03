@@ -1158,14 +1158,13 @@ const Game = {
     e.hurt(total, 0, 0, 'explode', att);
     floatText(x, y - e.r, Math.round(total), '#f78cff', true);
     SFX.play('explode');
-    if (lv >= 3) {  // 連鎖引爆：波及周圍，並立刻引爆鄰近敵人身上的子彈
+    if (lv >= 3) {  // 連鎖引爆：立刻引爆周圍敵人身上的子彈（範圍 90，插巨彈時取波及範圍；波及傷害交給巨彈）
+      const R = Math.max(90, H.splash);
       for (const o of this.enemies) {
-        if (o === e || o.dead || o.spawnT > 0 || dist2(x, y, o.x, o.y) > 90 * 90) continue;
-        this.tagGrow(o, S[0].owner, 'sticky');
-        o.hurt(total * 0.5, 0, 0, 'explode', att);
-        if (o.stuck && o.stuck.length) o.stickT = 0.05;
+        if (o === e || o.dead || o.spawnT > 0 || !(o.stuck && o.stuck.length) || dist2(x, y, o.x, o.y) > (R + o.r) ** 2) continue;
+        o.stickT = 0.05;
       }
-      ring(90, '#f78cff');
+      ring(R, '#f78cff');
     }
     if (H.splash) {  // 巨彈插在黏著上：爆炸波及周圍（50%）
       for (const o of this.enemies) {
