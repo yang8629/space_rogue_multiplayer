@@ -43,21 +43,21 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
     ops.push(o);
     if (def.type === 'trigger') { I.trig = true; seg++; }
     const cap = socketsOf(id), base = baseOf(id);
-    S.forEach((cid0, k) => {  // 插座上的組件（強化只看晶片那一格，組件本身不吃屬性）
-      const J = info.socks[i][k], cb = baseOf(cid0), real = o.comps.filter(c => !c.hidden);
+    S.forEach((cid, k) => {  // 插座上的組件（強化只看晶片那一格，組件本身不吃屬性）
+      const J = info.socks[i][k], cb = baseOf(cid);
       if (k >= cap) return idle(J, `插座不夠：${CHIPS[id].name}只有 ${cap} 個插座`);
       if (cb === 'overclock' && id !== 'weapon') return idle(J, '超頻是整條電路的射速，只能插在武器上');
-      let cid = cid0;
-      if (cb === 'mirror') {
-        const prev = real[real.length - 1];
-        if (o.wlike && (!prev || prev.copySrc)) {  // 武器（或觸發器）前面還沒有其他組件：複製武器 = 多射一次（回響也一樣；兩個鏡像 = 射 3 次）
+      if (cb === 'mirror') {  // 鏡像 = 再來一次（插在哪個插座都一樣）
+        if (o.wlike) {  // 武器（或觸發器）多射一次（回響也一樣；兩個鏡像 = 射 3 次）
           (o.extra = o.extra || []).push({ slot: i, key: 'mirror' });
-          o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true });  // 佔一個插座；鏡像本身沒有 apply，runComps 會跳過
+          o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true });  // 佔一個插座；runComps 會跳過
           return;
         }
-        if (!prev) return idle(J, '前一個插座沒有可以複製的組件');
-        if (baseOf(prev.id) === 'overclock') return idle(J, '鏡像不能複製超頻');
-        cid = prev.id;
+        if (base === 'pull') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
+        const mm = o.comps.find(c => c.key === 'mirror');  // 玩法晶片：產物多一份；兩個鏡像合成一個（n = 2 → 3 份）
+        if (mm) { mm.n++; return; }
+        o.comps.push({ id: cid, m: am, slot: i, key: 'mirror', n: 1 });
+        return;
       }
       if (base === 'pull' && baseOf(cid) !== 'bigshot') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
       o.comps.push({ id: cid, m: am, slot: i, key: cb });  // 效果 ×1.5／×0.7：那一格晶片上的組件跟著放大
@@ -72,7 +72,7 @@ function runComps(list, comps, layer) {
   for (const c of comps) {
     if (!list.length) break;
     const def = CHIPS[c.id];
-    if (!def.apply) continue;
+    if (!def.apply || c.copySrc) continue;
     let before = 0, after = 0;
     for (const b of list) before += b.damage;
     list = def.apply(list, c.m, { ...c, layer });
@@ -117,7 +117,7 @@ function runOps(ops, depth) {
     if (def.type === 'source') {
       const src = o.key || 'weapon';
       list.push(...def.emit(o.pw).map(b => Object.assign(b, { src, cr: null })));
-      for (const x of o.extra || []) if (!(x.flaky && flakyOff()))  // 鏡像插在第一個插座：武器多射一次（基礎傷害算鏡像的）
+      for (const x of o.extra || []) if (!(x.flaky && flakyOff()))  // 鏡像：武器多射一次（基礎傷害算鏡像的）
         list.push(...def.emit(o.pw).map(b => Object.assign(b, { src: 'mirror', cr: null })));
       list = runComps(list, o.comps || [], 'w');  // 武器、回響的插座
       for (const b of list) b.wsb = b.bonus || 0;  // 武器插座上的傷害加成：只算直擊，產物出現時拿掉（見 stripW）

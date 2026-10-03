@@ -366,7 +366,7 @@ const Editor = {
     const hostId = Game.chain[h], b = baseOf(compId), hb = baseOf(hostId);
     if (used >= socketsOf(hostId)) return `${CHIPS[hostId].name}的插座滿了（${socketsOf(hostId)} 個）${hostId === 'weapon' ? '；武器插座每打完一隻王 +1，最多 3 個' : ''}`;
     if (b === 'overclock' && hostId !== 'weapon') return '超頻是整條電路的射速，只能插在武器上';
-    if (hb === 'pull' && b !== 'bigshot' && b !== 'mirror') return '吸引的產物是拉力，只能插巨彈';
+    if (hb === 'pull' && b !== 'bigshot') return '吸引的產物是拉力，只能插巨彈';
     return '';
   },
   // 把組件插到第 h 格的晶片上（加在最後面）
@@ -597,11 +597,11 @@ function sockEffect(h, k) {
   const wlike = host === 'weapon' || CHIPS[host].type === 'trigger', dmg = b === 'amp' || b === 'bigshot';
   if (b === 'overclock') return '整條電路射速 ×2，連射 3 秒過熱、停火 1.5 秒';
   if (b === 'mirror') {
-    const prev = (Game.socks[h] || []).slice(0, k).filter(c => baseOf(c) !== 'mirror').pop();
-    if (wlike && !prev) return host === 'weapon' ? '武器多射一次（基礎傷害算鏡像的）' : '回響多射一次';
-    return prev ? `再執行一次前面的「${CHIPS[prev].name}」` : '前面沒有可以複製的組件';
+    if (wlike) return host === 'weapon' ? '武器多射一次（基礎傷害算鏡像的）' : '回響多射一次';
+    if (hb === 'sticky') return '黏著的爆炸再爆一次（傷害、碎片都多一份）';
+    return `${CHIPS[hb].name}的產物多一份（${HOST_PRODUCT[hb] || ''}）`;
   }
-  const fx = { amp: `傷害 +${Math.round(100 * m)}%`, split: `分成 ${n} 顆（每顆 ×0.4）`, pierce: `穿透 +${Math.round(2 * m)}`, bigshot: `兩兩合併、變大，傷害 +${Math.round(30 * m)}%` }[b] + mtxt;
+  const fx = { amp: `傷害 +${Math.round(100 * m)}%`, split: `分成 ${n} 顆（每顆 ×0.4）`, pierce: `穿透 +${Math.round(2 * m)}`, bigshot: `變大、擊退變強，傷害 +${Math.round(30 * m)}%` }[b] + mtxt;
   if (host === 'weapon') return `武器射出的全部子彈：${fx}${dmg ? '（傷害加成只算直擊：迴旋回程、環繞放出、黏著爆炸這些產物不吃）' : ''}`;
   if (wlike) return `回響（武器 50%）：${fx}${dmg ? '（傷害加成只算回響的直擊）' : ''}`;
   if (hb === 'sticky') return '黏著的爆炸：' + { amp: `爆炸傷害 +${Math.round(100 * m)}%（宿主層，跟武器層相乘）`,
@@ -617,7 +617,7 @@ function slotAttrLine(i) {
   if (!at) return '';
   const S = SLOT_ATTRS[at], id = Game.chain[i], col = S.good ? '#9dff6b' : '#ff8a8a';
   const CV = { amp: m => `傷害 +${Math.round(100 * m)}%`, split: m => `分裂成 ${Math.max(2, Math.round(3 + 2 * (m - 1)))} 顆`,
-    pierce: m => `穿透 +${Math.round(2 * m)}`, bigshot: m => `合併後傷害 +${Math.round(30 * m)}%` };
+    pierce: m => `穿透 +${Math.round(2 * m)}`, bigshot: m => `傷害 +${Math.round(30 * m)}%` };
   let fx;
   if (!id) fx = '這格現在是空的，放晶片進來才有效果';
   else if (at === 'eff' || at === 'weak') {
