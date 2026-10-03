@@ -997,7 +997,7 @@ const Game = {
         if (b.dashShot) this.tagGrow(e, own, 'dashfire');
         if (b.infGen > 0) this.tagGrow(e, own, 'infect');
         if (b.att.src === 'intercept') this.tagGrow(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
-        if (b.pull && b.mode !== 'orbit') this.pullAt(b);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
+        if (b.pull && b.mode !== 'orbit') this.pullAt(b, e);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         let att = b.att;
         if (dmg !== b.damage && b.damage > 0) {  // 傷害統計：速度倍率多出來的傷害平分給造成它的晶片（環繞放出、加速、疾射）
@@ -1076,14 +1076,17 @@ const Game = {
   },
   // ---------- V2 改玩法的晶片（房主執行） ----------
   // 吸引：命中時把附近的敵人往命中點拉（旗艦不會被拉）；引力漩渦：每命中 8 次生成一個
-  pullAt(b) {
+  // 吸引：把被打中那一隻附近的敵人拉向牠的中心（被打中的那一隻不動）
+  //   以前是拉向子彈的位置，連被打中的那一隻也拉；命中點在牠靠近飛船的那一側，等於每打一下就把敵人往飛船拖
+  pullAt(b, hit) {
     const R = (b.pull >= 2 ? 130 : 90) * (b.pullMul || 1);  // 巨彈插在吸引上：範圍 ×1.5
+    const cx = hit.x, cy = hit.y;
     let n = 0;
     for (const o of this.enemies) {
-      if (o.dead || o.t.boss || o.spawnT > 0) continue;
-      const d = Math.hypot(o.x - b.x, o.y - b.y);
+      if (o === hit || o.dead || o.t.boss || o.spawnT > 0) continue;
+      const d = Math.hypot(o.x - cx, o.y - cy);
       if (d > R + o.r || d < 1) continue;
-      o.vx += (b.x - o.x) / d * 380; o.vy += (b.y - o.y) / d * 380;
+      o.vx += (cx - o.x) / d * 380; o.vy += (cy - o.y) / d * 380;
       this.tagGrow(o, b.owner, 'pull');
       n++;
     }
