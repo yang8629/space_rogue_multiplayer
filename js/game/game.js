@@ -151,7 +151,7 @@ const Game = {
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
     this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
-    this.kills = 0; this.banner = null; this.nextId = 1;
+    this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
     // 雙人：房主在左、隊友在右（隊友的位置由隊友自己的電腦決定）
@@ -195,7 +195,7 @@ const Game = {
     if (sbBoss) list.push(sbBoss);
     else if (C.sandbox && n % 5 === 0) list.push('elite');
     C.pending = list;
-    this.banner = { text: C.sandbox ? `WAVE ${n}` : `WAVE ${n} / ${C.wavesTotal}`, t: 2 };
+    this.banner = { text: C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`, t: 2 };
     SFX.play(sbBoss ? 'boss' : 'wave');
     if (sbBoss) this.banner.sub = `♛ ${ENEMY_TYPES[sbBoss].name}接近中`;
     else if (list.includes('elite')) this.banner.sub = '⚠ 精英反應接近中';
@@ -247,9 +247,48 @@ const Game = {
         SFX.play('clear');
         return;
       }
+      // 一場戰鬥分成幾個區域（一區一波）：清完出現出口，有人飛進去才到下一區
+      if (C.wave >= 1 && this.usesAreas() && C.exitUsed !== C.wave) {
+        if (!this.exit) this.openExit();
+        else for (const p of this.players()) if (dist2(p.x, p.y, this.exit.x, this.exit.y) < (this.exit.r + p.r) ** 2) { this.nextArea(); break; }
+        return;
+      }
       C.waveTimer -= dt;
       if (C.waveTimer <= 0) { C.waveTimer = 2.5; this.startWave(C.wave + 1); }
     }
+  },
+  // ---------- 區域：一般戰、精英戰分成 2～3 個區域（旗艦戰、沙盒、靶場照舊） ----------
+  usesAreas() {
+    const C = this.combat;
+    return !!C && !C.sandbox && !C.range && !C.boss && isFinite(C.wavesTotal) && C.wavesTotal > 1;
+  },
+  // 出口：離飛船 450～800、不在行星／黑洞／小行星上
+  openExit() {
+    const p = this.player, B = Objects.blockers(), M = 140;
+    let x = CFG.WORLD_W / 2, y = CFG.WORLD_H / 2;
+    for (let i = 0; i < 40; i++) {
+      const a = rand(0, TAU), d = rand(450, 800), tx = p.x + Math.cos(a) * d, ty = p.y + Math.sin(a) * d;
+      if (tx < M || ty < M || tx > CFG.WORLD_W - M || ty > CFG.WORLD_H - M) continue;
+      if (B.some(o => dist2(tx, ty, o.x, o.y) < (Objects.blockR(o) + 70) ** 2)) continue;
+      x = tx; y = ty; break;
+    }
+    this.exit = { x, y, r: 40 };
+    this.banner = { text: '區域肅清', sub: '飛進出口，前往下一區', t: 2 };
+    SFX.play('clear');
+  },
+  // 換區：地上的晶體直接收下、子彈清掉、重新產生地圖物件，飛船回到中央，下一波照常倒數
+  nextArea() {
+    const C = this.combat, n = this.pickups.length;
+    this.credits += n;
+    if (this.mode === 'coop') Net.lootTotal += n;
+    this.pickups = []; this.bullets = []; this.eBullets = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
+    this.exit = null; C.exitUsed = C.wave; C.areaN = (C.areaN || 0) + 1; C.waveTimer = 1.2;
+    this.player.resetPos();
+    if (Net.role === 'host') this.player.x -= 50;
+    if (this.mate) { this.mate.resetPos(); this.mate.x += Net.role === 'host' ? 50 : -50; }
+    this.objs = Objects.gen(C, this.node);
+    Objects.flowT = 0;  // 尋路馬上照新的地圖重算
+    this.cam.x = this.player.x - ZW / 2; this.cam.y = this.player.y - ZH / 2;
   },
   combatWon() {
     const client = this.isClient();  // 雙人的隊友：地上剩下的晶體由房主算好數量傳過來

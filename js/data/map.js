@@ -7,8 +7,8 @@
 // =====================================================================
 // desc：航圖下方的節點介紹（數字直接讀 CFG，改數值時說明會跟著變）
 const NODE_META = {
-  combat: { label: '戰鬥', icon: '⚔', color: '#4cc9f0', desc: () => '2 波敵人（第 4 層起 3 波）。勝利後從 3 個晶片選 1 個。' },
-  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => '最後一波出現精英「虛空獵手」，戰場固定有行星和彗星。勝利後從 3 個背包模組（只有 1 格，換上新的舊的就沒了）或「插槽 +1」選 1 個，另得 ◆15。之後至少有一條路通往維修站。' },
+  combat: { label: '戰鬥', icon: '⚔', color: '#4cc9f0', desc: () => '2 個區域（第 4 層起 3 個），一區一波敵人：清完出現出口，飛進去到下一區（地上的晶體直接收下）。打完最後一區後從 3 個晶片選 1 個。' },
+  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => '分成 2 個區域，最後一區出現精英「虛空獵手」，戰場固定有行星和彗星。勝利後從 3 個背包模組（只有 1 格，換上新的舊的就沒了）或「插槽 +1」選 1 個，另得 ◆15。之後至少有一條路通往維修站。' },
   workshop: { label: '改裝廠', icon: '🔧', color: '#9fe8ff', desc: () => `零件三選一（佔 1 個零件格）；也可以付 ◆${Game.shopPrice(PART_SWAP_PRICE)} 把 1 層零件換成另一種（價格隨星區上漲）。` },
   shop:   { label: '補給站', icon: '◆', color: '#2ee6a6',
     desc: () => `買晶片、補血（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）、電路擴充（◆${Game.shopPrice(CFG.SHOP_SLOT)}）。不賣武器升級。價格隨星區上漲（第 2 星區 ×${+(1 + CFG.SHOP_PRICE_UP).toFixed(2)}、第 3 星區 ×${+(1 + 4 * CFG.SHOP_PRICE_UP).toFixed(2)}）。` },

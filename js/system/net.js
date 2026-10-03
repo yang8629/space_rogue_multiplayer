@@ -738,7 +738,7 @@ const Net = {
   whereText() {
     const G = Game, n = G.node, C = G.combat;
     const at = n ? `${G.isEndless() ? '無盡 · ' : ''}星區 ${G.sector} 第 ${n.L + 1} 層（${NODE_META[n.type].label}）` : `星區 ${G.sector} 航圖`;
-    return at + (n && C && G.inArena && C.wavesTotal !== Infinity ? ` 第 ${C.wave} / ${C.wavesTotal} 波` : '');
+    return at + (n && C && G.inArena && C.wavesTotal !== Infinity ? ` 第 ${C.wave} / ${C.wavesTotal} ${G.usesAreas() ? "區" : "波"}` : '');
   },
   buildRecord(result) {
     const G = Game, R = G.runStats, S = this.stats || { pings: [], snaps: 0, inputs: 0, maxGap: 0 };
@@ -821,7 +821,7 @@ const Net = {
       eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r]),
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       mg: r(CFG.MAGNET_RANGE * (1 + G.passives.magnet)),  // 房主的拾取範圍（隊友那邊模擬晶體飛向房主時用）
-      pal, lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills,
+      pal, lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
       bn: G.banner ? [G.banner.text, G.banner.sub || '', r2(G.banner.t)] : null,
       fx: this.fxBuf,
     });
@@ -927,6 +927,11 @@ const Net = {
     });
     this.applyLoot(s.lt);
     G.kills = num(s.k, G.kills); G.combat.wave = num(s.w, G.combat.wave);
+    G.exit = Array.isArray(s.ex) ? { x: num(s.ex[0]), y: num(s.ex[1]), r: num(s.ex[2], 40) } : null;  // 區域出口
+    if (num(s.ar) !== (G.combat.areaN || 0)) {  // 房主換區了：自己的飛船也回到中央（隊友的位置由自己的電腦決定）
+      G.combat.areaN = num(s.ar); G.player.resetPos(); G.player.x += 50;
+      G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2;
+    }
     G.banner = Array.isArray(s.bn) ? { text: String(s.bn[0]), sub: String(s.bn[1] || ''), t: num(s.bn[2], 1) } : null;
     for (const f of arr(s.fx)) {  // 房主那邊發生的特效與音效
       if (!Array.isArray(f)) continue;

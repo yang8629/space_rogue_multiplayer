@@ -383,7 +383,32 @@ const MechCheck = {
       return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
         got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
-    ['電路晶片', '吸引', '把被打中那一隻附近的敵人拉向牠（被打中的那一隻不會被往飛船拉）', M => {
+    ['航圖與戰鬥', '區域', '一般戰分成幾個區域（一區一波）：清完出現出口（離飛船 450 以上）、飛進去才換區（地上的晶體直接收下、子彈清掉、飛船回到中央）；最後一區清完結束戰鬥；旗艦戰不分區', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
+      const p = Game.player; p.maxHp = p.hp = 1e9;
+      let exits = 0, far = true, cleanOk = true, got0 = 0, credit = 0;
+      for (let f = 0; f < 60 * 120 && Game.state === 'play'; f++) {
+        for (const e of Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e9, 0, 0, 'direct');
+        const X = Game.exit;
+        if (X && !X.seen) {
+          X.seen = true; exits++;
+          if (Math.hypot(X.x - p.x, X.y - p.y) < 449) far = false;
+          Game.pickups.push({ x: 50, y: 50, vx: 0, vy: 0, life: 9 }); Game.bullets.push({ dead: false, update() {} }); got0 = Game.credits;
+          p.x = X.x; p.y = X.y;
+        }
+        const a0 = Game.combat.areaN || 0;
+        Game.update(1 / 60);
+        if ((Game.combat.areaN || 0) > a0) { credit += Game.credits - got0; if (Game.bullets.length || Game.pickups.length || p.x !== CFG.WORLD_W / 2) cleanOk = false; }
+      }
+      const won = Game.state !== 'play', areas = Game.combat.areaN || 0;
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = CFG.BOSS_ORDER[0]; Game.startCombat({ level: 6, wavesTotal: 1, elites: 0, boss: true });
+      const bossNo = !Game.usesAreas();
+      return { ok: exits === 2 && areas === 2 && far && cleanOk && credit >= 2 && won && bossNo,
+        got: `出口出現 ${exits} 次、換區 ${areas} 次（應各 2）${far ? '' : '、出口太近'}；換區時${cleanOk ? '清乾淨、飛船回中央' : '沒清乾淨'}、晶體收下 ${credit}；${won ? '戰鬥結束' : '戰鬥沒結束'}；旗艦戰${bossNo ? '不分區' : '分區（錯誤）'}` };
+    }],
+    ['電路晶片', '吸引','把被打中那一隻附近的敵人拉向牠（被打中的那一隻不會被往飛船拉）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', null, null]);
       const [a, b] = M.targets([[150, 0], [150, 70]]), ax = a.x, by = b.y, p = Game.player, d0 = Math.hypot(a.x - p.x, a.y - p.y);
       Game.player.fire(); SockCheck.step(30);
