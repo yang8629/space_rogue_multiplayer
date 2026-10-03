@@ -215,7 +215,7 @@ const Game = {
     let x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
     let y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
     const zone = Math.max(0, C.wave - 1);
-    if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 520, 780, 60);  // 大地圖：出生在這一波的區域裡（離在這一區的玩家 520～780）
+    if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 500, 60);  // 大地圖：散在這一波的區域各處（離在這一區的玩家至少 500）
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
       (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
       (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）

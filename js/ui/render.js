@@ -190,7 +190,11 @@ function drawExit() {
   const p = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, c = Game.cam;
   if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;  // 看得到就不畫箭頭
   const dir = X.gate ? Arena.exitDir(p.x, p.y, p.zone) : null;  // 大地圖：箭頭照繞牆的路線指
-  const a = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x), ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
+  const a0 = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x);
+  // 角度慢慢轉過去（不跟著每一幀的方向跳）
+  const a = drawExit.a = drawExit.a == null || drawExit.key !== X.x + ',' + X.y ? a0 : drawExit.a + angleDiff(drawExit.a, a0) * 0.15;
+  drawExit.key = X.x + ',' + X.y;  // 雙人的隊友每次同步都會換一個新的 exit 物件，用位置判斷是不是同一個出口
+  const ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
   ctx.fillStyle = '#2ee6a6'; ctx.globalAlpha = 0.6 + 0.3 * Math.sin(t * 6);
   ctx.beginPath(); ctx.moveTo(ax + Math.cos(a) * 12, ay + Math.sin(a) * 12);
   ctx.lineTo(ax + Math.cos(a + 2.5) * 10, ay + Math.sin(a + 2.5) * 10); ctx.lineTo(ax + Math.cos(a - 2.5) * 10, ay + Math.sin(a - 2.5) * 10);

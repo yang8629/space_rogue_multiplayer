@@ -14,11 +14,11 @@
 // =====================================================================
 const ARENA = {
   CELL: 20,           // 格點間距
-  GAP: 3200,          // 相鄰區域中心的距離
-  MAIN_R: [700, 820], // 主圓半徑
-  ARM: 1150,           // 手臂長度（區域中心到通道口）
-  ARM_W: [220, 280],  // 手臂半寬
-  SAT_N: [3, 4], SAT_R: [400, 600], NECK: 170,  // 衛星圓：個數、半徑、跟上一個圓接起來的地方至少多寬（半寬）
+  GAP: 2650,          // 相鄰區域中心的距離（大小：每區空地平均約 240 萬 px²，方形場地的 2/3）
+  MAIN_R: [570, 670], // 主圓半徑
+  ARM: 950,           // 手臂長度（區域中心到通道口）
+  ARM_W: [190, 235],  // 手臂半寬
+  SAT_N: [3, 4], SAT_R: [330, 490], NECK: 160,  // 衛星圓：個數、半徑、跟上一個圓接起來的地方至少多寬（半寬）
   WALL: 160,          // 相鄰區域之間的牆至少多厚
   CORR_W: 120,        // 通道半寬
   GATE_T: 6,          // 閘門半厚（子彈判定）
@@ -262,16 +262,10 @@ const Arena = {
     }
     return ok;
   },
-  // 第 k 區裡隨機一點：離 ref 裡每個點 d0～d1（盡量）、離牆至少 margin；rnd 預設 Math.random
-  spawnPoint(k, refs, d0, d1, margin) {
-    for (let t = 0; t < 80; t++) {
-      const ref = refs.length ? refs[Math.floor(Math.random() * refs.length)] : this.areaCenter(k);
-      const a = rand(0, TAU), d = rand(d0, d1), x = ref.x + Math.cos(a) * d, y = ref.y + Math.sin(a) * d;
-      if (this.f(x, y) < margin || this.zoneOf(x, y) !== k) continue;
-      if (refs.some(p => dist2(x, y, p.x, p.y) < d0 * d0 * 0.8)) continue;
-      return [x, y];
-    }
-    return this.randomIn(k, margin, refs, 300);
+  // 敵人出生點：散在第 k 區各處（主圓、衛星圓、手臂隨機挑一個再隨機一點），離 refs（在這一區的玩家）至少 minD、離牆至少 margin
+  //   （以前是離玩家 520～780 的一圈：剛穿過閘門時那一圈大多落在前方，敵人一起生在面前）
+  spawnPoint(k, refs, minD, margin) {
+    return this.randomIn(k, margin, refs, minD);
   },
   // 第 k 區裡隨機一點（離牆至少 margin；盡量離 refs 至少 minD）
   randomIn(k, margin, refs = [], minD = 0) {
@@ -336,17 +330,29 @@ const Arena = {
       }
       this.exitFlow = { k, dist, W, H };
     }
-    const F = this.exitFlow, cx = clamp(Math.floor(x / C), 0, W - 1), cy = clamp(Math.floor(y / C), 0, H - 1);
-    let best = -1, bd = F.dist[cy * W + cx] >= 0 ? F.dist[cy * W + cx] : Infinity;
-    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-      const xx = cx + ox, yy = cy + oy;
-      if ((!ox && !oy) || xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
-      const d = F.dist[yy * W + xx];
-      if (d >= 0 && d < bd) { bd = d; best = yy * W + xx; }
+    // 直線看得到閘門就直接指過去；看不到就沿著步數遞減的路線往前走（最多 60 格），指向路線上「從這裡直線看得到」的最遠一點
+    //   （只看隔壁一格的話，飛船在格子裡移動方向就會在 45° 之間跳來跳去，箭頭會抖）
+    const goal = [g.x - g.nx * 40, g.y - g.ny * 40], to = ([px, py]) => { const l = Math.hypot(px - x, py - y) || 1; return [(px - x) / l, (py - y) / l]; };
+    if (!this.losBlocked(x, y, goal[0], goal[1], 16)) return to([g.x + g.nx * 80, g.y + g.ny * 80]);  // 看得到閘門：指向閘門另一邊（直接穿過去，不會停在門前）
+    const F = this.exitFlow;
+    let c = clamp(Math.floor(y / C), 0, H - 1) * W + clamp(Math.floor(x / C), 0, W - 1);
+    const path = [];
+    for (let step = 0; step < 60; step++) {
+      const cx = c % W, cy = Math.floor(c / W);
+      let best = -1, bd = F.dist[c] >= 0 ? F.dist[c] : Infinity;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const xx = cx + ox, yy = cy + oy;
+        if ((!ox && !oy) || xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const d = F.dist[yy * W + xx];
+        if (d >= 0 && d < bd) { bd = d; best = yy * W + xx; }
+      }
+      if (best < 0) break;
+      c = best; path.push([(c % W + 0.5) * C, (Math.floor(c / W) + 0.5) * C]);
+      if (bd === 0) break;
     }
-    if (best < 0) { const l = Math.hypot(g.x - x, g.y - y) || 1; return [(g.x - x) / l, (g.y - y) / l]; }
-    const dx = (best % W + 0.5) * C - x, dy = (Math.floor(best / W) + 0.5) * C - y, l = Math.hypot(dx, dy) || 1;
-    return [dx / l, dy / l];
+    if (!path.length) return to(goal);
+    for (let i = path.length - 1; i > 0; i--) if (!this.losBlocked(x, y, path[i][0], path[i][1], 12)) return to(path[i]);
+    return to(path[0]);
   },
 
   // ---------- 畫面 ----------
