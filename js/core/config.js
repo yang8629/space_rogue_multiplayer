@@ -9,6 +9,7 @@ const CFG = {
   WORLD_W: 2400, WORLD_H: 1600,
   IFRAME: 0.7,               // 船體 HP / 速度 / 衝刺冷卻改由 SHIPS 定義
   DASH_SPEED: 900, DASH_TIME: 0.14,
+  COMET_SHARD_DMG: 10,      // 彗星打爆後的碎片打到飛船的傷害（每片）
   START_SLOTS: 4, MAX_SLOTS: 8, INV_SLOTS: 6,
   MAX_CHIP_LV: 3,           // 晶片等級上限；每級效果強度 +50%
   GROW_TAG_TIME: 1,         // 用量成長：照玩法打中後 1 秒內敵人死掉才算（見 Game.tagGrow）

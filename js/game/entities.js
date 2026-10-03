@@ -12,7 +12,7 @@ class Player {
     this.resetPos();
   }
   resetPos() {
-    this.x = CFG.WORLD_W / 2; this.y = CFG.WORLD_H / 2; this.vx = 0; this.vy = 0;
+    this.x = Arena.start.x; this.y = Arena.start.y; this.vx = 0; this.vy = 0; this.zone = 0;  // zone：大地圖上在第幾區（閘門用）
     this.iframe = 0; this.fireCd = 0; this.aim = 0; this.moving = false;
     this.dashT = 0; this.dashCd = 0; this.dashA = 0; this.overdrive = 0; this.target = null;
     this.reviveT = 0;  // 雙人：倒下後隊友救援的進度（秒）
@@ -131,8 +131,13 @@ class Player {
         this.dashSX = this.x; this.dashSY = this.y;  // 衝刺起點（星門號的第一個門）：在瞬移之前記
         if (M.module === 'blink') {  // 相位跳躍：瞬移，留一小段「衝刺中」讓衝刺結束的效果照常觸發
           const x0 = this.x, y0 = this.y;
-          this.x = clamp(this.x + Math.cos(this.dashA) * 150, this.r, CFG.WORLD_W - this.r);
-          this.y = clamp(this.y + Math.sin(this.dashA) * 150, this.r, CFG.WORLD_H - this.r);
+          if (Arena.rect) {
+            this.x = clamp(this.x + Math.cos(this.dashA) * 150, this.r, CFG.WORLD_W - this.r);
+            this.y = clamp(this.y + Math.sin(this.dashA) * 150, this.r, CFG.WORLD_H - this.r);
+          } else {  // 大地圖：不能瞬移穿牆、穿閘門
+            const d = Arena.rayFree(this.x, this.y, this.dashA, 150, this.r);
+            this.x += Math.cos(this.dashA) * d; this.y += Math.sin(this.dashA) * d;
+          }
           this.dashT = 0.05; this.blinkT = 0.05;
           burst(x0, y0, '#b388ff', 12, 160, 0.3, 2);
         }
@@ -157,8 +162,14 @@ class Player {
       this.vy += (my / l * spd - this.vy) * k;
     }
     const x0 = this.x, y0 = this.y;
-    this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
-    this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+    if (Arena.rect) {
+      this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
+      this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+    } else {  // 大地圖：撞牆停住；打開的閘門可以往前穿過（穿過去就到下一區，不能回頭）
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      Arena.collide(this, this.r, Arena.shipPass(this));
+      Arena.updateZone(this);
+    }
     this.moduleMove(dt);
     Objects.moveShip(this, dt);  // 地圖物件：黑洞拉扯、行星與小行星擋住
     Game.portalShip(this, x0, y0);   // 星門：走進門從另一個門出來
@@ -376,22 +387,33 @@ class Bullet {
     // 加速、疾射的子彈照飛行距離消耗存活時間：不管速度怎麼變，都剛好飛完射程（迴旋回程照秒數，追到飛船為止）
     this.life -= (this.accel || this.quick) && this.mode === 'fly' ? dt * this.accelMul / this.mul0 : dt;
     if (this.accel || this.quick) this.setMul();  // 速度倍率（= 傷害加成）照射程進度變化（移動完馬上更新，碰撞用的是這一幀到達位置的倍率）
-    const W = CFG.WORLD_W, H = CFG.WORLD_H, outX = this.x < 0 || this.x > W, outY = this.y < 0 || this.y > H;
-    if (outX || outY) {
-      if (this.bounce > 0) {  // 牆反彈
-        this.bounce--;
-        if (outX) { this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
-        if (outY) { this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
-        this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
-        this.bounced = true;  // 成長：反彈過的子彈打中才貼標記
-        stripW(this);
-        const c = this.prism ? this.copy(0.4) : null;  // 稜鏡：反彈時分裂
-        if (c) this.angle -= 0.2;
-        for (const b of c ? [this, c] : [this]) hostFire(b, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後（兩發都套用）
-      } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
-      else {
-        if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
-        this.dead = true; return;
+    if (!Arena.rect) {  // 大地圖：碰到牆或閘門（環繞中、迴旋回程、停住的地雷不算）
+      const hit = this.mode === 'orbit' || this.mode === 'return' || this.mode === 'wait' ? null : Arena.bulletWall(this.px, this.py, this.x, this.y, this.r);
+      if (hit) {
+        if (this.bounce > 0) {  // 牆反彈：照牆面的法線反彈
+          this.bounce--;
+          const vx = Math.cos(this.angle), vy = Math.sin(this.angle), dot = vx * hit.nx + vy * hit.ny;
+          if (dot < 0) this.angle = Math.atan2(vy - 2 * dot * hit.ny, vx - 2 * dot * hit.nx);
+          this.x = hit.x; this.y = hit.y;
+          this.afterBounce();
+        } else {
+          if (this.endBoom) Game.explode(hit.x, hit.y, 90, this.damage, this.color, null, this.att);
+          this.dead = true; return;
+        }
+      }
+    } else {
+      const W = CFG.WORLD_W, H = CFG.WORLD_H, outX = this.x < 0 || this.x > W, outY = this.y < 0 || this.y > H;
+      if (outX || outY) {
+        if (this.bounce > 0) {  // 牆反彈
+          this.bounce--;
+          if (outX) { this.angle = Math.PI - this.angle; this.x = clamp(this.x, 0, W); }
+          if (outY) { this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
+          this.afterBounce();
+        } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
+        else {
+          if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
+          this.dead = true; return;
+        }
       }
     }
     if (this.life <= 0) {
@@ -404,6 +426,15 @@ class Bullet {
         this.endTrig();  // 飛完射程：算消失
       }
     }
+  }
+  // 牆反彈之後（方向已經改好）：成長標記、稜鏡分裂、插在牆反彈上的組件
+  afterBounce() {
+    this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
+    this.bounced = true;  // 成長：反彈過的子彈打中才貼標記
+    stripW(this);
+    const c = this.prism ? this.copy(0.4) : null;  // 稜鏡：反彈時分裂
+    if (c) this.angle -= 0.2;
+    for (const b of c ? [this, c] : [this]) hostFire(b, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後（兩發都套用）
   }
   // 無限穿透：迴旋的回程、超音速（加速 Lv3 且 2 倍速以上）
   get infPierce() { return (!!this.boom && this.mode === 'return') || (this.accel >= 3 && this.accelMul >= 2); }
@@ -495,8 +526,10 @@ class Enemy {
     this.dead = false;
   }
   move(dt) {
-    this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
-    this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+    if (Arena.rect) {
+      this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
+      this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
+    } else { this.x += this.vx * dt; this.y += this.vy * dt; this.wallN = Arena.collide(this, this.r, null); }  // 大地圖：撞牆停住，閘門過不去
   }
   update(dt, p) {
     this.flash = Math.max(0, this.flash - dt);
@@ -606,7 +639,7 @@ class Enemy {
   }
   // 追向 p 的方向：看不到（中間有行星、小行星）時照尋路方向
   chaseDir(p, dx, dy, d) {
-    if (Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) { const f = Objects.flowDir(this, p); if (f) return f; }
+    if ((Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) || Arena.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) { const f = Objects.flowDir(this, p); if (f) return f; }
     return [dx / d, dy / d];
   }
   // ---------- 刺殼：平常慢慢走；靠近時縮成球（有預警線）→ 高速滾向玩家（撞牆反彈一次）→ 暈眩 ----------
@@ -625,11 +658,23 @@ class Enemy {
     }
     if (this.mode === 'charge') {  // 滾動：不吃擊退（hurt 裡處理），撞牆反彈一次，第二次撞牆就停
       this.modeT -= dt; this.move(dt); this.rot += dt * 14;
+      if (!Arena.rect) {  // 大地圖：照牆面法線反彈（move 撞到牆時記下 wallN，速度已經被削掉往牆裡的分量，用滾動方向算）
+        if (this.wallN) {
+          if (this.bounced) this.modeT = 0;
+          else {
+            const s = B.rollSpeed * this.spdMul, vx = Math.cos(this.chargeA), vy = Math.sin(this.chargeA), [nx, ny] = this.wallN, dot = vx * nx + vy * ny;
+            this.chargeA = Math.atan2(vy - 2 * Math.min(0, dot) * ny, vx - 2 * Math.min(0, dot) * nx);
+            this.vx = Math.cos(this.chargeA) * s; this.vy = Math.sin(this.chargeA) * s;
+            this.bounced = true; Game.shake(3);
+          }
+        }
+      } else {
       const hitX = (this.x <= this.r + 0.5 && this.vx < 0) || (this.x >= W - this.r - 0.5 && this.vx > 0);
       const hitY = (this.y <= this.r + 0.5 && this.vy < 0) || (this.y >= H - this.r - 0.5 && this.vy > 0);
       if (hitX || hitY) {
         if (this.bounced) this.modeT = 0;
         else { this.bounced = true; if (hitX) this.vx = -this.vx; if (hitY) this.vy = -this.vy; this.chargeA = Math.atan2(this.vy, this.vx); Game.shake(3); }
+      }
       }
       if (Game.particles.length < 1500 && Math.random() < 0.5)
         Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.t.color, size: 5 });
@@ -659,8 +704,8 @@ class Enemy {
   summon(type, n, dist, scale) {
     for (let i = 0; i < n; i++) {
       const a = i / n * TAU + this.rot;
-      const e = new Enemy(type, clamp(this.x + Math.cos(a) * dist, 40, CFG.WORLD_W - 40),
-        clamp(this.y + Math.sin(a) * dist, 40, CFG.WORLD_H - 40), this.hpScale * scale);
+      const [ex, ey] = Arena.clampIn(this.x + Math.cos(a) * dist, this.y + Math.sin(a) * dist, 40);
+      const e = new Enemy(type, ex, ey, this.hpScale * scale);
       e.summoned = true;  // 旗艦叫出來的小怪不掉晶體
       Game.enemies.push(e);
     }
@@ -857,7 +902,7 @@ const THEME_AI = {
     this.cd = 4;
     this.kids = (this.kids || []).filter(k => !k.dead);
     for (let i = 0; i < 2 && this.kids.length < 8; i++) {
-      const a = rand(0, TAU), k = new Enemy('swarmer', clamp(this.x + Math.cos(a) * 45, 40, CFG.WORLD_W - 40), clamp(this.y + Math.sin(a) * 45, 40, CFG.WORLD_H - 40), this.hpScale);
+      const a = rand(0, TAU), k = new Enemy('swarmer', ...Arena.clampIn(this.x + Math.cos(a) * 45, this.y + Math.sin(a) * 45, 40), this.hpScale);
       k.summoned = true; k.noGrow = true;  // 不掉晶體、不給晶片成長（不然可以一直刷）
       this.kids.push(k); Game.enemies.push(k);
     }

@@ -383,30 +383,109 @@ const MechCheck = {
       return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
         got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
-    ['航圖與戰鬥', '區域', '一般戰分成幾個區域（一區一波）：清完出現出口（離飛船 450 以上）、飛進去才換區（地上的晶體直接收下、子彈清掉、飛船回到中央）；最後一區清完結束戰鬥；旗艦戰不分區', M => {
+    ['航圖與戰鬥', '區域', '一般戰是一張大地圖，分成幾個區域（一區一波）；每一區都連得通；閘門關著過不去；清完閘門打開，穿過去才開始下一區（剩下的晶體直接收下），穿過去之後不能回頭；敵人只出生在玩家所在的區域；最後一區清完結束戰鬥；旗艦戰是方形場地', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
       const p = Game.player; p.maxHp = p.hp = 1e9;
-      let exits = 0, far = true, cleanOk = true, got0 = 0, credit = 0;
-      for (let f = 0; f < 60 * 120 && Game.state === 'play'; f++) {
-        for (const e of Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e9, 0, 0, 'direct');
+      const big = !Arena.rect && Arena.areas.length === 3 && Arena.gates.length === 2;
+      // 連通：從出生點走得到每一道閘門的兩側（離牆 22 以上的格子）
+      const C = 20, W = Math.ceil(Arena.W / C), H = Math.ceil(Arena.H / C), seen = new Uint8Array(W * H), q = [];
+      const cell = (x, y) => Math.floor(y / C) * W + Math.floor(x / C), open = c => Arena.f((c % W + 0.5) * C, (Math.floor(c / W) + 0.5) * C) >= 22;
+      q.push(cell(Arena.start.x, Arena.start.y)); seen[q[0]] = 1;
+      while (q.length) { const c = q.pop(), x = c % W; for (const m of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, c - W, c + W]) if (m >= 0 && m < W * H && !seen[m] && open(m)) { seen[m] = 1; q.push(m); } }
+      const linked = Arena.gates.every(g => seen[cell(g.x - g.nx * 60, g.y - g.ny * 60)] && seen[cell(g.x + g.nx * 60, g.y + g.ny * 60)]);
+      // 閘門關著：往閘門飛 2 秒，過不去
+      const g0 = Arena.gates[0], side = () => (p.x - g0.x) * g0.nx + (p.y - g0.y) * g0.ny;
+      p.x = g0.x - g0.nx * 80; p.y = g0.y - g0.ny * 80;
+      const push = (sg, n) => { for (let i = 0; i < n; i++) { p.vx = g0.nx * 400 * sg; p.vy = g0.ny * 400 * sg; p.x += p.vx / 60; p.y += p.vy / 60; Arena.collide(p, p.r, Arena.shipPass(p)); Arena.updateZone(p); } };
+      push(1, 120);
+      const blocked = side() <= -p.r + 0.5 && p.zone === 0;
+      p.x = Arena.start.x; p.y = Arena.start.y; p.zone = 0;
+      let exits = 0, spawnOk = true, got0 = 0, credit = 0, passed = true, back = true;
+      for (let f = 0; f < 60 * 150 && Game.state === 'play'; f++) {
+        for (const e of Game.enemies) {
+          if (!e.dead && e.spawnT <= 0) { if (Arena.zoneOf(e.x, e.y) !== Game.combat.wave - 1) spawnOk = false; e.hurt(1e9, 0, 0, 'direct'); }
+        }
         const X = Game.exit;
         if (X && !X.seen) {
           X.seen = true; exits++;
-          if (Math.hypot(X.x - p.x, X.y - p.y) < 449) far = false;
-          Game.pickups.push({ x: 50, y: 50, vx: 0, vy: 0, life: 9 }); Game.bullets.push({ dead: false, update() {} }); got0 = Game.credits;
-          p.x = X.x; p.y = X.y;
+          const g = Arena.gates[Game.combat.wave - 1];
+          if (!g || !g.open) passed = false;
+          Game.pickups.push({ x: p.x + 300, y: p.y, vx: 0, vy: 0, life: 9 }); got0 = Game.credits;
+          // 飛到閘門後面，再往前穿過去
+          p.x = g.x - g.nx * 60; p.y = g.y - g.ny * 60; p.zone = g.i;
+          for (let i = 0; i < 30; i++) { p.vx = g.nx * 400; p.vy = g.ny * 400; p.x += p.vx / 60; p.y += p.vy / 60; Arena.collide(p, p.r, Arena.shipPass(p)); Arena.updateZone(p); }
+          if (p.zone !== g.i + 1) passed = false;
+          // 回頭：過不去
+          for (let i = 0; i < 60; i++) { p.vx = -g.nx * 400; p.vy = -g.ny * 400; p.x += p.vx / 60; p.y += p.vy / 60; Arena.collide(p, p.r, Arena.shipPass(p)); Arena.updateZone(p); }
+          if ((p.x - g.x) * g.nx + (p.y - g.y) * g.ny < p.r - 0.5) back = false;
         }
         const a0 = Game.combat.areaN || 0;
         Game.update(1 / 60);
-        if ((Game.combat.areaN || 0) > a0) { credit += Game.credits - got0; if (Game.bullets.length || Game.pickups.length || p.x !== CFG.WORLD_W / 2) cleanOk = false; }
+        if ((Game.combat.areaN || 0) > a0) credit += Game.credits - got0;
       }
       const won = Game.state !== 'play', areas = Game.combat.areaN || 0;
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = CFG.BOSS_ORDER[0]; Game.startCombat({ level: 6, wavesTotal: 1, elites: 0, boss: true });
-      const bossNo = !Game.usesAreas();
-      return { ok: exits === 2 && areas === 2 && far && cleanOk && credit >= 2 && won && bossNo,
-        got: `出口出現 ${exits} 次、換區 ${areas} 次（應各 2）${far ? '' : '、出口太近'}；換區時${cleanOk ? '清乾淨、飛船回中央' : '沒清乾淨'}、晶體收下 ${credit}；${won ? '戰鬥結束' : '戰鬥沒結束'}；旗艦戰${bossNo ? '不分區' : '分區（錯誤）'}` };
+      const bossRect = !Game.usesAreas() && Arena.rect;
+      return { ok: big && linked && blocked && exits === 2 && areas === 2 && passed && back && spawnOk && credit >= 1 && won && bossRect,
+        got: `${big ? '大地圖 3 區、2 道閘門' : '不是大地圖（錯誤）'}；${linked ? '每道閘門兩側都走得到' : '有地方走不到'}；閘門關著${blocked ? '過不去' : '穿過去了（錯誤）'}；閘門打開 ${exits} 次、換區 ${areas} 次（應各 2）${passed ? '' : '、穿閘門失敗'}${back ? '、不能回頭' : '、可以回頭（錯誤）'}；${spawnOk ? '敵人都在目前的區域' : '有敵人生在別區'}；晶體收下 ${credit}；${won ? '戰鬥結束' : '戰鬥沒結束'}；旗艦戰${bossRect ? '方形場地' : '不是方形場地（錯誤）'}` };
+    }],
+    ['航圖與戰鬥', '大地圖的牆', '牆反彈的子彈照牆面法線反彈（入射角 = 反射角）、沒有反彈的子彈打到牆消失；敵人、敵彈不會穿牆；彗星碎片會打到飛船', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]);
+      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0 });
+      const p = Game.player;
+      // 1. 反彈：從出生點朝 8 個方向各找一面牆，在牆前 160 朝牆射（斜 25°）
+      let tries = 0, okRef = 0, nRef = 0, diesOk = 0, nDie = 0, worst = 0;
+      const nearGate = (x, y) => Arena.gates.some(g => segDist2(g.x - g.ny * g.L, g.y + g.nx * g.L, g.x + g.ny * g.L, g.y - g.nx * g.L, x, y) < 60 * 60);
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * TAU, ux = Math.cos(a), uy = Math.sin(a);
+        let d = 0;
+        while (d < 3000 && Arena.f(Arena.start.x + ux * d, Arena.start.y + uy * d) > 0) d += 10;
+        if (d < 260 || d >= 3000 || Arena.gateCross(Arena.start.x, Arena.start.y, Arena.start.x + ux * d, Arena.start.y + uy * d)) continue;
+        tries++;
+        for (const chain of [['weapon', 'wallbounce', null, null], ['weapon', null, null, null]]) {
+          const sp = splitChain(chain.map(fullChip)); Game.chain = sp.chain; Game.socks = sp.socks; Game.objs = []; Game.recalc();
+          p.x = Arena.start.x + ux * (d - 160); p.y = Arena.start.y + uy * (d - 160); p.zone = 0;
+          p.aim = a + 0.44; Game.bullets = []; p.fire();
+          const b = Game.bullets[0];
+          if (!b) continue;
+          let prevA = b.angle, bounced = false;
+          for (let f = 0; f < 90 && !b.dead; f++) {
+            prevA = b.angle; Game.updateBullets(1 / 60);
+            worst = Math.min(worst, Arena.f(b.x, b.y));
+            if (b.bounced && !bounced) {
+              bounced = true;
+              if (nearGate(b.x, b.y)) continue;  // 打到閘門（閘門也會反彈，法線是閘門的方向，這裡只檢查牆）
+              nRef++;
+              const [nx, ny] = Arena.grad(b.x, b.y), ix = Math.cos(prevA), iy = Math.sin(prevA), ox = Math.cos(b.angle), oy = Math.sin(b.angle);
+              const nIn = ix * nx + iy * ny, nOut = ox * nx + oy * ny, tIn = -ix * ny + iy * nx, tOut = -ox * ny + oy * nx;
+              if (nIn < 0 && Math.abs(nIn + nOut) < 0.12 && Math.abs(tIn - tOut) < 0.12) okRef++;
+            }
+          }
+          if (chain[1] === null && b.dead && !b.bounced && !nearGate(b.x, b.y) && b.life > 0) { nDie++; if (Arena.f(b.x, b.y) < 2) diesOk++; }  // 射程用完才消失的不算
+        }
+      }
+      // 2. 敵人、敵彈不穿牆：真正打 25 秒（飛船無敵、不開火）
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 5, id: 'mc' }; Game.startCombat({ level: 5, wavesTotal: 2, elites: 0 });
+      Game.player.maxHp = Game.player.hp = 1e9;
+      let inWall = 0, eb = 0, ebBad = 0, seenE = 0;
+      for (let f = 0; f < 60 * 25; f++) {
+        Game.update(1 / 60);
+        for (const e of Game.enemies) { if (e.dead) continue; seenE++; if (Arena.f(e.x, e.y) < e.r * 0.5 || Arena.zoneOf(e.x, e.y) !== 0) inWall++; }
+        for (const q of Game.eBullets) { eb++; if (Arena.f(q.x, q.y) < -10) ebBad++; }
+      }
+      // 3. 彗星碎片：彗星在飛船前方 80、朝飛船飛，打爆
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0 });
+      const P = Game.player; P.iframe = 0; const hp0 = P.hp = P.maxHp;
+      const o = { type: 'comet', id: 999, x: P.x + 80, y: P.y, vx: -300, vy: 0, r: 18, hp: 1, maxHp: 1, warn: 0, hits: new Set(), age: 2 };
+      Game.objs = [o]; Objects.breakComet(o);
+      for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+      const shardHit = P.hp < hp0 && /彗星（碎片）/.test(Game.lastHit || '');
+      return { ok: tries >= 3 && nRef >= 3 && okRef === nRef && nDie >= 3 && diesOk === nDie && worst > -40 && seenE > 100 && inWall === 0 && ebBad === 0 && shardHit,
+        got: `反彈 ${okRef} / ${nRef} 次角度正確，沒反彈的子彈 ${diesOk} / ${nDie} 撞牆消失（最深進牆 ${(-worst).toFixed(0)}）；敵人 ${inWall ? inWall + ' 次在牆裡或別區（錯誤）' : '沒有穿牆'}（${seenE} 隻·幀），敵彈 ${eb} 個·幀 ${ebBad ? '有 ' + ebBad + ' 個在牆裡（錯誤）' : '沒有穿牆'}；彗星碎片${shardHit ? `打到飛船（-${Math.round(hp0 - P.hp)}）` : '沒打到飛船（錯誤）'}` };
     }],
     ['電路晶片', '吸引','把被打中那一隻附近的敵人拉向牠（被打中的那一隻不會被往飛船拉）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', null, null]);
@@ -883,7 +962,7 @@ const MechCheck = {
   runAll() {
     const saved = {};
     for (const k of Object.keys(Game)) if (typeof Game[k] !== 'function') saved[k] = Game[k];
-    const savedWeaponChip = { ...CHIPS.weapon }, savedMuted = SFX.muted;
+    const savedWeaponChip = { ...CHIPS.weapon }, savedMuted = SFX.muted, savedArena = { ...Arena };
     SFX.muted = true;
     const results = [];
     const t0 = performance.now();
@@ -896,6 +975,7 @@ const MechCheck = {
     this.running = false;
     Object.assign(Game, saved);
     Object.assign(CHIPS.weapon, savedWeaponChip);
+    Object.assign(Arena, savedArena);
     SFX.muted = savedMuted;
     this.results = { list: results, ms: performance.now() - t0, at: new Date() };
     Game.restoreScreen();
