@@ -163,18 +163,25 @@ const MechCheck = {
       const d = M.firstHit();
       return { ok: near1(d, 20), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
     }],
-    ['電路晶片', '迴旋', '沒打中就飛到盡頭消失；打中敵人時穿過去折返，回程再打牠一次，飛回飛船；刃片揮到盡頭時有砍到敵人就飛回飛船；沒砍到就消失；迴旋的子彈打中時留一份黏著，照常折返（不會黏住就消失）', M => M.all([
+    ['電路晶片', '迴旋', '沒打中也會在射程盡頭折返、飛回飛船；撞到場地邊緣折返；打中敵人時穿過去折返，回程再打牠一次，飛回飛船；相刃的刃片揮到盡頭（砍到或沒砍到）都飛回飛船；迴旋的子彈打中時留一份黏著，照常折返（不會黏住就消失）', M => M.all([
       M => {  // 迴旋
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); M.targets([]);
         M.run(1); const b = Game.bullets[0];
         let back = false;
-        for (let f = 0; f < 120 && b && !b.dead; f++) { Game.updateBullets(1 / 60); if (b.mode === 'return') back = true; }
+        for (let f = 0; f < 300 && b && !b.dead; f++) { Game.updateBullets(1 / 60); if (b.mode === 'return') back = true; }
+        const missHome = b.dead && Math.hypot(b.x - Game.player.x, b.y - Game.player.y) < 40;
+        // 撞牆：靠著右邊的場地邊緣往右射
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); M.targets([]);
+        Game.player.x = CFG.WORLD_W - 60; M.run(1); const w = Game.bullets[0];
+        let wallBack = false, maxX = 0;
+        for (let f = 0; f < 120 && w && !w.dead; f++) { Game.updateBullets(1 / 60); maxX = Math.max(maxX, w.x); if (w.mode === 'return') wallBack = true; }
+        const wallOk = wallBack && maxX <= CFG.WORLD_W + 1;
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]); const e = M.targets([[150, 0]])[0];
         M.run(1); const c = Game.bullets[0];
         for (let f = 0; f < 300 && c && !c.dead; f++) Game.updateBullets(1 / 60);
         const dmg = e.maxHp - e.hp;
         const home = c.dead && Math.hypot(c.x - Game.player.x, c.y - Game.player.y) < 40;
-        return { ok: !back && b.dead && near1(dmg, 14) && home, got: (back ? '沒打中也折返了' : '沒打中：飛到盡頭消失') + `；單發打一隻：${Math.round(dmg)}（應為 7 + 7）${home ? '，回到飛船' : '，沒回到飛船'}` };
+        return { ok: back && missHome && wallOk && near1(dmg, 14) && home, got: (back && missHome ? '沒打中：盡頭折返、回到飛船' : '沒打中：沒有折返回來（錯誤）') + `；撞牆${wallOk ? '折返' : '沒折返（錯誤）'}；單發打一隻：${Math.round(dmg)}（應為 7 + 7）${home ? '，回到飛船' : '，沒回到飛船'}` };
       },
       M => {  // 相刃＋迴旋
         const go = tg => {
@@ -186,7 +193,7 @@ const MechCheck = {
           return { ret, home };
         };
         const hit = go([[70, 0]]), miss = go([]);
-        return { ok: hit.ret > 0 && hit.home && miss.ret === 0, got: `砍到：${hit.ret} 片折返${hit.home ? '、都飛回來了' : '、還沒回來'}；沒砍到：${miss.ret} 片折返` };
+        return { ok: hit.ret > 0 && hit.home && miss.ret > 0 && miss.home, got: `砍到：${hit.ret} 片折返${hit.home ? '、都飛回來了' : '、還沒回來'}；沒砍到：${miss.ret} 片折返${miss.home ? '、都飛回來了' : '、還沒回來'}` };
       },
       M => {  // 黏著＋迴旋
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', 'boomerang', null]); const e = M.targets([[150, 0]])[0];
