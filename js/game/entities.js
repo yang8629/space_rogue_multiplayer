@@ -555,7 +555,7 @@ class Enemy {
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
     if (this.spawnT > 0) { this.spawnT -= dt; return; }
     const t = this.t;
-    if (t.dummy) {  // 標靶：被擊退後像彈簧一樣回到原位
+    if (t.dummy || this.frozen) {  // 標靶（和靶場手動生的「不動」敵人）：被擊退後像彈簧一樣回到原位，不移動也不攻擊
       const k = Math.min(1, dt * 6);
       this.vx += ((this.hx - this.x) * 8 - this.vx) * k;
       this.vy += ((this.hy - this.y) * 8 - this.vy) * k;
@@ -845,7 +845,7 @@ class Enemy {
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
     this.hp -= dmg; this.flash = 0.08;
-    if (this.t.dummy && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶打不死
+    if ((this.t.dummy || this.immortal) && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶（和靶場手動生的「打不死」）打不死
     if (this.t.boss) {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
       if (over > 0 && l > 0 && this.mode !== 'charge') { this.vx += kx / l * over * CFG.BOSS_KNOCK; this.vy += ky / l * over * CFG.BOSS_KNOCK; }
