@@ -195,7 +195,7 @@ const Screen = {
     let body;
     const card = (key, n, color) => `<div class="card" style="border-color:${color}">
       <div class="ttl" style="color:${color}">${n.name}</div><div class="ds">${n.desc}</div>
-      ${n.next ? `<div class="ty">第二段可選：${n.next.map(x => x.name).join(' ／ ')}</div>` : ''}
+      ${n.next ? `<div class="ty">第二段可選（二選一）：</div>${n.next.map(x => `<div class="ds" style="margin-top:4px;padding-left:8px;border-left:2px solid ${color}55"><b style="color:${color}">${x.name}</b>：${x.desc}</div>`).join('')}` : ''}
       <button data-act="upg" data-arg="${key}">選擇</button></div>`;
     // 軍械台一律給武器升級；只有武器升滿之後，才可以改選「電路擴充」
     const canSlot = stage === 2 && Game.chain.length < CFG.MAX_SLOTS;
