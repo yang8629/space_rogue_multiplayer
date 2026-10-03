@@ -381,6 +381,17 @@ const MechCheck = {
       return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
         got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
+    ['電路晶片', '元素組件', '跟武器升級相加：新星＋爆裂 = 爆炸 130%（半徑 90）；磁暴線圈＋電擊 = 3 道電弧；黑潮＋冰凍 = 減速 70%（上限）；雷射＋燃燒實際打中：每秒燒 30% 命中傷害、3 秒', M => {
+      const top = (w, path, fin, flat) => { M.setup('sandbox', 'vanguard', w, path, fin, flat); return runOps(Game.stats.ops, 0)[0]; };
+      const ex = top('plasma', 'C', null, ['weapon', 'blast', null, null]).explode;
+      const ar = top('railgun', 'C', null, ['weapon', 'shock', null, null]).arcs;
+      const sl = top('plasma', 'B', 1, ['weapon', 'frost', null, null]).slow;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'ignite', null, null]); const e = M.targets([[120, 0]])[0];
+      const hp = e.hp; Game.player.fire(); for (let f = 0; f < 20 && e.hp === hp; f++) { Game.time += 1 / 60; Game.updateBullets(1 / 60); }
+      const hit = hp - e.hp, ok4 = e.burnT > 2.9 && near1(e.burnDps, hit * 0.3);
+      return { ok: !!ex && near1(ex.ratio, 1.3) && ex.r === 90 && !!ar && ar.n === 3 && near1(sl, 0.7) && ok4,
+        got: `新星＋爆裂 ${ex ? Math.round(ex.ratio * 100) + '%、半徑 ' + ex.r : '沒有爆炸'}；磁暴＋電擊 ${ar ? ar.n : 0} 道；黑潮＋冰凍 ${Math.round((sl || 0) * 100)}%；雷射打中 ${hit.toFixed(1)}、燃燒每秒 ${e.burnDps.toFixed(1)}、${e.burnT.toFixed(1)} 秒` };
+    }],
     ['電路晶片', '鏡像迴路', '再來一次，插哪個插座都一樣：武器［鏡像］= 2 發、武器［分裂、鏡像］和［鏡像、分裂］都是 6 發；蓄力［倍增、鏡像］蓄滿 2 發、各 +100%；黏著［鏡像］有作用；吸引［鏡像］沒作用', M => {
       const cnt = flat => { M.setup('sandbox', 'vanguard', 'laser', null, null, flat); return Game.stats.count; };
       const a = cnt(['weapon', 'mirror', null, null]), b = cnt(['weapon', 'split', 'mirror', null]), c = cnt(['weapon', 'mirror', 'split', null]);
@@ -416,7 +427,7 @@ const MechCheck = {
       return { ok: full && oc && near1(d3, 40) && near1(echo, 5) && w0 && near1(ch.damage, 100),
         got: `1 個插座插 2 個倍增：第 2 個${full ? '沒作用' : '有作用（錯誤）'}；超頻插黏著${oc ? '沒作用' : '有作用（錯誤）'}；武器 3 個倍增 ${d3}；回響 ${echo}（應為 5）；遠征開局武器插座 ${ws0} 個${w0 ? '、倍增沒作用' : ''}；蓄力［倍增］蓄滿 ${ch.damage.toFixed(1)}` };
     }],
-    ['構築系統', '插座組合（雷射）', '武器、13 個玩法晶片、3 種觸發器 × 分裂／穿甲／倍增／巨彈／鏡像：效果出現在那個晶片的產物上（環繞放出時、迴旋折返時、黏著爆炸…）；疾射減速後插在上面的倍增失效', M => SockCheck.summary(SockCheck.rows('laser'))],
+    ['構築系統', '插座組合（雷射）', '武器、13 個玩法晶片、3 種觸發器 × 分裂／穿甲／倍增／巨彈／鏡像／四種元素：效果出現在那個晶片的產物上（環繞放出時、迴旋折返時、黏著爆炸…）；疾射減速後插在上面的倍增失效', M => SockCheck.summary(SockCheck.rows('laser'))],
     ['構築系統', '插座組合（散彈）', '同上，散彈（一次 5 顆）', M => SockCheck.summary(SockCheck.rows('scatter'))],
     ['構築系統', '插座組合（相位刃）', '同上，相位刃（刃片、無限穿透、射程很短）', M => SockCheck.summary(SockCheck.rows('blade'))],
     ['構築系統', '武器、觸發器插座只算直擊', '插在武器上的倍增：迴旋回程、環繞放出、加速／疾射 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出都不吃；插在觸發器上的倍增：回響的迴旋回程不吃', M => SockCheck.summary(SockCheck.direct())],
@@ -860,7 +871,10 @@ const near1 = (a, b) => Math.abs(a - b) <= Math.max(0.05, Math.abs(b) * 0.02);
 //   武器、觸發器插座的傷害加成只算直擊。mp_tests 的 sockcheck.js 也用這裡印總表
 // =====================================================================
 const SockCheck = {
-  COMPS: ['amp', 'split', 'pierce', 'bigshot', 'mirror'],
+  COMPS: ['amp', 'split', 'pierce', 'bigshot', 'mirror', 'blast', 'ignite', 'frost', 'shock'],
+  // 元素組件：子彈身上的命中效果有沒有變多（爆炸傷害、燃燒、減速、電弧道數）
+  EL: { blast: b => (b.explode ? b.explode.ratio : 0), ignite: b => b.burnR || 0, frost: b => b.slow || 0, shock: b => (b.arcs ? b.arcs.n : 0) },
+  elUp(c, a, b) { const g = this.EL[c]; return !!(a && b) && g(b) > g(a) + 0.05; },
   fires: [],
   setup(weapon, flat, targets = [], type = 'brute', hp = 60) {
     MechCheck.setup('sandbox', 'vanguard', weapon, null, null, flat);
@@ -884,9 +898,9 @@ const SockCheck = {
     window.hostFire = (b, base) => {
       const comps = b.hm && b.hm[base];
       if (!comps) return orig(b, base);
-      const before = { hb: b.hb || 0, pierce: b.pierce, r: b.r, n: Game.bullets.length };
+      const before = { hb: b.hb || 0, pierce: b.pierce, r: b.r, n: Game.bullets.length, el: { ...b } };
       orig(b, base);
-      self.fires.push({ base, before, after: { hb: b.hb || 0, pierce: b.pierce, r: b.r, n: Game.bullets.length } });
+      self.fires.push({ base, before, after: { hb: b.hb || 0, pierce: b.pierce, r: b.r, n: Game.bullets.length, el: { ...b } } });
     };
     try { fn(); } finally { window.hostFire = orig; }
   },
@@ -898,7 +912,7 @@ const SockCheck = {
   },
   hurtLog(type, fn) {  // 跑 fn 的時候，記下每隻敵人受到某種傷害（explode、echo…）
     const log = [];
-    Game.enemies.forEach((e, i) => { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { if (!type || r[2] === type) log.push({ i, d }); return h(d, ...r); }; });
+    Game.enemies.forEach((e, i) => { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { if (!type || r[2] === type) log.push({ i, d, t: r[2] }); return h(d, ...r); }; });
     fn();
     return log;
   },
@@ -911,8 +925,8 @@ const SockCheck = {
     wallbounce: (S, w, c) => { S.setup(w, ['weapon', 'wallbounce', c]); Game.player.x = CFG.WORLD_W - S.range() * 0.4; S.watch(() => { Game.player.fire(); S.step(90); }); },
   },
   targets(list) { MechCheck.targets(list, 'brute', true, 60); },
-  effectOk: (c, x) => c === 'mirror' ? x.after.n - x.before.n >= 1 : c === 'amp' ? x.after.hb - x.before.hb > 0.9 : c === 'split' ? x.after.n - x.before.n >= 2
-    : c === 'pierce' ? x.after.pierce - x.before.pierce >= 2 : x.after.r > x.before.r * 1.3,
+  effectOk(c, x) { return SockCheck.EL[c] ? SockCheck.elUp(c, x.before.el, x.after.el) : c === 'mirror' ? x.after.n - x.before.n >= 1 : c === 'amp' ? x.after.hb - x.before.hb > 0.9 : c === 'split' ? x.after.n - x.before.n >= 2
+    : c === 'pierce' ? x.after.pierce - x.before.pierce >= 2 : x.after.r > x.before.r * 1.3; },
   // 開火當下就出現的產物：同一個電路有沒有插組件，比較產物和其他子彈
   shots(mode, charge) { Game.fireMode = mode; Game.chargeC = charge; try { return runOps(Game.stats.ops, 0); } finally { Game.fireMode = null; Game.chargeC = null; } },
   launch(w, host, c) {
@@ -926,7 +940,7 @@ const SockCheck = {
     };
     const A = grab(['weapon', host]), B = grab(['weapon', host, c]);
     const avg = (L, k) => L.length ? L.reduce((a, b) => a + (b[k] || 0), 0) / L.length : 0;
-    const ok = c === 'mirror' ? B.prod.length === 2 * A.prod.length && B.other.length === A.other.length : c === 'amp' ? avg(B.prod, 'hb') > 0.9 && avg(B.other, 'hb') === 0 : c === 'split' ? B.prod.length === 3 * A.prod.length && B.other.length === A.other.length
+    const ok = this.EL[c] ? this.elUp(c, A.prod[0], B.prod[0]) && (!B.other.length || !this.elUp(c, A.other[0], B.other[0])) : c === 'mirror' ? B.prod.length === 2 * A.prod.length && B.other.length === A.other.length : c === 'amp' ? avg(B.prod, 'hb') > 0.9 && avg(B.other, 'hb') === 0 : c === 'split' ? B.prod.length === 3 * A.prod.length && B.other.length === A.other.length
       : c === 'pierce' ? B.prod[0].pierce - A.prod[0].pierce >= 2 : B.prod[0].radius > A.prod[0].radius * 1.3;
     return { ok, got: `產物 ${A.prod.length} → ${B.prod.length} 發（加成 ${avg(B.prod, 'hb').toFixed(1)}、穿透 ${A.prod[0].pierce}→${B.prod[0].pierce}、半徑 ${A.prod[0].radius.toFixed(1)}→${B.prod[0].radius.toFixed(1)}）；其他子彈 ${B.other.length} 發（加成 ${avg(B.other, 'hb').toFixed(1)}）` };
   },
@@ -936,13 +950,15 @@ const SockCheck = {
       const d = Math.min(150, this.range() * 0.6);
       this.targets([[d, 0], [d, 70]]);
       let spawned = [];
-      const log = this.hurtLog('explode', () => { spawned = this.spawned('sticky', () => { Game.player.fire(); this.step(150); }); });
-      return { log, spawned, pierce: runOps(Game.stats.ops, 0)[0].pierce };
+      const all = this.hurtLog(null, () => { spawned = this.spawned('sticky', () => { Game.player.fire(); this.step(150); }); });
+      const e0 = Game.enemies[0];
+      return { log: all.filter(x => x.t === 'explode'), arcs: all.filter(x => x.t === 'arc').length, burn: !!(e0 && e0.burnT > 0), slow: !!(e0 && e0.slowT > 0), spawned, pierce: runOps(Game.stats.ops, 0)[0].pierce };
     };
     const A = run(['weapon', 'sticky']), B = run(['weapon', 'sticky', c]);
     const ex = r => r.log.filter(x => x.i === 0).reduce((a, x) => a + x.d, 0), side = r => r.log.filter(x => x.i === 1).length;
-    const ok = c === 'amp' || c === 'mirror' ? ex(B) > ex(A) * 1.8 : c === 'split' ? B.spawned.length >= 3 : c === 'pierce' ? B.pierce - A.pierce >= 2 : side(B) > side(A);
-    return { ok, got: `爆炸 ${ex(A).toFixed(1)} → ${ex(B).toFixed(1)}、碎片 ${B.spawned.length}、穿透 ${A.pierce}→${B.pierce}、波及 ${side(A)}→${side(B)}` };
+    const ok = c === 'blast' ? B.log.length > A.log.length : c === 'ignite' ? B.burn && !A.burn : c === 'frost' ? B.slow && !A.slow : c === 'shock' ? B.arcs > A.arcs
+      : c === 'amp' || c === 'mirror' ? ex(B) > ex(A) * 1.8 : c === 'split' ? B.spawned.length >= 3 : c === 'pierce' ? B.pierce - A.pierce >= 2 : side(B) > side(A);
+    return { ok, got: `爆炸 ${A.log.length}→${B.log.length} 下、燃燒 ${B.burn}、減速 ${B.slow}、電弧 ${A.arcs}→${B.arcs}；爆炸 ${ex(A).toFixed(1)} → ${ex(B).toFixed(1)}、碎片 ${B.spawned.length}、穿透 ${A.pierce}→${B.pierce}、波及 ${side(A)}→${side(B)}` };
   },
   infect(w, c) {  // 感染：爆出來的子彈是產物
     const run = flat => {
@@ -952,7 +968,7 @@ const SockCheck = {
     };
     const A = run(['weapon', 'infect']), B = run(['weapon', 'infect', c]);
     const hb = L => L.length ? L.reduce((x, s) => x + (s.hb || 0), 0) / L.length : 0;
-    const ok = !!A.length && !!B.length && (c === 'mirror' ? B.length >= A.length * 2 : c === 'amp' ? hb(B) > 0.9 : c === 'split' ? B.length >= A.length * 3
+    const ok = !!A.length && !!B.length && (this.EL[c] ? this.elUp(c, A[0], B[0]) : c === 'mirror' ? B.length >= A.length * 2 : c === 'amp' ? hb(B) > 0.9 : c === 'split' ? B.length >= A.length * 3
       : c === 'pierce' ? B[0].pierce - A[0].pierce >= 2 : B[0].radius > A[0].radius * 1.3);
     return { ok, got: `爆出 ${A.length} → ${B.length} 發、加成 ${hb(B).toFixed(1)}、穿透 ${A[0] ? A[0].pierce : '-'}→${B[0] ? B[0].pierce : '-'}` };
   },
@@ -964,14 +980,14 @@ const SockCheck = {
   trig(w, host, c) {  // 觸發器：插座上的組件作用在回響上，不作用在開火的子彈
     const run = flat => { this.setup(w, flat); const top = runOps(Game.stats.ops, 0), P = top[0].payload; return { top, echo: P ? runOps(P, 1) : [] }; };
     const A = run(['weapon', host]), B = run(['weapon', host, c]);
-    const ok = B.top.length === A.top.length && !(B.top[0].bonus > 0) && B.echo.length > 0 && (c === 'mirror' ? B.echo.length === 2 * A.echo.length : c === 'amp' ? B.echo[0].bonus > 0.9
+    const ok = B.top.length === A.top.length && !(B.top[0].bonus > 0) && B.echo.length > 0 && (this.EL[c] ? this.elUp(c, A.echo[0], B.echo[0]) && !this.elUp(c, A.top[0], B.top[0]) : c === 'mirror' ? B.echo.length === 2 * A.echo.length : c === 'amp' ? B.echo[0].bonus > 0.9
       : c === 'split' ? B.echo.length === 3 * A.echo.length : c === 'pierce' ? B.echo[0].pierce - A.echo[0].pierce >= 2 : B.echo[0].radius > A.echo[0].radius * 1.3);
     return { ok, got: `開火 ${B.top.length} 發；回響 ${A.echo.length} → ${B.echo.length} 發（加成 ${(B.echo[0] && B.echo[0].bonus || 0).toFixed(1)}、穿透 ${A.echo[0] ? A.echo[0].pierce : '-'}→${B.echo[0] ? B.echo[0].pierce : '-'}）` };
   },
   weapon(w, c) {
     const run = flat => { this.setup(w, flat); return runOps(Game.stats.ops, 0); };
     const A = run(['weapon']), B = run(['weapon', c]);
-    const ok = c === 'mirror' ? B.length === 2 * A.length : c === 'amp' ? B[0].bonus > 0.9 : c === 'split' ? B.length === 3 * A.length : c === 'pierce' ? B[0].pierce - A[0].pierce >= 2 : B[0].radius > A[0].radius * 1.3;
+    const ok = this.EL[c] ? this.elUp(c, A[0], B[0]) : c === 'mirror' ? B.length === 2 * A.length : c === 'amp' ? B[0].bonus > 0.9 : c === 'split' ? B.length === 3 * A.length : c === 'pierce' ? B[0].pierce - A[0].pierce >= 2 : B[0].radius > A[0].radius * 1.3;
     return { ok, got: `${A.length} → ${B.length} 發、加成 ${(B[0].bonus || 0).toFixed(1)}、穿透 ${A[0].pierce}→${B[0].pierce}、半徑 ${A[0].radius.toFixed(1)}→${B[0].radius.toFixed(1)}` };
   },
   // 一把武器的完整表：每個晶片（武器、玩法晶片、觸發器）× 4 個組件

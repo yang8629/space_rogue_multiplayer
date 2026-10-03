@@ -1020,13 +1020,9 @@ const Game = {
         floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
         SFX.play('hit');
-        // 武器升級帶來的命中效果
-        if (b.burn) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, b.burn.dps); e.burnT = Math.max(e.burnT, b.burn.t); e.burnAtt = b.att; }
-        if (b.slow) { e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, b.slow); e.slowT = 1.5; }
+        this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素組件）：燃燒、減速、爆炸、電弧
         if (b.lifesteal) this.healPlayer(b.lifesteal, b.owner ? this.mate : this.player);
-        if (b.explode) this.explode(b.x, b.y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att);
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
-        if (b.arcs) this.arc(e, b);
         if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner, aim: true });
         if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
@@ -1055,7 +1051,15 @@ const Game = {
     }
     this.bullets = B.filter(b => !b.dead);
   },
-  // 電弧（軌道砲・磁暴線圈）：命中時瞬間打中附近其他敵人；附近敵人不夠時，剩下的電弧打回目標本身（傷害減半）
+  // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
+  hitFx(e, b, dmg, x, y) {
+    const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg;
+    if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; }
+    if (b.slow) { e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, b.slow); e.slowT = Math.max(e.slowT, b.slowDur || 1.5); }
+    if (b.explode) this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att);
+    if (b.arcs) this.arc(e, b);
+  },
+  // 電弧（軌道砲・磁暴線圈、電擊線圈）：命中時瞬間打中附近其他敵人；附近敵人不夠時，剩下的電弧打回目標本身（傷害減半）
   arc(hit, b) {
     const { n, ratio } = b.arcs, R = CFG.ARC_RANGE, dmg = b.damage * ratio;
     const near = this.enemies.filter(o => !o.dead && o !== hit && o.spawnT <= 0 && dist2(o.x, o.y, hit.x, hit.y) < (R + o.r) ** 2)
@@ -1063,7 +1067,7 @@ const Game = {
     for (let k = 0; k < n; k++) {
       const t = near[k] || hit, d = near[k] ? dmg : dmg * 0.5;
       if (t.dead) continue;
-      if (b.slow) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, b.slow); t.slowT = 1.5; }
+      if (b.slow) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, b.slow); t.slowT = Math.max(t.slowT, b.slowDur || 1.5); }
       t.hurt(d, 0, 0, 'arc', b.att);
       floatText(t.x, t.y - t.r, Math.round(d), '#9fe8ff');
       if (this.zaps.length < 60) this.zaps.push({ x1: hit.x, y1: hit.y, x2: t.x + rand(-6, 6), y2: t.y + rand(-6, 6), life: 0.18, max: 0.18 });
@@ -1157,6 +1161,10 @@ const Game = {
     ring(e.r + 20 + n * 3, '#f78cff');
     e.hurt(total, 0, 0, 'explode', att);
     floatText(x, y - e.r, Math.round(total), '#f78cff', true);
+    if (H.el.length) {  // 元素組件插在黏著上：爆炸帶命中效果（爆裂再炸一圈、燃燒、冰凍、電弧）
+      const fb = runComps([shot({ damage: total, color: S[0].color || '#f78cff', cr: att.cr })], H.el, 'h')[0];
+      this.hitFx(e, { ...fb, att }, total, x, y);
+    }
     SFX.play('explode');
     if (lv >= 3) {  // 連鎖引爆：立刻引爆周圍敵人身上的子彈（範圍 90，插巨彈時取波及範圍；波及傷害交給巨彈）
       const R = Math.max(90, H.splash);
@@ -1185,7 +1193,7 @@ const Game = {
   },
   // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片；鏡像 → 再爆一次（傷害、碎片都多一份）
   stickyHost(S, total, att) {
-    const comps = (S.find(q => q.hm) || {}).hm, out = { total, att, splash: 0, shards: 0, shardM: 0 };
+    const comps = (S.find(q => q.hm) || {}).hm, out = { total, att, splash: 0, shards: 0, shardM: 0, el: [] };
     if (!comps) return out;
     const hb0 = S[0].hb || 0;
     let add = 0, rep = 1;
@@ -1197,6 +1205,7 @@ const Game = {
       else if (b === 'bigshot') { add += 0.3 * c.m; out.splash = Math.max(out.splash, 70 + 40 * c.m); }
       else if (b === 'split') { out.shards += Math.max(2, Math.round(3 + 2 * (c.m - 1))); out.shardM = Math.max(out.shardM, c.m); }
       else if (b === 'mirror') rep += c.n || 1;
+      else if (CHIPS[c.id] && CHIPS[c.id].elem) out.el.push(c);
     }
     if (add) {
       const f = Math.max(0.1, 1 + hb0 + add) / Math.max(0.1, 1 + hb0);
