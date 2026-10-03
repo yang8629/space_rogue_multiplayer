@@ -545,6 +545,19 @@ const Game = {
       ? `進入無盡模式：星區 ${this.sector}，船體修復 30%。旗艦改為隨機出現`
       : `進入星區 ${this.sector}：船體修復 30%，敵人更強了`);
   },
+  // ---------- 戰鬥中的選單（Esc／手機的「選單」鈕）：繼續、離開遊戲（離開 = 中途結束，存紀錄、顯示結算） ----------
+  togglePauseMenu(open = !this.pauseMenu) {
+    this.pauseMenu = open;
+    Input.down = false; Input.dash = false; Input.dashHeld = false; Input.joy = null; Input.aimStick = null;
+    if (open) Screen.pauseMenu(); else Screen.hide();
+  },
+  quitRun() {
+    this.pauseMenu = false;
+    this.saveRecord('retired');
+    this.state = 'ended'; this.inArena = false;
+    Screen.ended();
+    if (this.mode === 'coop') Net.leave();  // 雙人：自己離開，隊友可以一個人繼續（跟隊友離線一樣）
+  },
   // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到標題
   finishRun() {
     this.saveRecord(this.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'retired');
@@ -945,6 +958,8 @@ const Game = {
 
   // ---------- 主更新 ----------
   update(dt) {
+    if (this.pauseMenu && (this.state !== 'play' || this.mode === 'coop' && !Net.active())) this.pauseMenu = false;
+    if (this.pauseMenu && this.mode !== 'coop') return;  // 選單開著：單人暫停（雙人不暫停，隊友那邊照常進行）
     if (Net.role === 'client' && this.mode === 'coop') { Net.clientUpdate(dt); return; }
     const frozen = !!Net.pauseReason();  // 雙人：隊友在編輯電路、切到其他視窗、斷線重連中 → 全員暫停
     if (this.state === 'play' && this.mate && !frozen) Net.hostUpdateMate(dt);
@@ -1420,8 +1435,7 @@ const Game = {
     this.zones = this.zones.filter(z => z.t > 0);
   },
   updatePickups(dt) {
-    for (const c of this.pickups) {
-      c.life -= dt;
+    for (const c of this.pickups) {  // 晶體不會消失（以前 14 秒沒撿就不見）；life 只在撿到時歸零
       const p = this.nearestPlayer(c.x, c.y), range = CFG.MAGNET_RANGE * (1 + this.passivesOf(p).magnet);  // 晶體飛向最近的玩家（雙人：撿到的人和隊友都 +1）
       const d2 = dist2(c.x, c.y, p.x, p.y);
       stepPickup(c, p, range, d2, dt);

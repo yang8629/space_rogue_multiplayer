@@ -79,6 +79,8 @@ const Screen = {
       case 'buy': Game.buy(+arg); break;
       case 'leave': Game.showMap(); break;
       case 'node': if (Game.mode === 'coop') Net.vote(arg); else Game.enterNode(Game.nodeById(arg)); break;
+      case 'resume': Game.togglePauseMenu(false); break;
+      case 'quitrun': Game.quitRun(); break;
       case 'title': Net.leave(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
       case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
@@ -443,6 +445,28 @@ const Screen = {
       <div class="sum-note">武器：${weaponTitle(Game.weapon)}　·　飛船：${SHIPS[Game.shipId].name}</div></div>`;
   },
 
+  // 戰鬥中按 Esc 的選單
+  pauseMenu() {
+    const coop = Game.mode === 'coop';
+    this.show(`<div class="scr title-wrap">
+      <h1>${coop ? '選單' : '暫停'}</h1>
+      <div class="sub">${coop ? '雙人模式不會暫停，隊友那邊照常進行。<br>' : ''}離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。</div>
+      <div class="row"><button class="big" data-act="resume" data-back>繼續 (Esc)</button>
+        <button class="big" data-act="quitrun">離開遊戲</button></div></div>`);
+  },
+  // 離開遊戲後的結算（跟死亡畫面一樣的統計，標題是「中途結束」）
+  ended() {
+    const rec = ['run', 'coop'].includes(Game.mode);
+    const where = Game.mode === 'coop' ? Net.whereText() : Game.mode === 'run' ? Game.buildRecord('retired').where : `第 ${Game.combat ? Game.combat.wave : 0} 波`;
+    this.show(`<div class="scr title-wrap">
+      <h1 style="color:#8fa3d9;text-shadow:0 0 18px #8fa3d9">中途結束</h1>
+      <div class="sub">結束在 ${where} · 剩餘晶體 ${Game.credits}${rec ? '<br><span style="color:#6a79ad">這一局已存入「遊玩紀錄」</span>' : ''}</div>
+      ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
+      ${this.runSummary()}
+      <div class="row">${Game.mode !== 'coop' ? `<button class="big" data-act="run" data-arg="${Game.mode}">重新開始</button>` : ''}
+        <button class="big" data-act="title">回到標題</button></div>
+      ${rec ? '<div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div><div id="copyBox"></div>' : ''}</div>`);
+  },
   dead() {
     const run = Game.mode === 'run';
     if (Game.mode === 'coop') {

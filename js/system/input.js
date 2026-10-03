@@ -23,6 +23,7 @@ addEventListener('keydown', e => {
   if (k === ' ') { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
+  if (k === 'escape' && Game.state === 'play' && !e.repeat) { Game.togglePauseMenu(); return; }  // 戰鬥中：選單（繼續／離開遊戲）
   if (k === 'escape' && !e.repeat) {  // Esc：按下畫面上標了 data-back 的返回鍵（只有不會造成損失的返回，例如選武器 → 選飛船）
     const back = !Screen.el.classList.contains('hidden') && Screen.el.querySelector('[data-back]');
     if (back) { Screen.act(back); return; }
@@ -85,6 +86,7 @@ const TouchUI = {
   el: document.getElementById('touchUI'),
   init() {
     const dash = document.getElementById('tDash'), edit = document.getElementById('tEdit');
+    document.getElementById('tMenu').addEventListener('click', () => { if (Game.state === 'play') Game.togglePauseMenu(); });
     this.autoBtn = document.getElementById('tAuto');
     try { if (localStorage.getItem('autoFire') === '0') Input.autoFire = false; } catch (e) {}
     dash.addEventListener('pointerdown', e => { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } });
@@ -102,7 +104,7 @@ const TouchUI = {
     this.autoBtn.innerHTML = `自動<br>${Input.autoFire ? '開' : '關'}`;
     this.autoBtn.classList.toggle('off', !Input.autoFire);
   },
-  sync() { this.el.classList.toggle('hidden', !(Input.touch && Game.state === 'play')); },
+  sync() { this.el.classList.toggle('hidden', !(Input.touch && Game.state === 'play' && !Game.pauseMenu)); },
 };
 
 // 畫面尺寸與鏡頭縮放：小螢幕自動拉遠，保持足夠的視野

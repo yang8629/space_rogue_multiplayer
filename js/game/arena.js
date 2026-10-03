@@ -361,6 +361,34 @@ const Arena = {
     this._mask = { key, blk };
     return blk;
   },
+  // 直線上沒有牆、閘門，也沒有行星、小行星、黑洞（飛船走得過去）
+  clearLine(ax, ay, bx, by, pad) { return !this.losBlocked(ax, ay, bx, by, pad) && !(Game.objs.length && Objects.losBlocked(ax, ay, bx, by, pad)); },
+  // 飛船 p 繞牆走到 (tx, ty) 的方向（電腦操作用）：直線看得到回傳 null（照原本的走法）；
+  //   看不到就用敵人尋路的步數圖（從 p 往外算的）從目標倒著走回 p，指向路線上從 p 直線看得到、離目標最近的那一點
+  navTo(p, tx, ty) {
+    if (this.rect || this.clearLine(p.x, p.y, tx, ty, 12)) return null;
+    const F = Objects.fields && Objects.fields.get(p);
+    if (!F) return null;
+    const C = OBJ.FLOW_CELL, { dist, W, H } = F;
+    let c = clamp(Math.floor(ty / C), 0, H - 1) * W + clamp(Math.floor(tx / C), 0, W - 1);
+    if (dist[c] < 0) return null;
+    const path = [];
+    for (let s = 0; s < 400 && dist[c] > 0; s++) {
+      const cx = c % W, cy = Math.floor(c / W);
+      let best = -1, bd = dist[c];
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const x = cx + ox, y = cy + oy;
+        if ((!ox && !oy) || x < 0 || y < 0 || x >= W || y >= H) continue;
+        const d = dist[y * W + x];
+        if (d >= 0 && d < bd) { bd = d; best = y * W + x; }
+      }
+      if (best < 0) break;
+      c = best; path.push([(c % W + 0.5) * C, (Math.floor(c / W) + 0.5) * C]);
+    }
+    const to = ([x, y]) => { const l = Math.hypot(x - p.x, y - p.y) || 1; return [(x - p.x) / l, (y - p.y) / l]; };
+    for (let i = 0; i < path.length; i += 4) if (this.clearLine(p.x, p.y, path[i][0], path[i][1], 12)) return to(path[i]);
+    return path.length ? to(path[path.length - 1]) : null;
+  },
   // 出口方向（電腦操作用）：從閘門往外算步數，回傳往閘門走的方向；閘門沒開回傳 null
   exitDir(x, y, k) {
     const g = this.gates[k];
@@ -369,6 +397,10 @@ const Arena = {
     if (!this.exitFlow || this.exitFlow.k !== k) {
       const blk = new Uint8Array(W * H);
       for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) if (this.f((xx + 0.5) * C, (yy + 0.5) * C) < 24) blk[yy * W + xx] = 1;
+      for (const o of Objects.blockers()) {  // 行星、小行星、黑洞也繞開（小行星帶從縫鑽過去）
+        const R = Objects.blockR(o) + 16, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C)), y0 = Math.max(0, Math.floor((o.y - R) / C)), y1 = Math.min(H - 1, Math.floor((o.y + R) / C));
+        for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) if (dist2((xx + 0.5) * C, (yy + 0.5) * C, o.x, o.y) < R * R) blk[yy * W + xx] = 1;
+      }
       const dist = new Int32Array(W * H).fill(-1), q = new Int32Array(W * H);
       let head = 0, tail = 0;
       const tx = Math.floor((g.x - g.nx * 40) / C), ty = Math.floor((g.y - g.ny * 40) / C), s = ty * W + tx;
@@ -385,7 +417,7 @@ const Arena = {
     // 直線看得到閘門就直接指過去；看不到就沿著步數遞減的路線往前走（最多 60 格），指向路線上「從這裡直線看得到」的最遠一點
     //   （只看隔壁一格的話，飛船在格子裡移動方向就會在 45° 之間跳來跳去，箭頭會抖）
     const goal = [g.x - g.nx * 40, g.y - g.ny * 40], to = ([px, py]) => { const l = Math.hypot(px - x, py - y) || 1; return [(px - x) / l, (py - y) / l]; };
-    if (!this.losBlocked(x, y, goal[0], goal[1], 16)) return to([g.x + g.nx * 80, g.y + g.ny * 80]);  // 看得到閘門：指向閘門另一邊（直接穿過去，不會停在門前）
+    if (this.clearLine(x, y, goal[0], goal[1], 16)) return to([g.x + g.nx * 80, g.y + g.ny * 80]);  // 看得到閘門：指向閘門另一邊（直接穿過去，不會停在門前）
     const F = this.exitFlow;
     let c = clamp(Math.floor(y / C), 0, H - 1) * W + clamp(Math.floor(x / C), 0, W - 1);
     const path = [];
@@ -403,7 +435,7 @@ const Arena = {
       if (bd === 0) break;
     }
     if (!path.length) return to(goal);
-    for (let i = path.length - 1; i > 0; i--) if (!this.losBlocked(x, y, path[i][0], path[i][1], 12)) return to(path[i]);
+    for (let i = path.length - 1; i > 0; i--) if (this.clearLine(x, y, path[i][0], path[i][1], 12)) return to(path[i]);
     return to(path[0]);
   },
 
@@ -474,9 +506,10 @@ const Arena = {
     }
   },
   // 小地圖（畫面右上角，螢幕座標）：整張地圖、閘門、飛船
-  drawMinimap(x, y, maxW, maxH) {
+  drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left：左邊緣）
     if (this.rect || !this.path) return;
     const s = Math.min(maxW / this.W, maxH / this.H), w = this.W * s, h = this.H * s;
+    if (left) x += w;
     ctx.save();
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = 'rgba(5, 8, 20, 0.7)'; ctx.fillRect(x - w, y, w, h);
