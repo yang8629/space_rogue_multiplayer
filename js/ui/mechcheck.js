@@ -1027,6 +1027,13 @@ const SockCheck = {
     check('感染', () => { this.setup('laser', ['weapon', 'amp', 'infect']); MechCheck.targets([[150, 0]], 'swarmer', true, 0.01);
       const got = this.spawned('infect', () => { P().fire(); this.step(30); });
       return { ok: got.length > 0 && Math.abs(got[0].bonus) < 0.01, got: got.length ? `爆出的子彈 ${got[0].bonus.toFixed(2)}` : '沒有爆出' }; });
+    // 進化複製出來的子彈：也只算直擊，插在宿主上的組件每一發都套用
+    const evoSplit = (name, flat, pre, pick, want) => check(name, () => { this.setup('laser', flat); pre();
+      for (let f = 0; f < 90 && !Game.bullets.some(pick); f++) this.step(1);
+      const L = Game.bullets.filter(pick), bad = L.filter(b => Math.abs(b.bonus) > 0.01);
+      return { ok: L.length === want && !bad.length, got: `產物 ${L.length} 發（應為 ${want}），吃到武器層加成的 ${bad.length} 發` }; });
+    evoSplit('迴旋風暴＋分裂', ['weapon', 'amp', chipId('boomerang', 3, 1), 'split'], () => { this.targets([[150, 0]]); P().fire(); }, b => b.mode === 'return', 9);
+    evoSplit('稜鏡＋分裂', ['weapon', 'amp', chipId('wallbounce', 3, 1), 'split'], () => { P().x = CFG.WORLD_W - 60; P().fire(); }, b => b.bounced, 6);
     check('觸發器（回響的迴旋）', () => { this.setup('laser', ['weapon', 'trigger', 'amp', 'boomerang']); this.targets([[120, 0], [320, 0]]);
       const H = this.hurtLog('echo', () => { P().fire(); this.step(180); }).map(x => +x.d.toFixed(1));
       return { ok: H.some(d => Math.abs(d - 7) < 0.05) && H.some(d => Math.abs(d - 3.5) < 0.05), got: `回響 ${[...new Set(H)].join('、')}（去程 7，回程不吃觸發器上的倍增 3.5）` }; });
