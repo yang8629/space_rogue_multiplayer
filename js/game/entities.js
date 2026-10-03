@@ -286,9 +286,9 @@ class Bullet {
     for (const e of Game.enemies) if (e.id !== this.overId && dist2(this.x, this.y, e.x, e.y) < (e.r + this.r) ** 2) this.hitSet.add(e.id);
     this.att = { ...this.att, src: 'boomerang' };  // 傷害統計：回程打中的基礎傷害算迴旋的
     if (this.boom >= 2) { this.damage *= 1.5; this.att = attCredit(this.att, 'boomerang', 1.5); }
-    if (this.boom >= 3) for (const off of [-0.7, 0.7]) this.copy(off);  // 迴旋風暴：折返時分裂成 3 發
     stripW(this);  // 產物：武器插座的傷害加成只算直擊
-    hostFire(this, 'boomerang');  // 插在迴旋上的組件：折返之後的子彈
+    const cs = this.boom >= 3 ? [-0.7, 0.7].map(off => this.copy(off)) : [];  // 迴旋風暴：折返時分裂成 3 發
+    for (const b of [this, ...cs]) hostFire(b, 'boomerang');  // 插在迴旋上的組件：折返之後的每一發（風暴＋分裂 = 9 發）
   }
   update(dt) {
     this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
@@ -384,9 +384,10 @@ class Bullet {
         if (outY) { this.angle = -this.angle; this.y = clamp(this.y, 0, H); }
         this.hitSet.clear(); this.life = Math.max(this.life, 0.5);
         this.bounced = true;  // 成長：反彈過的子彈打中才貼標記
-        if (this.prism) { this.copy(0.4); this.angle -= 0.2; }  // 稜鏡：反彈時分裂
         stripW(this);
-        hostFire(this, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後
+        const c = this.prism ? this.copy(0.4) : null;  // 稜鏡：反彈時分裂
+        if (c) this.angle -= 0.2;
+        for (const b of c ? [this, c] : [this]) hostFire(b, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後（兩發都套用）
       } else if (this.mode === 'return') { this.x = clamp(this.x, 0, W); this.y = clamp(this.y, 0, H); }
       else {
         if (this.endBoom) Game.explode(clamp(this.x, 0, W), clamp(this.y, 0, H), 90, this.damage, this.color, null, this.att);
