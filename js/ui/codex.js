@@ -308,9 +308,11 @@ const Codex = {
         const rows = V.pair[L];
         const pts = rows.map(([a, b, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
           tip: `<b>${cn(a)} ＋ ${cn(b)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('速度加乘', x2(s))}${tipRow('掉血加乘', x2(d))}${tipRow('場數', n)}` }));
-        const keys = [...new Set(rows.map(r => r[0] + '+' + r[1]))], cell = (k, w) => rows.find(r => r[0] + '+' + r[1] === k && r[2] === w);
-        const avg = k => WK.reduce((a, w) => a + (cell(k, w) ? cell(k, w)[3] : 0), 0);
-        keys.sort((a, b) => avg(b) - avg(a));
+        // 先建索引（組合＋武器 → 那一列）、每個組合的總和只算一次：以前每格都從頭找一遍、排序時又一直重算，開這一頁要卡好幾秒
+        const idx = new Map(rows.map(r => [r[0] + '+' + r[1] + '|' + r[2], r]));
+        const keys = [...new Set(rows.map(r => r[0] + '+' + r[1]))], cell = (k, w) => idx.get(k + '|' + w);
+        const sumOf = new Map(keys.map(k => [k, WK.reduce((a, w) => a + (cell(k, w) ? cell(k, w)[3] : 0), 0)]));
+        keys.sort((a, b) => sumOf.get(b) - sumOf.get(a));
         return { id: L, label: `難度 ${L}`, cap: `${tierCap(L).replace(/：.*/, '')}：只有武器＋這兩個晶片（都是 Lv1）、武器升 ${V.tiers[L].stage} 段、零件 ${V.tiers[L].parts} 層。每個點 ${rows[0][5]} 場，場數少，差 20% 以上才算數。`,
           html: this.scatterChart(`cp${L}`, { pts, xName: '速度加乘（一起裝 ÷ 各自的倍數相乘）→', yName: '↑ 掉血加乘（越上面越少）', xFmt: x2, yFmt: x2, xRef: 1, yRef: 1, invertY: true,
             clampX: [0.4, 2.2], clampY: [0.4, 2.5], corner: '一起裝更快又少掉血 ↗' }) +
