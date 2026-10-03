@@ -262,15 +262,17 @@ const Game = {
     const C = this.combat;
     return !!C && !C.sandbox && !C.range && !C.boss && isFinite(C.wavesTotal) && C.wavesTotal > 1;
   },
-  // 出口：離飛船 450～800、不在行星／黑洞／小行星上
+  // 出口：離飛船 450～800、不在行星／黑洞／小行星上，而且從飛船直線飛得到（不會被小行星帶整片擋住）
+  //   找不到就放近一點（250～450），再不行就 120～800 裡任何直線飛得到的地方；都沒有就放在飛船身上（直接換區，不會卡住）
   openExit() {
     const p = this.player, B = Objects.blockers(), M = 140;
-    let x = CFG.WORLD_W / 2, y = CFG.WORLD_H / 2;
-    for (let i = 0; i < 40; i++) {
-      const a = rand(0, TAU), d = rand(450, 800), tx = p.x + Math.cos(a) * d, ty = p.y + Math.sin(a) * d;
+    let x = p.x, y = p.y;
+    search: for (const [d0, d1] of [[450, 800], [250, 450], [120, 800]]) for (let i = 0; i < 40; i++) {
+      const a = rand(0, TAU), d = rand(d0, d1), tx = p.x + Math.cos(a) * d, ty = p.y + Math.sin(a) * d;
       if (tx < M || ty < M || tx > CFG.WORLD_W - M || ty > CFG.WORLD_H - M) continue;
       if (B.some(o => dist2(tx, ty, o.x, o.y) < (Objects.blockR(o) + 70) ** 2)) continue;
-      x = tx; y = ty; break;
+      if (Objects.losBlocked(p.x, p.y, tx, ty, p.r + 8)) continue;
+      x = tx; y = ty; break search;
     }
     this.exit = { x, y, r: 40 };
     this.banner = { text: '區域肅清', sub: '飛進出口，前往下一區', t: 2 };
