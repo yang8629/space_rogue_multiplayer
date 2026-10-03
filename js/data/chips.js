@@ -4,7 +4,7 @@
 
 // V2 晶片池：
 //   改玩法的晶片（彈道／發射／命中／機體）：照著它的玩法打就會成長（grow），Lv3 進化（evo，改名、玩法再變一次）
-//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像）：插在武器／玩法晶片／觸發器的插座裡（Game.socks，不佔電路格），不會升級
+//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像、元素組件 爆裂／燃燒／冰凍／電擊）：插在武器／玩法晶片／觸發器的插座裡（Game.socks，不佔電路格），不會升級
 //   觸發器（命中、消失、定時）：放在電路格，右邊的晶片只作用在它的回響上
 //   玩法晶片照順序作用在「它左邊」已經產生的子彈
 const CHIPS = {
@@ -125,6 +125,20 @@ const CHIPS = {
     apply: (list, pw, o) => { const n = 1 + (o.n || 1);  // 產物多 n 份，左右微微錯開
       return list.flatMap(b => Array.from({ length: n }, (_, k) => ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.08 }))); } },
 
+  // ---------- 元素組件：命中效果，跟武器升級的爆炸／燃燒／減速／電弧疊加（elem: true） ----------
+  blast: { name: '爆裂彈頭', short: '爆裂', type: 'comp', comp: true, elem: true, cost: 2,
+    desc: '命中時爆炸（半徑 60，子彈傷害的 50%）。武器本身就會爆炸（新星、衝擊波…）時，爆炸傷害相加、半徑取大的。插在玩法晶片上只作用在它的產物（黏著：爆炸時再炸一圈）。',
+    apply: (list, pw) => list.map(b => ({ ...b, explode: { r: Math.max(60, b.explode ? b.explode.r : 0), ratio: (b.explode ? b.explode.ratio : 0) + 0.5 * pw } })) },
+  ignite: { name: '燃燒彈頭', short: '燃燒', type: 'comp', comp: true, elem: true, cost: 1,
+    desc: '命中附加燃燒 3 秒，每秒是這一下傷害的 30%（跟著倍增、蓄力變強）。武器本身有燃燒（龍息彈…）時相加。插在玩法晶片上只作用在它的產物。',
+    apply: (list, pw) => list.map(b => ({ ...b, burnR: (b.burnR || 0) + 0.3 * pw })) },
+  frost: { name: '冰凍塗層', short: '冰凍', type: 'comp', comp: true, elem: true, cost: 1,
+    desc: '命中的敵人減速 40%，持續 2 秒。武器本身有減速（黑潮、感電）時相加，最多 70%。插在玩法晶片上只作用在它的產物。',
+    apply: (list, pw) => list.map(b => ({ ...b, slow: Math.min(0.7, (b.slow || 0) + 0.4 * pw), slowDur: 2 })) },
+  shock: { name: '電擊線圈', short: '電擊', type: 'comp', comp: true, elem: true, cost: 2,
+    desc: '命中時放出 1 道電弧，打中附近另一隻敵人（子彈傷害的 50%；附近沒有就打回目標，25%）。武器本身有電弧（磁暴線圈）時道數相加。插在玩法晶片上只作用在它的產物。',
+    apply: (list, pw) => list.map(b => ({ ...b, arcs: { n: (b.arcs ? b.arcs.n : 0) + Math.max(1, Math.round(pw)), ratio: b.arcs ? b.arcs.ratio : 0.5 } })) },
+
   // ---------- 觸發器：放在電路格；右邊的晶片只作用在回響上，插在觸發器上的組件作用在回響上（跟插在武器上一樣） ----------
   trigger: { name: '命中觸發器', short: '命中', type: 'trigger', trig: 'hit', cost: 1,
     desc: '子彈命中敵人時，從命中點用武器再射一次（回響：傷害 50%，朝最近的另一隻敵人；附近沒有就沿子彈的方向），右邊的晶片只作用在回響上，開火時不執行。插在觸發器上的組件作用在回響上（跟插在武器上一樣）。最多巢狀 3 層。' },
@@ -174,6 +188,10 @@ const CHIP_BRIEF = {
   amp: '傷害 +100%',
   overclock: '射速 ×2，但連射會過熱（只能插武器）',
   mirror: '再來一次：武器多射一次／產物多一份',
+  blast: '命中時爆炸（50% 傷害）',
+  ignite: '命中附加燃燒（每秒 30% 傷害）',
+  frost: '命中的敵人減速 40%',
+  shock: '命中時電弧打附近 1 隻',
   trigger: '命中時從命中點再射一次（右邊的晶片）',
   trigend: '子彈消失時從那裡再射一次（右邊的晶片）',
   trigtime: '飛行中每 0.3 秒往兩側射一次（右邊的晶片）',

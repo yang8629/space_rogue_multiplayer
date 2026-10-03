@@ -236,7 +236,7 @@ function analyzeChain(chain) {
     (b.arcs ? b.damage * b.arcs.ratio * b.arcs.n * 0.5 : 0);  // 電弧：假設一半打到別隻、一半打回目標
   const est = top.reduce((a, b) => a + effect(b), 0);
   // 燃燒不會疊加（再次命中只會刷新時間），持續命中時等於每秒多造成「燃燒每秒傷害」
-  const burnDps = Math.max(0, ...top.map(b => b.burn ? b.burn.dps : 0));
+  const burnDps = Math.max(0, ...top.map(b => (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * b.damage));
   const layers = [];
   let carrier = top.find(s => s.payload);
   while (carrier) {

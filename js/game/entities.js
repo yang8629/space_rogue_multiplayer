@@ -206,7 +206,7 @@ class Bullet {
     this.life = s.life; this.color = s.color; this.shape = s.shape;
     this.payload = s.payload; this.depth = depth;
     this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
-    this.slow = s.slow; this.knock = s.knock; this.lifesteal = s.lifesteal;
+    this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.knock = s.knock; this.lifesteal = s.lifesteal;
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();

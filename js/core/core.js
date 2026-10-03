@@ -17,7 +17,7 @@ const TYPE_META = {
   impact:    { label: '命中', icon: '✷', color: '#f78cff' },
   body:      { label: '機體', icon: '⬢', color: '#9dff6b' },
   trigger:   { label: '觸發器', icon: '◎', color: '#ff6b9d' },
-  comp:      { label: '組件', icon: '◆', color: '#ffd166' },  // 插在晶片插座裡的分裂、巨彈、穿甲、倍增、超頻、鏡像
+  comp:      { label: '組件', icon: '◆', color: '#ffd166' },  // 插在晶片插座裡的分裂、巨彈、穿甲、倍增、超頻、鏡像、爆裂、燃燒、冰凍、電擊
   composite: { label: '軍規複合', icon: '✦', color: '#ff9f1c' },
 };
 
