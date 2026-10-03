@@ -206,7 +206,7 @@ class Bullet {
     this.life = s.life; this.color = s.color; this.shape = s.shape;
     this.payload = s.payload; this.depth = depth;
     this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
-    this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.knock = s.knock; this.lifesteal = s.lifesteal;
+    this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.shred = s.shred || 0; this.knock = s.knock; this.lifesteal = s.lifesteal;
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -490,7 +490,7 @@ class Enemy {
     this.cd = t.ranged ? rand(0.8, t.ranged.cd) : type === 'gunboat' ? rand(1.5, 3) : type === 'hive' ? 2 : 0;
     if (type === 'shield') this.shieldA = rand(0, TAU);  // 盾的方向（世界座標，不會轉）
     this.cloak = type === 'lurker' ? 1 : 0;              // 潛伏者：1 = 隱形
-    this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0;
+    this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0; this.shredT = 0; this.shredAmt = 0;
     this.mode = type === 'lurker' ? 'stalk' : 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
     this.dead = false;
   }
@@ -516,6 +516,7 @@ class Enemy {
     }
     if (this.slowT > 0) this.slowT -= dt;
     if (this.markT > 0) this.markT -= dt;
+    if (this.shredT > 0) this.shredT -= dt;
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
     if (this.spawnT > 0) { this.spawnT -= dt; return; }
     const t = this.t;
@@ -781,7 +782,8 @@ class Enemy {
   // knock：子彈的擊退值（只有子彈命中會帶）。旗艦只有在擊退值超過自己的抗擊退時才會被推，力道只看超過的部分；
   // 爆炸、震波、電弧不會推王。衝鋒中的敵人不會被推
   hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
-    if (this.markT > 0) dmg *= 1.25;  // 弱點標記
+    const vul = (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，相加最多 +50%
+    if (vul > 0) dmg *= 1 + Math.min(0.5, vul);
     if (att) this.lastAtt = att;
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據

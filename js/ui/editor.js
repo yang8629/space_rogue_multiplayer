@@ -404,7 +404,7 @@ const Editor = {
   },
   showDefaultInfo() {
     this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b> → <b style="color:#5ef2d0">玩法晶片</b>依序改變子彈的玩法。' +
-      '晶片下面的圓是<b style="color:#ffd166">插座</b>：把組件（分裂、巨彈、穿甲、倍增、超頻、鏡像、爆裂、燃燒、冰凍、電擊）拖進去（組件不佔電路格）。插在武器上作用在全部子彈（倍增、巨彈的傷害加成只算直擊，產物不吃），插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。' +
+      '晶片下面的圓是<b style="color:#ffd166">插座</b>：把組件（分裂、巨彈、穿甲、倍增、超頻、鏡像、爆裂、燃燒、冰凍、電擊、破甲）拖進去（組件不佔電路格）。插在武器上作用在全部子彈（倍增、巨彈的傷害加成只算直擊，產物不吃），插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。' +
       '<b style="color:#ff6b9d">觸發器</b>（命中／消失／定時）用武器再射一次回響（50%），右邊的晶片只作用在回響上。滑鼠移到晶片、插座上可看說明。';
   },
   showInfo(id, slot = -1, J = null) {
@@ -601,13 +601,13 @@ function sockEffect(h, k) {
     if (hb === 'sticky') return '黏著的爆炸再爆一次（傷害、碎片都多一份）';
     return `${CHIPS[hb].name}的產物多一份（${HOST_PRODUCT[hb] || ''}）`;
   }
-  const fx = { amp: `傷害 +${Math.round(100 * m)}%`, split: `分成 ${n} 顆（每顆 ×0.4）`, pierce: `穿透 +${Math.round(2 * m)}`, bigshot: `變大、擊退變強，傷害 +${Math.round(30 * m)}%`, blast: `命中時爆炸（半徑 60，${Math.round(50 * m)}% 傷害；跟武器的爆炸相加）`, ignite: `命中燃燒 3 秒，每秒 ${Math.round(30 * m)}% 傷害`, frost: `命中減速 ${Math.round(40 * m)}%（2 秒）`, shock: `命中時 ${Math.max(1, Math.round(m))} 道電弧（50% 傷害）` }[b] + mtxt;
+  const fx = { amp: `傷害 +${Math.round(100 * m)}%`, split: `分成 ${n} 顆（每顆 ×0.4）`, pierce: `穿透 +${Math.round(2 * m)}`, bigshot: `變大、擊退變強，傷害 +${Math.round(30 * m)}%`, blast: `命中時爆炸（半徑 60，${Math.round(50 * m)}% 傷害；跟武器的爆炸相加）`, ignite: `命中燃燒 3 秒，每秒 ${Math.round(30 * m)}% 傷害`, frost: `命中減速 ${Math.round(40 * m)}%（2 秒）`, shock: `命中時 ${Math.max(1, Math.round(m))} 道電弧（50% 傷害）`, shred: `命中的敵人 3 秒內受傷 +${Math.round(25 * m)}%` }[b] + mtxt;
   if (host === 'weapon') return `武器射出的全部子彈：${fx}${dmg ? '（傷害加成只算直擊：迴旋回程、環繞放出、黏著爆炸這些產物不吃）' : ''}`;
   if (wlike) return `回響（武器 50%）：${fx}${dmg ? '（傷害加成只算回響的直擊）' : ''}`;
   if (hb === 'sticky') return '黏著的爆炸：' + { amp: `爆炸傷害 +${Math.round(100 * m)}%（宿主層，跟武器層相乘）`,
     split: `爆炸時噴出 ${n} 發碎片（每發是爆炸傷害的 ${Math.round(20 * m)}%）`, pierce: `黏住前多穿 ${Math.round(2 * m)} 隻（多留 ${Math.round(2 * m)} 份）`,
     bigshot: `爆炸波及周圍 ${Math.round(70 + 40 * m)}（50% 傷害），爆炸 +${Math.round(30 * m)}%`,
-    blast: `再炸一圈（半徑 60，爆炸傷害的 ${Math.round(50 * m)}%）`, ignite: `被炸的敵人燃燒 3 秒，每秒 ${Math.round(30 * m)}% 爆炸傷害`, frost: `被炸的敵人減速 ${Math.round(40 * m)}%`, shock: `放出 ${Math.max(1, Math.round(m))} 道電弧（爆炸傷害的 50%）` }[b] + mtxt;
+    blast: `再炸一圈（半徑 60，爆炸傷害的 ${Math.round(50 * m)}%）`, ignite: `被炸的敵人燃燒 3 秒，每秒 ${Math.round(30 * m)}% 爆炸傷害`, frost: `被炸的敵人減速 ${Math.round(40 * m)}%`, shock: `放出 ${Math.max(1, Math.round(m))} 道電弧（爆炸傷害的 50%）`, shred: `被炸的敵人 3 秒內受傷 +${Math.round(25 * m)}%` }[b] + mtxt;
   if (hb === 'pull') return `吸引的拉力範圍 ×${(1 + 0.5 * m).toFixed(2)}`;
   return `只作用在${CHIPS[hb].name}的產物（${HOST_PRODUCT[hb] || ''}）：${fx}${dmg ? '，加進宿主層（跟武器層相乘）' : ''}`;
 }
@@ -617,7 +617,7 @@ function slotAttrLine(i) {
   const at = (Game.slotAttr || [])[i];
   if (!at) return '';
   const S = SLOT_ATTRS[at], id = Game.chain[i], col = S.good ? '#9dff6b' : '#ff8a8a';
-  const CV = { blast: m => `爆炸 ${Math.round(50 * m)}%`, ignite: m => `燃燒每秒 ${Math.round(30 * m)}%`, frost: m => `減速 ${Math.round(40 * m)}%`, shock: m => `電弧 ${Math.max(1, Math.round(m))} 道`, amp: m => `傷害 +${Math.round(100 * m)}%`, split: m => `分裂成 ${Math.max(2, Math.round(3 + 2 * (m - 1)))} 顆`,
+  const CV = { blast: m => `爆炸 ${Math.round(50 * m)}%`, ignite: m => `燃燒每秒 ${Math.round(30 * m)}%`, frost: m => `減速 ${Math.round(40 * m)}%`, shock: m => `電弧 ${Math.max(1, Math.round(m))} 道`, shred: m => `受傷 +${Math.round(25 * m)}%`, amp: m => `傷害 +${Math.round(100 * m)}%`, split: m => `分裂成 ${Math.max(2, Math.round(3 + 2 * (m - 1)))} 顆`,
     pierce: m => `穿透 +${Math.round(2 * m)}`, bigshot: m => `傷害 +${Math.round(30 * m)}%` };
   let fx;
   if (!id) fx = '這格現在是空的，放晶片進來才有效果';

@@ -1057,6 +1057,7 @@ const Game = {
     if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; }
     if (b.slow) { e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, b.slow); e.slowT = Math.max(e.slowT, b.slowDur || 1.5); }
     if (b.explode) this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att);
+    if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）
     if (b.arcs) this.arc(e, b);
   },
   // 電弧（軌道砲・磁暴線圈、電擊線圈）：命中時瞬間打中附近其他敵人；附近敵人不夠時，剩下的電弧打回目標本身（傷害減半）
