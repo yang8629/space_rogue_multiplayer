@@ -239,7 +239,7 @@ function drawEnemy(e) {
     ctx.strokeStyle = 'rgba(127, 212, 255, 0.8)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, TAU); ctx.stroke();
   }
-  if (e.markT > 0) {  // 弱點標記：紅色準星
+  if (e.markT > 0 || e.shredT > 0) {  // 弱點標記、破甲：紅色準星
     ctx.strokeStyle = 'rgba(255, 90, 90, 0.8)'; ctx.lineWidth = 1.5;
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Game.time; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 8, a, a + 0.5); ctx.stroke(); }
   }

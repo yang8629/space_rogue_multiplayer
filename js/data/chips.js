@@ -4,7 +4,7 @@
 
 // V2 晶片池：
 //   改玩法的晶片（彈道／發射／命中／機體）：照著它的玩法打就會成長（grow），Lv3 進化（evo，改名、玩法再變一次）
-//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像、元素組件 爆裂／燃燒／冰凍／電擊）：插在武器／玩法晶片／觸發器的插座裡（Game.socks，不佔電路格），不會升級
+//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像、元素組件 爆裂／燃燒／冰凍／電擊／破甲）：插在武器／玩法晶片／觸發器的插座裡（Game.socks，不佔電路格），不會升級
 //   觸發器（命中、消失、定時）：放在電路格，右邊的晶片只作用在它的回響上
 //   玩法晶片照順序作用在「它左邊」已經產生的子彈
 const CHIPS = {
@@ -135,6 +135,9 @@ const CHIPS = {
   frost: { name: '冰凍塗層', short: '冰凍', type: 'comp', comp: true, elem: true, cost: 1,
     desc: '命中的敵人減速 40%，持續 2 秒。武器本身有減速（黑潮、感電）時相加，最多 70%。插在玩法晶片上只作用在它的產物。',
     apply: (list, pw) => list.map(b => ({ ...b, slow: Math.min(0.7, (b.slow || 0) + 0.4 * pw), slowDur: 2 })) },
+  shred: { name: '破甲彈頭', short: '破甲', type: 'comp', comp: true, elem: true, cost: 3,
+    desc: '命中的敵人 3 秒內受到的所有傷害 +25%（身上出現紅色準星）。跟感測器 4 層的弱點標記相加，最多 +50%。插在玩法晶片上只作用在它的產物。',
+    apply: (list, pw) => list.map(b => ({ ...b, shred: Math.min(0.5, (b.shred || 0) + 0.25 * pw) })) },
   shock: { name: '電擊線圈', short: '電擊', type: 'comp', comp: true, elem: true, cost: 2,
     desc: '命中時放出 1 道電弧，打中附近另一隻敵人（子彈傷害的 50%；附近沒有就打回目標，25%）。武器本身有電弧（磁暴線圈）時道數相加。插在玩法晶片上只作用在它的產物。',
     apply: (list, pw) => list.map(b => ({ ...b, arcs: { n: (b.arcs ? b.arcs.n : 0) + Math.max(1, Math.round(pw)), ratio: b.arcs ? b.arcs.ratio : 0.5 } })) },
@@ -192,6 +195,7 @@ const CHIP_BRIEF = {
   ignite: '命中附加燃燒（每秒 30% 傷害）',
   frost: '命中的敵人減速 40%',
   shock: '命中時電弧打附近 1 隻',
+  shred: '命中的敵人受到的傷害 +25%',
   trigger: '命中時從命中點再射一次（右邊的晶片）',
   trigend: '子彈消失時從那裡再射一次（右邊的晶片）',
   trigtime: '飛行中每 0.3 秒往兩側射一次（右邊的晶片）',
