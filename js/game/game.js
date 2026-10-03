@@ -1024,20 +1024,19 @@ const Game = {
         if (b.lifesteal) this.healPlayer(b.lifesteal, b.owner ? this.mate : this.player);
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
         if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
-          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: e.id, owner: b.owner, aim: true });
+          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner });  // 回響可以打到被命中的這一隻
         if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
         else if (b.boom && b.mode === 'fly') { b.overT = (e.r * 2 + 30) / b.speed; b.overId = e.id; }  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
-        else { b.dead = true; b.endTrig(e.id); }  // 穿甲用完：算消失（黏住的等引爆才算）
+        else { b.dead = true; b.endTrig(); }  // 穿甲用完：算消失（黏住的等引爆才算）
         break;
       }
     }
     this.updateVortices(dt);
     this.updateStasisArcs(dt);
-    for (const t of Q) {  // 觸發器：從觸發點展開子管線（用射出這顆子彈的人的武器與電路）；命中、消失的回響朝最近的另一隻敵人，附近沒有就沿子彈的方向
-      const tg = t.aim && nearestEnemy(t.x, t.y, 700, t.ignore != null ? new Set([t.ignore]) : null, true);
-      const ang = tg ? Math.atan2(tg.y - t.y, tg.x - t.x) : t.angle;
+    for (const t of Q) {  // 觸發器：從觸發點展開子管線（用射出這顆子彈的人的武器與電路）；回響沿子彈原本的方向射（定時觸發器是往兩側）
+      const ang = t.angle;
       this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, ang, t.depth, t.ignore));
       burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
     }
@@ -1190,7 +1189,7 @@ const Game = {
     }
     const T = S.find(q => q.end);  // 消失觸發器：黏住的子彈引爆時才算消失（一次爆炸觸發一次）
     if (T && this.triggerQueue.length < CFG.MAX_TRIGGERS_PER_FRAME)
-      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: e.id, owner: T.owner, aim: true });
+      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: null, owner: T.owner });
   },
   // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片；鏡像 → 再爆一次（傷害、碎片都多一份）
   stickyHost(S, total, att) {
