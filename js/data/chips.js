@@ -19,7 +19,7 @@ const CHIPS = {
   boomerang: { name: '迴旋', short: '迴旋', type: 'path', cost: 2, evo: '迴旋風暴',
     grow: { what: '回程擊殺', need: [70, 235] },
     desc: '一定會飛回來：打中敵人（有穿甲時穿甲用完）就穿過去再折返，回程再打牠一次；撞到牆、行星、小行星，或飛到射程盡頭也折返。回程追著射出它的飛船，一路無限穿透。傷害 ×0.7。',
-    lvs: ['回程傷害 ×1', '回程傷害 ×1.5', '進化：打中敵人折返時分裂成 3 發'],
+    lvs: ['回程傷害 ×1', '回程傷害 ×1.5', '進化：折返時分裂成 3 發'],
     apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7 })) },
   orbit: { name: '環繞', short: '環繞', type: 'path', cost: 2, evo: '星環',
     grow: { what: '環繞擊殺', need: [190, 645] },
