@@ -285,7 +285,7 @@ const MechCheck = {
       return { ok: m0 > 2.8 && m0 <= 3 && Math.abs(m1 - 1.75) < 0.08 && Math.abs(range - 1) < 0.06 && Math.abs(c0 - 2.5) < 0.02 && Math.abs(c1 - 2.5) < 0.02,
         got: `出手 ${m0.toFixed(2)} 倍，射程一半 ${m1.toFixed(2)} 倍（應為 1.75）；射程 ×${range.toFixed(2)}；疾射＋加速一直是 ${c0.toFixed(2)} → ${c1.toFixed(2)} 倍（應為 2.5）` };
     }],
-    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（Lv1 ×1.5＋0.1／發，最多 ×3）；會穿透的子彈每穿過一隻留一份', M => {
+    ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（Lv1 ×1.5＋0.1／發，最多 ×3）；會穿透的子彈每穿過一隻留一份；Lv3 爆炸時立刻引爆周圍敵人身上的子彈（沒有波及傷害）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
       M.run(20); const n = e.stuck ? e.stuck.length : 0, hp = e.hp; Game.bullets = [];
       for (let f = 0; f < 150; f++) { Game.time += 1 / 60; Game.updateEnemies(1 / 60); }
@@ -293,7 +293,12 @@ const MechCheck = {
       M.run(1); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
       const each = row.map(r => r.stuck ? r.stuck.length : 0).join('');
       const want = n * 10 * Math.min(3, 1.5 + 0.1 * n);
-      return { ok: n > 0 && near1(hp - e.hp, want) && each === '11110', got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${Math.round(want)}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}` };
+      // 連鎖引爆（Lv3）：爆炸時把 90 內敵人身上的子彈立刻引爆，不再有波及傷害
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', chipId('sticky', 3), null, null]); const [c0, c1, c2, c3] = M.targets([[120, 0], [120, 70], [120, 300], [200, 40]]);
+      M.run(20); Game.bullets = []; const st = c0.stuck || [];
+      c1.stuck = [...st]; c2.stuck = [...st]; c1.stickT = c2.stickT = 9; const h3 = c3.hp; Game.detonate(c0);
+      const chain = st.length > 0 && c1.stickT < 0.1 && c2.stickT === 9 && c3.hp === h3;
+      return { ok: n > 0 && near1(hp - e.hp, want) && each === '11110' && chain, got: `雷射黏了 ${n} 發，爆炸 ${Math.round(hp - e.hp)}（應為 ${Math.round(want)}）；軌道砲（穿甲 3）一排 5 隻各黏 ${each}；Lv3：旁邊 70 的${c1.stickT < 0.1 ? '立刻引爆' : '沒引爆（錯誤）'}、300 外的${c2.stickT === 9 ? '沒動' : '被引爆（錯誤）'}、旁邊沒黏的${c3.hp === h3 ? '沒受傷' : '受傷（錯誤：波及傷害應該拿掉）'}` };
     }],
     ['電路晶片', '感染', '被擊殺的敵人爆出 3 發子彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'infect', null, null]); M.targets([[120, 0]], 'swarmer', true, 0.1);
