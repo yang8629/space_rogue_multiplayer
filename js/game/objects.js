@@ -68,7 +68,7 @@ const Objects = {
     const out = [];
     for (let k = 0; k < Arena.areas.length; k++) {
       if (Math.random() < 0.5) continue;
-      const kinds = C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
+      const kinds = C.boss ? pickN(['planet', 'belt', 'comet'], randInt(1, 2)) : C.elites ? pickN(['planet', 'comet'], 1) : pickN(['planet', 'hole', 'comet', 'belt'], randInt(1, 2));
       if (kinds.includes('comet') && !kinds.includes('planet')) kinds.push('planet');
       const entry = Arena.entryOf(k), gate = Arena.gates[k];
       const spot = (minD, r, margin) => {
@@ -82,7 +82,7 @@ const Objects = {
         return null;
       };
       for (const kd of kinds) {
-        if (kd === 'planet') {
+        if (kd === 'planet') for (let pn = C.boss ? randInt(1, 2) : 1; pn > 0; pn--) {  // 旗艦戰 1～2 顆
           const r = randInt(55, 95), p = spot(300, r, r + 90);
           if (p) out.push({ type: 'planet', ...p, r, r0: r, hp: r * OBJ.PLANET_HP, maxHp: r * OBJ.PLANET_HP, gm: +rand(0.7, 1.3).toFixed(2), area: k });
         }

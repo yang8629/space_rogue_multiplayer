@@ -390,7 +390,7 @@ const MechCheck = {
       return { ok: B.length === n0.length && B.every(b => b.dashShot && near1(b.damage, d0 * 1.5)) && aimOk,
         got: `一般一槍 ${n0.length} 發；衝刺射出 ${B.length} 發，傷害 ${B.length && B[0].damage.toFixed(1)}（一般 ${d0.toFixed(1)}）${aimOk ? '，朝準星' : '，方向不對'}` };
     }],
-    ['航圖與戰鬥', '區域', '一般戰是一張大地圖，分成幾個區域（一區一波）；每一區都連得通；閘門關著過不去；清完閘門打開，穿過去才開始下一區（剩下的晶體直接收下），穿過去之後不能回頭；敵人只出生在玩家所在的區域；最後一區清完結束戰鬥；旗艦戰是方形場地', M => {
+    ['航圖與戰鬥', '區域', '一般戰是一張大地圖，分成幾個區域（一區一波）；每一區都連得通；閘門關著過不去；清完閘門打開，穿過去才開始下一區（剩下的晶體直接收下），穿過去之後不能回頭；敵人只出生在玩家所在的區域；最後一區清完結束戰鬥；旗艦戰是一區的王關場地（沒有閘門）', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
       const p = Game.player; p.maxHp = p.hp = 1e9;
@@ -434,9 +434,9 @@ const MechCheck = {
       const won = Game.state !== 'play', areas = Game.combat.areaN || 0;
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = CFG.BOSS_ORDER[0]; Game.startCombat({ level: 6, wavesTotal: 1, elites: 0, boss: true });
-      const bossRect = !Game.usesAreas() && Arena.rect;
+      const bossRect = !Game.usesAreas() && !Arena.rect && Arena.gates.length === 0 && Arena.bossId === Game.bossId;
       return { ok: big && linked && blocked && exits === 2 && areas === 2 && passed && back && spawnOk && credit >= 1 && won && bossRect,
-        got: `${big ? '大地圖 3 區、2 道閘門' : '不是大地圖（錯誤）'}；${linked ? '每道閘門兩側都走得到' : '有地方走不到'}；閘門關著${blocked ? '過不去' : '穿過去了（錯誤）'}；閘門打開 ${exits} 次、換區 ${areas} 次（應各 2）${passed ? '' : '、穿閘門失敗'}${back ? '、不能回頭' : '、可以回頭（錯誤）'}；${spawnOk ? '敵人都在目前的區域' : '有敵人生在別區'}；晶體收下 ${credit}；${won ? '戰鬥結束' : '戰鬥沒結束'}；旗艦戰${bossRect ? '方形場地' : '不是方形場地（錯誤）'}` };
+        got: `${big ? '大地圖 3 區、2 道閘門' : '不是大地圖（錯誤）'}；${linked ? '每道閘門兩側都走得到' : '有地方走不到'}；閘門關著${blocked ? '過不去' : '穿過去了（錯誤）'}；閘門打開 ${exits} 次、換區 ${areas} 次（應各 2）${passed ? '' : '、穿閘門失敗'}${back ? '、不能回頭' : '、可以回頭（錯誤）'}；${spawnOk ? '敵人都在目前的區域' : '有敵人生在別區'}；晶體收下 ${credit}；${won ? '戰鬥結束' : '戰鬥沒結束'}；旗艦戰${bossRect ? '是王關場地' : '不是王關場地（錯誤）'}` };
     }],
     ['航圖與戰鬥', '大地圖的牆', '牆反彈的子彈照牆面法線反彈（入射角 = 反射角）、沒有反彈的子彈打到牆消失；敵人、敵彈不會穿牆；彗星碎片會打到飛船', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]);
@@ -493,6 +493,33 @@ const MechCheck = {
       const shardHit = P.hp < hp0 && /彗星（碎片）/.test(Game.lastHit || '');
       return { ok: tries >= 3 && nRef >= 3 && okRef === nRef && nDie >= 3 && diesOk === nDie && worst > -40 && seenE > 100 && inWall === 0 && ebBad === 0 && shardHit,
         got: `反彈 ${okRef} / ${nRef} 次角度正確，沒反彈的子彈 ${diesOk} / ${nDie} 撞牆消失（最深進牆 ${(-worst).toFixed(0)}）；敵人 ${inWall ? inWall + ' 次在牆裡或別區（錯誤）' : '沒有穿牆'}（${seenE} 隻·幀），敵彈 ${eb} 個·幀 ${ebBad ? '有 ' + ebBad + ' 個在牆裡（錯誤）' : '沒有穿牆'}；彗星碎片${shardHit ? `打到飛船（-${Math.round(hp0 - P.hp)}）` : '沒打到飛船（錯誤）'}` };
+    }],
+    ['航圖與戰鬥', '王關場地', '三隻王各有自己的場地形狀（母艦：圓形大廳＋凹室；獵艦：細長菱形；核心：中間四根柱子），只有一區、沒有閘門，大小跟方形場地差不多、整區連得通；王不會卡進牆裡；王的子彈打到牆會消失', M => {
+      const out = [];
+      let ok = true;
+      for (const id of CFG.BOSS_ORDER) {
+        M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = id; Game.startCombat({ level: 6, wavesTotal: 1, elites: 0, boss: true });
+        Game.objs = [];
+        const p = Game.player; p.maxHp = p.hp = 1e9;
+        const C = 20, W = Math.ceil(Arena.W / C), H = Math.ceil(Arena.H / C), open = c => Arena.f((c % W + 0.5) * C, (Math.floor(c / W) + 0.5) * C) >= 22;
+        const seen = new Uint8Array(W * H), s0 = Math.floor(Arena.start.y / C) * W + Math.floor(Arena.start.x / C), q = [s0]; seen[s0] = 1;
+        while (q.length) { const c = q.pop(), x = c % W; for (const m of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, c - W, c + W]) if (m >= 0 && m < W * H && !seen[m] && open(m)) { seen[m] = 1; q.push(m); } }
+        let tot = 0, reach = 0;
+        for (let c = 0; c < W * H; c++) if (open(c)) { tot++; if (seen[c]) reach++; }
+        const area = tot * C * C, sizeOk = area > 2.8e6 && area < 4.4e6, linked = reach >= tot * 0.97;
+        let inWall = 0, ebInWall = 0, boss = null;
+        for (let f = 0; f < 60 * 20; f++) {
+          Game.update(1 / 60);
+          boss = Game.enemies.find(e => e.t.boss) || boss;
+          for (const e of Game.enemies) if (!e.dead && Arena.f(e.x, e.y) < e.r * 0.5) inWall++;
+          for (const b of Game.eBullets) if (Arena.f(b.x, b.y) < -12) ebInWall++;
+        }
+        const good = !Arena.rect && Arena.bossId === id && Arena.gates.length === 0 && sizeOk && linked && boss && inWall === 0 && ebInWall === 0;
+        if (!good) ok = false;
+        out.push(`${ENEMY_TYPES[id].name}：${Arena.rect ? '方形（錯誤）' : '王關場地'}、空地 ${(area / 1e6).toFixed(1)}M${sizeOk ? '' : '（大小不對）'}${linked ? '' : '、有地方走不到'}${boss ? '' : '、王沒出現'}${inWall ? `、敵人卡牆 ${inWall} 次` : ''}${ebInWall ? `、敵彈穿牆 ${ebInWall}` : ''}`);
+      }
+      return { ok, got: out.join('；') };
     }],
     ['電路晶片', '吸引','把被打中那一隻附近的敵人拉向牠（被打中的那一隻不會被往飛船拉）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', null, null]);
@@ -685,6 +712,29 @@ const MechCheck = {
       Game.updateEnemyBullets(1 / 60);
       return { ok: p.hp === hp, got: `HP ${hp} → ${p.hp}` };
     }],
+    ['機體', '星噬核心', '每 6 秒朝四周 6 個方向各用電路開一槍：吃晶片效果（裝分裂 = 每個方向 3 發）；有環繞時直接射出、不存在身邊', M => {
+      const go = chain => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, chain); Game.module = 'swarmcore'; Game.recalc(); Game.enemies = [];
+        const p = Game.player; Game.resetMechCombat(p);
+        let max = 0, orb = 0, firstT = null;
+        for (let f = 0; f < 60 * 6.5; f++) { Game.tickModules(p, 1 / 60); Game.updateBullets(1 / 60); if (firstT == null && Game.bullets.length) firstT = f / 60; max = Math.max(max, Game.bullets.length); orb = Math.max(orb, Game.bullets.filter(b => b.mode === 'orbit').length); }
+        return { max, orb, firstT };
+      };
+      const plain = go(['weapon', null, null, null]), split = go(['weapon', 'split', null, null]), orbit = go(['weapon', 'orbit', null, null]);
+      return { ok: plain.max === 6 && split.max === 18 && orbit.max === 6 && orbit.orb === 0 && Math.abs(plain.firstT - 6) < 0.1,
+        got: `第 ${plain.firstT == null ? '-' : plain.firstT.toFixed(1)} 秒放出：一般 ${plain.max} 發、裝分裂 ${split.max} 發、裝環繞 ${orbit.max} 發（存在身邊 ${orbit.orb}）` };
+    }],
+    ['機體', '按住衝刺', '按住衝刺鍵：冷卻一好就自動再衝；同時按其他鍵也不會斷；放開就停', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); Game.enemies = [];
+      const p = Game.player, keys = new Set(Input.keys);
+      let n0 = 0, n1 = 0;
+      Input.dash = false; Input.dashHeld = true; Input.keys.add('w'); Input.keys.add('d');
+      for (let f = 0; f < 60 * 4; f++) { const s0 = p.dashSeq || 0; p.update(1 / 60); if ((p.dashSeq || 0) > s0) n0++; }
+      Input.dashHeld = false;
+      for (let f = 0; f < 60 * 3; f++) { const s0 = p.dashSeq || 0; p.update(1 / 60); if ((p.dashSeq || 0) > s0) n1++; }
+      Input.keys = keys; Input.dash = false;
+      return { ok: n0 >= 3 && n1 === 0, got: `按住 4 秒（同時按著移動鍵）衝了 ${n0} 次；放開後 3 秒衝了 ${n1} 次` };
+    }],
     ['機體', '堡壘號・厚甲', '開局重裝甲 2 層：HP 140，單次受傷最多扣 20%（28）', M => {
       M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player; p.hp = p.maxHp; Game.state = 'play';
@@ -874,6 +924,24 @@ const MechCheck = {
       for (let i = 0; i < 60 * 16; i++) b.update(1 / 60, Game.player);
       const brutes = Game.enemies.filter(e => e.type === 'brute').length;
       return { ok: first > 0 && first < 32 && brutes > 0, got: `第一圈 ${first} 發（滿圈 32），召喚 ${brutes} 隻刺殼` };
+    }],
+    ['敵人', '終焉核心：落點轟炸', '在最近的玩家身邊標 4 個紅圈（暴走 6 個，其中一個在腳下），1.2 秒後爆炸，圈裡的飛船受 25 傷害；圈外不受傷', M => {
+      const go = (rage, stay) => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const b = M.targets([[400, 0]], 'boss3', false, 1)[0]; b.t = { ...b.t, dmg: 0 };
+        if (rage) b.hp = b.maxHp * 0.4;
+        b.skillIdx = b.t.skills.indexOf('bomb'); b.skillCd = 0; b.mode = 'chase';
+        Game.zones = []; Game.eBullets = [];
+        const p = Game.player; p.iframe = 0; p.hp = p.maxHp; const hp0 = p.hp;
+        b.update(1 / 60, p);
+        const n = Game.zones.length, under = Game.zones.some(z => Math.hypot(z.x - p.x, z.y - p.y) < z.r);
+        if (!stay) { p.x = 200; p.y = 200; }  // 跑開
+        for (let f = 0; f < 80; f++) { Game.eBullets = []; Game.updateZones(1 / 60); }
+        return { n, under, lost: hp0 - p.hp, left: Game.zones.length };
+      };
+      const a = go(false, true), r = go(true, true), away = go(false, false);
+      return { ok: a.n === 4 && r.n === 6 && a.under && a.lost > 0 && away.lost === 0 && a.left === 0,
+        got: `標 ${a.n} 個（暴走 ${r.n} 個）${a.under ? '、有一個在腳下' : '、腳下沒有（錯誤）'}；站著不動扣 ${Math.round(a.lost)}，跑開扣 ${Math.round(away.lost)}` };
     }],
     ['敵人', '刺殼：縮球滾過來', '靠近時縮球（有預警）→ 高速滾向玩家 → 暈眩', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

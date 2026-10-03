@@ -11,7 +11,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0, shake: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], particles: [], texts: [], pickups: [], triggerQueue: [], rings: [], zaps: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], particles: [], texts: [], pickups: [], triggerQueue: [], rings: [], zaps: [], zones: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -151,9 +151,13 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = [];
+    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = []; this.zones = [];
     this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
-    if (this.usesAreas() && !this.isClient()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal); else Arena.reset();  // 大地圖（雙人：隊友收到種子才產生，之前先用方形場地）
+    // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
+    if (this.isClient()) Arena.reset();
+    else if (this.usesAreas()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal);
+    else if (this.combat.boss && !this.combat.sandbox) Arena.genBoss(randInt(1, 2 ** 31 - 2), this.bossId);
+    else Arena.reset();
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
     // 雙人：房主在左、隊友在右（隊友的位置由隊友自己的電腦決定）
@@ -870,16 +874,15 @@ const Game = {
         e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, F.slow); e.slowT = Math.max(e.slowT, 0.1);
       }
     }
-    if (mod === 'swarmcore' && (p.coreT -= dt) <= 0) {  // 每 5 秒朝四周放出 12 發
-      p.coreT = 5;
-      const w = this.wp, list = Array.from({ length: 12 }, (_, i) => shot({ angle: i / 12 * TAU, speed: Math.min(700, w.speed), damage: w.damage,
-        radius: w.radius, life: 0.8, color: '#ff4d6d', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
-      spawnShots(list, p.x, p.y, 0, 0, null);
+    if (mod === 'swarmcore' && (p.coreT -= dt) <= 0) {  // 每 6 秒朝四周 6 個方向各用電路開一槍（吃全部晶片效果；環繞不存彈，直接射出）
+      p.coreT = CFG.SWARMCORE.every;
+      const list = runOps(this.stats.ops, 0).map(q => q.orbit ? { ...q, orbit: 0 } : q), n = CFG.SWARMCORE.dirs;
+      if (list.length) for (let i = 0; i < n; i++) spawnShots(list, p.x, p.y, p.aim + i / n * TAU, 0, null);
     }
   },
   // 每場戰鬥開始時重置的機體狀態
   resetMechCombat(p) {
-    p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = 5; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
+    p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
     p.portalCd = 0; p.pullV = null;
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
@@ -956,6 +959,7 @@ const Game = {
       this.updatePortals(dt);
       this.updateBullets(dt);
       this.updateEnemyBullets(dt);
+      this.updateZones(dt);
       this.updatePickups(dt);
       if (this.mate) this.updateRevive(dt);
     }
@@ -1402,6 +1406,18 @@ const Game = {
       }
     }
     this.eBullets = this.eBullets.filter(b => b.life > 0);
+  },
+  // 王的落點轟炸：時間到就爆炸，圈裡的飛船受傷
+  updateZones(dt) {
+    for (const z of this.zones) {
+      if ((z.t -= dt) > 0) continue;
+      for (const p of this.players()) if (dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2) this.hurtPlayer(z.dmg, z.from, p, z.x, z.y);
+      burst(z.x, z.y, '#ff4d6d', 24, 260, 0.5, 3);
+      if (this.rings.length < 40) this.rings.push({ x: z.x, y: z.y, r: z.r, life: 0.3, max: 0.3, color: '#ff4d6d' });
+      if (Net.role === 'host') Net.fx(['r', Math.round(z.x), Math.round(z.y), z.r, '#ff4d6d']);
+      this.shake(4); SFX.play('explode');
+    }
+    this.zones = this.zones.filter(z => z.t > 0);
   },
   updatePickups(dt) {
     for (const c of this.pickups) {

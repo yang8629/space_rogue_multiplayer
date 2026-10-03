@@ -121,7 +121,7 @@ class Player {
     }
 
     this.dashCd -= dt;
-    if (Input.dash) {
+    if (Input.dash || (Input.dashHeld && this.dashCd <= 0 && Game.state === 'play')) {  // 按住衝刺鍵：冷卻一好就再衝
       Input.dash = false;
       if (this.dashCd <= 0) {
         const M = Game.mech;
@@ -498,8 +498,8 @@ const ENEMY_TYPES = {
     knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy'],
     desc: '高速衝鋒（有預警線，衝鋒時往兩側灑彈）、旋轉十字彈流、三連狙擊、部署噴吐者。' },
   boss3:   { name: '終焉核心', hp: 3000, speed: 35, radius: 56, dmg: 40, color: '#2ee6a6', credits: 40, shape: 6, boss: true,
-    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'wall', 'guard'],
-    desc: '連續缺口環形波、雙向螺旋、慢速彈牆、召喚刺殼護衛。' },
+    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'bomb', 'wall', 'guard'],
+    desc: '連續缺口環形波、雙向螺旋、落點轟炸、慢速彈牆、召喚刺殼護衛。' },
 };
 
 // 無盡模式：每過一個星區，敵人攻擊頻率 ×1.1、移動速度 ×1.05（乘算；攻擊力另外在受傷時 ×1.25）
@@ -715,7 +715,7 @@ class Enemy {
   }
   updateBoss(dt, dx, dy, d) {
     const t = this.t, rage = this.hp < this.maxHp * 0.5;
-    this.blocked = Game.objs.length ? Objects.losBlocked(this.x, this.y, this.x + dx, this.y + dy, 6) : null;
+    this.blocked = (Game.objs.length ? Objects.losBlocked(this.x, this.y, this.x + dx, this.y + dy, 6) : null) || Arena.losPoint(this.x, this.y, this.x + dx, this.y + dy, 6);  // 大地圖：牆、柱子也算
     if (rage && !this.enraged) {
       this.enraged = true; this.skillCd = Math.min(this.skillCd, 1);
       Game.banner = { text: t.rage, sub: '攻擊頻率上升', t: 2 };
@@ -738,7 +738,7 @@ class Enemy {
       }
       if (Game.particles.length < 1500)
         Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: t.color, size: 8 });
-      const wall = this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1;
+      const wall = Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN;  // 大地圖：撞牆（move 記下的 wallN）
       if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx *= 0.3; this.vy *= 0.3; }
     } else {
       // 與玩家保持距離並緩慢繞行（獵艦貼得比較近，核心幾乎不動）
@@ -820,6 +820,16 @@ class Enemy {
         this.stream = { t: 3.2, every: rage ? 0.07 : 0.1, arms: 2, turn: 0.22, spd: 170, r: 6, dmg: 13, twin: true };
         this.fireAcc = 0; this.skillCd = rage ? 3.8 : 4.4; break;
       case 'wall': this.volley = { kind: 'wall', n: rage ? 3 : 2, T: 0, every: 0.6 }; this.skillCd = rage ? 2.6 : 3.2; break;
+      case 'bomb': {  // 落點轟炸：在最近的玩家身邊標幾個紅圈，一段時間後爆炸（牆、柱子擋不住）
+        const B = CFG.BOSS_BOMB, q = Game.nearestPlayer(this.x, this.y) || Game.player;
+        for (let i = 0, n = rage ? B.nRage : B.n; i < n; i++) {
+          const a = rand(0, TAU), d = i === 0 ? rand(0, 40) : rand(90, 260);
+          const [x, y] = Arena.clampIn(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20);
+          Game.zones.push({ x, y, r: B.r, t: B.delay, max: B.delay, dmg: B.dmg, from: t.name + '（轟炸）' });
+        }
+        SFX.play('boss');
+        this.skillCd = rage ? 2.2 : 2.8; break;
+      }
       case 'guard':
         this.summon('brute', rage ? 2 : 1, 110, 0.6);
         this.summon('swarmer', rage ? 6 : 4, 80, 0.8);

@@ -44,7 +44,7 @@ const Arena = {
 
   // ---------- 方形場地（旗艦戰、沙盒、靶場；雙人的隊友收到種子之前也先用這個） ----------
   reset() {
-    this.rect = true; this.W = CFG.WORLD_W; this.H = CFG.WORLD_H; this.seed = 0; this.n = 0;
+    this.rect = true; this.W = CFG.WORLD_W; this.H = CFG.WORLD_H; this.seed = 0; this.n = 0; this.bossId = null; this.cuts = [];
     this.areas = []; this.gates = []; this.start = { x: this.W / 2, y: this.H / 2 };
     this.val = this.owner = this.path = this.wallPath = null; this.exitFlow = null;
   },
@@ -52,7 +52,7 @@ const Arena = {
   // ---------- 產生大地圖：n 個區域 ----------
   gen(seed, n) {
     const R = seededRand(seed), rr = (a, b) => a + (b - a) * R(), ri = (a, b) => Math.floor(rr(a, b + 1));
-    this.rect = false; this.seed = seed; this.n = n;
+    this.rect = false; this.seed = seed; this.n = n; this.bossId = null;
     // 1. 區域中心：第一區往右，之後往右／上／下（±20°），不能太靠近之前的區域
     const C = [{ x: 0, y: 0 }], dirs = [];
     for (let k = 1; k < n; k++) {
@@ -100,6 +100,41 @@ const Arena = {
       corridors.push({ kind: 'cap', ax: A.x + ux * (ARENA.ARM - 60), ay: A.y + uy * (ARENA.ARM - 60), bx: B.x - ux * (ARENA.ARM - 60), by: B.y - uy * (ARENA.ARM - 60), w: ARENA.CORR_W, p: 0, flat: true });
       gates.push({ i: k, x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, nx: ux, ny: uy, L: ARENA.CORR_W + 50, open: false });
     }
+    this.bake(areas, corridors, gates, []);
+  },
+  // 王關：一個區域、沒有閘門，形狀照王的打法（大小跟方形場地差不多）
+  //   星噬母艦 boss ：圓形大廳＋外圍 5 個小凹室（像艙口；可以躲，叫出來的蟲群也從凹室湧出）
+  //   裂界獵艦 boss2：細長的菱形（像船身），讓衝鋒有距離，撞到牆就停
+  //   終焉核心 boss3：圓形場地，中間四根柱子排成十字（擋慢速彈牆、環形波）
+  genBoss(seed, bossId) {
+    const R = seededRand(seed), rr = (a, b) => a + (b - a) * R();
+    this.rect = false; this.seed = seed; this.n = 1; this.bossId = bossId;
+    const noise = (amp = 1) => Array.from({ length: 5 }, (_, i) => ({ k: [3, 5, 7, 13, 19][i], a: [0.035, 0.025, 0.02, 0.01, 0.006][i] * amp * rr(0.6, 1.4), p: rr(0, Math.PI * 2) }));
+    const shapes = [], cuts = [], A = { k: 0, cx: 0, cy: 0, shapes };
+    if (bossId === 'boss2') {
+      // 菱形：沿 x 軸排一串圓，中間最粗、兩頭變細
+      for (let x = -1500; x <= 1500; x += 150) {
+        const w = 1 - Math.abs(x) / 1750;
+        shapes.push({ kind: 'c', x, y: rr(-15, 15), r: 170 + 700 * Math.pow(w, 1.2), nz: noise(0.6) });
+      }
+    } else if (bossId === 'boss3') {
+      shapes.push({ kind: 'c', x: 0, y: 0, r: rr(1080, 1120), nz: noise() });
+      const a0 = rr(0, Math.PI / 2);
+      for (let i = 0; i < 4; i++) { const a = a0 + i * Math.PI / 2; cuts.push({ kind: 'c', x: Math.cos(a) * 430, y: Math.sin(a) * 430, r: rr(85, 105), nz: noise(1.5) }); }
+      A.sy = 760;  // 出生點在下方（中間有柱子圍著核心）
+    } else {
+      const main = { kind: 'c', x: 0, y: 0, r: rr(960, 1000), nz: noise() };
+      shapes.push(main);
+      const n = 5, a0 = rr(0, Math.PI * 2);
+      for (let i = 0; i < n; i++) {
+        const a = a0 + i / n * Math.PI * 2 + rr(-0.15, 0.15), r2 = rr(220, 260);
+        shapes.push({ kind: 'c', x: Math.cos(a) * (main.r * 0.88 + r2 * 0.55), y: Math.sin(a) * (main.r * 0.88 + r2 * 0.55), r: r2, nz: noise() });
+      }
+    }
+    this.bake([A], [], [], cuts);
+  },
+  // 共用：把區域、通道、閘門、柱子換算成格點上的場地值
+  bake(areas, corridors, gates, cuts) {
     // 4. 外框：全部形狀的範圍加留白，整張圖平移到 (MARGIN, MARGIN) 開始
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const ext = s => s.kind === 'c' ? [[s.x - s.r * 1.2, s.y - s.r * 1.2], [s.x + s.r * 1.2, s.y + s.r * 1.2]]
@@ -110,9 +145,10 @@ const Arena = {
     for (const a of areas) { a.cx += ox; a.cy += oy; a.shapes.forEach(mv); }
     corridors.forEach(mv);
     for (const g of gates) { g.x += ox; g.y += oy; }
+    cuts.forEach(mv);
     const CELL = ARENA.CELL;
     this.W = Math.ceil((x1 - x0 + ARENA.MARGIN * 2) / CELL) * CELL; this.H = Math.ceil((y1 - y0 + ARENA.MARGIN * 2) / CELL) * CELL;
-    this.areas = areas; this.gates = gates; this.corridors = corridors;
+    this.areas = areas; this.gates = gates; this.corridors = corridors; this.cuts = cuts;
     // 5. 格點上的場地值：每個區域取形狀的最大值，再照區域中心的中線切開（留 WALL 厚的牆）；通道另外疊上去
     const NX = this.NX = this.W / CELL, NY = this.NY = this.H / CELL, N = (NX + 1) * (NY + 1);
     const val = this.val = new Float32Array(N).fill(-999), owner = this.owner = new Int8Array(N).fill(-1);
@@ -153,10 +189,19 @@ const Arena = {
         if (v > val[k]) { val[k] = v; owner[k] = -1; }
       }
     }
-    this.start = { x: areas[0].cx, y: areas[0].cy };
+    // 6. 挖掉的柱子（終焉核心的四根柱子）：場地值 = min(原本, 離柱子邊緣多遠)
+    for (const c of cuts) {
+      const [i0, j0, i1, j1] = box(c);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const k = j * (NX + 1) + i, v = -shapeVal(c, i * CELL, j * CELL);
+        if (v < val[k]) { val[k] = v; if (v <= 0) owner[k] = -1; }
+      }
+    }
+    this.start = { x: areas[0].cx + (areas[0].sx || 0), y: areas[0].cy + (areas[0].sy || 0) };
     this.exitFlow = null;
     this.buildPath();
   },
+
 
   // ---------- 查詢 ----------
   // 場地值（不含閘門）：大約是離最近的牆多遠；方形場地 = 離最近的邊多遠
@@ -249,6 +294,13 @@ const Arena = {
     const L = Math.hypot(bx - ax, by - ay), n = Math.ceil(L / 16);
     for (let i = 1; i < n; i++) if (this.f(ax + (bx - ax) * i / n, ay + (by - ay) * i / n) < pad) return true;
     return false;
+  },
+  // 直線上第一個被牆擋住的點（回傳 { x, y }，給王「射線被擋住就橫移」用）；沒擋住回傳 null
+  losPoint(ax, ay, bx, by, pad) {
+    if (this.rect) return null;
+    const L = Math.hypot(bx - ax, by - ay), n = Math.ceil(L / 16);
+    for (let i = 1; i < n; i++) { const x = ax + (bx - ax) * i / n, y = ay + (by - ay) * i / n; if (this.f(x, y) < pad) return { x, y }; }
+    return null;
   },
   // 從 (x, y) 往角度 a 最多能走多遠（離牆至少 r，不穿閘門；瞬移用）
   rayFree(x, y, a, dist, r) {
