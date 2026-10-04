@@ -415,9 +415,10 @@ const Editor = {
       : P ? `<br><span style="color:#ffd166">◇ 插座 ${socketsOf(id)} 個　插在它上面的組件只作用在：${P}</span>` : '';
     const price = !Game.freePlay() ? `　回收價 ◆${sellPrice(id)}` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
-      `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span><br>${d.desc}` +
+      `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span>` +
+      (CHIPS[baseOf(id)].grow ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '') +  // 成長進度放在名稱下面（以前在最後一行，說明框要往下捲才看得到）
+      `<br>${d.desc}` +
       `${!d.lv && LV_INFO[id] ? '<br>' + lvLine(id, 1) : ''}${ps}` +
-      (CHIPS[baseOf(id)].grow ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '') +
       (slot > 0 ? slotAttrLine(slot) : '') + (J && J.idle ? `<br><b style="color:#ff8a8a">✖ 這個插座沒有作用：${J.why}</b>` : '');
   },
 
@@ -480,6 +481,8 @@ const Editor = {
       el.addEventListener('dragend', () => this.clearMarks());
       if (from === 'slot') el.addEventListener('mouseenter', e => { e.stopImmediatePropagation(); Editor.showInfo(id, i); }, true);
       slot.appendChild(el);
+      const g = growBar(id);
+      if (g) slot.insertAdjacentHTML('beforeend', g);
     } else {
       slot.insertAdjacentHTML('beforeend', `<span class="empty">空插槽</span>`);
       if (from === 'slot') slot.addEventListener('mouseenter', () => this.showInfo(null, i));
