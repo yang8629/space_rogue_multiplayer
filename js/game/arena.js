@@ -385,7 +385,8 @@ const Arena = {
   // 飛船 p 繞牆走到 (tx, ty) 的方向（電腦操作用）：直線看得到回傳 null（照原本的走法）；
   //   看不到就用敵人尋路的步數圖（從 p 往外算的）從目標倒著走回 p，指向路線上從 p 直線看得到、離目標最近的那一點
   navTo(p, tx, ty) {
-    if (this.rect || this.clearLine(p.x, p.y, tx, ty, 12)) return null;
+    const pad = 12 + (p.r || 0);  // 線寬加上飛船半徑（只看中心線的話會挑到擦過牆角的點，飛船卡在牆角）
+    if (this.rect || this.clearLine(p.x, p.y, tx, ty, pad)) return null;
     const F = Objects.fields && Objects.fields.get(p);
     if (!F) return null;
     const C = OBJ.FLOW_CELL, { dist, W, H } = F;
@@ -405,11 +406,11 @@ const Arena = {
       c = best; path.push([(c % W + 0.5) * C, (Math.floor(c / W) + 0.5) * C]);
     }
     const to = ([x, y]) => { const l = Math.hypot(x - p.x, y - p.y) || 1; return [(x - p.x) / l, (y - p.y) / l]; };
-    for (let i = 0; i < path.length; i += 4) if (this.clearLine(p.x, p.y, path[i][0], path[i][1], 12)) return to(path[i]);
+    for (let i = 0; i < path.length; i += 4) if (this.clearLine(p.x, p.y, path[i][0], path[i][1], pad)) return to(path[i]);
     return path.length ? to(path[path.length - 1]) : null;
   },
-  // 出口方向（電腦操作用）：從閘門往外算步數，回傳往閘門走的方向；閘門沒開回傳 null
-  exitDir(x, y, k) {
+  // 出口方向（電腦操作用、畫面箭頭）：從閘門往外算步數，回傳往閘門走的方向；閘門沒開回傳 null；r = 飛船半徑（線寬加上去，不挑擦過牆角的點）
+  exitDir(x, y, k, r = 0) {
     const g = this.gates[k];
     if (this.rect || !g || !g.open) return null;
     const C = OBJ.FLOW_CELL, W = Math.ceil(this.W / C), H = Math.ceil(this.H / C);
@@ -436,7 +437,7 @@ const Arena = {
     // 直線看得到閘門就直接指過去；看不到就沿著步數遞減的路線往前走（最多 60 格），指向路線上「從這裡直線看得到」的最遠一點
     //   （只看隔壁一格的話，飛船在格子裡移動方向就會在 45° 之間跳來跳去，箭頭會抖）
     const goal = [g.x - g.nx * 40, g.y - g.ny * 40], to = ([px, py]) => { const l = Math.hypot(px - x, py - y) || 1; return [(px - x) / l, (py - y) / l]; };
-    if (this.clearLine(x, y, goal[0], goal[1], 16)) return to([g.x + g.nx * 80, g.y + g.ny * 80]);  // 看得到閘門：指向閘門另一邊（直接穿過去，不會停在門前）
+    if (this.clearLine(x, y, goal[0], goal[1], 16 + r)) return to([g.x + g.nx * 80, g.y + g.ny * 80]);  // 看得到閘門：指向閘門另一邊（直接穿過去，不會停在門前）
     const F = this.exitFlow;
     let c = clamp(Math.floor(y / C), 0, H - 1) * W + clamp(Math.floor(x / C), 0, W - 1);
     const path = [];
@@ -454,7 +455,7 @@ const Arena = {
       if (bd === 0) break;
     }
     if (!path.length) return to(goal);
-    for (let i = path.length - 1; i > 0; i--) if (this.clearLine(x, y, path[i][0], path[i][1], 12)) return to(path[i]);
+    for (let i = path.length - 1; i > 0; i--) if (this.clearLine(x, y, path[i][0], path[i][1], 12 + r)) return to(path[i]);
     return to(path[0]);
   },
 

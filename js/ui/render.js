@@ -197,7 +197,7 @@ function drawExit() {
   }
   const p = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, c = Game.cam;
   if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;  // 看得到就不畫箭頭
-  const dir = X.gate ? Arena.exitDir(p.x, p.y, p.zone) : null;  // 大地圖：箭頭照繞牆的路線指
+  const dir = X.gate ? Arena.exitDir(p.x, p.y, p.zone, p.r) : null;  // 大地圖：箭頭照繞牆的路線指
   const a0 = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x);
   // 角度慢慢轉過去（不跟著每一幀的方向跳）
   const a = drawExit.a = drawExit.a == null || drawExit.key !== X.x + ',' + X.y ? a0 : drawExit.a + angleDiff(drawExit.a, a0) * 0.15;
