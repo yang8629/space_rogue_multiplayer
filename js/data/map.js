@@ -22,7 +22,8 @@ const NODE_META = {
 //   精英、黑洞、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
 //   每個精英的下一步至少有一條路通維修站；黑洞之後的路上走得到維修站；
 //   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
-//   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站
+//   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站；
+//   同一個分岔的選項不重複：不會兩個都是同一種重要房間，也不會兩個選項一模一樣（同種、接到同樣的下一步）
 const NEED_REPAIR_AFTER = ['elite'];  // 下一步就要有維修站的節點
 // 從 n 往後走得到的所有節點（不含 n 自己）
 function descendants(n, byId) {
@@ -48,12 +49,30 @@ function mapOk(m) {
     all.filter(n => NEED_REPAIR_AFTER.includes(n.type)).every(n => n.next.some(id => byId(id).type === 'repair')) &&
     holes.every(h => descendants(h, byId).some(d => d.type === 'repair')) &&
     holes.every(h => !descendants(h, byId).some(d => d.type === 'blackhole')) &&
-    !all.some(n => ['repair', 'shop'].includes(n.type) && n.next.some(id => byId(id).type === n.type));
+    !all.some(n => ['repair', 'shop'].includes(n.type) && n.next.some(id => byId(id).type === n.type)) &&
+    !all.some(n => branchDup(n.next.map(byId))) && !branchDup(m[0]);
+}
+// 一組分岔選項裡有沒有重複：兩個同種的重要房間（戰鬥以外），或兩個選項一模一樣（同種、下一步也一樣）
+function branchDup(opts) {
+  for (let i = 0; i < opts.length; i++) for (let j = i + 1; j < opts.length; j++) {
+    const a = opts[i], b = opts[j];
+    if (a.type === b.type && (a.type !== 'combat' || a.next.join() === b.next.join())) return true;
+  }
+  return false;
+}
+// 修補：分岔裡重複的重要房間，多出來的改成戰鬥（保底條件之後由 mapOk 再檢查，不行才整張重來）
+function fixBranches(m) {
+  const all = m.flat(), byId = id => all.find(n => n.id === id);
+  for (const opts of [m[0], ...all.map(n => n.next.map(byId))]) {
+    const seen = new Set();
+    for (const o of opts) { if (o.type !== 'combat' && o.type !== 'boss' && seen.has(o.type)) o.type = 'combat'; seen.add(o.type); }
+  }
 }
 function genMap() {
   let m;
   for (let i = 0; i < 1000; i++) {  // 保底規則多，單次生成符合的機率低（約 2%），多試幾次
     m = genMapOnce();
+    fixBranches(m);
     if (mapOk(m)) break;
   }
   return m;

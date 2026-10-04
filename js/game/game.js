@@ -65,7 +65,7 @@ const Game = {
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.socks = mode === 'sandbox' ? [['split']] : [];
     this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
-    this.growth = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false;  // playDry：上一次三選一沒有玩法晶片（下一次保底）
+    this.growth = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
@@ -376,13 +376,14 @@ const Game = {
     if (!MODULES[id]) return;
     this.setModule(id);
     SFX.play('upgrade');
-    this.showMap(`裝上背包模組「${MODULES[id].name}」`);
+    this.showMap(`裝上背包模組「${MODULES[id].name}」` + this.mechGain());
   },
   takeBossModule() {  // 擊沉旗艦：裝上旗艦專屬模組
     const V = this.victory;
     if (!V || V.took || !V.module) return;
     V.took = true;
     this.setModule(V.module);
+    this.mechGain();
     SFX.play('upgrade');
     Screen.victory();
   },
@@ -396,7 +397,7 @@ const Game = {
     const W = this.ws;
     if (!W || W.picked || !W.options.includes(id)) return;
     if (!this.addPart(id)) { W.msg = '零件格已滿：可以用「換零件」改成別種'; Screen.workshop(); return; }
-    W.picked = true; W.msg = `裝上 ${PARTS[id].name}（${this.parts[id]} 層）`;
+    W.picked = true; W.msg = `裝上 ${PARTS[id].name}（${this.parts[id]} 層）` + this.mechGain();
     SFX.play('upgrade');
     Screen.workshop();
   },
@@ -414,7 +415,7 @@ const Game = {
       const k = id.slice(5);
       if (!this.addPart(k)) return;
       SFX.play('upgrade');
-      this.showMap(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）`);
+      this.showMap(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）` + this.mechGain());
       return;
     }
     if (id) {
@@ -907,6 +908,17 @@ const Game = {
     p.portalCd = 0; p.pullV = null;
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
+  // 機體強化（零件 1 層、背包模組）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
+  mechGain() {
+    const k = CFG.MECH_SLOT_EVERY;
+    if (!k) return '';
+    this.mechN = (this.mechN || 0) + 1;
+    if (this.mechN % k || this.chain.length >= CFG.MAX_SLOTS) return '';
+    this.chain.push(null);
+    this.recalc();
+    if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（機體強化）`);
+    return `；機體強化 ${this.mechN} 個：電路格 +1`;
+  },
   addPart(id) {
     if (!PARTS[id] || partsUsed(this.parts) >= this.partSlots) return false;
     this.parts[id] = (this.parts[id] || 0) + 1;
@@ -1032,6 +1044,18 @@ const Game = {
       p.orbT = p.orbV && p.orbV.size && p.wantFire ? (p.orbT || 0) + dt : 0;
       p.orbV = new Set();
     }
+    // 敵人空間格子（碰撞用）：每幀把敵人照中心點分進 GS 大小的格子，子彈只跟路徑附近幾格的敵人比
+    //   （以前每發子彈都跟全部敵人比：7000 發 × 40 隻 = 每幀 28 萬次）。結果跟以前一樣：候選照敵人在 E 裡的順序檢查（先打到排前面的），
+    //   這一幀中途才出現的敵人（分裂、召喚，接在 E 後面）另外全部檢查。敵人在這個迴圈裡不會移動（擊退、吸引只改速度）
+    const GS = 128, nE = E.length, grid = new Map(), cand = [];
+    let maxR = 0;
+    for (let i = 0; i < nE; i++) {
+      const e = E[i];
+      if (e.dead) continue;
+      if (e.r > maxR) maxR = e.r;
+      const k = Math.floor(e.x / GS) * 100000 + Math.floor(e.y / GS), L = grid.get(k);
+      if (L) L.push(i); else grid.set(k, [i]);
+    }
     for (const b of B) {
       if (b.dead) continue;
       b.update(dt);
@@ -1041,7 +1065,16 @@ const Game = {
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
       if (b.overT > 0) continue;  // 迴旋：正在穿過打中的敵人，準備折返
       const orbit = b.mode === 'orbit';  // 環繞：繞圈時每碰到一次都算命中、照穿甲規則扣（同一隻隔 0.5 秒），穿甲用完就消失
-      for (const e of E) {
+      cand.length = 0;
+      if (grid.size) {
+        const pad = b.r + maxR, x0 = Math.floor((Math.min(b.px, b.x) - pad) / GS), x1 = Math.floor((Math.max(b.px, b.x) + pad) / GS),
+          y0 = Math.floor((Math.min(b.py, b.y) - pad) / GS), y1 = Math.floor((Math.max(b.py, b.y) + pad) / GS);
+        for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) { const L = grid.get(gx * 100000 + gy); if (L) for (const i of L) cand.push(i); }
+        if (cand.length > 1) cand.sort((p, q) => p - q);
+      }
+      for (let j = nE; j < E.length; j++) cand.push(j);  // 這一幀才出現的敵人
+      for (const ci of cand) {
+        const e = E[ci];
         if (e.dead) continue;
         if (orbit ? this.time < ((b.orbitCd && b.orbitCd.get(e.id)) || 0) : b.hitSet.has(e.id)) continue;
         const rr = b.r + e.r;
@@ -1113,13 +1146,23 @@ const Game = {
     }
     Q.length = 0;
     for (const s of SQ) {  // 碎片：從命中點往前方扇形散開
-      const { n, ratio, homing = 0 } = s.b.shards, list = [];
+      const { n, ratio, homing = 0, seek } = s.b.shards, list = [];
+      if (seek) {  // seek（雷射稜鏡）：命中點 350 內沒有別的敵人 → 碎光折回打原本那一隻（打王時碎光不會全部打空）
+        const e0 = this.enemies.find(o => o.id === s.ignore);
+        if (e0 && !e0.dead && !this.enemies.some(o => o !== e0 && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, s.x, s.y) < 350 * 350)) {
+          for (let k = 0; k < n && !e0.dead; k++) e0.hurt(s.b.damage * ratio, 0, 0, 'direct', s.b.att);
+          burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
+          continue;
+        }
+      }
       for (let k = 0; k < n; k++)
         list.push(shot({ angle: (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
           life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr }));
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }
-    this.bullets = B.filter(b => !b.dead);
+    let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）
+    for (let i = 0; i < B.length; i++) if (!B[i].dead) B[w++] = B[i];
+    B.length = w;
   },
   // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
   hitFx(e, b, dmg, x, y) {

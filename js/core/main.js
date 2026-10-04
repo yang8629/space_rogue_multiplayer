@@ -23,6 +23,7 @@ if (['#charts', '#mech', '#rules', '#chips', '#comps', '#weapons'].includes(loca
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
+  FPS.tick(now);
   last = now;
   TouchUI.sync();
   Music.update();

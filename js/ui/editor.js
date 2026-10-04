@@ -538,7 +538,7 @@ const Editor = {
       col.appendChild(socks);
       this.chainEl.appendChild(col);
     });
-    this.chainEl.insertAdjacentHTML('beforeend', `<div class="chaincount">電路 ${chain.filter(Boolean).length - 1} / ${chain.length - 1} 格<br><span>插座上 ${sockCount()} 個組件</span></div>`);
+    this.chainEl.insertAdjacentHTML('beforeend', `<div class="chaincount">電路 ${chain.filter(Boolean).length - 1} / ${chain.length - 1} 格<br><span>插座上 ${sockCount()} 個組件</span>${CFG.MECH_SLOT_EVERY && chain.length < CFG.MAX_SLOTS ? `<br><span>機體強化 ${(Game.mechN || 0) % CFG.MECH_SLOT_EVERY} / ${CFG.MECH_SLOT_EVERY} → 電路格 +1</span>` : ''}</div>`);
 
     this.invEl.innerHTML = '';
     Game.inventory.forEach((_, i) => this.invEl.appendChild(this.makeSlot(Game.inventory, i, 'inv', '倉庫 ' + (i + 1))));
