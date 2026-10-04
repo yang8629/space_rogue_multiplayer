@@ -777,7 +777,7 @@ const Net = {
     const p = Game.mate;
     if (!p || p.dead || Game.state !== 'play') return;
     p.x = clamp(num(m.x, p.x), p.r, Arena.W - p.r); p.y = clamp(num(m.y, p.y), p.r, Arena.H - p.r);
-    if (!Arena.rect) p.zone = Math.max(p.zone || 0, Arena.zoneOf(p.x, p.y));  // 大地圖：隊友在第幾區（撞牆、閘門由隊友的電腦算）
+    Arena.updateZone(p);  // 大地圖：隊友在第幾區（跟自己的飛船同一套：穿過打開的閘門才 +1；新戰鬥收到上一場的舊座標不會跳區）
     p.vx = num(m.vx); p.vy = num(m.vy); p.aim = num(m.a, p.aim);
     p.moving = !!m.mv; p.dashT = clamp(num(m.dT), 0, CFG.DASH_TIME); p.wantFire = !!m.f;
     p.dashSX = num(m.sx, p.x); p.dashSY = num(m.sy, p.y);  // 衝刺起點由隊友的電腦記（瞬移、衝刺途中穿門都在那邊算）
