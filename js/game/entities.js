@@ -708,7 +708,7 @@ class Enemy {
       const a = i / n * TAU + this.rot;
       const [ex, ey] = Arena.clampIn(this.x + Math.cos(a) * dist, this.y + Math.sin(a) * dist, 40);
       const e = new Enemy(type, ex, ey, this.hpScale * scale);
-      e.summoned = true;  // 旗艦叫出來的小怪不掉晶體
+      e.summoned = true; e.noGrow = true;  // 旗艦叫出來的小怪不掉晶體、不給晶片成長（跟母巢生的蟲群一樣）
       Game.enemies.push(e);
     }
     burst(this.x, this.y, this.t.color, 24, 200, 0.5, 2);
