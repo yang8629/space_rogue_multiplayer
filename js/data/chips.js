@@ -313,6 +313,14 @@ function growLine(id, growth, minutes) {
   return `<span style="color:#9dff6b">成長：${g.what} ${have} / ${growNeed(base, lv)}</span>${rate}　到了自動升 Lv${lv + 1}${lv + 1 >= 3 ? '（進化）' : ''}`;
 }
 
+// 電路格子底下的成長進度條（玩法晶片、還沒進化才有）
+function growBar(id) {
+  const base = baseOf(id), g = CHIPS[base] && CHIPS[base].grow, lv = levelOf(id);
+  if (!g || lv >= CFG.MAX_CHIP_LV) return '';
+  const have = Math.floor(Game.growth[base] || 0), need = growNeed(base, lv), f = Math.min(1, have / need);
+  return `<div class="gbar" title="成長：${g.what} ${have} / ${need} → Lv${lv + 1}${lv + 1 >= CFG.MAX_CHIP_LV ? '（進化）' : ''}"><i style="width:${Math.round(f * 100)}%"></i></div>`;
+}
+
 // 開局電路：武器＋三選一的起始晶片（沒選就空著）；組件不佔電路格，開局又沒有插座可插 → 放進倉庫（startInv）
 const startChain = chip => ['weapon', NORMAL_IDS.includes(chip) && !isComp(chip) ? newChip(chip) : null, ...Array(CFG.START_SLOTS - 2).fill(null)];
 const startInv = chip => { const inv = Array(CFG.INV_SLOTS).fill(null); if (NORMAL_IDS.includes(chip) && isComp(chip)) inv[0] = newChip(chip); return inv; };
