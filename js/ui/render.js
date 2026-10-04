@@ -487,6 +487,8 @@ function drawRangePanel() {
   }
 }
 
+// 每 0.5 秒算一次 FPS（主迴圈每幀呼叫 FPS.tick）
+const FPS = { v: 60, n: 0, t0: 0, tick(now) { this.n++; if (now - this.t0 >= 500) { this.v = Math.round(this.n * 1000 / (now - this.t0)); this.n = 0; this.t0 = now; } } };
 function drawHUD() {
   const p = Game.player, s = Game.stats, C = Game.combat, T = Input.touch;
   const hpW = Math.min(220, VW * 0.42);
@@ -538,6 +540,9 @@ function drawHUD() {
   ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '雙人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
   ctx.font = '12px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
   ctx.fillText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54);
+  // FPS（右上角最上面）：綠 ≥ 55、黃 ≥ 40、紅
+  ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b';
+  ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14);
   if (Game.mode === 'range') drawRangePanel();
   if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);

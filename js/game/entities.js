@@ -713,6 +713,20 @@ class Enemy {
     }
     burst(this.x, this.y, this.t.color, 24, 200, 0.5, 2);
   }
+  // 出招（以前固定順序輪流，背得起來）：加權隨機、不連續用同一招，再看情況調整
+  //   玩家離得遠（450 外）：瞄準型（扇形、狙擊、彈牆、衝鋒）多一點；玩家貼近（350 內）：範圍型（螺旋、環形、新星、十字、雙螺旋）多一點
+  //   叫出來的小怪還有 6 隻以上：少召喚；技能清單裡寫兩次的招式（獵艦的衝鋒）機率加倍；forceSkill：指定下一招（機制檢查用）
+  pickSkill(d) {
+    if (this.forceSkill) { const s = this.forceSkill; this.forceSkill = null; return s; }
+    const AIM = ['fan', 'snipe', 'wall', 'charge'], AREA = ['spiral', 'ring', 'nova', 'cross', 'twin'], CALL = ['summon', 'deploy', 'guard'];
+    const minions = Game.enemies.filter(e => e.summoned && !e.dead).length, cnt = {};
+    for (const k of this.t.skills) cnt[k] = (cnt[k] || 0) + 1;
+    const opts = Object.keys(cnt), w = opts.map(k => k === this.skill ? 0
+      : cnt[k] * (AIM.includes(k) ? (d > 450 ? 1.6 : 0.8) : AREA.includes(k) ? (d < 350 ? 1.6 : 1) : CALL.includes(k) && minions >= 6 ? 0.2 : 1));
+    let r = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < opts.length; i++) if ((r -= w[i]) < 0) return opts[i];
+    return opts[opts.length - 1];
+  }
   updateBoss(dt, dx, dy, d) {
     const t = this.t, rage = this.hp < this.maxHp * 0.5;
     this.blocked = (Game.objs.length ? Objects.losBlocked(this.x, this.y, this.x + dx, this.y + dy, 6) : null) || Arena.losPoint(this.x, this.y, this.x + dx, this.y + dy, 6);  // 大地圖：牆、柱子也算
@@ -789,7 +803,7 @@ class Enemy {
 
     this.skillCd -= dt * endlessAtk();
     if (this.skillCd > 0 || this.mode !== 'chase') return;
-    this.skill = t.skills[this.skillIdx++ % t.skills.length];
+    this.skill = this.pickSkill(d);
     switch (this.skill) {
       // 星噬母艦
       case 'spiral':

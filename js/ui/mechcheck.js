@@ -944,13 +944,22 @@ const MechCheck = {
       return { ok: windup && charged && maxShots > 0 && b.enraged && minions > 0,
         got: `預警${windup ? '有' : '沒有'}、衝鋒${charged ? '有' : '沒有'}，彈幕最多 ${maxShots} 發，${b.enraged ? '已暴走' : '沒有暴走'}，部署 ${minions} 隻噴吐者` };
     }],
+    ['敵人', '王出招', '加權隨機、不連續用同一招；玩家離得遠時瞄準型（扇形）比較多，貼近時範圍型（螺旋、環形）比較多', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const b = M.targets([[400, 0]], 'boss', false, 1)[0];
+      const roll = d => { const n = {}; let rep = 0, last = null; for (let i = 0; i < 400; i++) { const k = b.pickSkill(d); if (k === last) rep++; b.skill = last = k; n[k] = (n[k] || 0) + 1; } return { n, rep }; };
+      const far = roll(600), near = roll(200);
+      return { ok: far.rep === 0 && near.rep === 0 && Object.keys(far.n).length === 4 && far.n.fan > near.n.fan && near.n.spiral + near.n.ring > far.n.spiral + far.n.ring,
+        got: `連續同一招 ${far.rep + near.rep} 次；遠（600）扇形 ${far.n.fan}、螺旋＋環形 ${far.n.spiral + far.n.ring}；近（200）扇形 ${near.n.fan}、螺旋＋環形 ${near.n.spiral + near.n.ring}（各 400 次）` };
+    }],
     ['敵人', '終焉核心：缺口環形波與護衛', '環形波留有缺口，會召喚刺殼', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const b = M.targets([[400, 0]], 'boss3', false, 1)[0]; b.t = { ...b.t, dmg: 0 };
-      b.skillCd = 0;
-      b.update(1 / 60, Game.player);  // 第一招：缺口環形波（第一圈立刻發射）
+      b.skillCd = 0; b.forceSkill = 'nova';
+      b.update(1 / 60, Game.player);  // 指定第一招：缺口環形波（第一圈立刻發射；出招改成隨機之後要指定）
       b.update(1 / 60, Game.player);
       const first = Game.eBullets.length;
+      b.forceSkill = 'guard'; b.skillCd = 0;  // 出招是隨機的：指定下一招叫護衛
       for (let i = 0; i < 60 * 16; i++) b.update(1 / 60, Game.player);
       const brutes = Game.enemies.filter(e => e.type === 'brute').length;
       return { ok: first > 0 && first < 32 && brutes > 0, got: `第一圈 ${first} 發（滿圈 32），召喚 ${brutes} 隻刺殼` };
@@ -960,7 +969,7 @@ const MechCheck = {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
         const b = M.targets([[400, 0]], 'boss3', false, 1)[0]; b.t = { ...b.t, dmg: 0 };
         if (rage) b.hp = b.maxHp * 0.4;
-        b.skillIdx = b.t.skills.indexOf('bomb'); b.skillCd = 0; b.mode = 'chase';
+        b.forceSkill = 'bomb'; b.skillCd = 0; b.mode = 'chase';
         Game.zones = []; Game.eBullets = [];
         const p = Game.player; p.iframe = 0; p.hp = p.maxHp; const hp0 = p.hp;
         b.update(1 / 60, p);
