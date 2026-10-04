@@ -65,7 +65,7 @@ const Game = {
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.socks = mode === 'sandbox' ? [['split']] : [];
     this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
-    this.growth = {}; this.pullHits = 0; this.slotAttr = [];
+    this.growth = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false;  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
@@ -328,10 +328,18 @@ const Game = {
     Screen.reward();
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
+  // 保底：電路有空格時，零件只會出現在最後一格；上一次三選一沒有玩法晶片，這一次一定有（刷新也算一次）
   rewardOptions() {
-    const chips = pickN(this.chipOffers(), 3), parts = pickN(PART_IDS, 3);
-    const out = [0, 1, 2].map(i => Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i]));  // 晶片的插座數在這裡決定
-    return this.withComp(out);
+    const offers = this.chipOffers(), chips = pickN(offers, 3), parts = pickN(PART_IDS, 3), empty = this.chain.includes(null);
+    const out = this.withComp([0, 1, 2].map(i => (!empty || i === 2) && Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i])));  // 晶片的插座數在這裡決定
+    const isPlay = id => !String(id).startsWith('part:') && !!CHIPS[baseOf(id)].grow;
+    if (this.playDry && !out.some(isPlay)) {
+      const pool = offers.filter(id => CHIPS[id].grow && !out.some(o => CHIPS[o] && baseOf(o) === id));
+      const nComp = out.filter(isComp).length, k = out.findIndex(id => !isComp(id) || nComp > 1);  // 換掉零件、觸發器（或多出來的組件）；保底的那個組件留著
+      if (pool.length && k >= 0) out[k] = newChip(pick(pool));
+    }
+    this.playDry = !out.some(isPlay);
+    return out;
   },
   // 至少一格是組件（組件才填得滿插座）：沒抽到就隨機把一格換成組件
   withComp(ids) {

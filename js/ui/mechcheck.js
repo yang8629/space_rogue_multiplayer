@@ -610,7 +610,19 @@ const MechCheck = {
       }
       return { ok: seq.join() === '0,1,2,3,3', got: `打王前後：${seq.join(' → ')}` };
     }],
-    ['構築系統', '用量成長', '迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」；拿到重複的不會合成，獎勵也不再出現；照玩法打中後 1 秒內敵人死掉，晶片成長 + 牠的晶體值；散彈多顆打中同一隻只算一份；超過 1 秒不算', M => M.all([
+    ['構築系統', '三選一保底', '電路有空格時，零件只會出現在最後一格（滿了哪一格都可能）；上一次三選一沒有玩法晶片，這一次一定有', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      const N = 400, part = id => String(id).startsWith('part:'), play = id => !part(id) && !!CHIPS[baseOf(id)].grow;
+      let early = 0, last = 0, dry = 0;
+      for (let i = 0; i < N; i++) { Game.playDry = false; const o = Game.rewardOptions(); if (part(o[0]) || part(o[1])) early++; if (part(o[2])) last++; }
+      for (let i = 0; i < N; i++) { Game.playDry = true; if (!Game.rewardOptions().some(play)) dry++; }
+      Game.chain = ['weapon', 'boomerang', 'orbit', 'trigger'];
+      let full = 0;
+      for (let i = 0; i < N; i++) { const o = Game.rewardOptions(); if (part(o[0]) || part(o[1])) full++; }
+      return { ok: early === 0 && last > 0 && dry === 0 && full > 0,
+        got: `有空格：前兩格出現零件 ${early} 次、最後一格 ${last} 次；保底時沒有玩法晶片 ${dry} 次；電路滿了前兩格出現零件 ${full} 次（各 ${N} 次）` };
+    }],
+    ['構築系統', '用量成長','迴旋回程命中 180 次 → Lv2，540 次 → 進化「迴旋風暴」；拿到重複的不會合成，獎勵也不再出現；照玩法打中後 1 秒內敵人死掉，晶片成長 + 牠的晶體值；散彈多顆打中同一隻只算一份；超過 1 秒不算', M => M.all([
       M => {  // 用量成長
         M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
         Game.acquire('boomerang');
