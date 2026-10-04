@@ -21,9 +21,9 @@ const WEAPONS = {
         next: [
           { name: '三連發', desc: '一次射出 3 道雷射。', apply: p => { p.count = 3; p.spread = 0.14; } },
           { name: '高頻', desc: rateTxt(0.7) + '。', apply: p => { p.rate *= 0.7; } }] },
-      C: { name: '貫穿光束', desc: '穿透 +2，彈速 ×1.3。', apply: p => { p.pierce += 2; p.speed *= 1.3; },
+      C: { name: '貫穿光束', desc: '穿透 +2，彈速 ×1.3，傷害 ×1.25。', apply: p => { p.pierce += 2; p.speed *= 1.3; p.damage *= 1.25; },
         next: [
-          { name: '粒子光束', desc: '穿透再 +4，傷害 ×1.3。', apply: p => { p.pierce += 4; p.damage *= 1.3; } },
+          { name: '粒子光束', desc: '穿透再 +4，傷害 ×1.5。', apply: p => { p.pierce += 4; p.damage *= 1.5; } },
           { name: '過載射線', desc: '命中時爆炸（半徑 50，60% 傷害）。', apply: p => { p.explode = { r: 50, ratio: 0.6 }; } }] },
     } },
   scatter: { name: '散彈砲', short: '散彈', color: '#ffb347', desc: '扇形噴出 5 顆短程彈丸，近距離爆發高。',
