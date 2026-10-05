@@ -21,6 +21,14 @@ function polygon(x, y, r, sides, rot) {
 
 function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (GLR.on && GLR.ready) {  // 新畫面：世界（背景、地圖、子彈、敵人、飛船、數字）交給 WebGL 繪圖層，這層只畫 HUD
+    ctx.clearRect(0, 0, VW, VH);
+    GLR.render();
+    if (!Game.inArena) return;
+    drawHUD();
+    if (Input.touch && Game.state === 'play') drawSticks();
+    return;
+  }
   ctx.fillStyle = '#05060f';
   ctx.fillRect(0, 0, VW, VH);
   const c = Game.cam;

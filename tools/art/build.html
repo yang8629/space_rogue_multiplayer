@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>圖集產生工具</title>
+<!-- 星環電路 圖集產生工具：用 art_world.js、art_extra.js、render.js 的 drawShipArt 把所有貼圖畫出來，裝箱成 2048×2048 的圖集頁
+     由 mp_tests/perf/buildatlas.mjs 用瀏覽器打開、呼叫 window.buildAtlas()，把結果存成 assets/atlas_N.png、atlas.json、atlas_data.js -->
+<body style="background:#111;color:#ccc;font:13px sans-serif">
+<script>var Game = { time: 0 };</script>
+<script src="../../js/core/config.js"></script>
+<script src="../../js/data/ships.js"></script>
+<script src="../../js/ui/render.js"></script>
+<script src="art_world.js"></script>
+<script src="art_extra.js"></script>
+<script>
+'use strict';
+// 每一張貼圖：name、w／h（世界單位）、ox／oy（原點在框裡的位置，世界單位）、res（每個世界單位幾個像素）、draw(ctx)（原點在 ox, oy，單位是世界單位）
+const ENTRIES = [];
+const add = (name, w, h, ox, oy, res, draw) => ENTRIES.push({ name, w, h, ox, oy, res, draw });
+const sq = (name, half, res, draw) => add(name, half * 2, half * 2, half, half, res, draw);  // 以原點為中心的正方形框
+const E = id => ENEMIES.find(e => e.id === id);
+
+// ---- 敵人：照遊戲裡的行為做成動畫格（船頭朝 +x） ----
+function enemyFrames() {
+  const R = 2;  // 每單位 2 像素
+  const anim = (id, half, n, period, fn) => { const e = E(id); for (let k = 0; k < n; k++) sq(`e/${id}/${k}`, e.r * half, R, ctx => fn(ctx, e.col, e.r, k / n * period, k / n)); };
+  anim('swarmer', 1.7, 6, TAU / 40, (c, col, r, t) => drawSwarmer(c, col, r, t));
+  anim('brute', 2.0, 1, 1, (c, col, r) => drawBrute(c, col, r, 0, false));
+  sq('e/brute_ball/0', E('brute').r * 2.0, R, c => drawBrute(c, E('brute').col, E('brute').r, 0, true));
+  anim('spitter', 2.1, 8, 1, (c, col, r, t, u) => drawSpitter(c, col, r, 1.8 * (0.75 + 0.25 * u)));  // 第 0 格沒鼓起；之後是開火前鼓起的過程
+  anim('elite', 2.5, 16, TAU / 1.1, (c, col, r, t) => drawElite(c, col, r, t));
+  for (let k = 0; k < 5; k++) sq(`e/gunboat/${k}`, E('gunboat').r * 1.5, R, c => drawGunboat(c, E('gunboat').col, E('gunboat').r, 0, k / 4, 0));  // 蓄力 0～1
+  const w = E('worm');
+  for (let g = 0; g < 4; g++) for (let k = 0; k < 4; k++) sq(`e/worm_head/${g * 4 + k}`, w.r * 1.7, 3, c => artWormSeg(c, w.col, w.r, 'head', k / 4 * TAU, g / 3));  // 大顎長出來（g）× 腳（k）
+  for (let k = 0; k < 4; k++) { sq(`e/worm_body/${k}`, w.r * 1.5, 3, c => artWormSeg(c, w.col, w.r, 'body', k / 4 * TAU)); sq(`e/worm_tail/${k}`, w.r * 1.6, 3, c => artWormSeg(c, w.col, w.r, 'tail', k / 4 * TAU)); }
+  anim('shield', 1.95, 12, TAU / 1.6, (c, col, r, t) => drawShieldGuard(c, col, r, t));
+  anim('splitter', 1.7, 8, TAU / 3, (c, col, r, t) => drawSplitter(c, col, r, t));
+  sq('e/splitling/0', E('splitling').r * 1.9, 3, c => drawShard(c, E('splitling').col, E('splitling').r * 1.8, 0, 0, true));
+  anim('lurker', 3.3, 4, TAU / 9, (c, col, r, t) => drawLurker(c, col, r, t));
+  anim('hive', 1.7, 16, 4, (c, col, r, t) => drawHiveNest(c, col, r, t));
+  anim('dummy', 1.5, 1, 1, (c, col, r) => drawDummy(c, col, r, 0));
+  anim('boss', 1.05, 16, 2, (c, col, r, t) => artBoss1Body(c, col, r, t));
+  sq('e/boss_ring/0', E('boss').r * 1.27, R, c => artBoss1Ring(c, E('boss').col, E('boss').r));
+  anim('boss2', 1.75, 4, TAU / 7, (c, col, r, t) => drawBoss2(c, col, r, t));
+  const b3 = E('boss3');
+  for (let k = 0; k < 8; k++) sq(`e/boss3_core/${k}`, b3.r * 0.95, R, c => artBoss3Core(c, b3.col, b3.r, 0.5 + 0.5 * Math.sin(k / 8 * TAU)));
+  sq('e/boss3_ring_out/0', b3.r * 1.4, R, c => artBoss3Ring(c, b3.col, b3.r, b3.r * 1.2, b3.r * 0.2, 1));
+  sq('e/boss3_ring_in/0', b3.r * 1.05, R, c => artBoss3Ring(c, b3.col, b3.r, b3.r * 0.88, b3.r * 0.17, 4));
+}
+// ---- 飛船：船身（重裝甲 0～4 層）、噴焰、背包模組效果 ----
+function shipFrames() {
+  for (const [id, S] of Object.entries(SHIPS)) for (let a = 0; a <= 4; a++) sq(`s/${id}/${a}`, 26, 4, c => drawShipArt(c, S, { armor: a }));
+  sq('s/flame', 1, 32, c => { c.translate(0.5, 0); artFlame(c); });  // 原點在框中間；噴焰從 +0.5 往左畫（遊戲裡錨點設在右邊）
+  for (const id of ['shield', 'reactive', 'endshell']) sq(`m/${id}`, 40, 3, c => artModuleFx(c, id, true));
+  for (const id of ['gravity', 'thruster']) sq(`m/${id}`, 40, 3, c => artModuleFx(c, id, false));
+  for (let k = 0; k < 8; k++) sq(`m/swarmcore/${k}`, 40, 3, c => moduleFx(c, MODS.find(m => m.id === 'swarmcore'), k / 8 * TAU / 4, true));
+  sq('m/drone', 9, 4, c => artDrone(c));
+}
+// ---- 子彈、粒子、晶體、光暈 ----
+function fxFrames() {
+  sq('b/dot', 1.2, 32, artBulletDot);
+  sq('b/halo', 1, 32, artBulletHalo);
+  add('b/line', 1, 1, 1, 0.5, 32, artBulletLine);  // 原點在右邊中間（子彈頭）
+  sq('b/dart', 2.3, 16, artBulletDart);
+  sq('b/blade', 1.1, 48, artBulletBlade);
+  sq('b/ring', 1, 64, artRing);
+  sq('eb', 2.05, 16, artEnemyBullet);
+  sq('p/sq', 0.5, 8, artSquare);
+  sq('glow', 1, 64, artGlow);
+  sq('pickup', 6.5, 3, artPickup);
+}
+// ---- 地圖物件 ----
+function objFrames() {
+  globalThis.ART_NO_ORBIT = true;
+  sq('o/planet', 100 * 1.4, 1.5, c => artPlanetTex(c, 100));
+  sq('o/hole_core', 42, 2, c => artHoleCore(c, 40));
+  sq('o/hole_disk', 82, 2, c => artHoleDisk(c, 40));
+  for (let k = 0; k < 6; k++) sq(`o/rock/${k}`, 36, 2, c => artRockTex(c, 32, k * 1.7));
+  sq('o/comet', 28, 2, c => artCometHead(c, 24));
+}
+// ---- 牆：貼磚、邊緣裝飾、閘門發射器 ----
+function wallFrames() {
+  const T = 512, N = { rock: 8, lava: 6, organic: 6, ice: 6, metal: 1, ruins: 6 }, H = { rock: 24, lava: 20, organic: 32, ice: 42, metal: 16, ruins: 32 };
+  for (const sty of Object.keys(WALL_STYLES)) {
+    add(`w/${sty}/tile`, T, T, 0, 0, 1, c => artWallTile(c, sty, T));
+    for (let k = 0; k < N[sty]; k++) sq(`w/${sty}/deco/${k}`, H[sty], 2, c => artWallDeco(c, sty, k));
+    sq(`w/${sty}/gate`, 12, 3, c => artGateEmitter(c, sty));
+  }
+}
+
+// ---- 裝箱：照高度排，一列一列放進 2048×2048 的頁；每張四周留 2 像素 ----
+function buildAtlas() {
+  ENTRIES.length = 0;
+  enemyFrames(); shipFrames(); fxFrames(); objFrames(); wallFrames();
+  const P = 2048, PAD = 2, items = ENTRIES.map(e => ({ e, pw: Math.ceil(e.w * e.res) + PAD * 2, ph: Math.ceil(e.h * e.res) + PAD * 2 }));
+  items.sort((a, b) => b.ph - a.ph || b.pw - a.pw);
+  const pages = [], frames = {};
+  let page = null, x = 0, y = 0, rowH = 0;
+  const newPage = () => { const cv = document.createElement('canvas'); cv.width = cv.height = P; page = { cv, ctx: cv.getContext('2d') }; pages.push(page); x = 0; y = 0; rowH = 0; };
+  newPage();
+  for (const it of items) {
+    if (it.pw > P || it.ph > P) throw new Error('太大：' + it.e.name);
+    if (x + it.pw > P) { x = 0; y += rowH; rowH = 0; }
+    if (y + it.ph > P) newPage();
+    const { e } = it, c = page.ctx;
+    c.save(); c.beginPath(); c.rect(x, y, it.pw, it.ph); c.clip();
+    c.translate(x + PAD + e.ox * e.res, y + PAD + e.oy * e.res); c.scale(e.res, e.res);
+    try { e.draw(c); } catch (err) { throw new Error(e.name + '：' + err.message); }
+    c.restore();
+    frames[e.name] = { page: pages.length - 1, x: x + PAD, y: y + PAD, w: Math.ceil(e.w * e.res), h: Math.ceil(e.h * e.res), ax: e.ox / e.w, ay: e.oy / e.h, res: e.res };
+    x += it.pw; rowH = Math.max(rowH, it.ph);
+  }
+  return { pages: pages.map(p => p.cv.toDataURL('image/png')), frames, count: ENTRIES.length };
+}
+window.buildAtlas = buildAtlas;
+</script>
