@@ -44,20 +44,14 @@ const GLActors = {
   wormInfo() {
     const W = Game.enemies.filter(e => e.type === 'worm' && !e.dead), behind = new Set(), now = Game.time;
     this.wormHead = new Set(); this.wormTail = new Set();
-    const host = W.length && W[0].ahead !== undefined;
-    for (const e of W) {
+    for (const e of W) {  // ahead：房主是真的連結；隊友那邊由同步的 id 接回（net.js applySnap）
       let a = e.ahead; while (a && a.dead) a = a.ahead;
-      if (host) { if (a) behind.add(a); else this.wormHead.add(e); }
-      else {  // 隊友那邊沒有 ahead：前方 30 內沒有別節 → 頭
-        const sp = Math.hypot(e.vx, e.vy) || 1, ux = e.vx / sp, uy = e.vy / sp;
-        if (!W.some(o => o !== e && Math.abs((o.x - e.x) - ux * 22) < 12 && Math.abs((o.y - e.y) - uy * 22) < 12)) this.wormHead.add(e);
-        const nb = W.find(o => o !== e && Math.abs((o.x - e.x) + ux * 22) < 12 && Math.abs((o.y - e.y) + uy * 22) < 12); if (nb) behind.add(e);
-      }
+      if (a) behind.add(a); else this.wormHead.add(e);
     }
     for (const e of W) {
       if (!behind.has(e)) this.wormTail.add(e);
       const m = this.worm.get(e.id);
-      if (this.wormHead.has(e)) { if (!m) this.worm.set(e.id, { t: e.spawnT > 0 || W.length === 1 || !host ? -9 : now }); }  // 一出生就是頭：不播長出來的動畫
+      if (this.wormHead.has(e)) { if (!m) this.worm.set(e.id, { t: e.spawnT > 0 || W.length === 1 ? -9 : now }); }  // 一出生就是頭：不播長出來的動畫
       else if (m) this.worm.delete(e.id);
     }
     if (this.worm.size > 200) for (const k of this.worm.keys()) if (!W.some(e => e.id === k)) this.worm.delete(k);
