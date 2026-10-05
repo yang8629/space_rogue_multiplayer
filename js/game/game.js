@@ -1002,12 +1002,13 @@ const Game = {
     if (!this.inArena) { this.cam.x += dt * 20; this.cam.y += dt * 8; }
     if (Net.role === 'host' && this.mode === 'coop') Net.hostSend(dt);
   },
-  // 盾衛的盾是實心的：飛船撞到盾（盾那一側 ±60°、盾外緣 r+13 以內）會被推到盾外，回傳 true（房主再算撞擊傷害）
+  // 盾衛的盾是實心的：飛船撞到盾（盾那一側 ±60°、盾外緣 r+13 以內）會被推到盾外、往外彈開（0.2 秒不吃操控），回傳 true（房主再算撞擊傷害）
   //   雙人：隊友自己的船由隊友那邊推（net.js clientUpdate），不然會被自己送來的位置蓋掉
   shieldBlock(e, p) {
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, R = e.r + 13 + p.r;
     if (d >= R || Math.abs(angleDiff(Math.atan2(dy, dx), e.shieldA)) >= Math.PI / 3) return false;
     p.x = e.x + dx / d * R; p.y = e.y + dy / d * R;
+    if (!(p.dashT > 0)) { p.vx = dx / d * 520; p.vy = dy / d * 520; p.kbT = 0.2; }
     return true;
   },
   updateEnemies(dt) {
@@ -1384,7 +1385,7 @@ const Game = {
       }
       this.withLoadout(b.owner, () => {
         if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
-          life: 2, color: '#9dff6b', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);  // 反射鏡：每顆都反彈（一顆換一顆，不受冷卻）
+          life: 2, color: '#9dff6b', shape: 'reflect', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);  // 反射鏡：每顆都反彈（一顆換一顆，不受冷卻）
       });
       return true;
     }
@@ -1431,7 +1432,7 @@ const Game = {
     let rx = vx - 2 * dot * nx, ry = vy - 2 * dot * ny;
     if (rx * nx + ry * ny < 0.3) { rx = nx; ry = ny; }  // 擦邊的也往外彈
     const l = Math.hypot(rx, ry) || 1, spd = clamp(b.speed * 0.6, 200, 450), dmg = Math.min(25, hitDamage(b) * 0.5);
-    this.eBullets.push({ x: e.x + nx * (e.r + 8), y: e.y + ny * (e.r + 8), vx: rx / l * spd, vy: ry / l * spd, r: 5, dmg, life: 2.5, from: e.t.name });
+    this.eBullets.push({ x: e.x + nx * (e.r + 8), y: e.y + ny * (e.r + 8), vx: rx / l * spd, vy: ry / l * spd, r: 5, dmg, life: 2.5, from: e.t.name, col: b.color });  // col：原本子彈的顏色（畫成紅框＋原本顏色的芯）
     b.dead = true;
     burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 6, 160, 0.25, 2);
   },

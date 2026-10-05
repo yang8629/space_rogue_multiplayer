@@ -1042,16 +1042,16 @@ const MechCheck = {
       const front = shoot(Math.PI), back = shoot(0);
       return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發' };
     }],
-    ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外並受撞擊傷害；背面同樣距離沒事', M => {
+    ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外、往外彈開並受撞擊傷害；背面同樣距離沒事', M => {
       const bump = ang => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
         const p = Game.player, e = M.targets([[150, 0]], 'shield', true, 1)[0]; e.shieldA = ang; e.t = { ...e.t, dmg: ENEMY_TYPES.shield.dmg };
         p.x = e.x - (e.r + p.r + 6); p.y = e.y; p.iframe = 0; p.vx = p.vy = 0; const hp = p.hp;
         Game.updateEnemies(1 / 60);
-        return { dmg: hp - p.hp, d: Math.hypot(p.x - e.x, p.y - e.y), R: e.r + 13 + p.r };
+        return { dmg: hp - p.hp, d: Math.hypot(p.x - e.x, p.y - e.y), R: e.r + 13 + p.r, out: -p.vx };  // 盾朝左：往外 = 往左
       };
       const front = bump(Math.PI), back = bump(0);
-      return { ok: front.dmg > 0 && front.d >= front.R - 0.5 && back.dmg === 0 && back.d < back.R - 1, got: '盾那側：扣 ' + Math.round(front.dmg) + '、推到 ' + Math.round(front.d) + '（盾外緣 ' + front.R + '）；背面：扣 ' + Math.round(back.dmg) + '、距離 ' + Math.round(back.d) };
+      return { ok: front.dmg > 0 && front.d >= front.R - 0.5 && front.out > 300 && back.dmg === 0 && back.d < back.R - 1, got: '盾那側：扣 ' + Math.round(front.dmg) + '、推到 ' + Math.round(front.d) + '（盾外緣 ' + front.R + '）、往外彈 ' + Math.round(front.out) + '；背面：扣 ' + Math.round(back.dmg) + '、距離 ' + Math.round(back.d) };
     }],
     ['敵人', '分裂體', '死掉時分成 3 隻碎裂體', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

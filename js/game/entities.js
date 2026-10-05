@@ -156,6 +156,8 @@ class Player {
       this.vy = Math.sin(this.dashA) * sp;
       if (Game.particles.length < 1500)
         Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.ship.color, size: 5 });
+    } else if (this.kbT > 0) {  // 被彈開（盾衛的盾）：這段時間不吃操控，速度慢慢減
+      this.kbT -= dt; const f = Math.max(0, 1 - dt * 4); this.vx *= f; this.vy *= f;
     } else {
       const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed) * Game.mech.speed, k = Math.min(1, dt * 12);
       this.vx += (mx / l * spd - this.vx) * k;

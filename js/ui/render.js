@@ -271,9 +271,9 @@ function drawEnemyBullets() {
   for (const b of Game.eBullets) {
     ctx.fillStyle = 'rgba(255, 30, 30, 0.35)';
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = '#2a0000'; ctx.lineWidth = 2;
+    ctx.fillStyle = b.col || '#ff2a2a'; ctx.strokeStyle = b.col ? '#ff2a2a' : '#2a0000'; ctx.lineWidth = 2;  // 盾衛反彈：芯是原本子彈的顏色、紅框
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#ffd0d0';
+    ctx.fillStyle = b.col ? '#ffffff' : '#ffd0d0';
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
   }
 }
@@ -388,6 +388,10 @@ function drawBullet(b, fa = 1) {  // fa：整體透明度（飛船附近變淡�
     ctx.lineWidth = b.r; ctx.lineCap = 'round';
     const t = tail(b, 18);
     ctx.beginPath(); ctx.moveTo(b.x - cos * t, b.y - sin * t); ctx.lineTo(b.x, b.y); ctx.stroke();
+  } else if (b.shape === 'reflect') {  // 反射鏡反彈：敵彈的圓球外形（外圈＋實心＋亮芯）、我方的顏色
+    ctx.globalAlpha = 0.25 * fa; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.7 * fa; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+    ctx.globalAlpha = fa; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
   } else if (b.shape === 'dart') {
     ctx.beginPath();
     ctx.moveTo(b.x + cos * b.r * 2.2, b.y + sin * b.r * 2.2);
