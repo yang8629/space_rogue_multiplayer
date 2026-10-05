@@ -11,7 +11,8 @@ const CFG = {
   DASH_SPEED: 900, DASH_TIME: 0.14,
   COMET_SHARD_DMG: 10,      // 彗星打爆後的碎片打到飛船的傷害（每片）
   SWARMCORE: { every: 6, dirs: 6 },
-  COUNTER: { win: 0.1, per: 0.15, max: 3 },  // 攔截回射：第一顆擋下後 win 秒內擋下的合成一次回射，每多 1 顆傷害 +per，最多 ×max
+  // 攔截回射：第一顆擋下的位置開一個集氣池，win 秒內 join 以內擋下的都合進去，時間到回射一次（每多 1 顆傷害 +per，最多 ×max）；離所有集結點太遠就另開一個池
+  COUNTER: { win: 0.2, per: 0.3, max: 4, join: 300 },
   BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
   START_SLOTS: 4, MAX_SLOTS: 8, INV_SLOTS: 6,
   MECH_SLOT_EVERY: 0,       // 機體強化（零件每 1 層、背包模組）每拿幾個，電路格 +1（0 = 關閉）

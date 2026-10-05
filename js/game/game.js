@@ -904,7 +904,7 @@ const Game = {
   // 每場戰鬥開始時重置的機體狀態
   resetMechCombat(p) {
     p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
-    p.portalCd = 0; p.pullV = null; p.icW = null;
+    p.portalCd = 0; p.pullV = null; p.icWs = [];
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1356,11 +1356,13 @@ const Game = {
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
       if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
-      // 合併回射：第一顆擋下的位置當集結點，0.1 秒內再擋下的用綠色電弧拉進集結點，時間到才回射一次（每多 1 顆 +15%，最多 ×3）
-      //   不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
-      const p = (b.owner ? this.mate : this.player) || this.player, W = p.icW;
+      // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
+      //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
+      const p = (b.owner ? this.mate : this.player) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
+      let W = null, wd = C.join * C.join;
+      for (const w of Ws) { const d = dist2(w.x, w.y, eb.x, eb.y); if (d <= wd) { wd = d; W = w; } }
       if (!W) {
-        p.icW = { x: eb.x, y: eb.y, ang: b.angle, n: 1, t: CFG.COUNTER.win };
+        Ws.push({ x: eb.x, y: eb.y, ang: b.angle, n: 1, t: C.win });
         this.fxRing(eb.x, eb.y, 18, '#9dff6b');
       } else {
         W.n++;
@@ -1383,12 +1385,14 @@ const Game = {
     if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color });
     if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
   },
-  // 合併回射的計時（在 withLoadout 裡呼叫）：時間到就從集結點回射
+  // 合併回射的計時（在 withLoadout 裡呼叫）：每個池時間到就從它的集結點回射
   tickCounter(p, dt) {
-    const W = p.icW;
-    if (!W || (W.t -= dt) > 0) return;
-    p.icW = null;
-    this.counterFire(W.x, W.y, W.ang, this.counterMult(W.n));
+    const Ws = p.icWs;
+    for (const W of Ws) W.t -= dt;
+    const due = Ws.filter(W => W.t <= 0);
+    if (!due.length) return;
+    p.icWs = Ws.filter(W => W.t > 0);
+    for (const W of due) this.counterFire(W.x, W.y, W.ang, this.counterMult(W.n));
   },
   // 攔截回射：從集結點用整條電路朝最近的敵人射出（沒有敵人就照攔截子彈的方向）；mult > 1 的越大、越亮、越白
   counterFire(x, y, ang, mult) {
@@ -1494,7 +1498,7 @@ const Game = {
   },
   updateEnemyBullets(dt) {
     const ps = this.players();
-    for (const p of ps) if (p.icW) this.withLoadout(p.L, () => this.tickCounter(p, dt));  // 合併回射：0.1 秒到就射
+    for (const p of ps) if (p.icWs && p.icWs.length) this.withLoadout(p.L, () => this.tickCounter(p, dt));  // 合併回射：集氣時間到就射
     // 攔截晶片、相位刃的格擋：打掉敵彈。飛回來途中的迴旋不能攔截（攔截會用整條電路重射，裡面又有迴旋 → 飛回飛船附近又攔截，子彈一直翻倍）
     //   攔截重射出來的子彈（和它們觸發的回響）也不能再攔截：不然「攔截 → 重射 → 再攔截」會一直滾大
     const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return' && !b.fromIntercept) || b.parry) && b.mode !== 'wait');
