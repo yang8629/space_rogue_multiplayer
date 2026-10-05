@@ -19,6 +19,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
+  if (k === 'f2') { e.preventDefault(); if (!e.repeat) GLR.toggle(); return; }  // 新畫面（WebGL）／舊畫面
   if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k, e.shiftKey)) return;
   if (k === ' ') { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
@@ -116,5 +117,6 @@ function resize() {
   canvas.style.width = VW + 'px'; canvas.style.height = VH + 'px';
   ZOOM = clamp(Math.min(VW, VH) / 720, 0.55, 1);
   ZW = VW / ZOOM; ZH = VH / ZOOM;
+  if (typeof GLR !== 'undefined') GLR.resize();
 }
 addEventListener('resize', resize);
