@@ -16,6 +16,7 @@ const NET_VOTE_TIME = 20;  // 兩人都回到航圖後的投票時間（秒）
 const NET_REJOIN_TIME = 120;  // 斷線後房間保留多久等隊友重連（秒）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
+const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; return a ? a.id : 0; };
 
 const Net = {
   role: null,          // null = 單人；'host' = 房主；'client' = 加入的隊友
@@ -806,9 +807,10 @@ const Net = {
     this.send({
       t: 's',
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
-        P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT)],
+        P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT),
+        P.gravField ? P.gravField.R : 0, P.shield || 0],  // 重力井範圍、護盾層數（隊友那邊畫房主的船用）
       me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0)] : null,  // 最後一個：修復無人機的可回復量（畫血條用）
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), m.gravField ? m.gravField.R : 0] : null,  // 修復無人機的可回復量（畫血條用）、重力井範圍
       gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
@@ -817,7 +819,9 @@ const Net = {
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
-        e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0)]),  // 盾衛的盾方向、潛伏者的隱形程度
+        e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0),  // 盾衛的盾方向、潛伏者的隱形程度
+        e.type === 'spitter' || e.type === 'hive' ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 開火倒數（噴吐者鼓起、母巢脈動）、弱點標記／破甲
+        e.type === 'worm' ? wormAhead(e) : null]),  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
       b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
         ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
       eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r]),
@@ -841,6 +845,7 @@ const Net = {
       // 兩次戰場狀態之間：照速度往前推，畫面才會滑順
       for (const e of G.enemies) {
         e.modeT -= dt;
+        if (e.cd !== undefined) e.cd -= dt;
         if (e.spawnT > 0) e.spawnT -= dt;
         else { e.x += e.vx * dt; e.y += e.vy * dt; }
       }
@@ -877,6 +882,7 @@ const Net = {
       m.x = num(p[0], m.x); m.y = num(p[1], m.y); m.aim = num(p[2]); m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
       m.dashT = num(p[5]); m.iframe = num(p[6]); m.overdrive = p[7] ? 1 : 0; m.moving = !!p[8]; m.dead = !!p[9];
       m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
+      m.gravField = p[13] > 0 ? { R: num(p[13]), slow: 0 } : null; m.shield = clamp(num(p[14]), 0, 9);
     }
     const P = G.player;
     if (Array.isArray(s.me)) {  // 自己的血量以房主為準
@@ -892,6 +898,7 @@ const Net = {
       else if (!s.me[3] && P.dead && hp > 0) { P.dead = false; P.vx = P.vy = 0; P.iframe = CFG.REVIVE.iframe; }  // 被隊友救起來
       P.reviveT = num(s.me[5]);
       P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]); P.shield = num(s.me[9]);
+      P.gravField = s.me[11] > 0 ? { R: num(s.me[11]), slow: 0 } : null;
     }
     if (s.gr && typeof s.gr === 'object') {  // 用量成長：房主算好的累積量，這邊只增不減，到了就升級
       let up = false;
@@ -904,8 +911,11 @@ const Net = {
       return { id: a[0], type: a[1], t, r: t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
         hp: num(a[6]), maxHp: num(a[7], 1), rot: num(a[8]), flash: a[9] ? 0.08 : 0, spawnT: num(a[10]), spawnMax: num(a[11], 1) || 1,
         mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
-        shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false };
+        shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false,
+        cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: a[1] === 'worm' ? num(a[23]) : undefined };
     }).filter(Boolean);
+    const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）
+    for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;
     const pal = arr(s.pal);
     G.bullets = arr(s.b).map(a => {
       const ang = num(a[2]), tl = num(a[10]);
