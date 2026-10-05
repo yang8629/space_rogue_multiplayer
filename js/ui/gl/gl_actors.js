@@ -95,7 +95,7 @@ const GLActors = {
         main = this.spr(this.frame('boss', Math.floor(t / 2 * 16) % 16), e.x, e.y, k / 2, 0);
         break;
       }
-      case 'boss2': main = base('boss2', 4, TAU / 7); if (e.enraged) this.glowAt(this.pE, e.x, e.y, e.r * 1.2, 0xffd166, 0.3); break;
+      case 'boss2': main = base('boss2', 4, TAU / 7); main.tint = 0xdcd6ec; if (e.enraged) this.glowAt(this.pE, e.x, e.y, e.r * 1.2, 0xffd166, 0.3); break;
       case 'boss3': {
         const o = this.spr(this.frame('boss3_ring_out', 0), e.x, e.y, k / 2, t * 0.35); o.alpha = alpha;
         const i = this.spr(this.frame('boss3_ring_in', 0), e.x, e.y, k / 2, -t * 0.6); i.alpha = alpha;
