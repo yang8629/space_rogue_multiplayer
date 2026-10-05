@@ -74,6 +74,15 @@ const GLWorld = {
     if (tile) fill.fill(new PIXI.FillPattern(tile, 'repeat')); else fill.fill({ color: 0x131a33 });
     for (const l of Arena.loops) fill.poly(l.flat()).cut();
     C.addChild(fill);
+    this.flow = null;
+    const fl = GLR.flows[sty];
+    if (fl && fl.length) {  // 流動的亮光：跟貼磚一樣從世界原點開始鋪（tilePosition 補回位移）
+      const mask = new PIXI.Graphics(); mask.rect(-4000, -4000, Arena.W + 8000, Arena.H + 8000).fill({ color: 0xffffff });
+      for (const l of Arena.loops) mask.poly(l.flat()).cut();
+      const ts = new PIXI.TilingSprite({ texture: fl[0], width: Arena.W + 8000, height: Arena.H + 8000 });
+      ts.position.set(-4000, -4000); ts.tilePosition.set(4000, 4000); ts.blendMode = 'add'; ts.mask = mask;
+      C.addChild(mask, ts); this.flow = { ts, frames: fl };
+    }
     // 邊：深色底線＋材質色的細線
     const edge = new PIXI.Graphics();
     for (const l of Arena.loops) edge.poly(l.flat(), true);
@@ -146,6 +155,7 @@ const GLWorld = {
   },
   wallAnim() {
     const t = Game.time, sty = this.style;
+    if (this.flow) { const F = this.flow.frames, k = Math.floor(t / (sty === 'lava' ? 2.4 : 1.6) * F.length) % F.length; if (this.flow.ts.texture !== F[k]) this.flow.ts.texture = F[k]; }
     if (this.glowEdge && (sty === 'lava' || sty === 'organic')) this.glowEdge.alpha = 0.75 + 0.25 * Math.sin(t * (sty === 'lava' ? 2 : 3));
     if (!this.lights) return;
     if (sty === 'metal') { const on = Math.floor(t * 4) % 6; for (const L of this.lights) L.s.alpha = (L.k % 6) === on ? 0.9 : 0; }

@@ -55,14 +55,16 @@ const GLR = {
       this.tex[name] = t;
     }
     // 牆面貼磚要能重複鋪：另外做成獨立的貼圖
-    this.tiles = {};
+    this.tiles = {}; this.flows = {};
     for (const [name, f] of Object.entries(A.frames)) {
-      if (!name.endsWith('/tile')) continue;
+      const flow = name.match(/^w\/(\w+)\/flow\/(\d+)$/);
+      if (!name.endsWith('/tile') && !flow) continue;
       const cv = document.createElement('canvas'); cv.width = f.w; cv.height = f.h;
       const img = bases[f.page].resource;
       cv.getContext('2d').drawImage(img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
       const t = PIXI.Texture.from(cv); t.source.addressMode = 'repeat';
-      this.tiles[name.split('/')[1]] = t;
+      if (flow) (this.flows[flow[1]] = this.flows[flow[1]] || [])[+flow[2]] = t;
+      else this.tiles[name.split('/')[1]] = t;
     }
   },
   T(name) { return this.tex[name] || PIXI.Texture.WHITE; },
