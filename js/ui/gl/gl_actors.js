@@ -169,6 +169,7 @@ const GLActors = {
       const len = 9 + n('booster') * 4 + Math.sin(t * 40) * 2 + rand(0, 3), fr = GLR.res('s/flame');
       const f = sprL(GLR.T('s/flame'), A.nx - 2.8, 0, 1); f.anchor.set(0.75, 0.5); f.scale.set(len / fr, 6.4 / fr); f.alpha = fade * rand(0.75, 1); f.blendMode = 'add'; if (n('booster')) f.tint = 0xcfeeff;
     }
+    if (A.id === 'gate') sprL(GLR.T('s/gate_ring'), -9, 0, 1 / 4, t * 2);  // 星門號：船尾旋轉的傳送環
     // 船身（重裝甲層數決定哪一張）
     sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4);
     // 背包模組（船上面那層）

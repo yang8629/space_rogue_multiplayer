@@ -397,6 +397,10 @@ const SHIP_ART = new Map(Object.entries(SHIPS).map(([id, S]) => {
   return [S, { id, nose, rear, nx: notch[0], hi: mixWhite(col, 0.35), lo1: mixBlack(col, 0.25), lo2: mixBlack(col, 0.7),
     trim: mixWhite(col, 0.3), fin: mixWhite(col, 0) + 'b3', ring: mixWhite(col, 0) + 'cc' }];
 }));
+function drawGateRing(c, A) {  // 星門號的傳送環（原點在環中心）
+  c.strokeStyle = A.ring; c.lineWidth = 1.3; c.setLineDash([3, 3]);
+  c.beginPath(); c.arc(0, 0, 7.5, 0, TAU); c.stroke(); c.setLineDash([]);
+}
 function drawShipArt(c, S, o = {}) {
   const A = SHIP_ART.get(S), col = S.color, t = Game.time, x1 = A.nx - 2.8, x0 = A.nx + 1.5;
   const hull = () => { c.beginPath(); S.hull.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); };
@@ -409,10 +413,8 @@ function drawShipArt(c, S, o = {}) {
     c.strokeStyle = A.fin; c.lineWidth = 1.4;
     for (const sg of [-1, 1]) { c.beginPath(); c.moveTo(-8, sg * 6); c.lineTo(-19, sg * 10); c.stroke(); }
   }
-  if (A.id === 'gate') {  // 星門：船尾旋轉的傳送環
-    c.save(); c.translate(-9, 0); c.rotate(t * 2);
-    c.strokeStyle = A.ring; c.lineWidth = 1.3; c.setLineDash([3, 3]);
-    c.beginPath(); c.arc(0, 0, 7.5, 0, TAU); c.stroke(); c.setLineDash([]); c.restore();
+  if (A.id === 'gate' && !o.noRing) {  // 星門：船尾旋轉的傳送環（新畫面另外用 s/gate_ring 貼圖轉）
+    c.save(); c.translate(-9, 0); c.rotate(t * 2); drawGateRing(c, A); c.restore();
   }
   // 深色描邊（剪影）；衝刺／超頻時發船色光暈
   if (o.hot) { c.shadowBlur = 22; c.shadowColor = col; }
