@@ -106,7 +106,7 @@ function drawWorld() {
   }
   for (const z of Game.zaps) {  // 電弧：鋸齒狀的閃電
     ctx.globalAlpha = z.life / z.max;
-    ctx.strokeStyle = '#9fe8ff'; ctx.lineWidth = 2;
+    ctx.strokeStyle = z.c || '#9fe8ff'; ctx.lineWidth = 2;  // c：攔截合併的綠色電弧
     const dx = z.x2 - z.x1, dy = z.y2 - z.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
     ctx.beginPath(); ctx.moveTo(z.x1, z.y1);
     for (let k = 1; k < 6; k++) { const j = rand(-10, 10); ctx.lineTo(z.x1 + dx * k / 6 + nx * j, z.y1 + dy * k / 6 + ny * j); }

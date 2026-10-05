@@ -373,15 +373,29 @@ const MechCheck = {
       return { ok: st.length > 0 && mine.length > 0 && back && tm === 2 && aimOk,
         got: `黏著引爆 ${st.length} 次、地雷時間到 ${mine.length} 次、迴旋飛回飛船${back ? '有' : '沒有'}觸發；定時（地雷）${tm} 發；回響方向 ${aim.length ? Math.round(aim[0].ang * 180 / Math.PI) + '°' : '沒有'}（應為 0°，沿子彈方向）、只有一隻時受傷 ${(h1 - one.hp).toFixed(1)}（雷射 10 ＋ 回響 5 應 > 14）` };
     }],
-    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈（沒有穿甲就消失），並用整條電路回射；分裂插在攔截上：平常 1 發，只有回射分裂成 3 發', M => {
+    ['電路晶片', '衝刺射擊／攔截', '衝刺結束時用整條電路朝準星開一槍（×1.5）；散彈照樣 5 發散射；攔截：子彈打掉敵彈（沒有穿甲就消失），0.1 秒後用整條電路回射；0.1 秒內擋 4 顆只回射一次、傷害 ×1.45、子彈變大；分裂插在攔截上：平常 1 發，只有回射分裂成 3 發', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'intercept', 'split', null]); M.targets([[300, 200]]);
       const gp = Game.player, gn = runOps(Game.stats.ops, 0).length;
       spawnShots([shot({ angle: 0, speed: 600, damage: 10, life: 1, intercept: 1 })], gp.x, gp.y, 0, 0, null);
       const mine = Game.bullets[0];
       Game.eBullets = [{ x: gp.x + 60, y: gp.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'test' }];
       for (let f = 0; f < 10 && Game.eBullets.length; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+      const back0 = Game.bullets.filter(b => b.depth === 1).length;  // 0.1 秒還沒到：還沒回射
+      for (let f = 0; f < 8; f++) Game.updateEnemyBullets(1 / 60);
       const back = Game.bullets.filter(b => b.depth === 1).length;
-      if (Game.eBullets.length || !mine.dead || back !== 3 || gn !== 1) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；回射 ${back} 發（平常一槍 ${gn} 發）` };
+      if (Game.eBullets.length || !mine.dead || back0 !== 0 || back !== 3 || gn !== 1) return { ok: false, got: `敵彈${Game.eBullets.length ? '沒被打掉' : '被打掉'}；子彈${mine.dead ? '消失了' : '還在'}；擋下當下回射 ${back0} 發、0.1 秒後 ${back} 發（平常一槍 ${gn} 發）` };
+      // 合併：0.1 秒內擋下 4 顆 → 只回射一次（1 發），傷害 ×1.45、變大
+      const one = n => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'intercept', null, null]); M.targets([[300, 200]]);
+        const q = Game.player;
+        spawnShots([shot({ angle: 0, speed: 600, damage: 10, life: 1, intercept: 1, pierce: 20 })], q.x, q.y, 0, 0, null);
+        Game.eBullets = Array.from({ length: n }, (_, i) => ({ x: q.x + 60 + i * 8, y: q.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'test' }));
+        for (let f = 0; f < 20; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+        return Game.bullets.filter(b => b.depth === 1);
+      };
+      const s1 = one(1), s4 = one(4);
+      if (s1.length !== 1 || s4.length !== 1 || !near1(s4[0].damage / s1[0].damage, 1.45) || !(s4[0].r > s1[0].r))
+        return { ok: false, got: `擋 1 顆回射 ${s1.length} 發、擋 4 顆回射 ${s4.length} 發；傷害比 ${s4.length && s1.length ? (s4[0].damage / s1[0].damage).toFixed(2) : '-'}（要 1.45）` };
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'dashfire', null, null]); M.targets([]);
       const p = Game.player, n0 = runOps(Game.stats.ops, 0), d0 = n0[0].damage;
       p.aim = Math.PI / 2; p.dashT = 0.05; p.vx = 900; p.vy = 0;

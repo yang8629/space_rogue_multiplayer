@@ -11,6 +11,7 @@ const CFG = {
   DASH_SPEED: 900, DASH_TIME: 0.14,
   COMET_SHARD_DMG: 10,      // 彗星打爆後的碎片打到飛船的傷害（每片）
   SWARMCORE: { every: 6, dirs: 6 },
+  COUNTER: { win: 0.1, per: 0.15, max: 3 },  // 攔截回射：第一顆擋下後 win 秒內擋下的合成一次回射，每多 1 顆傷害 +per，最多 ×max
   BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
   START_SLOTS: 4, MAX_SLOTS: 8, INV_SLOTS: 6,
   MECH_SLOT_EVERY: 0,       // 機體強化（零件每 1 層、背包模組）每拿幾個，電路格 +1（0 = 關閉）
@@ -72,6 +73,14 @@ function segDist2(ax, ay, bx, by, px, py) {
   const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
   const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
   return dist2(ax + dx * t, ay + dy * t, px, py);
+}
+// 顏色往白色混 k（0～1）；只認 #rgb／#rrggbb，其他格式原樣傳回
+function mixWhite(c, k) {
+  if (typeof c !== 'string' || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c)) return c;
+  const h = c.length === 4 ? c.replace(/^#(.)(.)(.)$/, '#$1$1$2$2$3$3') : c;
+  let o = '#';
+  for (let i = 1; i < 7; i += 2) o += Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - k) + 255 * k).toString(16).padStart(2, '0');
+  return o;
 }
 
 // 敵人血量倍率（難度 ＝ 層數 ＋（星區 − 1）× 7）：二次成長，後面的星區越來越硬，跟得上玩家疊起來的傷害
