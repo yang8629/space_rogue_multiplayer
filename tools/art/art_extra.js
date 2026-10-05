@@ -28,6 +28,22 @@ function artEnemyBullet(ctx) {  // 敵彈（半徑 1）：紅色實心＋深色�
   ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = '#2a0000'; ctx.lineWidth = 0.33; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#ffd0d0'; ctx.beginPath(); ctx.arc(0, 0, 0.4, 0, TAU); ctx.fill();
 }
+// 反彈的子彈：形狀照原本是誰的，顏色照現在是誰的
+function artEBRim(ctx) {  // 盾衛反彈的敵彈（半徑 1）：紅色外圈＋紅框（中間空的，遊戲裡另外疊一張染成原本子彈顏色的 eb_fill）
+  ctx.fillStyle = 'rgba(255,30,30,0.35)'; ctx.beginPath(); ctx.arc(0, 0, 2, 0, TAU); ctx.arc(0, 0, 0.9, 0, TAU, true); ctx.fill();
+  ctx.strokeStyle = '#2a0000'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.arc(0, 0, 1.05, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(0, 0, 0.95, 0, TAU); ctx.stroke();
+}
+function artEBFill(ctx) {  // 盾衛反彈的敵彈的芯（半徑 1，白色，遊戲裡染成原本子彈的顏色；中間亮）
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 0.85); g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, '#ffffff'); g.addColorStop(0.5, '#d8d8d8'); g.addColorStop(1, '#bcbcbc');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 0.85, 0, TAU); ctx.fill();
+}
+function artEBWhite(ctx) {  // 反射鏡反彈的我方子彈（半徑 1，白色，遊戲裡染綠、加法混色）：敵彈的圓球外形（外圈＋實心＋亮邊＋亮芯）
+  ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.arc(0, 0, 2, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(0, 0, 0.9, 0, TAU); ctx.stroke();
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 0.4, 0, TAU); ctx.fill();
+}
 function artSquare(ctx) { ctx.fillStyle = '#ffffff'; ctx.fillRect(-0.5, -0.5, 1, 1); }
 function artGlow(ctx) {  // 光暈（半徑 1，白色，遊戲裡染色、加法混色）
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.25, 'rgba(255,255,255,0.45)'); g.addColorStop(0.6, 'rgba(255,255,255,0.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');

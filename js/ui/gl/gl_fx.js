@@ -18,8 +18,8 @@ const GLFx = {
     const tS = new PIXI.Container(), tB = new PIXI.Container(); L.texts.addChild(tS, tB);  // 大數字的圖層在上面
     this.pTs = GLR.pool('txtS', tS, () => new PIXI.BitmapText({ text: '', style: this.styles.small }));
     this.pTb = GLR.pool('txtB', tB, () => new PIXI.BitmapText({ text: '', style: this.styles.big }));
-    this.tx = { dot: GLR.T('b/dot'), halo: GLR.T('b/halo'), line: GLR.T('b/line'), dart: GLR.T('b/dart'), blade: GLR.T('b/blade'), ring: GLR.T('b/ring'), eb: GLR.T('eb'), sq: GLR.T('p/sq') };
-    this.res = { dot: GLR.res('b/dot'), line: GLR.res('b/line'), dart: GLR.res('b/dart'), blade: GLR.res('b/blade'), ring: GLR.res('b/ring'), eb: GLR.res('eb'), sq: GLR.res('p/sq') };
+    this.tx = { dot: GLR.T('b/dot'), halo: GLR.T('b/halo'), line: GLR.T('b/line'), dart: GLR.T('b/dart'), blade: GLR.T('b/blade'), ring: GLR.T('b/ring'), eb: GLR.T('eb'), sq: GLR.T('p/sq'), ebRim: GLR.T('eb_rim'), ebFill: GLR.T('eb_fill'), ebw: GLR.T('b/ebw') };
+    this.res = { dot: GLR.res('b/dot'), line: GLR.res('b/line'), dart: GLR.res('b/dart'), blade: GLR.res('b/blade'), ring: GLR.res('b/ring'), eb: GLR.res('eb'), sq: GLR.res('p/sq'), ebFill: GLR.res('eb_fill'), ebw: GLR.res('b/ebw') };
   },
   spr(P, tex, x, y) { return P.get(tex, x, y); },
 
@@ -40,6 +40,8 @@ const GLFx = {
         const t = tail(b, 18);
         const s = this.spr(P, tx.line, b.x, b.y); s.rotation = b.angle; s.scaleX = Math.max(t, 0.5) / R.line; s.scaleY = b.r / R.line; s.tint = col; s.alpha = fa;
         const d = this.spr(P, tx.dot, b.x, b.y); d.scaleX = d.scaleY = b.r * 0.5 / R.dot; d.tint = col; d.alpha = fa;  // 圓頭
+      } else if (b.shape === 'reflect') {  // 反射鏡反彈：敵彈的圓球外形、我方的顏色
+        const s = this.spr(P, tx.ebw, b.x, b.y); s.scaleX = s.scaleY = b.r / R.ebw; s.tint = col; s.alpha = fa;
       } else if (b.shape === 'dart') {
         const s = this.spr(P, tx.dart, b.x, b.y); s.rotation = b.angle; s.scaleX = s.scaleY = b.r / R.dart; s.tint = col; s.alpha = fa;
       } else if (b.shape === 'blade') {
@@ -67,7 +69,10 @@ const GLFx = {
     }
     for (const r of G.rings) { const t = 1 - r.life / r.max; g.circle(r.x, r.y, r.r * (0.4 + 0.6 * t)).stroke({ width: 3, color: glColor(r.color), alpha: r.life / r.max }); }
     // 敵彈（不用加法混色：紅色實心＋深色外框，才不會被我方彈幕蓋掉）
-    for (const b of G.eBullets) { const s = this.spr(this.pEB, tx.eb, b.x, b.y); s.scaleX = s.scaleY = b.r / R.eb; }
+    for (const b of G.eBullets) {
+      const s = this.spr(this.pEB, b.col ? tx.ebRim : tx.eb, b.x, b.y); s.scaleX = s.scaleY = b.r / R.eb;
+      if (b.col) { const f = this.spr(this.pEB, tx.ebFill, b.x, b.y); f.scaleX = f.scaleY = b.r / R.ebFill; f.tint = glColor(b.col); }  // 盾衛反彈：紅框＋原本子彈顏色的芯
+    }
     this.pB.end(); this.pP.end(); this.pEB.end();
   },
   // 浮動數字：深色外框（字型本身帶外框）＋染色；大數字畫在最上層
