@@ -61,8 +61,8 @@ const GLActors = {
     const G = Game, t = G.time, ty = e.type, T = ENEMY_TYPES[ty] || e.t, sp = e.spawnT > 0 ? 1 - e.spawnT / e.spawnMax : 1;
     const alpha = (0.3 + 0.7 * sp) * (1 - 0.9 * (e.cloak || 0)), k = (e.r / T.radius) * sp;
     let rot = ['swarmer', 'worm', 'splitling', 'lurker', 'spitter'].includes(ty) ? Math.atan2(e.vy, e.vx) : e.rot || 0;
-    if (ty === 'spitter') rot = Math.atan2(G.player.y - e.y, G.player.x - e.x);
-    if (ty === 'boss2' && e.mode !== 'chase') rot = e.chargeA;
+    if (ty === 'spitter') rot = spitterFace(e);
+    if (ty === 'elite' || ty === 'boss2') rot = enemyFace(e);  // 船頭朝目標（不自己一直轉）
     const base = (name, n, period, scaleRes = 2) => this.spr(this.frame(name, Math.floor(t / period * n) % n), e.x, e.y, k / scaleRes, rot);
     let main;
     switch (ty) {

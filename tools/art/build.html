@@ -25,24 +25,27 @@ function enemyFrames() {
   anim('swarmer', 1.7, 6, TAU / 40, (c, col, r, t) => drawSwarmer(c, col, r, t));
   anim('brute', 2.0, 1, 1, (c, col, r) => drawBrute(c, col, r, 0, false));
   sq('e/brute_ball/0', E('brute').r * 2.0, R, c => drawBrute(c, E('brute').col, E('brute').r, 0, true));
-  anim('spitter', 2.1, 8, 1, (c, col, r, t, u) => drawSpitter(c, col, r, 1.8 * (0.75 + 0.25 * u)));  // 第 0 格沒鼓起；之後是開火前鼓起的過程
+  anim('spitter', 2.7, 8, 1, (c, col, r, t, u) => drawSpitter(c, col, r, 1.8 * (0.75 + 0.25 * u)));  // 第 0 格沒鼓起；之後是開火前鼓起的過程
   anim('elite', 2.5, 16, TAU / 1.1, (c, col, r, t) => drawElite(c, col, r, t));
   for (let k = 0; k < 5; k++) sq(`e/gunboat/${k}`, E('gunboat').r * 1.5, R, c => drawGunboat(c, E('gunboat').col, E('gunboat').r, 0, k / 4, 0));  // 蓄力 0～1
   const w = E('worm');
   for (let g = 0; g < 4; g++) for (let k = 0; k < 4; k++) sq(`e/worm_head/${g * 4 + k}`, w.r * 1.7, 3, c => artWormSeg(c, w.col, w.r, 'head', k / 4 * TAU, g / 3));  // 大顎長出來（g）× 腳（k）
   for (let k = 0; k < 4; k++) { sq(`e/worm_body/${k}`, w.r * 1.5, 3, c => artWormSeg(c, w.col, w.r, 'body', k / 4 * TAU)); sq(`e/worm_tail/${k}`, w.r * 1.6, 3, c => artWormSeg(c, w.col, w.r, 'tail', k / 4 * TAU)); }
-  anim('shield', 1.95, 12, TAU / 1.6, (c, col, r, t) => drawShieldGuard(c, col, r, t));
+  anim('shield', 2.15, 12, TAU / 1.6, (c, col, r, t) => drawShieldGuard(c, col, r, t));
   anim('splitter', 1.7, 8, TAU / 3, (c, col, r, t) => drawSplitter(c, col, r, t));
   sq('e/splitling/0', E('splitling').r * 1.9, 3, c => drawShard(c, E('splitling').col, E('splitling').r * 1.8, 0, 0, true));
   anim('lurker', 3.3, 4, TAU / 9, (c, col, r, t) => drawLurker(c, col, r, t));
   anim('hive', 1.7, 16, 4, (c, col, r, t) => drawHiveNest(c, col, r, t));
-  anim('dummy', 1.5, 1, 1, (c, col, r) => drawDummy(c, col, r, 0));
+  anim('dummy', 1.6, 1, 1, (c, col, r) => drawDummy(c, col, r, 0));
   anim('boss', 1.05, 16, 2, (c, col, r, t) => artBoss1Body(c, col, r, t));
   sq('e/boss_ring/0', E('boss').r * 1.27, R, c => artBoss1Ring(c, E('boss').col, E('boss').r));
   anim('boss2', 1.75, 4, TAU / 7, (c, col, r, t) => drawBoss2(c, col, r, t));
   const b3 = E('boss3');
   for (let k = 0; k < 8; k++) sq(`e/boss3_core/${k}`, b3.r * 0.95, R, c => artBoss3Core(c, b3.col, b3.r, 0.5 + 0.5 * Math.sin(k / 8 * TAU)));
-  sq('e/boss3_ring_out/0', b3.r * 1.4, R, c => artBoss3Ring(c, b3.col, b3.r, b3.r * 1.2, b3.r * 0.2, 1));
+  sq('e/boss3_ring_out/0', b3.r * 1.4, R, c => {  // 底下墊深色圓盤（到外環內緣）：環之間看起來還是空的，但底下的敵彈不會透出來
+    c.fillStyle = '#070a14'; c.beginPath(); c.arc(0, 0, b3.r * 1.12, 0, TAU); c.fill();
+    artBoss3Ring(c, b3.col, b3.r, b3.r * 1.2, b3.r * 0.2, 1);
+  });
   sq('e/boss3_ring_in/0', b3.r * 1.05, R, c => artBoss3Ring(c, b3.col, b3.r, b3.r * 0.88, b3.r * 0.17, 4));
 }
 // ---- 飛船：船身（重裝甲 0～4 層）、噴焰、背包模組效果 ----
@@ -79,7 +82,7 @@ function objFrames() {
 }
 // ---- 牆：貼磚、邊緣裝飾、閘門發射器 ----
 function wallFrames() {
-  const T = 512, N = { rock: 8, lava: 6, organic: 6, ice: 6, metal: 1, ruins: 6 }, H = { rock: 24, lava: 20, organic: 32, ice: 42, metal: 16, ruins: 32 };
+  const T = 512, N = { rock: 8, lava: 6, organic: 6, ice: 6, metal: 1, ruins: 6 }, H = { rock: 24, lava: 20, organic: 32, ice: 42, metal: 16, ruins: 38 };
   for (const sty of Object.keys(WALL_STYLES)) {
     add(`w/${sty}/tile`, T, T, 0, 0, 1, c => artWallTile(c, sty, T));
     for (let k = 0; k < N[sty]; k++) sq(`w/${sty}/deco/${k}`, H[sty], 2, c => artWallDeco(c, sty, k));

@@ -8,7 +8,7 @@ const GLFx = {
     const L = GLR.L, S = () => new PIXI.Sprite();
     this.pB = new GLParticles(L.bullets, 'add');   // 我方子彈（加法混色）
     this.pP = new GLParticles(L.fx, 'add');        // 粒子
-    this.pEB = new GLParticles(L.eBullets, 'normal');  // 敵彈
+    this.pEB = new GLParticles(L.eBullets, 'normal');  // 敵彈（畫在敵人底下：看起來從砲管／機身邊緣射出）
     this.g = new PIXI.Graphics(); L.fx.addChild(this.g);           // 電弧、光圈（每幀重畫）
     this.g.blendMode = 'add';
     this.styles = {
