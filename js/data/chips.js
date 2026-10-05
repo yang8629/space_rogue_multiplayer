@@ -93,7 +93,7 @@ const CHIPS = {
       : list.map(b => ({ ...addBonus(b, o.lv >= 3 ? 1 : 0.5), dashShot: true, pierce: o.lv >= 3 ? 99 : b.pierce })) },
   intercept: { name: '攔截', short: '攔截', type: 'impact', cost: 1, evo: '反射鏡',
     grow: { what: '回射擊殺', need: [100, 330] },
-    desc: '子彈碰到敵彈時把它打掉，並從那裡用整條電路朝最近的敵人回射一次（不會用掉停火蓄力；回射出來的子彈、飛回來的迴旋只會格擋，不會再回射）。打掉一發敵彈跟打中敵人一樣扣 1 穿甲，沒有穿甲就消失。子彈越多、越大越會攔：散彈、相位刃（無限穿透）特別好用。',
+    desc: `子彈碰到敵彈時把它打掉。<b>合併回射</b>：擋下後 ${CFG.COUNTER.win} 秒才回射，這段時間內在 ${CFG.COUNTER.join} 以內擋下的合成一次，用整條電路朝最近的敵人回射（每多擋 1 顆傷害 +${Math.round(CFG.COUNTER.per * 100)}%，最多 ×${CFG.COUNTER.max}，子彈跟著變大、變白；更遠的另外集氣）。不會用掉停火蓄力；回射出來的子彈、飛回來的迴旋只會格擋，不會再回射。打掉一發敵彈跟打中敵人一樣扣 1 穿甲，沒有穿甲就消失。子彈越多、越大越會攔：散彈、相位刃（無限穿透）特別好用。`,
     lvs: ['回射傷害 ×0.5', '回射傷害 ×1', '進化：打掉的敵彈也反彈回去（敵彈傷害 ×2）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, intercept: o.lv, damage: Game.fireMode === 'intercept' ? b.damage * (o.lv >= 2 ? 1 : 0.5) : b.damage })) },
 
@@ -184,7 +184,7 @@ const CHIP_BRIEF = {
   infect: '擊殺的敵人爆出子彈',
   pull: '命中時把附近的敵人拉過來',
   dashfire: '衝刺結束時額外開一槍',
-  intercept: '子彈打掉敵彈，並回射一次',
+  intercept: '子彈打掉敵彈，擋下的合在一起回射',
   split: '每顆子彈分成 3 顆（每顆 ×0.4）',
   bigshot: '子彈變大、傷害 +30%',
   pierce: '子彈穿透 +2',
