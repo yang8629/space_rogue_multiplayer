@@ -158,7 +158,7 @@ const GLActors = {
     // 背包模組（船後面那層）
     if (mod === 'gravity') sprL(GLR.T('m/gravity'), 0, 0, 1 / 3, t);
     if (mod === 'thruster') sprL(GLR.T('m/thruster'), 0, 0, 1 / 3);
-    if (mod === 'blink') for (let k = 3; k >= 1; k--) { const s = sprL(GLR.T(`s/${A.id}/0`), -k * 7, 0, 1 / 4); s.alpha = fade * 0.32 * (4 - k) / 3; s.tint = col; }
+    if (mod === 'blink') for (let k = 3; k >= 1; k--) { const s = sprL(GLR.T(`s/${A.id}/0`), -k * 8, 0, 1 / 4); s.alpha = fade * 0.5 * (4 - k) / 3; s.tint = col; }
     // 零件：散熱鰭、感測器天線（船底下）
     if (n('sink')) for (let i = 0; i < Math.min(4, n('sink')); i++) for (const sg of [-1, 1]) { const [x0, y0] = L(-2 - i * 4, sg * 9), [x1, y1] = L(-5 - i * 4, sg * 16); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 2, color: 0x8f9bb8, alpha: fade }); }
     if (n('sensor')) { const [x0, y0] = L(16, 0), [x1, y1] = L(22 + n('sensor') * 2, 0); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 1.5, color: 0x8f9bb8, alpha: fade }); g.circle(x1, y1, 2).fill({ color: 0x9dff6b, alpha: fade }); }
