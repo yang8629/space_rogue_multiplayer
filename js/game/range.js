@@ -7,10 +7,10 @@
 // =====================================================================
 const Range = {
   layout: 'single', slow: false, live: false, log: [], total: 0, hits: 0, maxHit: 0, bySrc: {}, t0: 0,
-  LAYOUTS: { single: '單一標靶', line: '一排（看穿透）', pack: '密集群（看爆炸、分裂）', wide: '散開（看彈射、追蹤、電弧）', block: '擋彈（標靶朝你射彈幕，看攔截合併回射）',
+  LAYOUTS: { single: '單一標靶', line: '一排（看穿透）', pack: '密集群（看爆炸、分裂）', wide: '散開（看彈射、追蹤、電弧）',
     flood: '爆量重現（以前攔截爆量那組散彈配裝＋終焉核心環形波）' },
-  KEYS: ['single', 'line', 'pack', 'wide', 'block', 'flood'],
-  KEY_CH: '123467',  // 各排列的快捷鍵（5 是實戰）
+  KEYS: ['single', 'line', 'pack', 'wide', 'flood'],
+  KEY_CH: '12346',  // 各排列的快捷鍵（5 是實戰）
   SLOW: 0.25,
   // 手動生成敵人：種類、會不會動、打不打得死、難度（血量照這個難度的第 1 波）
   spawnType: 'swarmer', spawnMove: false, spawnKill: true, spawnLv: 1,
@@ -50,24 +50,12 @@ const Range = {
       pack: [[0, 0], ...[0, 1, 2, 3, 4, 5].map(k => [Math.cos(k * Math.PI / 3) * 66, Math.sin(k * Math.PI / 3) * 66]),  // 同心排列：中間 1、內圈 6、外圈 12
         ...Array.from({ length: 12 }, (_, k) => [Math.cos(k * Math.PI / 6) * 132, Math.sin(k * Math.PI / 6) * 132])],
       wide: [[0, -300], [120, -220], [200, -110], [230, 0], [200, 110], [120, 220], [0, 300], [-60, -120], [-60, 120], [60, 0]],
-      block: [[100, -220], [160, 0], [100, 220]],
       flood: [[-140, -120], [-100, 60], [-180, 180], [-650, 100], [-680, -150], [-400, -260], [-320, 240], [-460, 220], [-20, -20], [-780, 0]],  // 圍在飛船四周（以前效能測試的位置）
     }[layout];
-    pts.forEach(([dx, dy], i) => {
+    for (const [dx, dy] of pts) {
       const e = new Enemy('dummy', cx + dx, cy + dy, 1);
       e.hx = e.x; e.hy = e.y;
-      if (layout === 'block') e.emitT = 0.6 + i * 0.25;  // 擋彈：錯開開火時間
       G.enemies.push(e);
-    });
-    if (layout === 'block') {  // 擋彈：換成相刃（最會擋彈）；電路沒有攔截就放進第一個空格（沒空格就換掉最後一格）
-      const got = [];
-      if (G.weapon.id !== 'blade') { G.weapon = { id: 'blade', path: null, final: null }; G.refreshWeapon(); got.push('相刃'); }
-      if (!G.chain.includes('intercept')) {
-        const i = G.chain.indexOf(null, 1);
-        G.chain[i > 0 ? i : G.chain.length - 1] = 'intercept';
-        G.recalc(); got.push('攔截');
-      }
-      if (got.length) floatText(p.x, p.y - 30, '已換上 ' + got.join('＋'), '#9dff6b', true);
     }
     if (layout === 'flood') {  // 爆量重現：QA 第 195 局那組配裝（以前一擋下環形波就整條電路回射，幾秒內幾萬發）
       G.weapon = { id: 'scatter', path: 'A', final: 0 }; G.refreshWeapon();
@@ -79,26 +67,14 @@ const Range = {
     }
     this.clearStats();
   },
-  // 擋彈排列：每個標靶每 0.9 秒朝飛船射一排扇形彈幕（13 發、慢速、不扣血），王關彈幕的密度
+  // 爆量重現：每 1.5 秒一圈 32 發從 500 外射向飛船（終焉核心的環形波，不扣血）
   tick(dt) {
-    if (this.live) return;
+    if (this.live || this.layout !== 'flood' || (this.ringT -= dt) > 0) return;
     const G = Game, p = G.player;
-    if (this.layout === 'flood' && (this.ringT -= dt) <= 0) {  // 爆量重現：每 1.5 秒一圈 32 發從 500 外射向飛船
-      this.ringT = 1.5;
-      for (let i = 0; i < 32; i++) {
-        const a = i / 32 * TAU;
-        G.eBullets.push({ x: p.x + Math.cos(a) * 500, y: p.y + Math.sin(a) * 500, vx: -Math.cos(a) * 160, vy: -Math.sin(a) * 160, r: 6, dmg: 0, life: 5, from: '靶場' });
-      }
-    }
-    if (this.layout !== 'block') return;
-    for (const e of G.enemies) {
-      if (e.emitT == null || (e.emitT -= dt) > 0) continue;
-      e.emitT = 0.9;
-      // 彈牆：13 發並排（間隔 13）一起平推過來，刃片一刀切過整排 → 合併倍率看得出來
-      const a0 = Math.atan2(p.y - e.y, p.x - e.x), cx = Math.cos(a0), cy = Math.sin(a0);
-      for (let k = -6; k <= 6; k++) {
-        G.eBullets.push({ x: e.x - cy * k * 13, y: e.y + cx * k * 13, vx: cx * 200, vy: cy * 200, r: 5, dmg: 0, life: 4, from: '靶場' });
-      }
+    this.ringT = 1.5;
+    for (let i = 0; i < 32; i++) {
+      const a = i / 32 * TAU;
+      G.eBullets.push({ x: p.x + Math.cos(a) * 500, y: p.y + Math.sin(a) * 500, vx: -Math.cos(a) * 160, vy: -Math.sin(a) * 160, r: 6, dmg: 0, life: 5, from: '靶場' });
     }
   },
   clearStats() {
