@@ -828,7 +828,7 @@ const Net = {
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       mg: r(CFG.MAGNET_RANGE * (1 + G.passives.magnet)),  // 房主的拾取範圍（隊友那邊模擬晶體飛向房主時用）
       pal, lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r, G.exit.gate ? 1 : 0] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
-      as: Arena.rect ? 0 : [Arena.seed, Arena.n, Arena.bossId || 0], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
+      as: Arena.rect ? 0 : [Arena.seed, Arena.n, Arena.bossId || 0, Arena.sc || 1], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
       bn: G.banner ? [G.banner.text, G.banner.sub || '', r2(G.banner.t)] : null,
       fx: this.fxBuf,
     });
@@ -927,9 +927,9 @@ const Net = {
         sx: num(a[0]) - Math.cos(ang) * tl, sy: num(a[1]) - Math.sin(ang) * tl };
     });
     if (Array.isArray(s.as)) {  // 大地圖：第一次收到（或換了一張）就照種子產生，自己的飛船放到出生點
-      if (Arena.rect || Arena.seed !== num(s.as[0])) {
+      if (Arena.rect || Arena.seed !== num(s.as[0]) || (Arena.sc || 1) !== num(s.as[3], 1)) {
         if (ENEMY_TYPES[s.as[2]] && ENEMY_TYPES[s.as[2]].boss) Arena.genBoss(num(s.as[0]), s.as[2]);  // 旗艦戰
-        else Arena.gen(num(s.as[0]), clamp(Math.floor(num(s.as[1], 2)), 2, 5));
+        else Arena.gen(num(s.as[0]), clamp(Math.floor(num(s.as[1], 2)), 2, 5), clamp(num(s.as[3], 1), 0.5, 1));
         G.player.resetPos(); G.player.x += 50;
         G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2;
       }

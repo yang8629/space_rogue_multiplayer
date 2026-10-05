@@ -155,7 +155,7 @@ const Game = {
     this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
-    else if (this.usesAreas()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal);
+    else if (this.usesAreas()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal, this.areaScale(this.combat.level));
     else if (this.combat.boss && !this.combat.sandbox) Arena.genBoss(randInt(1, 2 ** 31 - 2), this.bossId);
     else Arena.reset();
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
@@ -174,6 +174,8 @@ const Game = {
     this.inArena = true; this.state = 'play';
     Screen.hide();
   },
+  // 區域大小照難度縮放：前面敵人少，地圖小一點（第 1 星區 0.72～0.84、第 2 星區 0.86～0.98、之後 1）
+  areaScale(level) { return clamp(0.7 + 0.02 * (level || 0), 0.7, 1); },
   startWave(n) {
     const C = this.combat;
     C.wave = n;

@@ -78,6 +78,8 @@ function objFrames() {
   sq('o/planet', 100 * 1.4, 1.5, c => artPlanetTex(c, 100));
   sq('o/hole_core', 42, 2, c => artHoleCore(c, 40));
   sq('o/hole_disk', 82, 2, c => artHoleDisk(c, 40));
+  sq('o/hole_swirl', 282, 1, c => artHoleSwirl(c, 280));  // 吸引範圍（半徑 280 = OBJ.HOLE_R；遊戲裡照 o.R 縮放、慢慢轉）
+  sq('ui/exit_arrow', 14, 6, artExitArrow);
   for (let k = 0; k < 6; k++) sq(`o/rock/${k}`, 36, 2, c => artRockTex(c, 32, k * 1.7));
   sq('o/comet', 28, 2, c => artCometHead(c, 24));
 }
