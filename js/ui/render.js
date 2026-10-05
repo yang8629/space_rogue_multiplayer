@@ -371,6 +371,95 @@ function drawBullet(b, fa = 1) {  // fa：整體透明度（飛船附近變淡�
   ctx.globalAlpha = 1;
 }
 
+// 飛船本體（D 版：實心塗裝＋金屬噴嘴＋藍色噴焰）；在飛船自己的座標（船頭朝 +x）裡畫
+//   船身：深色描邊、上亮下暗的船色漸層、中線高光、深色玻璃駕駛艙；各船專屬零件；衝刺／超頻時外框發出船色光暈
+//   o：moving（有噴焰）、booster（加速器層數：噴焰更長）、armor（重裝甲層數：裝甲板線）、hot（衝刺／超頻）
+const SHIP_ART = new Map(Object.entries(SHIPS).map(([id, S]) => {
+  const nose = S.hull[0][0], rear = Math.min(...S.hull.map(q => q[0]));
+  const notch = S.hull.find(q => q[1] === 0 && q[0] < nose) || [rear, 0];  // 船尾凹口（噴嘴裝在這裡）
+  const col = S.color;  // 顏色先算好（每幀不用重算）
+  return [S, { id, nose, rear, nx: notch[0], hi: mixWhite(col, 0.35), lo1: mixBlack(col, 0.25), lo2: mixBlack(col, 0.7),
+    trim: mixWhite(col, 0.3), fin: mixWhite(col, 0) + 'b3', ring: mixWhite(col, 0) + 'cc' }];
+}));
+function drawShipArt(c, S, o = {}) {
+  const A = SHIP_ART.get(S), col = S.color, t = Game.time, x1 = A.nx - 2.8, x0 = A.nx + 1.5;
+  const hull = () => { c.beginPath(); S.hull.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); };
+  if (o.moving) {  // 噴嘴出口後面的火光（畫在船身底下，只從船尾透出來）
+    const R = 7 + Math.sin(t * 30) * 0.8, fx = A.nx - 5, g = c.createRadialGradient(fx, 0, 0, fx, 0, R);
+    g.addColorStop(0, 'rgba(190,230,255,0.55)'); g.addColorStop(0.5, 'rgba(120,190,255,0.22)'); g.addColorStop(1, 'rgba(120,190,255,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(fx, 0, R, 0, TAU); c.fill();
+  }
+  if (A.id === 'wraith') {  // 幻影：兩條往後拖的尾鰭
+    c.strokeStyle = A.fin; c.lineWidth = 1.4;
+    for (const sg of [-1, 1]) { c.beginPath(); c.moveTo(-8, sg * 6); c.lineTo(-19, sg * 10); c.stroke(); }
+  }
+  if (A.id === 'gate') {  // 星門：船尾旋轉的傳送環
+    c.save(); c.translate(-9, 0); c.rotate(t * 2);
+    c.strokeStyle = A.ring; c.lineWidth = 1.3; c.setLineDash([3, 3]);
+    c.beginPath(); c.arc(0, 0, 7.5, 0, TAU); c.stroke(); c.setLineDash([]); c.restore();
+  }
+  // 深色描邊（剪影）；衝刺／超頻時發船色光暈
+  if (o.hot) { c.shadowBlur = 22; c.shadowColor = col; }
+  hull(); c.strokeStyle = '#03050c'; c.lineWidth = 4 + (o.armor || 0) * 0.8; c.lineJoin = 'round'; c.stroke();
+  c.shadowBlur = 0;
+  // 上半面亮、下半面暗（光從左上來）
+  for (const sg of [-1, 1]) {
+    c.save(); c.beginPath(); c.rect(-40, sg < 0 ? -40 : 0, 80, 40); c.clip();
+    const g = c.createLinearGradient(A.nose, sg * 2, A.rear, sg * 12);
+    g.addColorStop(0, sg < 0 ? A.hi : col); g.addColorStop(1, sg < 0 ? A.lo1 : A.lo2);
+    hull(); c.fillStyle = g; c.fill(); c.restore();
+  }
+  c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 0.8;  // 中線高光
+  c.beginPath(); c.moveTo(A.nose - 1, -0.3); c.lineTo(A.nx + 1, -0.3); c.stroke();
+  if (o.armor) {  // 重裝甲：每層一條裝甲板線
+    c.strokeStyle = 'rgba(3,5,12,0.6)'; c.lineWidth = 0.9;
+    for (let i = 0; i < Math.min(4, o.armor); i++) for (const sg of [-1, 1]) { const x = A.nx + 3 + i * 3; c.beginPath(); c.moveTo(x, sg * 2); c.lineTo(x - 2, sg * 7); c.stroke(); }
+  }
+  const kx = A.nose * 0.38;  // 駕駛艙：深色玻璃＋反光
+  c.fillStyle = '#0a1430'; c.beginPath(); c.ellipse(kx, 0, 4.4, 2.5, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.ellipse(kx + 1.2, -0.9, 1.6, 0.7, -0.2, 0, TAU); c.fill();
+  if (A.id === 'vanguard') {  // 先鋒：兩側短砲管
+    c.fillStyle = A.trim;
+    for (const sg of [-1, 1]) c.fillRect(2, sg * 5 - 0.8, 8, 1.6);
+  }
+  if (A.id === 'bulwark') {  // 堡壘：機翼上的裝甲板
+    c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 0.9;
+    for (const sg of [-1, 1]) for (const x of [-7, -1, 4]) { c.beginPath(); c.moveTo(x, sg * 8); c.lineTo(x, sg * 13); c.stroke(); }
+  }
+  // 噴嘴：金屬短噴管（蓋住船身黑邊）＋船色環＋出口；移動時藍色噴焰從出口接出去（加速器越多越長）
+  if (o.moving) {
+    const L = 9 + (o.booster || 0) * 4 + Math.sin(t * 40) * 2 + rand(0, 3), a = rand(0.6, 0.9);
+    c.fillStyle = o.booster ? `rgba(170,225,255,${a})` : `rgba(140,210,255,${a})`;
+    c.beginPath(); c.moveTo(x1, -3.2); c.lineTo(x1 - L, 0); c.lineTo(x1, 3.2); c.fill();
+    c.fillStyle = 'rgba(235,248,255,0.85)';
+    c.beginPath(); c.moveTo(x1, -1.4); c.lineTo(x1 - L * 0.45, 0); c.lineTo(x1, 1.4); c.fill();
+  }
+  const g = c.createLinearGradient(0, -3.6, 0, 3.6);
+  g.addColorStop(0, '#9aa6c4'); g.addColorStop(0.5, '#5a6584'); g.addColorStop(1, '#2a3150');
+  c.beginPath(); c.moveTo(x0, -2.4); c.lineTo(x1, -3.6); c.lineTo(x1, 3.6); c.lineTo(x0, 2.4); c.closePath();
+  c.fillStyle = g; c.fill(); c.strokeStyle = '#03050c'; c.lineWidth = 0.7; c.stroke();
+  c.strokeStyle = A.trim; c.lineWidth = 0.6;
+  c.beginPath(); c.moveTo(x0 - 1.2, -2.6); c.lineTo(x0 - 1.2, 2.6); c.stroke();
+  c.fillStyle = o.moving ? '#bfe6ff' : '#3a4566';
+  c.beginPath(); c.ellipse(x1, 0, 0.9, 3.1, 0, 0, TAU); c.fill();
+}
+
+// 選飛船畫面的小圖：用 drawShipArt 畫成圖片（船頭朝上、噴焰開著），每艘只畫一次；畫不出來（測試環境）回傳 null
+const SHIP_ICON = new Map();
+function shipIconURL(S) {
+  if (SHIP_ICON.has(S)) return SHIP_ICON.get(S);
+  let url = null;
+  try {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 144;
+    const c = cv.getContext('2d');
+    c.translate(72, 76); c.scale(3, 3); c.rotate(-Math.PI / 2);
+    drawShipArt(c, S, { moving: true });
+    url = cv.toDataURL();
+  } catch (e) { url = null; }
+  SHIP_ICON.set(S, url);
+  return url;
+}
+
 function drawPlayer(p, tag = '') {
   if (tag) {  // 雙人：船上方標示 1P / 2P
     ctx.font = 'bold 11px Segoe UI'; ctx.textAlign = 'center'; ctx.fillStyle = p.ship.color;
@@ -383,37 +472,23 @@ function drawPlayer(p, tag = '') {
   const S = p.ship, own = p === Game.player;
   const parts = own ? Game.parts : p.L ? p.L.parts : p.parts || {}, mod = own ? Game.module : p.L ? p.L.module : p.module;
   const n = id => (parts && parts[id]) || 0;
-  // 外觀跟著零件變：加速器 → 尾焰變長變藍、散熱片 → 兩側散熱鰭、感測器 → 船頭天線、輕裝甲 → 外圈薄殼、重裝甲 → 外框變粗
-  if (p.moving) {
-    const L = 8 + n('booster') * 4;
-    ctx.fillStyle = n('booster') ? `rgba(120, 200, 255, ${rand(0.5, 0.9)})` : `rgba(255, 159, 28, ${rand(0.5, 0.9)})`;
-    ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-6 - rand(L, L + 6), 0); ctx.lineTo(-6, 4); ctx.fill();
-  }
+  // 外觀跟著零件變：加速器 → 噴焰變長變亮、散熱片 → 兩側散熱鰭、感測器 → 船頭天線、輕裝甲 → 外圈薄殼、重裝甲 → 船身裝甲板線
   if (n('sink')) {
-    ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#8f9bb8'; ctx.lineWidth = 2;
     for (let i = 0; i < Math.min(4, n('sink')); i++) for (const sgn of [-1, 1]) {
       ctx.beginPath(); ctx.moveTo(-2 - i * 4, sgn * 9); ctx.lineTo(-5 - i * 4, sgn * 16); ctx.stroke();
     }
   }
   if (n('sensor')) {
-    ctx.strokeStyle = '#9dff6b'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#8f9bb8'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(22 + n('sensor') * 2, 0); ctx.stroke();
     ctx.fillStyle = '#9dff6b'; ctx.beginPath(); ctx.arc(22 + n('sensor') * 2, 0, 2, 0, TAU); ctx.fill();
   }
   if (mod && MODULES[mod]) {  // 背包模組畫在船尾
-    ctx.fillStyle = '#070a16'; ctx.strokeStyle = '#cfe8ff'; ctx.lineWidth = 1.5;
+    ctx.fillStyle = '#2a3150'; ctx.strokeStyle = '#9aa6c4'; ctx.lineWidth = 1.5;
     ctx.fillRect(-19, -5, 8, 10); ctx.strokeRect(-19, -5, 8, 10);
   }
-  // 深色實心船身＋船色粗外框＋白色內框：在後期的亮色彈幕裡形成暗色剪影
-  const hot = p.dashT > 0 || p.overdrive > 0;
-  ctx.shadowBlur = hot ? 28 : 14; ctx.shadowColor = S.color;
-  ctx.beginPath();
-  S.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-  ctx.closePath();
-  ctx.strokeStyle = S.color; ctx.lineWidth = 5 + n('armor') * 1.5; ctx.lineJoin = 'round'; ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#070a16'; ctx.fill();
-  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+  drawShipArt(ctx, S, { moving: p.moving, booster: n('booster'), armor: n('armor'), hot: p.dashT > 0 || p.overdrive > 0 });
   ctx.rotate(-p.aim);
   for (let i = 0; i < Math.min(3, n('larmor')); i++) {  // 輕裝甲：外圈薄殼
     ctx.strokeStyle = 'rgba(159, 232, 255, 0.45)'; ctx.lineWidth = 1;
