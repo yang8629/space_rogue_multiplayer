@@ -210,18 +210,29 @@ const GLWorld = {
   },
   hole(o) {
     let H = this.holes.get(o);
-    if (!H) {  // 外光暈 → 後半盤（壓扁、旋轉、只露上半）→ 核心 → 前半盤（只露下半）
+    if (!H) {  // 吸引範圍的旋臂 → 外光暈 → 後半盤（壓扁、旋轉、只露上半）→ 核心 → 前半盤（只露下半）
       const c = new PIXI.Container(), gl = new PIXI.Sprite(GLR.T('glow')); gl.anchor.set(0.5); gl.tint = 0x7a3dff; gl.blendMode = 'add'; gl.alpha = 0.45;
+      const sw = new PIXI.Sprite(GLR.T('o/hole_swirl')); sw.anchor.set(0.5); sw.blendMode = 'add'; c.addChild(sw);
       const half = top => { const box = new PIXI.Container(); box.scale.set(1, 0.42); const spin = new PIXI.Container(); box.addChild(spin); const d = new PIXI.Sprite(GLR.T('o/hole_disk')); d.anchor.set(0.5); d.blendMode = 'add'; spin.addChild(d); const m = new PIXI.Graphics().rect(-400, top ? -400 : 0, 800, 400).fill({ color: 0xffffff }); box.addChild(m); box.mask = m; return { box, spin, d }; };
       const back = half(true), front = half(false), core = new PIXI.Sprite(GLR.T('o/hole_core')); core.anchor.set(0.5);
       c.addChild(gl, back.box, core, front.box); this.objs.addChild(c);
-      H = { c, gl, back, front, core }; this.holes.set(o, H);
+      H = { c, gl, sw, back, front, core, t: Game.time, motes: Array.from({ length: 16 }, () => ({ a: rand(0, TAU), r: rand(0.3, 1) })) }; this.holes.set(o, H);
     }
     const t = Game.time, s = o.r / 40 / GLR.res('o/hole_core');
     H.c.position.set(o.x, o.y);
     H.gl.scale.set((o.R || o.r * 3) / GLR.res('glow'));
     H.core.scale.set(s);
     for (const h of [H.back, H.front]) { h.d.scale.set(s); h.spin.rotation = t * 0.6; }
+    // 吸引範圍：旋臂往中心捲（圖案反方向轉，看起來是往內流）；光點從外緣螺旋吸進去（速度跟吸力一樣，外慢內快）
+    const R = o.R || OBJ.HOLE_R, dt = clamp(t - H.t, 0, 0.1); H.t = t;
+    H.sw.scale.set(R / 280 / GLR.res('o/hole_swirl')); H.sw.rotation = -t * 0.5;
+    for (const m of H.motes) {
+      const u = m.r;  // 1 = 外緣
+      m.r -= (40 + 150 * (1 - u)) / R * dt; m.a += (0.5 + 2.5 * (1 - u)) * dt;
+      if (m.r < (o.r * 1.3) / R) { m.r = rand(0.92, 1); m.a = rand(0, TAU); }
+      const x = o.x + Math.cos(m.a) * m.r * R, y = o.y + Math.sin(m.a) * m.r * R;
+      GLActors.glowAt(this.pObj, x, y, 5 + 4 * (1 - m.r), 0xc9a8ff, Math.min(1, (1 - m.r) * 8) * 0.7);
+    }
   },
   comet(o) {
     const G = Game, gO = this.gObj, s = Math.hypot(o.vx, o.vy) || 1, ux = o.vx / s, uy = o.vy / s;
@@ -283,8 +294,14 @@ const GLWorld = {
     const a0 = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x), key = X.x + ',' + X.y;
     const a = this.exA = this.exA == null || this.exKey !== key ? a0 : this.exA + angleDiff(this.exA, a0) * 0.15;
     this.exKey = key;
-    const ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
-    g.poly([ax + Math.cos(a) * 12, ay + Math.sin(a) * 12, ax + Math.cos(a + 2.5) * 10, ay + Math.sin(a + 2.5) * 10, ax + Math.cos(a - 2.5) * 10, ay + Math.sin(a - 2.5) * 10]).fill({ color: 0x2ee6a6, alpha: 0.6 + 0.3 * Math.sin(t * 6) });
+    // 新畫面風格：切面上色的綠色 V 形箭頭＋光暈，兩層（»）由後往前輪流亮，表示「往這邊走」
+    const P = this.pObj, tex = GLR.T('ui/exit_arrow'), res = GLR.res('ui/exit_arrow');
+    GLActors.glowAt(P, p.x + Math.cos(a) * 62, p.y + Math.sin(a) * 62, 22, 0x2ee6a6, 0.35);
+    for (let i = 0; i < 2; i++) {
+      const d = 52 + i * 14, ph = (t * 2.2 - i * 0.35) % 1, s = GLR.sprite(P, tex);
+      s.position.set(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d); s.rotation = a; s.scale.set((i ? 1 : 0.8) / res);
+      s.alpha = 0.45 + 0.55 * Math.max(0, Math.sin(ph * Math.PI));
+    }
   },
 };
 

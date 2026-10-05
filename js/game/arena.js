@@ -20,6 +20,7 @@ const ARENA = {
   ARM_W: [190, 235],  // 手臂半寬
   SAT_N: [3, 4], SAT_R: [330, 490], NECK: 160,  // 衛星圓：個數、半徑、跟上一個圓接起來的地方至少多寬（半寬）
   WALL: 160,          // 相鄰區域之間的牆至少多厚
+  THIN: 140,          // 比這個細的牆削掉（變空地；見 openThinWalls）
   CORR_W: 120,        // 通道半寬
   GATE_T: 6,          // 閘門半厚（子彈判定）
   MARGIN: 260,        // 地圖外圍留白
@@ -50,9 +51,11 @@ const Arena = {
   },
 
   // ---------- 產生大地圖：n 個區域 ----------
-  gen(seed, n) {
+  // sc：區域大小的縮放（照難度，見 Game.areaScale；主圓、衛星圓、手臂長、區域間距一起縮，通道寬、牆厚不縮）
+  gen(seed, n, sc = 1) {
     const R = seededRand(seed), rr = (a, b) => a + (b - a) * R(), ri = (a, b) => Math.floor(rr(a, b + 1));
-    this.rect = false; this.seed = seed; this.n = n; this.bossId = null;
+    this.rect = false; this.seed = seed; this.n = n; this.bossId = null; this.sc = sc;
+    const GAP = ARENA.GAP * sc, ARM = ARENA.ARM * sc, MAIN_R = ARENA.MAIN_R.map(v => v * sc), SAT_R = ARENA.SAT_R.map(v => v * sc);
     // 1. 區域中心：第一區往右，之後往右／上／下（±20°），不能太靠近之前的區域
     const C = [{ x: 0, y: 0 }], dirs = [];
     for (let k = 1; k < n; k++) {
@@ -60,25 +63,25 @@ const Arena = {
       let best = null;
       for (let t = 0; t < 30 && !best; t++) {
         const base = k === 1 ? 0 : [0, -Math.PI / 2, Math.PI / 2][ri(0, 2)], a = base + rr(-0.35, 0.35);
-        const q = { x: p.x + Math.cos(a) * ARENA.GAP, y: p.y + Math.sin(a) * ARENA.GAP };
-        if (C.every(c => Math.hypot(c.x - q.x, c.y - q.y) > ARENA.GAP * 0.9)) best = { q, a };
+        const q = { x: p.x + Math.cos(a) * GAP, y: p.y + Math.sin(a) * GAP };
+        if (C.every(c => Math.hypot(c.x - q.x, c.y - q.y) > GAP * 0.9)) best = { q, a };
       }
-      if (!best) best = { q: { x: p.x + ARENA.GAP, y: p.y }, a: 0 };
+      if (!best) best = { q: { x: p.x + GAP, y: p.y }, a: 0 };
       C.push(best.q); dirs.push(best.a);
     }
     // 2. 每個區域的形狀
     const noise = () => Array.from({ length: 6 }, (_, i) => ({ k: [3, 4, 5, 7, 13, 19][i], a: [0.05, 0.035, 0.03, 0.02, 0.012, 0.008][i] * rr(0.6, 1.4), p: rr(0, Math.PI * 2) }));
     const areas = C.map((c, k) => {
-      const shapes = [], main = { kind: 'c', x: c.x, y: c.y, r: rr(...ARENA.MAIN_R), nz: noise() };
+      const shapes = [], main = { kind: 'c', x: c.x, y: c.y, r: rr(...MAIN_R), nz: noise() };
       shapes.push(main);
       const arms = [];
       if (k > 0) arms.push(dirs[k - 1] + Math.PI);  // 入口（從上一區來）
       if (k < n - 1) arms.push(dirs[k]);             // 出口（往下一區）
-      for (const a of arms) shapes.push({ kind: 'cap', ax: c.x, ay: c.y, bx: c.x + Math.cos(a) * ARENA.ARM, by: c.y + Math.sin(a) * ARENA.ARM, w: rr(...ARENA.ARM_W), p: rr(0, 6.28) });
-      if (k === 0) shapes.push({ kind: 'cap', ax: c.x, ay: c.y, bx: c.x - Math.cos(dirs[0] || 0) * ARENA.ARM * 0.55, by: c.y - Math.sin(dirs[0] || 0) * ARENA.ARM * 0.55, w: rr(...ARENA.ARM_W), p: rr(0, 6.28) });
+      for (const a of arms) shapes.push({ kind: 'cap', ax: c.x, ay: c.y, bx: c.x + Math.cos(a) * ARM, by: c.y + Math.sin(a) * ARM, w: rr(...ARENA.ARM_W), p: rr(0, 6.28) });
+      if (k === 0) shapes.push({ kind: 'cap', ax: c.x, ay: c.y, bx: c.x - Math.cos(dirs[0] || 0) * ARM * 0.55, by: c.y - Math.sin(dirs[0] || 0) * ARM * 0.55, w: rr(...ARENA.ARM_W), p: rr(0, 6.28) });
       const circles = [main];
       for (let s = ri(...ARENA.SAT_N); s > 0; s--) {
-        const par = circles[R() < 0.7 ? 0 : ri(0, circles.length - 1)], r2 = rr(...ARENA.SAT_R);
+        const par = circles[R() < 0.7 ? 0 : ri(0, circles.length - 1)], r2 = rr(...SAT_R);
         // 離開手臂方向至少 35°（不要把通道口塞住）
         let a = 0;
         for (let t = 0; t < 12; t++) { a = rr(0, Math.PI * 2); if (arms.every(b => Math.abs(angleDiff(a, b)) > 0.6)) break; }
@@ -97,7 +100,7 @@ const Arena = {
     const corridors = [], gates = [];
     for (let k = 0; k < n - 1; k++) {
       const a = dirs[k], ux = Math.cos(a), uy = Math.sin(a), A = C[k], B = C[k + 1];
-      corridors.push({ kind: 'cap', ax: A.x + ux * (ARENA.ARM - 60), ay: A.y + uy * (ARENA.ARM - 60), bx: B.x - ux * (ARENA.ARM - 60), by: B.y - uy * (ARENA.ARM - 60), w: ARENA.CORR_W, p: 0, flat: true });
+      corridors.push({ kind: 'cap', ax: A.x + ux * (ARM - 60), ay: A.y + uy * (ARM - 60), bx: B.x - ux * (ARM - 60), by: B.y - uy * (ARM - 60), w: ARENA.CORR_W, p: 0, flat: true });
       gates.push({ i: k, x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, nx: ux, ny: uy, L: ARENA.CORR_W + 50, open: false });
     }
     this.bake(areas, corridors, gates, []);
@@ -108,7 +111,7 @@ const Arena = {
   //   終焉核心 boss3：圓形場地，中間四根柱子排成十字（擋慢速彈牆、環形波）
   genBoss(seed, bossId) {
     const R = seededRand(seed), rr = (a, b) => a + (b - a) * R();
-    this.rect = false; this.seed = seed; this.n = 1; this.bossId = bossId;
+    this.rect = false; this.seed = seed; this.n = 1; this.bossId = bossId; this.sc = 1;
     const noise = (amp = 1) => Array.from({ length: 5 }, (_, i) => ({ k: [3, 5, 7, 13, 19][i], a: [0.035, 0.025, 0.02, 0.01, 0.006][i] * amp * rr(0.6, 1.4), p: rr(0, Math.PI * 2) }));
     const shapes = [], cuts = [], A = { k: 0, cx: 0, cy: 0, shapes };
     if (bossId === 'boss2') {
@@ -132,6 +135,35 @@ const Arena = {
       }
     }
     this.bake([A], [], [], cuts);
+  },
+  // 8. 削掉太細的牆（開運算）：兩個圓幾乎相切時中間會夾出又長又尖的細牆，看起來很突兀
+  //   「深牆」= 離空地 ≥ R 的格點；牆只留下離深牆 R 以內的部分（比 2R 細的地方變空地，尖刺變圓鈍）
+  //   新場地值 = max(原本, 離深牆的距離 − R)；區域之間的牆至少 WALL（160）厚，不受影響
+  openThinWalls(val, owner, NX, NY) {
+    const R = ARENA.THIN / 2, CELL = ARENA.CELL, W1 = NX + 1, N = val.length, dg = CELL * Math.SQRT2;
+    const D = new Float32Array(N);
+    for (let k = 0; k < N; k++) D[k] = val[k] <= -R ? 0 : 1e9;
+    for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+      const k = j * W1 + i; let d = D[k];
+      if (i > 0) d = Math.min(d, D[k - 1] + CELL);
+      if (j > 0) { d = Math.min(d, D[k - W1] + CELL); if (i > 0) d = Math.min(d, D[k - W1 - 1] + dg); if (i < NX) d = Math.min(d, D[k - W1 + 1] + dg); }
+      D[k] = d;
+    }
+    for (let j = NY; j >= 0; j--) for (let i = NX; i >= 0; i--) {
+      const k = j * W1 + i; let d = D[k];
+      if (i < NX) d = Math.min(d, D[k + 1] + CELL);
+      if (j < NY) { d = Math.min(d, D[k + W1] + CELL); if (i < NX) d = Math.min(d, D[k + W1 + 1] + dg); if (i > 0) d = Math.min(d, D[k + W1 - 1] + dg); }
+      D[k] = d;
+    }
+    const opened = [];
+    for (let k = 0; k < N; k++) { const v = D[k] - R; if (v > val[k]) { if (val[k] <= 0 && v > 0) opened.push(k); val[k] = v; } }
+    // 新變成空地的格點：屬於隔壁空地的區域（往外擴幾輪；細牆最多 THIN 寬）
+    for (let pass = 0; pass < Math.ceil(ARENA.THIN / CELL) + 1 && opened.length; pass++) {
+      for (const k of opened) if (owner[k] < 0) {
+        const i = k % W1;
+        for (const n of [i > 0 ? k - 1 : -1, i < NX ? k + 1 : -1, k - W1, k + W1]) if (n >= 0 && n < N && owner[n] >= 0 && val[n] > 0) { owner[k] = owner[n]; break; }
+      }
+    }
   },
   // 共用：把區域、通道、閘門、柱子換算成格點上的場地值
   bake(areas, corridors, gates, cuts) {
@@ -213,6 +245,7 @@ const Arena = {
       D[k] = d;
     }
     for (let k = 0; k < N; k++) if (val[k] <= 0) val[k] = -D[k];
+    if (!cuts.length) this.openThinWalls(val, owner, NX, NY);  // 終焉核心的柱子是掩護，不削
     this.start = { x: areas[0].cx + (areas[0].sx || 0), y: areas[0].cy + (areas[0].sy || 0) };
     this.exitFlow = null;
     this.buildPath();
@@ -441,6 +474,18 @@ const Arena = {
     const F = this.exitFlow;
     let c = clamp(Math.floor(y / C), 0, H - 1) * W + clamp(Math.floor(x / C), 0, W - 1);
     const path = [];
+    if (F.dist[c] < 0) {  // 站在走不到的格子（例如黑洞核心旁邊那圈）：附近走得到的格子裡，挑「走過去的距離＋那格到出口的步數」最小的，從那裡接上路線
+      //   （不然會在「直接指」和「照路線」之間跳；只挑最近的一格又會變成從黑洞往外指，繞黑洞時箭頭跟著轉）
+      const cx0 = c % W, cy0 = Math.floor(c / W);
+      let best = -1, bd = Infinity;
+      for (let oy = -10; oy <= 10; oy++) for (let ox = -10; ox <= 10; ox++) {
+        const xx = cx0 + ox, yy = cy0 + oy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H || F.dist[yy * W + xx] < 0) continue;
+        const d = Math.hypot(ox, oy) + F.dist[yy * W + xx];
+        if (d < bd) { bd = d; best = yy * W + xx; }
+      }
+      if (best >= 0) { c = best; path.push([(c % W + 0.5) * C, (Math.floor(c / W) + 0.5) * C]); }
+    }
     for (let step = 0; step < 60; step++) {
       const cx = c % W, cy = Math.floor(c / W);
       let best = -1, bd = F.dist[c] >= 0 ? F.dist[c] : Infinity;

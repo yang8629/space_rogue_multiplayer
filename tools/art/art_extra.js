@@ -108,6 +108,31 @@ function artHoleCore(ctx, r) {
   ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
   ctx.strokeStyle = 'rgba(230,200,255,0.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, r + 1, 0, TAU); ctx.stroke();
 }
+// 黑洞的吸引範圍（半徑 R）：4 條往中心捲進去的旋臂（加法、紫色，中段最亮、外緣淡出）＋外緣一圈柔和的光帶（實線漸層，不用虛線）
+function artHoleSwirl(ctx, R) {
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const band = ctx.createRadialGradient(0, 0, R * 0.86, 0, 0, R);  // 外緣光帶
+  band.addColorStop(0, 'rgba(150,100,255,0)'); band.addColorStop(0.7, 'rgba(150,100,255,0.10)'); band.addColorStop(0.92, 'rgba(180,140,255,0.16)'); band.addColorStop(1, 'rgba(180,140,255,0)');
+  ctx.fillStyle = band; ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.fill();
+  const r0 = 46, K = 1.7;  // 旋臂：對數螺線 θ = θ0 + K·ln(R/r)，做成一整條連續的帶子（寬度外寬內窄），透明度用半徑方向的漸層：中段亮、外緣和中心淡
+  const fade = ctx.createRadialGradient(0, 0, r0, 0, 0, R);
+  fade.addColorStop(0, 'rgba(190,150,255,0)'); fade.addColorStop(0.25, 'rgba(190,150,255,0.30)'); fade.addColorStop(0.75, 'rgba(190,150,255,0.24)'); fade.addColorStop(0.97, 'rgba(190,150,255,0.10)'); fade.addColorStop(1, 'rgba(190,150,255,0)');
+  ctx.fillStyle = fade;
+  for (let arm = 0; arm < 4; arm++) {
+    const th0 = arm * TAU / 4, L = [], Rt = [];
+    for (let r = R; r >= r0; r -= 4) {
+      const a = th0 + K * Math.log(R / r), u = (r - r0) / (R - r0), w = 2 + 9 * u;  // 帶子半寬
+      const nx = -Math.sin(a) - K * Math.cos(a) / 1, ny = Math.cos(a) - K * Math.sin(a) / 1, nl = Math.hypot(nx, ny);  // 螺線的法線（近似）
+      L.push([Math.cos(a) * r + nx / nl * w, Math.sin(a) * r + ny / nl * w]); Rt.push([Math.cos(a) * r - nx / nl * w, Math.sin(a) * r - ny / nl * w]);
+    }
+    ctx.beginPath(); L.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); for (let i = Rt.length - 1; i >= 0; i--) ctx.lineTo(Rt[i][0], Rt[i][1]); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+// 出口箭頭（船頭朝 +x）：切面上色的綠色 V 形箭頭＋深色描邊
+function artExitArrow(ctx) {
+  faceted(ctx, [[11, 0], [-6, -9], [-2, 0], [-6, 9]], '#2ee6a6', { outline: 2.4, bright: 0.45 });
+}
 function artHoleDisk(ctx, r) {  // 吸積盤（平放；遊戲裡壓扁成橢圓、旋轉、分前後兩半）
   for (let i = 0; i < 26; i++) {
     const a = i / 26 * TAU, rr = r * (1.35 + (i % 4) * 0.22);
