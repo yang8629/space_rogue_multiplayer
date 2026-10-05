@@ -166,13 +166,21 @@ function drawWorld() {
   if (Game.state !== 'dead' && !Game.player.dead) drawPlayer(Game.player, Game.mate ? (Net.role === 'host' ? '1P' : '2P') : '');
 
   ctx.textAlign = 'center';
-  for (const t of Game.texts) {
-    ctx.globalAlpha = Math.min(1, t.life * 2);
-    ctx.font = t.big ? 'bold 21px Microsoft JhengHei' : 'bold 15px Segoe UI';
-    ctx.fillStyle = t.color;
-    ctx.fillText(t.text, t.x, t.y);
+  // 浮動數字：深色外框再填色（疊在一起、壓在亮色彈幕上時才分得開）
+  //   分兩批：先一般數字、再大數字（大的永遠在最上層）；每批只設一次字型和外框粗細
+  ctx.lineJoin = 'round'; ctx.strokeStyle = '#03050c';
+  for (const big of [false, true]) {
+    ctx.font = big ? 'bold 21px Microsoft JhengHei' : 'bold 15px Segoe UI';
+    ctx.lineWidth = big ? 4 : 3.5;
+    for (const t of Game.texts) {
+      if (!t.big !== !big) continue;
+      ctx.globalAlpha = Math.min(1, t.life * 2);
+      ctx.strokeText(t.text, t.x, t.y);
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.text, t.x, t.y);
+    }
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1; ctx.lineJoin = 'miter';
 }
 
 // 衝鋒／滾球預警線：跟敵方子彈一起畫在我方子彈之上，一律紅色

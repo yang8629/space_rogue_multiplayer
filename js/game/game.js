@@ -1038,6 +1038,8 @@ const Game = {
   },
   updateBullets(dt) {
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
+    buildEnemyGrid();  // 共用的敵人格子（追蹤、地雷、迴旋折返、找最近的敵人用；見 spatial.js）
+    Objects.buildGrid();  // 地圖物件格子（子彈打行星、小行星、彗星、黑洞）
     for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbV（存著的「發」）由存著的子彈每幀重新數
       p.orbHeld = p.orbT || 0;
       p.orbT = p.orbV && p.orbV.size && p.wantFire ? (p.orbT || 0) + dt : 0;
@@ -1501,7 +1503,10 @@ const Game = {
     for (const p of ps) if (p.icWs && p.icWs.length) this.withLoadout(p.L, () => this.tickCounter(p, dt));  // 合併回射：集氣時間到就射
     // 攔截晶片、相位刃的格擋：打掉敵彈。飛回來途中的迴旋不能攔截（攔截會用整條電路重射，裡面又有迴旋 → 飛回飛船附近又攔截，子彈一直翻倍）
     //   攔截重射出來的子彈（和它們觸發的回響）也不能再攔截：不然「攔截 → 重射 → 再攔截」會一直滾大
+    Objects.buildGrid();  // 地圖物件格子（敵彈打行星、小行星）
     const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return' && !b.fromIntercept) || b.parry) && b.mode !== 'wait');
+    // 攔截子彈照這一幀的路徑分進格子，敵彈只跟附近幾格的比（以前每顆敵彈跟全部攔截子彈比：上千 × 上千）；候選照 I 的順序，結果不變
+    if (I.length > 16) IGrid.build(I, q => { const p = q.r + 2; return [Math.min(q.px, q.x) - p, Math.min(q.py, q.y) - p, Math.max(q.px, q.x) + p, Math.max(q.py, q.y) + p]; });
     const fields = ps.filter(p => p.gravField);  // 重力井：場內的敵彈變慢
     for (const b of this.eBullets) {
       let k = 1;
@@ -1510,7 +1515,7 @@ const Game = {
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
       if (!Arena.rect && (Arena.f(b.x, b.y) < 0 || Arena.gateCross(b.x - b.vx * dt * k, b.y - b.vy * dt * k, b.x, b.y))) { b.life = 0; continue; }  // 大地圖：敵彈打到牆、閘門就消失
       if (Objects.eBulletHit(b)) continue;
-      if (I.length && this.interceptHit(b, I)) continue;
+      if (I.length && this.interceptHit(b, I.length > 16 ? IGrid.query(b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r) : I)) continue;
       for (const p of ps) {
         const rr = b.r + p.r;
         if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }

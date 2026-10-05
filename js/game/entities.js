@@ -294,7 +294,7 @@ class Bullet {
     this.mode = 'return'; this.life = 4; this.hitSet.clear(); this.flyAge = 0; this.speed = (this.dashed ? this.speed0 : this.baseSpeed) * this.accelMul; this.overT = 0;  // 回程一直追到飛船為止（最多 4 秒）；地雷衝出去的用武器原本的速度飛回
     if (o) this.angle = Math.atan2(o.y - this.y, o.x - this.x);
     // 折返的那一刻剛好重疊到的敵人不算（不然折返點剛好停在下一隻身上會多打一下）；剛剛穿過的那一隻回程照樣再打
-    for (const e of Game.enemies) if (e.id !== this.overId && dist2(this.x, this.y, e.x, e.y) < (e.r + this.r) ** 2) this.hitSet.add(e.id);
+    for (const e of enemiesNear(this.x, this.y, this.r)) if (e.id !== this.overId && dist2(this.x, this.y, e.x, e.y) < (e.r + this.r) ** 2) this.hitSet.add(e.id);
     this.att = { ...this.att, src: 'boomerang' };  // 傷害統計：回程打中的基礎傷害算迴旋的
     if (this.boom >= 2) { this.damage *= 1.5; this.att = attCredit(this.att, 'boomerang', 1.5); }
     stripW(this);  // 產物：武器插座的傷害加成只算直擊
@@ -333,7 +333,7 @@ class Bullet {
       // 觸發範圍算到敵人的邊緣（大隻的刺殼、精英、旗艦在旁邊也會觸發；以前算到中心，貼著大隻的邊也不動，時間到就消失）
       const TR = this.stasis >= 2 ? 70 : 50;
       let near = null, nb = Infinity;
-      for (const e of Game.enemies) {
+      for (const e of enemiesNear(this.x, this.y, TR)) {
         if (e.dead || e.spawnT > 0) continue;
         const gap = Math.hypot(e.x - this.x, e.y - this.y) - e.r;
         if (gap < TR && gap < nb) { nb = gap; near = e; }
@@ -364,7 +364,7 @@ class Bullet {
     } else if (this.homing > 0 && this.mode !== 'return') {
       // 追蹤：只找前方 ±70° 內、450 以內最近的敵人（身後的不追，往反方向射不會整個轉回去）
       let t = null, bd = 450 * 450;
-      for (const e of Game.enemies) {
+      for (const e of enemiesNear(this.x, this.y, 450)) {
         if (e.dead || e.spawnT > 0 || this.hitSet.has(e.id) || e.cloak > 0.5) continue;  // 隱形的潛伏者不追
         const d2 = dist2(this.x, this.y, e.x, e.y);
         if (d2 >= bd || Math.abs(angleDiff(this.angle, Math.atan2(e.y - this.y, e.x - this.x))) > 1.22) continue;
@@ -466,7 +466,7 @@ function stepPickup(c, p, range, d2, dt) {
 
 function nearestEnemy(x, y, range, exclude, visible = false) {  // visible：略過隱形中的潛伏者（自動瞄準用）
   let best = null, bd = range * range;
-  for (const e of Game.enemies) {
+  for (const e of range <= 600 ? enemiesNear(x, y, range) : Game.enemies) {
     if (e.dead || (exclude && exclude.has(e.id)) || (visible && e.cloak > 0.5)) continue;
     const d = dist2(x, y, e.x, e.y);
     if (d < bd) { bd = d; best = e; }
