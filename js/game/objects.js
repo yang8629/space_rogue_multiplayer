@@ -262,9 +262,22 @@ const Objects = {
     return true;
   },
   // 引力加速度（行星、黑洞）
+  // 引力來源（行星、黑洞）：照 Game.objs 的順序；物件陣列換了或數量變了才重挑
+  gravSrc() {
+    const O = Game.objs;
+    if (this._gsArr !== O || this._gsLen !== O.length) { this._gsArr = O; this._gsLen = O.length; this._gs = O.filter(o => o.type === 'planet' || o.type === 'hole'); }
+    return this._gs;
+  },
+  // 物件空間格子：子彈、敵彈更新前重建（物件會動：彗星）；near 查不到格子就回傳全部（照 Game.objs 的順序，結果不變）
+  buildGrid() {
+    const O = Game.objs;
+    if (O.length < 8) { this.grid = null; return; }
+    this.grid = (this._grid || (this._grid = new SpatialGrid(160))).build(O, o => { const r = o.r || 0; return [o.x - r, o.y - r, o.x + r, o.y + r]; });
+  },
+  near(x0, y0, x1, y1) { return this.grid && this.grid.items === Game.objs ? this.grid.query(x0, y0, x1, y1) : Game.objs; },
   gravity(x, y) {
     let ax = 0, ay = 0;
-    for (const o of Game.objs) {
+    for (const o of this.gravSrc()) {  // 只有行星、黑洞有引力（每顆子彈都要算：先挑出來存著）
       if (o.type !== 'planet' && o.type !== 'hole') continue;
       const range = o.type === 'hole' ? o.R : o.r * 3.2, dx = o.x - x, dy = o.y - y, d2 = dx * dx + dy * dy;
       if (d2 > range * range || d2 < 1) continue;
@@ -282,7 +295,7 @@ const Objects = {
       const [ax, ay] = this.gravity(b.x, b.y);
       if (ax || ay) b.angle += (-Math.sin(b.angle) * ax + Math.cos(b.angle) * ay) / b.speed * this.dt;
     }
-    for (const o of G.objs) {
+    for (const o of this.near(Math.min(b.px, b.x) - b.r, Math.min(b.py, b.y) - b.r, Math.max(b.px, b.x) + b.r, Math.max(b.py, b.y) + b.r)) {  // 只看子彈路徑附近的物件（空間格子）
       if (o.dead) continue;  // 這一幀剛被打爆的（例如彗星：碎片不會打到自己的彗星）
       if (o.type === 'hole') {
         if (dist2(b.x, b.y, o.x, o.y) < o.r * o.r) { b.dead = true; return true; }  // 核心吞掉子彈
@@ -331,7 +344,7 @@ const Objects = {
     if (!Game.objs.length) return false;
     const [ax, ay] = this.gravity(b.x, b.y);
     b.vx += ax * this.dt; b.vy += ay * this.dt;
-    for (const o of Game.objs) {
+    for (const o of this.near(b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r)) {
       if ((o.type !== 'planet' && o.type !== 'rock' && o.type !== 'hole') || o.dead) continue;
       if (dist2(b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
       if (b.boss && o.type === 'planet') this.hurtPlanet(o, b.dmg, b.x, b.y);
