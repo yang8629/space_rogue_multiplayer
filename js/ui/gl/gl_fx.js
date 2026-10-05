@@ -7,7 +7,13 @@ const GLFx = {
   init() {
     const L = GLR.L, S = () => new PIXI.Sprite();
     this.pB = new GLParticles(L.bullets, 'add');   // 我方子彈（加法混色）
-    this.pP = new GLParticles(L.fx, 'add');        // 粒子
+    this.pP = new GLParticles(L.fx, 'add');        // 彗星爆炸的閃光：淡藍白的光暈很快擴大變淡＋中心亮點
+    for (const f of G.flashes) {
+      const k = f.life / f.max;
+      const h = this.spr(this.pP, tx.halo, f.x, f.y); h.scaleX = h.scaleY = f.r * (0.7 + 0.5 * (1 - k)) / R.dot; h.tint = 0xd8f4ff; h.alpha = k * 0.9;
+      const d = this.spr(this.pP, tx.dot, f.x, f.y); d.scaleX = d.scaleY = f.r * 0.3 * k / R.dot; d.alpha = k;
+    }
+    // 粒子
     this.pEB = new GLParticles(L.eBullets, 'normal');  // 敵彈（畫在敵人底下：看起來從砲管／機身邊緣射出）
     this.g = new PIXI.Graphics(); L.fx.addChild(this.g);           // 電弧、光圈（每幀重畫）
     this.g.blendMode = 'add';
@@ -18,8 +24,8 @@ const GLFx = {
     const tS = new PIXI.Container(), tB = new PIXI.Container(); L.texts.addChild(tS, tB);  // 大數字的圖層在上面
     this.pTs = GLR.pool('txtS', tS, () => new PIXI.BitmapText({ text: '', style: this.styles.small }));
     this.pTb = GLR.pool('txtB', tB, () => new PIXI.BitmapText({ text: '', style: this.styles.big }));
-    this.tx = { dot: GLR.T('b/dot'), halo: GLR.T('b/halo'), line: GLR.T('b/line'), dart: GLR.T('b/dart'), blade: GLR.T('b/blade'), ring: GLR.T('b/ring'), eb: GLR.T('eb'), sq: GLR.T('p/sq'), ebRim: GLR.T('eb_rim'), ebFill: GLR.T('eb_fill'), ebw: GLR.T('b/ebw') };
-    this.res = { dot: GLR.res('b/dot'), line: GLR.res('b/line'), dart: GLR.res('b/dart'), blade: GLR.res('b/blade'), ring: GLR.res('b/ring'), eb: GLR.res('eb'), sq: GLR.res('p/sq'), ebFill: GLR.res('eb_fill'), ebw: GLR.res('b/ebw') };
+    this.tx = { dot: GLR.T('b/dot'), halo: GLR.T('b/halo'), line: GLR.T('b/line'), dart: GLR.T('b/dart'), blade: GLR.T('b/blade'), ring: GLR.T('b/ring'), eb: GLR.T('eb'), sq: GLR.T('p/sq'), ebRim: GLR.T('eb_rim'), ebFill: GLR.T('eb_fill'), ebw: GLR.T('b/ebw'), ice: GLR.T('b/ice') };
+    this.res = { dot: GLR.res('b/dot'), line: GLR.res('b/line'), dart: GLR.res('b/dart'), blade: GLR.res('b/blade'), ring: GLR.res('b/ring'), eb: GLR.res('eb'), sq: GLR.res('p/sq'), ebFill: GLR.res('eb_fill'), ebw: GLR.res('b/ebw'), ice: GLR.res('b/ice') };
   },
   spr(P, tex, x, y) { return P.get(tex, x, y); },
 
@@ -40,6 +46,8 @@ const GLFx = {
         const t = tail(b, 18);
         const s = this.spr(P, tx.line, b.x, b.y); s.rotation = b.angle; s.scaleX = Math.max(t, 0.5) / R.line; s.scaleY = b.r / R.line; s.tint = col; s.alpha = fa;
         const d = this.spr(P, tx.dot, b.x, b.y); d.scaleX = d.scaleY = b.r * 0.5 / R.dot; d.tint = col; d.alpha = fa;  // 圓頭
+      } else if (b.shape === 'ice') {  // 彗星的冰晶碎片：邊飛邊轉
+        const s = this.spr(P, tx.ice, b.x, b.y); s.rotation = b.angle + b.life * 14; s.scaleX = s.scaleY = b.r * 1.7 / R.ice; s.tint = col; s.alpha = fa;
       } else if (b.shape === 'reflect') {  // 反射鏡反彈：敵彈的圓球外形、我方的顏色
         const s = this.spr(P, tx.ebw, b.x, b.y); s.scaleX = s.scaleY = b.r / R.ebw; s.tint = col; s.alpha = fa;
       } else if (b.shape === 'dart') {

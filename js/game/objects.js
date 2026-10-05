@@ -18,6 +18,7 @@ const OBJ = {
   PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
   FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
   COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60, COMET_GRAV: 1.5,  // COMET_GRAV：彗星受引力影響的倍數
+  COMET_FROST: { slow: 0.4, t: 2 }, COMET_SHARDS: 12,  // 被彗星打到（撞擊、爆炸、碎片）都會冰凍：減速 40%、2 秒（敵人、玩家一樣）；打爆、撞爆都往四周噴 12 片碎片
 };
 const Objects = {
   dt: 1 / 60,
@@ -430,32 +431,63 @@ const Objects = {
       if (e.dead || e.spawnT > 0 || o.hits.has(e.id) || dist2(o.x, o.y, e.x, e.y) > (o.r + e.r) ** 2) continue;
       o.hits.add(e.id);
       const s = Math.hypot(o.vx, o.vy) || 1;
-      e.hurt(40, o.vx / s * 400, o.vy / s * 400, 'shock', o.lastAtt || null, 3);
+      e.hurt(40, o.vx / s * 400, o.vy / s * 400, 'comet', this.cometAtt(o, false), 3);  // 飛行中撞到：不算任何人的
+      this.cometFrost(e);
       floatText(e.x, e.y - e.r, 40, '#bfe9ff', true);
     }
     for (const p of G.players()) {
       if (o.hits.has(p) || dist2(o.x, o.y, p.x, p.y) > (o.r + p.r) ** 2) continue;
       o.hits.add(p);
+      this.cometFrost(p);  // 先凍再扣血
       G.hurtPlayer(20, '彗星（撞擊）', p, o.x, o.y);
     }
   },
-  // 打爆：碎片沿原本的飛行方向炸出去（敵人和飛船都會被打到；打到敵人算打爆的人的，打到飛船每片 CFG.COMET_SHARD_DMG）
+  // 打爆：往四周噴冰晶碎片（敵人和飛船都會被打到、會冰凍；打到敵人算打爆的人的「彗星」傷害，打到飛船每片 CFG.COMET_SHARD_DMG）
   breakComet(o) {
     if (o.dead) return;
     o.dead = true;
-    const a = Math.atan2(o.vy, o.vx), owner = o.lastAtt ? o.lastAtt.owner : null;
-    const list = Array.from({ length: 10 }, (_, i) => shot({ angle: (i / 9 - 0.5) * 1.2, speed: 620, damage: 25, radius: 4, life: 0.7,
-      color: '#bfe9ff', shape: 'dot', src: 'ship', shard: true }));
-    const n0 = Game.bullets.length;
-    Game.withLoadout(owner, () => spawnShots(list, o.x, o.y, a, 0, null));
-    for (let i = n0; i < Game.bullets.length; i++) Game.bullets[i].comet = true;
-    burst(o.x, o.y, '#bfe9ff', 30, 260, 0.6, 3);
+    this.cometShards(o, this.cometAtt(o, true));
+    this.cometFx(o.x, o.y, 40 + o.r * 2);
     SFX.play('explode');
   },
-  cometBoom(o, r, dmg) {  // 爆炸範圍、傷害照彗星大小（範圍最大 180，不會炸到整個畫面）
+  // 彗星傷害的歸屬：被玩家打爆的 = 那個玩家的「彗星」傷害；撞爆、飛行中撞到 = 不算任何人的（nobody，傷害統計不記）
+  cometAtt(o, broken) {
+    return broken && o.lastAtt ? { src: 'comet', cr: null, owner: o.lastAtt.owner } : { src: 'comet', cr: null, owner: null, nobody: true };
+  },
+  // 冰凍：敵人減速（跟冰凍塗層一樣），玩家移動變慢（Player.update 的 frostT）
+  cometFrost(t) {
+    const F = OBJ.COMET_FROST;
+    if (t instanceof Enemy) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, F.slow); t.slowT = Math.max(t.slowT, F.t); }
+    else if (t && !t.dead && !t.invuln) t.frostT = Math.max(t.frostT || 0, F.t);
+  },
+  // 冰晶碎片：往四周 360° 噴（不吃任何人的電路效果，直接做成子彈；命中會冰凍）
+  cometShards(o, att) {
+    const n = OBJ.COMET_SHARDS, a0 = rand(0, TAU), F = OBJ.COMET_FROST;
+    for (let i = 0; i < n; i++) {
+      const b = new Bullet(o.x, o.y, a0 + i / n * TAU, shot({ angle: 0, speed: 620, damage: 25, radius: 4, life: 0.7, color: '#bfe9ff', shape: 'ice', shard: true, slow: F.slow, slowDur: F.t }), 0, null);
+      b.att = att; b.owner = att.owner || null; b.comet = true;
+      Game.bullets.push(b);
+    }
+  },
+  // 新畫面風格的爆炸：淡藍白閃光＋往外擴的衝擊波＋殘留的冰霧（雙人：閃光用 'f' 事件傳給隊友，冰霧的 burst 自己會傳）
+  cometFx(x, y, r) {
+    if (Game.flashes.length < 20) Game.flashes.push({ x, y, r, life: 0.35, max: 0.35 });
+    if (Net.role === 'host') Net.fx(['f', Math.round(x), Math.round(y), Math.round(r)]);
+    Game.fxRing(x, y, r, '#bfe9ff');
+    burst(x, y, '#cfefff', 22, 90, 1.1, 4);
+  },
+  cometBoom(o, r, dmg) {  // 撞爆：爆炸範圍、傷害照彗星大小（範圍最大 180，不會炸到整個畫面）；敵人和玩家都會受傷、冰凍，再往四周噴碎片；不算任何人的
     o.dead = true;
-    const k = o.r / 18;
-    Game.explode(o.x, o.y, Math.min(180, r * k), dmg * k, '#bfe9ff', null, o.lastAtt || null);
+    const k = o.r / 18, R = Math.min(180, r * k), D = dmg * k, att = this.cometAtt(o, false);
+    Game.explode(o.x, o.y, R, D, '#bfe9ff', null, att);
+    for (const e of Game.enemies) if (!e.dead && dist2(e.x, e.y, o.x, o.y) <= (R + e.r) ** 2) this.cometFrost(e);
+    for (const p of Game.players()) {
+      if (!p || p.dead || dist2(p.x, p.y, o.x, o.y) > (R + p.r) ** 2) continue;
+      this.cometFrost(p);  // 先凍再扣血（扣血後的無敵時間會擋掉冰凍）
+      Game.hurtPlayer(D, '彗星（爆炸）', p, o.x, o.y);
+    }
+    this.cometShards(o, att);
+    this.cometFx(o.x, o.y, R);
   },
 
   // ---------- 飛船（自己的電腦）：黑洞拉扯與核心、行星和小行星擋住 ----------
