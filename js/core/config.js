@@ -83,6 +83,11 @@ function mixWhite(c, k) {
   for (let i = 1; i < 7; i += 2) o += Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - k) + 255 * k).toString(16).padStart(2, '0');
   return o;
 }
+function mixBlack(c, k) {  // 顏色往黑色混 k（0～1）；只認 #rgb／#rrggbb，其他格式原樣傳回
+  const w = mixWhite(c, 0);
+  if (!/^#[0-9a-f]{6}$/i.test(w)) return c;
+  return '#' + [1, 3, 5].map(i => Math.round(parseInt(w.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
+}
 
 // 敵人血量倍率（難度 ＝ 層數 ＋（星區 − 1）× 7）：二次成長，後面的星區越來越硬，跟得上玩家疊起來的傷害
 //   1 ＋ 0.1×難度 ＋ 0.01×難度² ＋（波次 − 1）× 0.08：第 1 星區 ×1.0～1.96、第 2 星區到 ×3.64、第 3 星區到 ×7.0

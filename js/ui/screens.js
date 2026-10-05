@@ -135,10 +135,10 @@ const Screen = {
       <div style="height:6px;background:#141c3a;border-radius:3px;margin-top:3px">
       <div style="height:6px;width:${Math.round(v / max * 100)}%;background:${col};border-radius:3px"></div></div></div>`;
     const cards = Object.entries(SHIPS).map(([id, S]) => {
-      const pts = S.hull.map(([x, y]) => `${x},${y}`).join(' ');
+      const pts = S.hull.map(([x, y]) => `${x},${y}`).join(' '), icon = shipIconURL(S);  // 飛船小圖跟戰鬥畫面同一個畫法（畫不出來才用多邊形）
       return `<div class="card" style="border-color:${S.color}">
-        <svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
-          <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>
+        ${icon ? `<img src="${icon}" width="72" height="72" alt="${S.name}" style="margin:0 auto;display:block">` : `<svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
+          <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>`}
         <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
         <div class="ds brief">${S.desc}</div>
         <div class="ty">船體 ${S.hp}　·　速度 ${S.speed}　·　衝刺冷卻 ${S.dashCd} 秒　·　零件格 ${S.partSlots}</div>
