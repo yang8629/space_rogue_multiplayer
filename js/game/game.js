@@ -376,14 +376,13 @@ const Game = {
     if (!MODULES[id]) return;
     this.setModule(id);
     SFX.play('upgrade');
-    this.showMap(`裝上背包模組「${MODULES[id].name}」` + this.mechGain());
+    this.showMap(`裝上背包模組「${MODULES[id].name}」`);  // 背包模組本身就是強化，不算機體強化（不加電路格）
   },
   takeBossModule() {  // 擊沉旗艦：裝上旗艦專屬模組
     const V = this.victory;
     if (!V || V.took || !V.module) return;
     V.took = true;
     this.setModule(V.module);
-    this.mechGain();
     SFX.play('upgrade');
     Screen.victory();
   },
@@ -908,7 +907,7 @@ const Game = {
     p.portalCd = 0; p.pullV = null; p.icW = null;
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
-  // 機體強化（零件 1 層、背包模組）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
+  // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
   mechGain() {
     const k = CFG.MECH_SLOT_EVERY;
     if (!k) return '';
@@ -1510,7 +1509,7 @@ const Game = {
       if (I.length && this.interceptHit(b, I)) continue;
       for (const p of ps) {
         const rr = b.r + p.r;
-        if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
+        if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
       }
     }
     this.eBullets = this.eBullets.filter(b => b.life > 0);

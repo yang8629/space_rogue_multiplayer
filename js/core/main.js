@@ -28,7 +28,9 @@ function frame(now) {
   TouchUI.sync();
   Music.update();
   Net.tick(dt);
-  Game.update(Game.mode === 'range' && Range.slow ? dt * Range.SLOW : dt);  // 靶場慢動作
+  const gdt = Game.mode === 'range' && Range.slow ? dt * Range.SLOW : dt;  // 靶場慢動作
+  Game.update(gdt);
+  if (Game.mode === 'range' && Game.state === 'play') Range.tick(gdt);  // 靶場「擋彈」：標靶射彈幕
   Range.syncBar();  // 靶場按鈕列（只在靶場戰鬥中顯示）
   render();
   requestAnimationFrame(frame);

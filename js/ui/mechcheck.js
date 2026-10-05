@@ -948,7 +948,9 @@ const MechCheck = {
       const b = M.targets([[400, 0]], 'boss2', false, 1)[0]; b.t = { ...b.t, dmg: 0 };
       b.hp = b.maxHp * 0.45;
       let windup = false, charged = false, maxShots = 0;
+      b.forceSkill = 'charge';  // 出招是隨機的：先指定衝鋒，7 秒後指定部署
       for (let i = 0; i < 60 * 14; i++) {
+        if (i === 60 * 7) b.forceSkill = 'deploy';
         b.update(1 / 60, Game.player);
         if (b.mode === 'windup') windup = true;
         if (b.mode === 'charge') charged = true;
@@ -1080,6 +1082,7 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const b = M.targets([[400, 0]], 'boss', false, 1)[0]; b.t = { ...b.t, dmg: 0 };
       b.hp = b.maxHp * 0.45;
+      b.forceSkill = 'summon';  // 出招是隨機的：指定召喚
       for (let i = 0; i < 60 * 12; i++) b.update(1 / 60, Game.player);
       const minions = Game.enemies.filter(e => e.type === 'swarmer').length;
       return { ok: b.enraged && minions > 0, got: `${b.enraged ? '已暴走' : '沒有暴走'}，召喚 ${minions} 隻蟲群` };
