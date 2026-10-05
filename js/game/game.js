@@ -1002,6 +1002,14 @@ const Game = {
     if (!this.inArena) { this.cam.x += dt * 20; this.cam.y += dt * 8; }
     if (Net.role === 'host' && this.mode === 'coop') Net.hostSend(dt);
   },
+  // 盾衛的盾是實心的：飛船撞到盾（盾那一側 ±60°、盾外緣 r+13 以內）會被推到盾外，回傳 true（房主再算撞擊傷害）
+  //   雙人：隊友自己的船由隊友那邊推（net.js clientUpdate），不然會被自己送來的位置蓋掉
+  shieldBlock(e, p) {
+    const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, R = e.r + 13 + p.r;
+    if (d >= R || Math.abs(angleDiff(Math.atan2(dy, dx), e.shieldA)) >= Math.PI / 3) return false;
+    p.x = e.x + dx / d * R; p.y = e.y + dy / d * R;
+    return true;
+  },
   updateEnemies(dt) {
     const E = this.enemies;
     for (const e of E) {
@@ -1009,6 +1017,7 @@ const Game = {
       if (e.dead) continue;
       e.update(dt, this.nearestPlayer(e.x, e.y));  // 雙人：追最近的玩家
       if (e.spawnT <= 0) for (const p of this.players()) {
+        if (e.shieldA != null && this.shieldBlock(e, p) && !this.mechOf(p).traits.ram) this.hurtPlayer(e.t.dmg, e.t.name + '（盾）', p, e.x, e.y);
         const rr = e.r + p.r;
         if (dist2(e.x, e.y, p.x, p.y) >= rr * rr) continue;
         const M = this.mechOf(p);

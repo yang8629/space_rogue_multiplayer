@@ -481,7 +481,7 @@ const ENEMY_TYPES = {
     ranged: { range: 380, cd: 1.8, speed: 260, dmg: 12 } },
   elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
   // 主題小兵（每場隨機抽幾種，越後面越多，見 Game.pickThemes）
-  gunboat:  { name: '彈幕艇', hp: 60, speed: 70, radius: 16, dmg: 10, color: '#ff6b9d', credits: 3, shape: 7 },    // 停在 420～520 外，每 3 秒放一圈 10 發慢速彈（先閃 0.6 秒）
+  gunboat:  { name: '彈幕艇', hp: 60, speed: 70, radius: 16, dmg: 10, color: '#ff6b9d', credits: 3, shape: 8 },    // 停在 420～520 外，每 3 秒放一圈 8 發慢速彈（先閃 0.6 秒；從 8 根砲管射出，砲塔慢慢轉）
   worm:     { name: '列隊蟲', hp: 14, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
   shield:   { name: '盾衛', hp: 110, speed: 55, radius: 20, dmg: 20, color: '#5ec8ff', credits: 4, shape: 6 },    // 出生時隨機決定盾的方向（120°），之後不轉；打到盾的子彈反彈回去（傷害 ×0.5，最多 25）
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 3, shape: 5 },   // 死掉時分成 3 隻碎裂體
@@ -563,7 +563,7 @@ class Enemy {
       return;
     }
     const dx = p.x - this.x, dy = p.y - this.y, d = Math.hypot(dx, dy) || 1;
-    this.rot += dt * (this.type === 'brute' ? 0.8 : this.type === 'elite' ? 1.5 : this.type === 'boss' ? 0.4 : 0);
+    this.rot += dt * (this.type === 'brute' ? 0.8 : this.type === 'elite' ? 1.5 : this.type === 'boss' ? 0.4 : this.type === 'gunboat' ? 0.5 : 0);
     if (t.boss) { this.updateBoss(dt, dx, dy, d); return; }
     if (this.type === 'brute' && this.updateBrute(dt, dx, dy, d)) return;
     if (THEME_AI[this.type] && THEME_AI[this.type].call(this, dt, p, dx, dy, d)) return;
@@ -620,7 +620,8 @@ class Enemy {
       if (this.cd <= 0 && d < R + 120) {
         this.cd = t.ranged.cd;
         const a = Math.atan2(dy, dx);
-        Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * t.ranged.speed, vy: Math.sin(a) * t.ranged.speed,
+        const mz = this.type === 'spitter' ? this.r * 1.55 : 0;  // 噴吐者：從噴管口射出
+        Game.eBullets.push({ x: this.x + Math.cos(a) * mz, y: this.y + Math.sin(a) * mz, vx: Math.cos(a) * t.ranged.speed, vy: Math.sin(a) * t.ranged.speed,
           r: 5, dmg: t.ranged.dmg, life: 3, from: t.name });
         SFX.play('eshot');
       }
@@ -870,13 +871,12 @@ class Enemy {
 
 // ---------- 主題小兵的行為（this = Enemy）；回傳 true 表示這一幀的移動已經處理完 ----------
 const THEME_AI = {
-  gunboat(dt, p, dx, dy, d) {  // 停在 420～520 外；每 3 秒閃 0.6 秒後放一圈 10 發慢速彈
+  gunboat(dt, p, dx, dy, d) {  // 停在 420～520 外；每 3 秒閃 0.6 秒後從 8 根砲管各射一發慢速彈（砲塔 rot 慢慢轉）
     if (this.mode === 'windup') {
       this.modeT -= dt; this.vx *= 0.9; this.vy *= 0.9; this.move(dt);
       if (this.modeT <= 0) {
         this.mode = 'chase'; this.cd = 3;
-        const off = rand(0, TAU);
-        for (let i = 0; i < 10; i++) { const a = off + i / 10 * TAU; Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 6, dmg: 10, life: 5, from: this.t.name }); }
+        for (let i = 0; i < 8; i++) { const a = this.rot + i / 8 * TAU; Game.eBullets.push({ x: this.x + Math.cos(a) * this.r * 1.3, y: this.y + Math.sin(a) * this.r * 1.3, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 6, dmg: 10, life: 5, from: this.t.name }); }
         SFX.play('eshot');
       }
       return true;

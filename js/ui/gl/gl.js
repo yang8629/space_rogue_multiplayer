@@ -75,7 +75,7 @@ const GLR = {
     const st = this.app.stage, C = () => new PIXI.Container();
     const L = this.L;
     L.bg = C(); L.world = C(); st.addChild(L.bg, L.world);
-    for (const k of ['grid', 'map', 'mapFx', 'pickups', 'bullets', 'fx', 'enemies', 'eFx', 'eBullets', 'ships', 'texts']) { L[k] = C(); L.world.addChild(L[k]); }
+    for (const k of ['grid', 'map', 'mapFx', 'pickups', 'bullets', 'fx', 'eBullets', 'enemies', 'eFx', 'ships', 'texts']) { L[k] = C(); L.world.addChild(L[k]); }
     // 發光：整個世界加 bloom（亮的地方自然發光）
     const F = PIXI.filters || {};
     if (F.AdvancedBloomFilter) L.world.filters = [new F.AdvancedBloomFilter({ threshold: 0.72, bloomScale: 0.45, brightness: 1, blur: 4, quality: 4 })];

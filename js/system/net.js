@@ -841,7 +841,10 @@ const Net = {
     if (G.state === 'play' && !this.pauseReason()) {  // 房主在編輯電路、切到其他視窗、斷線時全員暫停
       G.time += dt;
       if (G.runStats) G.runStats.time += dt;
-      if (!P.dead) P.update(dt);
+      if (!P.dead) {
+        P.update(dt);
+        for (const e of G.enemies) if (e.shieldA != null && e.spawnT <= 0) G.shieldBlock(e, P);  // 盾衛的盾：自己的船自己推開（傷害房主算）
+      }
       // 兩次戰場狀態之間：照速度往前推，畫面才會滑順
       for (const e of G.enemies) {
         e.modeT -= dt;

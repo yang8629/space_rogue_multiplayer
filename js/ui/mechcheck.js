@@ -1014,13 +1014,13 @@ const MechCheck = {
       return { ok: seen.has('windup') && seen.has('charge') && seen.has('stun') && maxSpd > 400 && closest < 60,
         got: `經過：${[...seen].join(' → ')}，最高速度 ${Math.round(maxSpd)}，最接近玩家 ${Math.round(closest)}` };
     }],
-    ['敵人', '彈幕艇', '停在遠處，閃 0.6 秒後放一圈 10 發慢速彈', M => {
+    ['敵人', '彈幕艇', '停在遠處，閃 0.6 秒後放一圈 8 發慢速彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, e = M.targets([[470, 0]], 'gunboat', false, 1)[0]; e.cd = 0.1;
       let wind = false;
       for (let f = 0; f < 90; f++) { Game.time += 1 / 60; e.update(1 / 60, p); if (e.mode === 'windup') wind = true; }
       const d = Math.hypot(e.x - p.x, e.y - p.y);
-      return { ok: wind && Game.eBullets.length === 10 && d > 380, got: (wind ? '有預警' : '沒預警') + '，放了 ' + Game.eBullets.length + ' 發，距離 ' + Math.round(d) };
+      return { ok: wind && Game.eBullets.length === 8 && d > 380, got: (wind ? '有預警' : '沒預警') + '，放了 ' + Game.eBullets.length + ' 發，距離 ' + Math.round(d) };
     }],
     ['敵人', '列隊蟲', '6 節排成一列跟著走；頭被打死，下一節變成頭', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
@@ -1041,6 +1041,17 @@ const MechCheck = {
       };
       const front = shoot(Math.PI), back = shoot(0);
       return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發' };
+    }],
+    ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外並受撞擊傷害；背面同樣距離沒事', M => {
+      const bump = ang => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const p = Game.player, e = M.targets([[150, 0]], 'shield', true, 1)[0]; e.shieldA = ang; e.t = { ...e.t, dmg: ENEMY_TYPES.shield.dmg };
+        p.x = e.x - (e.r + p.r + 6); p.y = e.y; p.iframe = 0; p.vx = p.vy = 0; const hp = p.hp;
+        Game.updateEnemies(1 / 60);
+        return { dmg: hp - p.hp, d: Math.hypot(p.x - e.x, p.y - e.y), R: e.r + 13 + p.r };
+      };
+      const front = bump(Math.PI), back = bump(0);
+      return { ok: front.dmg > 0 && front.d >= front.R - 0.5 && back.dmg === 0 && back.d < back.R - 1, got: '盾那側：扣 ' + Math.round(front.dmg) + '、推到 ' + Math.round(front.d) + '（盾外緣 ' + front.R + '）；背面：扣 ' + Math.round(back.dmg) + '、距離 ' + Math.round(back.d) };
     }],
     ['敵人', '分裂體', '死掉時分成 3 隻碎裂體', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

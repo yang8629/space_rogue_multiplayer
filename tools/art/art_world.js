@@ -61,7 +61,7 @@ const ENEMIES = [
   { id: 'brute_ball', name: '刺殼（攻擊：旋轉滾動）', col: '#ff9f1c', n: 6, r: 22, note: '頭和大顎收進殼裡，六角殼帶著刺旋轉衝過來', face: true },
   { id: 'spitter', name: '噴吐者', col: '#f72585', n: 4, r: 13, note: '酸液囊：半透明肚子裡發光的酸液、肉質噴管（開火前鼓起）、背上一隻眼', face: true },
   { id: 'elite', name: '虛空獵手', col: '#ffd400', n: 5, r: 26, note: '吸光的虛空黑身體、只有邊緣透金光；鐮刀刃翼（拖出金色殘光）、發光眼縫、環繞碎晶', face: true },
-  { id: 'gunboat', name: '彈幕艇', col: '#ff6b9d', n: 7, r: 16, note: '砲台碟：轉動的砲塔環、7 根砲管朝外、中央圓頂；蓄力時砲管由內往外亮' },
+  { id: 'gunboat', name: '彈幕艇', col: '#ff6b9d', n: 8, r: 16, note: '砲台碟：轉動的砲塔環、8 根砲管朝外、中央圓頂；蓄力時砲管由內往外亮' },
   { id: 'worm', name: '列隊蟲', col: '#c0ff4d', n: 4, r: 9, note: '蜈蚣：頭有大顎、每節圓甲殼＋划動的腳、尾刺', face: true },
   { id: 'worm_cut', name: '列隊蟲（頭被打掉）', col: '#c0ff4d', n: 4, r: 9, note: '頭爆開 → 下一節長出大顎和眼睛（0.3 秒）、整條變快；尾刺永遠在最後一節', face: true },
   { id: 'shield', name: '盾衛', col: '#5ec8ff', n: 6, r: 20, note: '實體弧形塔盾用兩支機械臂固定在身上、外側能量光膜；裝甲身體＋肩甲＋護目鏡縫', face: true },
@@ -367,8 +367,8 @@ function drawSpitter(ctx, c, r, t) {
 function drawGunboat(ctx, c, r, t, chOv = null, ringOv = null) {  // chOv：指定蓄力程度（0～1）、ringOv：指定砲塔角度（產生圖集用）
   const cyc = (t % 3) / 3, ch = chOv != null ? chOv : cyc > 0.8 ? (cyc - 0.8) / 0.2 : 0, ring = ringOv != null ? ringOv : t * 0.5;
   ctx.save(); ctx.rotate(ring);
-  for (let i = 0; i < 7; i++) {  // 砲管
-    const a = i / 7 * TAU; ctx.save(); ctx.rotate(a);
+  for (let i = 0; i < 8; i++) {  // 砲管（8 根，子彈照砲管方向射出）
+    const a = i / 8 * TAU; ctx.save(); ctx.rotate(a);
     ctx.fillStyle = '#03050c'; ctx.fillRect(r * 0.6, -3.2, r * 0.75, 6.4);
     const g = ctx.createLinearGradient(0, -2.6, 0, 2.6); g.addColorStop(0, '#9aa6c4'); g.addColorStop(1, '#2a3150'); ctx.fillStyle = g; ctx.fillRect(r * 0.62, -2.4, r * 0.7, 4.8);
     if (ch > 0) ADD(ctx, () => { ctx.fillStyle = rgba('#ff2a6a', ch); ctx.fillRect(r * 0.62, -1.2, r * 0.7 * ch, 2.4); });
@@ -376,7 +376,7 @@ function drawGunboat(ctx, c, r, t, chOv = null, ringOv = null) {  // chOv：指�
     ctx.restore();
   }
   ctx.restore();
-  faceted(ctx, polyPts(7, r * 0.82, ring), c, { outline: 3 });  // 碟身（跟著砲塔環轉）
+  faceted(ctx, polyPts(8, r * 0.82, ring + TAU / 16), c, { outline: 3 });  // 碟身（跟著砲塔環轉）
   ctx.strokeStyle = 'rgba(3,5,12,0.5)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, TAU); ctx.stroke();  // 砲塔環的接縫
   litEllipse(ctx, 0, 0, r * 0.4, r * 0.4, mix(c, '#ffffff', 0.15));  // 圓頂
   glow(ctx, 0, 0, r * 0.5, '#ff2a6a', 0.3 + ch * 0.7); eye(ctx, 0, 0, r * 0.16, ch > 0 ? '#5a0a20' : '#0a1430');

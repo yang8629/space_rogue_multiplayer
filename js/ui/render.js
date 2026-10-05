@@ -135,6 +135,7 @@ function drawWorld() {
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
 
+  drawEnemyBullets();  // 敵彈畫在敵人底下（看起來從砲管／機身邊緣射出），我方子彈之上（看起來從砲管／機身邊緣射出）
   // 敵人畫在我方子彈之上，才不會被彈幕蓋住
   // 被小行星擋住的敵人看不到：只在那顆小行星邊緣畫一個淡淡的「？」
   const viewer = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player;
@@ -149,14 +150,6 @@ function drawWorld() {
 
   // 敵方攻擊畫在我方子彈之上、不用 lighter 疊色：紅色實心＋深色外框，才不會被我方彈幕蓋掉
   for (const e of Game.enemies) drawTelegraph(e);
-  for (const b of Game.eBullets) {
-    ctx.fillStyle = 'rgba(255, 30, 30, 0.35)';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = '#2a0000'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#ffd0d0';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
-  }
 
   const tg = Game.player.target;
   if (Input.touch && tg && !tg.dead) {  // 自動攻擊的鎖定框
@@ -256,12 +249,41 @@ function drawLurkerTrail(e) {
     polygon(q.x, q.y, e.r * (0.6 + 0.4 * i / T.length), e.t.shape, Math.atan2(e.vy, e.vx)); ctx.stroke();
   });
 }
+// 虛空獵手、裂界獵艦的畫面朝向（只影響繪圖；e.rot 還是環形彈的起始角）：蓄力／衝鋒等招式朝 chargeA，
+//   追人時船頭轉向最近的玩家（每秒最多轉 6 弧度）。隊友那邊的敵人每次同步都重建，所以角度記在這裡（用 id）
+const ENEMY_FACE = new Map();
+function nearestShip(e) {  // 離敵人最近、還活著的飛船（跟敵人瞄準的目標一樣；雙人時可能是隊友）
+  let q = null, bd = Infinity;
+  for (const p of [Game.player, Game.mate]) if (p && !p.dead && !p.gone) { const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; q = p; } }
+  return q;
+}
+function enemyFace(e) {
+  const G = Game;
+  if (e.mode && e.mode !== 'chase') { const m = ENEMY_FACE.get(e.id); if (m) { m.a = e.chargeA; m.t = G.time; } return e.chargeA; }
+  const q = nearestShip(e), want = q ? Math.atan2(q.y - e.y, q.x - e.x) : e.rot || 0, m = ENEMY_FACE.get(e.id);
+  if (!m || G.time - m.t > 0.5 || G.time < m.t) { ENEMY_FACE.set(e.id, { a: want, t: G.time }); return want; }  // 新出現（或編號被下一場重用）：直接朝目標
+  const step = 6 * clamp(G.time - m.t, 0, 0.1), d = angleDiff(m.a, want);
+  m.a += clamp(d, -step, step); m.t = G.time;
+  if (ENEMY_FACE.size > 100) for (const k of ENEMY_FACE.keys()) if (!G.enemies.some(o => o.id === k)) ENEMY_FACE.delete(k);
+  return m.a;
+}
+function drawEnemyBullets() {
+  for (const b of Game.eBullets) {
+    ctx.fillStyle = 'rgba(255, 30, 30, 0.35)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = '#2a0000'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffd0d0';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
+  }
+}
+function spitterFace(e) { const q = nearestShip(e); return q ? Math.atan2(q.y - e.y, q.x - e.x) : Math.atan2(e.vy, e.vx); }  // 噴吐者：嘴對著瞄準的玩家
 function drawEnemy(e) {
   const sp = e.spawnT > 0 ? 1 - e.spawnT / e.spawnMax : 1;
   if (e.type === 'lurker') drawLurkerTrail(e);
   ctx.globalAlpha = (0.3 + 0.7 * sp) * (1 - 0.9 * (e.cloak || 0));  // 潛伏者隱形時幾乎看不到（殘影還在）
   const rot = ['swarmer', 'worm', 'splitling', 'lurker'].includes(e.type) ? Math.atan2(e.vy, e.vx)
-    : e.type === 'spitter' ? Math.atan2(Game.player.y - e.y, Game.player.x - e.x) : e.rot;
+    : e.type === 'spitter' ? spitterFace(e) : e.type === 'elite' || e.type === 'boss2' ? enemyFace(e) : e.rot;
   if (e.type === 'elite') {
     ctx.strokeStyle = 'rgba(255, 212, 0, 0.35)'; ctx.lineWidth = 1;
     polygon(e.x, e.y, e.r * 1.5 * sp, 5, -e.rot * 0.7); ctx.stroke();
