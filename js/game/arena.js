@@ -505,51 +505,5 @@ const Arena = {
     WP.addPath(P);
     this.path = P; this.wallPath = WP;
   },
-  // 牆（填滿＋發光的邊）與閘門；viewer = 畫面跟著的飛船（閘門顏色：能過 = 綠、關著 = 紅）
-  draw(viewer) {
-    if (this.rect || !this.wallPath) return;
-    ctx.fillStyle = '#131a33';
-    ctx.fill(this.wallPath, 'evenodd');
-    ctx.strokeStyle = 'rgba(110, 140, 230, 0.10)'; ctx.lineWidth = 14; ctx.stroke(this.path);
-    ctx.strokeStyle = 'rgba(130, 160, 240, 0.65)'; ctx.lineWidth = 3; ctx.stroke(this.path);
-    const t = Game.time;
-    for (const g of this.gates) {
-      const pass = viewer && viewer.zone === g.i && g.open, behind = viewer && viewer.zone > g.i;
-      const color = pass ? '#2ee6a6' : '#ff4d6d', ex = -g.ny * g.L, ey = g.nx * g.L;
-      ctx.globalAlpha = behind ? 0.35 : pass ? 0.55 + 0.25 * Math.sin(t * 5) : 0.8;
-      ctx.strokeStyle = color; ctx.lineWidth = pass ? 3 : 6;
-      if (pass) ctx.setLineDash([10, 8]);
-      ctx.beginPath(); ctx.moveTo(g.x - ex, g.y - ey); ctx.lineTo(g.x + ex, g.y + ey); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 0.12; ctx.lineWidth = 22; ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-  },
-  // 小地圖（畫面右上角，螢幕座標）：整張地圖、閘門、飛船
-  drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left：左邊緣）
-    if (this.rect || !this.path) return;
-    const s = Math.min(maxW / this.W, maxH / this.H), w = this.W * s, h = this.H * s;
-    if (left) x += w;
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = 'rgba(5, 8, 20, 0.7)'; ctx.fillRect(x - w, y, w, h);
-    ctx.strokeStyle = 'rgba(130, 160, 240, 0.4)'; ctx.lineWidth = 1; ctx.strokeRect(x - w, y, w, h);
-    ctx.translate(x - w, y); ctx.scale(s, s);
-    const C = Game.combat, cur = C ? Math.max(0, (C.wave || 1) - 1) : 0;
-    ctx.fillStyle = 'rgba(70, 90, 160, 0.55)'; ctx.fill(this.path);
-    for (const g of this.gates) {
-      ctx.strokeStyle = g.open ? '#2ee6a6' : '#ff4d6d'; ctx.lineWidth = 3 / s * 0.8;
-      ctx.beginPath(); ctx.moveTo(g.x + g.ny * g.L, g.y - g.nx * g.L); ctx.lineTo(g.x - g.ny * g.L, g.y + g.nx * g.L); ctx.stroke();
-    }
-    const A = this.areas[cur];
-    if (A) { ctx.fillStyle = 'rgba(255, 209, 102, 0.9)'; ctx.font = `bold ${Math.round(14 / s)}px Microsoft JhengHei`; ctx.textAlign = 'center'; }
-    for (const e of Game.enemies) { if (e.dead) continue; ctx.fillStyle = '#ff4d6d'; ctx.fillRect(e.x - 1.5 / s, e.y - 1.5 / s, 3 / s, 3 / s); }
-    for (const p of [Game.player, Game.mate]) {
-      if (!p || p.gone) continue;
-      ctx.fillStyle = p.dead ? '#888' : p === Game.player ? '#fff' : (p.ship && p.ship.color) || '#4cc9f0';
-      ctx.beginPath(); ctx.arc(p.x, p.y, 3.5 / s, 0, TAU); ctx.fill();
-    }
-    ctx.restore();
-  },
 };
 Arena.reset();

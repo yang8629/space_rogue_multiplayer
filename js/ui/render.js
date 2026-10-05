@@ -77,9 +77,9 @@ function drawWorld() {
     ctx.strokeStyle = 'rgba(76, 201, 240, 0.6)';
     ctx.lineWidth = 3;
     ctx.strokeRect(0, 0, W, H);
-  } else Arena.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 大地圖：牆、閘門
+  } else WorldView.drawArena(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 大地圖：牆、閘門
 
-  Objects.draw(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
+  WorldView.drawObjects(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
   drawExit();
   for (const z of Game.zones) {  // 王的落點轟炸：紅圈，裡面的實心圓越長越大，滿了就爆炸
     const k = 1 - Math.max(0, z.t) / z.max;
@@ -189,7 +189,7 @@ function drawExit() {
   const X = Game.exit;
   if (!X) return;
   const t = Game.time, pulse = 1 + 0.08 * Math.sin(t * 5);
-  if (X.gate) {  // 大地圖：閘門本身由 Arena.draw 畫，這裡只寫字＋畫箭頭（已經穿過去的人不畫）
+  if (X.gate) {  // 大地圖：閘門本身由 WorldView.drawArena 畫，這裡只寫字＋畫箭頭（已經穿過去的人不畫）
     const me = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, g = Arena.gates[me.zone];
     if (!g || !g.open) return;
     ctx.globalAlpha = 1; ctx.fillStyle = '#c9fff3'; ctx.font = 'bold 14px Microsoft JhengHei'; ctx.textAlign = 'center';
@@ -632,8 +632,8 @@ function drawHUD() {
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
   // 大地圖：小地圖（電腦在右上角；手機的右邊有按鈕，放在左上角 HP 下面）
-  if (T) Arena.drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
-  else Arena.drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
+  if (T) WorldView.drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
+  else WorldView.drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
 
   // 電路鏈縮圖（觸控時移到上方，避開拇指）
   const n = Game.chain.length, w = T ? 40 : 54, gap = T ? 5 : 8, total = n * w + (n - 1) * gap;
