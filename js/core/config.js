@@ -14,8 +14,8 @@ const CFG = {
   // 攔截回射：第一顆擋下的位置開一個集氣池，win 秒內 join 以內擋下的都合進去，時間到回射一次（每多 1 顆傷害 +per，最多 ×max）；離所有集結點太遠就另開一個池
   COUNTER: { win: 0.2, per: 0.3, max: 4, join: 300 },
   BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
-  START_SLOTS: 4, MAX_SLOTS: 8, INV_SLOTS: 6,
-  MECH_SLOT_EVERY: 0,       // 機體強化（零件每 1 層、背包模組）每拿幾個，電路格 +1（0 = 關閉）
+  START_SLOTS: 3, MAX_SLOTS: 8, INV_SLOTS: 6,  // START_SLOTS 含武器格：開局 2 格晶片
+  MECH_SLOT_EVERY: 2,       // 機體強化（零件每 1 層；背包模組不算）每拿幾個，電路格 +1（0 = 關閉）
   MAX_CHIP_LV: 3,           // 晶片等級上限；每級效果強度 +50%
   GROW_TAG_TIME: 1,         // 用量成長：照玩法打中後 1 秒內敵人死掉才算（見 Game.tagGrow）
   DRONE_SHARE: 0.65, DRONE_CAP: 0.35,  // 修復無人機：每次受傷的 65% 變成可回復（最多存最大 HP 的 35%）；戰鬥結束時沒補完的直接補回
