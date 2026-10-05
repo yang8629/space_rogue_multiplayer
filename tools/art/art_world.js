@@ -469,8 +469,8 @@ function drawBoss2(ctx, c, r, t) {
   for (const sg of [-1, 1]) { ctx.save(); ctx.translate(-r * 0.05, sg * r * 0.5); faceted(ctx, polyPts(3, r * 0.2, sg > 0 ? Math.PI / 2 : -Math.PI / 2), mix(c, '#000000', 0.3), { outline: 2 }); ctx.restore(); }  // 吊艙（部署噴吐者）
   ADD(ctx, () => {  // 裂界縫
     const p = 0.6 + 0.4 * Math.sin(t * 7);
-    ctx.strokeStyle = rgba('#e0c8ff', 0.35 * p); ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(r * 0.8, 0); ctx.lineTo(-r * 0.45, 0); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,240,255,0.95)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(r * 0.8, 0); for (let x = 0.7; x > -0.45; x -= 0.12) ctx.lineTo(r * x, Math.sin(x * 30 + t * 20) * 1.6); ctx.stroke();
+    ctx.strokeStyle = rgba('#e0c8ff', 0.25 * p); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(r * 0.8, 0); ctx.lineTo(-r * 0.45, 0); ctx.stroke();
+    ctx.strokeStyle = 'rgba(240,220,255,0.9)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(r * 0.8, 0); for (let x = 0.7; x > -0.45; x -= 0.12) ctx.lineTo(r * x, Math.sin(x * 30 + t * 20) * 1.6); ctx.stroke();
   });
   eye(ctx, r * 0.25, 0, r * 0.1, '#1a0a30');
 }
