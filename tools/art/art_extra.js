@@ -236,3 +236,29 @@ function artDrone(ctx) {
   const c = '#9dff6b'; glow(ctx, 0, 0, 7, c, 0.7);
   faceted(ctx, polyPts(4, 4, Math.PI / 4), '#9aa6c4', { outline: 1.5 }); ctx.fillStyle = c; ctx.fillRect(-1, -3.5, 2, 7); ctx.fillRect(-3.5, -1, 7, 2);
 }
+
+// ---------- 牆面的流動亮光（疊在貼磚上、加法混色；ph = 0～1 動畫進度，8 格一輪）：岩漿河的亮芯往下流、血管的脈動往上傳 ----------
+//   路徑跟 artWallTile 裡的岩漿河、血管一樣（同樣的公式），才對得上
+function artWallFlow(ctx, sty, T, ph) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const wrapX = fn => { for (const dx of [-T, 0, T]) { ctx.save(); ctx.translate(dx, 0); fn(); ctx.restore(); } };
+  if (sty === 'lava') {
+    for (const [x0, amp, n, w] of [[T * 0.22, 26, 1, 11], [T * 0.7, 34, 2, 8]]) {
+      const path = () => { ctx.beginPath(); for (let y = 0; y <= T; y += 8) { const x = x0 + Math.sin(y / T * TAU * n) * amp + Math.sin(y / T * TAU * 3 + x0) * amp * 0.25; y ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } };
+      const period = w * 2.8;  // 亮段＋間隔的長度
+      wrapX(() => { path(); ctx.strokeStyle = 'rgba(255,225,140,0.95)'; ctx.lineWidth = w * 0.42; ctx.setLineDash([w * 1.6, w * 1.2]); ctx.lineDashOffset = -ph * period * 4; ctx.stroke(); ctx.setLineDash([]); });
+    }
+  }
+  if (sty === 'organic') {
+    for (let i = 0; i < 5; i++) {
+      const x0 = (i + 0.3 + seeded(i + 980) * 0.4) / 5 * T, amp = 14 + seeded(i + 981) * 12, n = 1 + (i % 2);
+      const X = y => x0 + Math.sin(y / T * TAU * n + i) * amp;
+      wrapX(() => {
+        ctx.beginPath(); for (let y = 0; y <= T; y += 8) y ? ctx.lineTo(X(y), y) : ctx.moveTo(X(y), y);
+        ctx.setLineDash([60, T / 2 - 60]); ctx.lineDashOffset = (ph + i * 0.37) * T / 2;  // 一段亮光沿著血管往上走
+        ctx.strokeStyle = 'rgba(255,120,140,0.35)'; ctx.lineWidth = 9; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,190,200,0.85)'; ctx.lineWidth = 2.6; ctx.stroke(); ctx.setLineDash([]);
+      });
+    }
+  }
+}

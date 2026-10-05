@@ -83,6 +83,7 @@ function wallFrames() {
     add(`w/${sty}/tile`, T, T, 0, 0, 1, c => artWallTile(c, sty, T));
     for (let k = 0; k < N[sty]; k++) sq(`w/${sty}/deco/${k}`, H[sty], 2, c => artWallDeco(c, sty, k));
     sq(`w/${sty}/gate`, 12, 3, c => artGateEmitter(c, sty));
+    if (sty === 'lava' || sty === 'organic') for (let k = 0; k < 8; k++) add(`w/${sty}/flow/${k}`, T, T, 0, 0, 1, c => artWallFlow(c, sty, T, k / 8));  // 流動的亮光（8 格動畫）
   }
 }
 
@@ -91,13 +92,17 @@ function buildAtlas() {
   ENTRIES.length = 0;
   enemyFrames(); shipFrames(); fxFrames(); objFrames(); wallFrames();
   const P = 2048, PAD = 2, items = ENTRIES.map(e => ({ e, pw: Math.ceil(e.w * e.res) + PAD * 2, ph: Math.ceil(e.h * e.res) + PAD * 2 }));
-  items.sort((a, b) => b.ph - a.ph || b.pw - a.pw);
+  // 子彈、粒子這組放在第 0 頁、自己一頁（遊戲用粒子容器一次畫，同一個容器的貼圖要在同一頁）
+  const FX = n => /^(b\/|p\/)|^(eb|glow|pickup)$/.test(n);
+  items.sort((a, b) => (FX(b.e.name) - FX(a.e.name)) || b.ph - a.ph || b.pw - a.pw);
   const pages = [], frames = {};
   let page = null, x = 0, y = 0, rowH = 0;
   const newPage = () => { const cv = document.createElement('canvas'); cv.width = cv.height = P; page = { cv, ctx: cv.getContext('2d') }; pages.push(page); x = 0; y = 0; rowH = 0; };
   newPage();
+  let fxDone = false;
   for (const it of items) {
     if (it.pw > P || it.ph > P) throw new Error('太大：' + it.e.name);
+    if (!fxDone && !FX(it.e.name)) { fxDone = true; newPage(); }  // 子彈這組放完：換新的一頁
     if (x + it.pw > P) { x = 0; y += rowH; rowH = 0; }
     if (y + it.ph > P) newPage();
     const { e } = it, c = page.ctx;
