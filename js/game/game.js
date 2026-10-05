@@ -905,7 +905,7 @@ const Game = {
   // 每場戰鬥開始時重置的機體狀態
   resetMechCombat(p) {
     p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
-    p.portalCd = 0; p.pullV = null;
+    p.portalCd = 0; p.pullV = null; p.icW = null;
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層、背包模組）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1357,21 +1357,56 @@ const Game = {
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
       if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
+      // 合併回射：第一顆擋下的位置當集結點，0.1 秒內再擋下的用綠色電弧拉進集結點，時間到才回射一次（每多 1 顆 +15%，最多 ×3）
+      //   不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
+      const p = (b.owner ? this.mate : this.player) || this.player, W = p.icW;
+      if (!W) {
+        p.icW = { x: eb.x, y: eb.y, ang: b.angle, n: 1, t: CFG.COUNTER.win };
+        this.fxRing(eb.x, eb.y, 18, '#9dff6b');
+      } else {
+        W.n++;
+        const k = this.counterMult(W.n);
+        if (this.zaps.length < 60) this.zaps.push({ x1: eb.x, y1: eb.y, x2: W.x, y2: W.y, life: 0.18, max: 0.18, c: '#9dff6b' });
+        if (Net.role === 'host') Net.fx(['z', Math.round(eb.x), Math.round(eb.y), Math.round(W.x), Math.round(W.y), '#9dff6b']);
+        this.fxRing(W.x, W.y, 18 + (k - 1) * 14, mixWhite('#9dff6b', this.counterWhite(k)));
+      }
       this.withLoadout(b.owner, () => {
-        const t = nearestEnemy(eb.x, eb.y, 900, null);
-        this.fireMode = 'intercept'; this.chargeC = null;
-        let list;
-        try { list = runOps(this.stats.ops, 0); } finally { this.fireMode = null; }
-        for (const s of list) s.src = 'intercept';  // 回射的子彈算攔截的
-        const n0 = this.bullets.length;
-        if (list.length) spawnShots(list, eb.x, eb.y, t ? Math.atan2(t.y - eb.y, t.x - eb.x) : b.angle, 1, null);  // 第 1 層：不會進環繞的圈
-        for (let i = n0; i < this.bullets.length; i++) this.bullets[i].fromIntercept = true;  // 永久標記（迴旋折返會把來源改成迴旋，盾要靠這個認）
         if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
-          life: 2, color: '#9dff6b', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);
+          life: 2, color: '#9dff6b', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);  // 反射鏡：每顆都反彈（一顆換一顆，不受冷卻）
       });
       return true;
     }
     return false;
+  },
+  counterMult(n) { const C = CFG.COUNTER; return Math.min(C.max, 1 + C.per * (n - 1)); },
+  counterWhite(k) { return Math.min(0.75, (k - 1) * 0.4); },  // 倍率越高越白：×2 約 4 成白
+  fxRing(x, y, r, color) {
+    if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color });
+    if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
+  },
+  // 合併回射的計時（在 withLoadout 裡呼叫）：時間到就從集結點回射
+  tickCounter(p, dt) {
+    const W = p.icW;
+    if (!W || (W.t -= dt) > 0) return;
+    p.icW = null;
+    this.counterFire(W.x, W.y, W.ang, this.counterMult(W.n));
+  },
+  // 攔截回射：從集結點用整條電路朝最近的敵人射出（沒有敵人就照攔截子彈的方向）；mult > 1 的越大、越亮、越白
+  counterFire(x, y, ang, mult) {
+    const t = nearestEnemy(x, y, 900, null);
+    this.fireMode = 'intercept'; this.chargeC = null;
+    let list;
+    try { list = runOps(this.stats.ops, 0); } finally { this.fireMode = null; }
+    for (const s of list) s.src = 'intercept';  // 回射的子彈算攔截的
+    if (mult > 1) {
+      const grow = 1 + 0.3 * (mult - 1), wk = this.counterWhite(mult), c = mixWhite('#9dff6b', wk);
+      for (const s of list) { s.damage *= mult; s.radius *= grow; s.color = mixWhite(s.color, wk); }
+      burst(x, y, c, Math.round(6 + mult * 6), 220, 0.35, 2 + mult);
+      floatText(x, y - 14, '×' + mult.toFixed(1), c, mult >= 2);
+    }
+    const n0 = this.bullets.length;
+    if (list.length) spawnShots(list, x, y, t ? Math.atan2(t.y - y, t.x - x) : ang, 1, null);  // 第 1 層：不會進環繞的圈
+    for (let i = n0; i < this.bullets.length; i++) this.bullets[i].fromIntercept = true;  // 永久標記（迴旋折返會把來源改成迴旋，盾要靠這個認）
   },
   // 用量成長：owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
   // 盾衛反彈：子彈照盾面的法線反彈，變成敵人的子彈（傷害 ×0.5，最多 25），我方子彈消失
@@ -1460,6 +1495,7 @@ const Game = {
   },
   updateEnemyBullets(dt) {
     const ps = this.players();
+    for (const p of ps) if (p.icW) this.withLoadout(p.L, () => this.tickCounter(p, dt));  // 合併回射：0.1 秒到就射
     // 攔截晶片、相位刃的格擋：打掉敵彈。飛回來途中的迴旋不能攔截（攔截會用整條電路重射，裡面又有迴旋 → 飛回飛船附近又攔截，子彈一直翻倍）
     //   攔截重射出來的子彈（和它們觸發的回響）也不能再攔截：不然「攔截 → 重射 → 再攔截」會一直滾大
     const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return' && !b.fromIntercept) || b.parry) && b.mode !== 'wait');

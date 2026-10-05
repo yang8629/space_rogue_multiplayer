@@ -954,7 +954,7 @@ const Net = {
         case 't': floatText(num(f[1]), num(f[2]), String(f[3]), String(f[4]), !!f[5]); break;
         case 's': SFX.play(String(f[1]), f[2]); break;
         case 'r': if (G.rings.length < 40) G.rings.push({ x: num(f[1]), y: num(f[2]), r: num(f[3], 40), life: 0.3, max: 0.3, color: String(f[4]) }); break;
-        case 'z': if (G.zaps.length < 60) G.zaps.push({ x1: num(f[1]), y1: num(f[2]), x2: num(f[3]), y2: num(f[4]), life: 0.18, max: 0.18 }); break;
+        case 'z': if (G.zaps.length < 60) G.zaps.push({ x1: num(f[1]), y1: num(f[2]), x2: num(f[3]), y2: num(f[4]), life: 0.18, max: 0.18, c: typeof f[5] === 'string' ? f[5].slice(0, 9) : null }); break;
       }
     }
   },
