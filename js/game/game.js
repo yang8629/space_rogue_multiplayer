@@ -11,7 +11,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0, shake: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], particles: [], texts: [], pickups: [], triggerQueue: [], rings: [], zaps: [], zones: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], particles: [], texts: [], pickups: [], triggerQueue: [], rings: [], flashes: [], zaps: [], zones: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -151,7 +151,7 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.zaps = []; this.vortices = []; this.portals = []; this.zones = [];
+    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.flashes = []; this.zaps = []; this.vortices = []; this.portals = []; this.zones = [];
     this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -724,6 +724,7 @@ const Game = {
   },
   shake(v) { this.cam.shake = Math.max(this.cam.shake, v); },
   recordDamage(source, amount, att) {  // 本局傷害統計：依來源分類，並依晶片分攤（見 splitDamage）
+    if (att && att.nobody) return;  // 不算任何人的（彗星自己撞爆、飛行中撞到）
     // 雙人：記在打出這一擊的人身上（owner = 隊友的配裝；null = 房主自己）
     const owner = att && att.owner !== undefined ? att.owner : this.shooter;
     const R = owner ? owner.R : this.runStats, stats = owner ? owner.stats : this.stats;
@@ -1007,7 +1008,7 @@ const Game = {
   // 盾衛的盾是實心的：飛船撞到盾（盾那一側 ±60°、盾外緣 r+13 以內）會被推到盾外、往外彈開（0.2 秒不吃操控），回傳 true（房主再算撞擊傷害）
   //   雙人：隊友自己的船由隊友那邊推（net.js clientUpdate），不然會被自己送來的位置蓋掉
   shieldBlock(e, p) {
-    const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, R = e.r + 13 + p.r;
+    const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, R = e.r + SHIELD_OUT + p.r;
     if (d >= R || Math.abs(angleDiff(Math.atan2(dy, dx), e.shieldA)) >= Math.PI / 3) return false;
     p.x = e.x + dx / d * R; p.y = e.y + dy / d * R;
     if (!(p.dashT > 0)) { p.vx = dx / d * 520; p.vy = dy / d * 520; p.kbT = 0.2; }
@@ -1065,7 +1066,8 @@ const Game = {
     for (let i = 0; i < nE; i++) {
       const e = E[i];
       if (e.dead) continue;
-      if (e.r > maxR) maxR = e.r;
+      const er = e.shieldA != null ? e.r + SHIELD_OUT : e.r;  // 盾衛：盾比身體大
+      if (er > maxR) maxR = er;
       const k = Math.floor(e.x / GS) * 100000 + Math.floor(e.y / GS), L = grid.get(k);
       if (L) L.push(i); else grid.set(k, [i]);
     }
@@ -1090,8 +1092,10 @@ const Game = {
         const e = E[ci];
         if (e.dead) continue;
         if (orbit ? this.time < ((b.orbitCd && b.orbitCd.get(e.id)) || 0) : b.hitSet.has(e.id)) continue;
-        const rr = b.r + e.r;
-        if (segDist2(b.px, b.py, b.x, b.y, e.x, e.y) >= rr * rr) continue;
+        const rr = b.r + e.r, d2 = segDist2(b.px, b.py, b.x, b.y, e.x, e.y);
+        if (d2 >= rr * rr) {  // 沒碰到身體：盾衛的盾（外緣 r+SHIELD_OUT）從盾那一側碰到也算（反彈）
+          if (e.shieldA == null || d2 >= (rr + SHIELD_OUT) ** 2 || Math.abs(angleDiff(Math.atan2(b.py - e.y, b.px - e.x), e.shieldA)) >= Math.PI / 3) continue;
+        }
         if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
         b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
         if (e.shieldA != null) {  // 盾衛：從盾的那一側（±60°）打過來的子彈反彈回去
@@ -1130,7 +1134,7 @@ const Game = {
         }
         const knock = b.knock * (b.quick >= 3 && b.accelMul >= 2 ? 3 : 1);  // 衝擊（疾射 Lv3）：2 倍速以上打中強力擊退
         const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
-        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
@@ -1430,13 +1434,13 @@ const Game = {
   reflectShot(e, b, ca) {
     const nx = Math.cos(ca), ny = Math.sin(ca), vx = Math.cos(b.angle), vy = Math.sin(b.angle), dot = vx * nx + vy * ny;
     // 攔截回射的子彈打到盾只會消失、不反彈：不然「反彈成敵彈 → 被攔截 → 整條電路回射 → 又打到盾」會無限放大（拿掉子彈上限之後）
-    if (b.att.src === 'intercept' || b.fromIntercept) { b.dead = true; burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 4, 120, 0.2, 2); return; }
+    if (b.att.src === 'intercept' || b.fromIntercept) { b.dead = true; burst(e.x + nx * (e.r + SHIELD_OUT), e.y + ny * (e.r + SHIELD_OUT), '#bfefff', 4, 120, 0.2, 2); return; }
     let rx = vx - 2 * dot * nx, ry = vy - 2 * dot * ny;
     if (rx * nx + ry * ny < 0.3) { rx = nx; ry = ny; }  // 擦邊的也往外彈
     const l = Math.hypot(rx, ry) || 1, spd = clamp(b.speed * 0.6, 200, 450), dmg = Math.min(25, hitDamage(b) * 0.5);
-    this.eBullets.push({ x: e.x + nx * (e.r + 8), y: e.y + ny * (e.r + 8), vx: rx / l * spd, vy: ry / l * spd, r: 5, dmg, life: 2.5, from: e.t.name, col: b.color });  // col：原本子彈的顏色（畫成紅框＋原本顏色的芯）
+    this.eBullets.push({ x: e.x + nx * (e.r + SHIELD_OUT + 6), y: e.y + ny * (e.r + SHIELD_OUT + 6), vx: rx / l * spd, vy: ry / l * spd, r: 5, dmg, life: 2.5, from: e.t.name, col: b.color });  // col：原本子彈的顏色（畫成紅框＋原本顏色的芯）
     b.dead = true;
-    burst(e.x + nx * e.r, e.y + ny * e.r, '#bfefff', 6, 160, 0.25, 2);
+    burst(e.x + nx * (e.r + SHIELD_OUT), e.y + ny * (e.r + SHIELD_OUT), '#bfefff', 6, 160, 0.25, 2);
   },
   // 成長標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），1 秒內敵人死掉就各加「牠的晶體值」
   //   蟲群 1、噴吐者 2、刺殼 4、虛空獵手 12、旗艦 40；子彈再多，同一隻敵人死掉也只算一份
@@ -1505,6 +1509,7 @@ const Game = {
   cometShardHit(b) {
     for (const p of this.players()) {
       if (p.invuln || dist2(b.x, b.y, p.x, p.y) >= (b.r + p.r) ** 2) continue;
+      Objects.cometFrost(p);  // 先凍再扣血（扣血後的無敵時間會擋掉冰凍）
       this.hurtPlayer(CFG.COMET_SHARD_DMG, '彗星（碎片）', p, b.px, b.py);
       b.dead = true; return true;
     }
@@ -1565,6 +1570,8 @@ const Game = {
     this.particles = this.particles.filter(q => q.life > 0);
     for (const r of this.rings) r.life -= dt;
     this.rings = this.rings.filter(r => r.life > 0);
+    for (const f of this.flashes) f.life -= dt;
+    this.flashes = this.flashes.filter(f => f.life > 0);
     for (const z of this.zaps) z.life -= dt;
     this.zaps = this.zaps.filter(z => z.life > 0);
     for (const t of this.texts) { t.y -= 40 * dt; t.life -= dt; }

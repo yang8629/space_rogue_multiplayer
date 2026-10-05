@@ -63,6 +63,7 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const pickN = (arr, n) => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
+const SHIELD_OUT = 13;  // 盾衛的盾外緣比身體多多少（畫面上的盾在 r+6～r+13）：子彈從盾那一側碰到這裡就反彈、飛船撞到就被彈開
 const angleDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
 const mod = (v, m) => ((v % m) + m) % m;
 // 射擊間隔倍率 → 說明文字：間隔 ×0.7 寫成「射速加快 1.43 倍」（紅），×1.3 寫成「射速變慢 1.3 倍」（綠）

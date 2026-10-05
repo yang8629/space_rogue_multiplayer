@@ -502,11 +502,11 @@ const MechCheck = {
         for (const e of Game.enemies) { if (e.dead) continue; seenE++; if (Arena.f(e.x, e.y) < e.r * 0.5 || Arena.zoneOf(e.x, e.y) !== 0) inWall++; }
         for (const q of Game.eBullets) { eb++; if (Arena.f(q.x, q.y) < -10) ebBad++; }
       }
-      // 3. 彗星碎片：彗星在飛船前方 80、朝飛船飛，打爆
+      // 3. 彗星碎片：彗星在飛船前方 40、朝飛船飛，打爆（碎片 360° 每 30° 一片、起始角隨機：40 以內一定有一片打到飛船）
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0 });
       const P = Game.player; P.iframe = 0; const hp0 = P.hp = P.maxHp;
-      const o = { type: 'comet', id: 999, x: P.x + 80, y: P.y, vx: -300, vy: 0, r: 18, hp: 1, maxHp: 1, warn: 0, hits: new Set(), age: 2 };
+      const o = { type: 'comet', id: 999, x: P.x + 40, y: P.y, vx: -300, vy: 0, r: 18, hp: 1, maxHp: 1, warn: 0, hits: new Set(), age: 2 };
       Game.objs = [o]; Objects.breakComet(o);
       for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
       const shardHit = P.hp < hp0 && /彗星（碎片）/.test(Game.lastHit || '');
@@ -925,14 +925,23 @@ const MechCheck = {
       const around = !w.dead && Math.hypot(w.x - p.x, w.y - p.y) <= 120 && near > 34 + w.r + 20;
       return { ok: d1 < d0 - 20 && b.dead && around, got: `靶離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}；蟲群最靠近核心 ${Math.round(near)}，${around ? `${(t / 60).toFixed(1)} 秒繞到玩家身邊` : '沒繞過來'}` };
     }],
-    ['地圖物件', '彗星', '有預警線；打爆後碎片往前炸出 10 發', M => {
+    ['地圖物件', '彗星', '有預警線；打爆、撞爆都往四周噴 12 片冰晶碎片（命中會冰凍）；被玩家打爆的算那個玩家的「彗星」傷害；撞爆的爆炸會傷玩家、冰凍，不算任何人的', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       Game.objs = [];
       Objects.spawnComet();
       const c = Game.objs[0], warned = c.warn > 0;
       c.warn = 0; c.lastAtt = { src: 'weapon', cr: null, owner: null };
       Objects.breakComet(c);
-      return { ok: warned && Game.bullets.length === 10, got: `預警${warned ? '有' : '沒有'}，碎片 ${Game.bullets.length} 發` };
+      const S = Game.bullets, quads = new Set(S.map(b => Math.floor(((b.angle % TAU) + TAU) % TAU / (Math.PI / 2))));
+      const brokeOk = S.length === OBJ.COMET_SHARDS && quads.size === 4 && S.every(b => b.att.src === 'comet' && !b.att.nobody && b.slow > 0);
+      // 撞爆：飛船、敵人都在範圍內
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const P = Game.player, e = M.targets([[60, 0]], 'brute', true, 1)[0]; P.iframe = 0; P.frostT = 0;
+      const hp0 = P.hp, ehp = e.hp, dmg0 = Game.totalDmg();
+      const o = { type: 'comet', id: 998, x: P.x + 30, y: P.y, vx: 0, vy: 0, r: 18, hp: 60, maxHp: 60, warn: 0, hits: new Set(), age: 2, lastAtt: { src: 'weapon', cr: null, owner: null } };
+      Game.objs = [o]; Objects.cometBoom(o, 100, 40);
+      const crashOk = P.hp < hp0 && P.frostT > 0 && e.hp < ehp && e.slowT > 0 && Game.totalDmg() === dmg0 && Game.bullets.length === OBJ.COMET_SHARDS && Game.bullets.every(b => b.att.nobody);
+      return { ok: warned && brokeOk && crashOk, got: `預警${warned ? '有' : '沒有'}；打爆：碎片 ${S.length} 片、涵蓋 ${quads.size}/4 個方向、${brokeOk ? '算玩家的彗星傷害、會冰凍' : '歸屬或冰凍不對'}；撞爆：飛船扣 ${Math.round(hp0 - P.hp)}、凍 ${(P.frostT || 0).toFixed(1)} 秒，敵人扣 ${Math.round(ehp - e.hp)}、減速 ${e.slowT > 0 ? '有' : '沒有'}，傷害統計 +${Math.round(Game.totalDmg() - dmg0)}（應為 0），碎片 ${Game.bullets.length} 片` };
     }],
 
     ['敵人', '精英：衝鋒與環形彈幕', '會蓄力衝鋒，也會連放兩圈 20 發環形彈', M => {
@@ -1040,7 +1049,14 @@ const MechCheck = {
         return { dmg: hp - e.hp, eb: Game.eBullets.length };
       };
       const front = shoot(Math.PI), back = shoot(0);
-      return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發' };
+      // 擦到盾的外緣（沒碰到身體，離中心 r + 9）也要反彈
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const g = M.targets([[150, 0]], 'shield', true, 1)[0]; g.shieldA = Math.PI;
+      const off = g.r + 9, b = new Bullet(g.x - 120, g.y + off, 0, shot({ angle: 0, speed: 900, damage: 10, radius: 3, life: 1 }), 0, null);
+      Game.bullets = [b];
+      for (let f = 0; f < 20 && !b.dead; f++) Game.updateBullets(1 / 60);
+      const edge = Game.eBullets.length;
+      return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0 && edge > 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發；擦到盾外緣：反彈 ' + edge + ' 發' };
     }],
     ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外、往外彈開並受撞擊傷害；背面同樣距離沒事', M => {
       const bump = ang => {
@@ -1048,7 +1064,7 @@ const MechCheck = {
         const p = Game.player, e = M.targets([[150, 0]], 'shield', true, 1)[0]; e.shieldA = ang; e.t = { ...e.t, dmg: ENEMY_TYPES.shield.dmg };
         p.x = e.x - (e.r + p.r + 6); p.y = e.y; p.iframe = 0; p.vx = p.vy = 0; const hp = p.hp;
         Game.updateEnemies(1 / 60);
-        return { dmg: hp - p.hp, d: Math.hypot(p.x - e.x, p.y - e.y), R: e.r + 13 + p.r, out: -p.vx };  // 盾朝左：往外 = 往左
+        return { dmg: hp - p.hp, d: Math.hypot(p.x - e.x, p.y - e.y), R: e.r + SHIELD_OUT + p.r, out: -p.vx };  // 盾朝左：往外 = 往左
       };
       const front = bump(Math.PI), back = bump(0);
       return { ok: front.dmg > 0 && front.d >= front.R - 0.5 && front.out > 300 && back.dmg === 0 && back.d < back.R - 1, got: '盾那側：扣 ' + Math.round(front.dmg) + '、推到 ' + Math.round(front.d) + '（盾外緣 ' + front.R + '）、往外彈 ' + Math.round(front.out) + '；背面：扣 ' + Math.round(back.dmg) + '、距離 ' + Math.round(back.d) };

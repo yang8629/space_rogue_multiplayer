@@ -83,11 +83,12 @@ function splitDamage(amount, att, rateCr) {
 function dmgKeyName(key) {
   if (key === 'weapon') return '武器・' + weaponTitle(Game.weapon);
   if (key === 'ship') return '機體（零件・模組）';
+  if (key === 'comet') return '彗星（打爆的碎片）';
   const d = CHIPS[key];
   return d ? d.name : key;
 }
 function dmgKeyColor(key) {
-  return key === 'weapon' ? WEAPONS[Game.weapon.id].color : key === 'ship' ? SHIPS[Game.shipId].color
+  return key === 'weapon' ? WEAPONS[Game.weapon.id].color : key === 'ship' ? SHIPS[Game.shipId].color : key === 'comet' ? '#bfe9ff'
     : CHIPS[key] ? TYPE_META[CHIPS[key].type].color : '#8fa3d9';
 }
 
@@ -101,4 +102,5 @@ const DMG_SOURCES = [
   ['shard', '碎片', '#199e70'],
   ['arc', '電弧', '#5ec8ff'],
   ['shock', '震盪衝撞', '#9085e9'],
+  ['comet', '彗星', '#bfe9ff'],  // 玩家打爆的彗星（碎片）；自己撞爆的不算任何人的
 ];

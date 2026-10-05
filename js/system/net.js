@@ -791,7 +791,7 @@ const Net = {
     if (m.dead || m.gone) return;
     m.x = clamp(m.x + m.vx * dt, m.r, Arena.W - m.r);  // 兩次輸入之間先照速度往前推
     m.y = clamp(m.y + m.vy * dt, m.r, Arena.H - m.r);
-    m.iframe -= dt; m.overdrive -= dt; m.dashT -= dt;
+    m.iframe -= dt; m.overdrive -= dt; m.dashT -= dt; if (m.frostT > 0) m.frostT -= dt;  // 冰凍時間在房主這邊倒數（隊友那邊照同步的剩餘秒數變慢）
     Game.withLoadout(m.L, () => { m.tickDash(); m.tickFire(dt, m.wantFire); });  // 開火（蓄力、過熱）與衝刺相關的晶片
     Objects.hostCheckMate(m);
   },
@@ -808,9 +808,9 @@ const Net = {
       t: 's',
       p: [r(P.x), r(P.y), r2(P.aim), r2(P.hp), P.maxHp, r2(Math.max(0, P.dashT)), r2(Math.max(0, P.iframe)),
         P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT),
-        P.gravField ? P.gravField.R : 0, P.shield || 0],  // 重力井範圍、護盾層數（隊友那邊畫房主的船用）
+        P.gravField ? P.gravField.R : 0, P.shield || 0, P.frostT > 0 ? 1 : 0],  // 重力井範圍、護盾層數、被凍住（隊友那邊畫房主的船用）
       me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), m.gravField ? m.gravField.R : 0] : null,  // 修復無人機的可回復量（畫血條用）、重力井範圍
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), m.gravField ? m.gravField.R : 0, r2(Math.max(0, m.frostT || 0))] : null,  // 修復無人機的可回復量（畫血條用）、重力井範圍、被凍住剩幾秒（隊友自己的船要變慢）
       gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
@@ -885,7 +885,7 @@ const Net = {
       m.x = num(p[0], m.x); m.y = num(p[1], m.y); m.aim = num(p[2]); m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
       m.dashT = num(p[5]); m.iframe = num(p[6]); m.overdrive = p[7] ? 1 : 0; m.moving = !!p[8]; m.dead = !!p[9];
       m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
-      m.gravField = p[13] > 0 ? { R: num(p[13]), slow: 0 } : null; m.shield = clamp(num(p[14]), 0, 9);
+      m.gravField = p[13] > 0 ? { R: num(p[13]), slow: 0 } : null; m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0;
     }
     const P = G.player;
     if (Array.isArray(s.me)) {  // 自己的血量以房主為準
@@ -902,6 +902,7 @@ const Net = {
       P.reviveT = num(s.me[5]);
       P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]); P.shield = num(s.me[9]);
       P.gravField = s.me[11] > 0 ? { R: num(s.me[11]), slow: 0 } : null;
+      if (s.me[12] > 0) P.frostT = Math.max(P.frostT || 0, num(s.me[12]));  // 被彗星凍住（房主判定，自己的船自己變慢）
     }
     if (s.gr && typeof s.gr === 'object') {  // 用量成長：房主算好的累積量，這邊只增不減，到了就升級
       let up = false;
@@ -966,6 +967,7 @@ const Net = {
         case 'b': burst(num(f[1]), num(f[2]), String(f[3]), Math.min(150, num(f[4])), num(f[5], 200), num(f[6], 0.5), num(f[7], 2)); break;
         case 't': floatText(num(f[1]), num(f[2]), String(f[3]), String(f[4]), !!f[5]); break;
         case 's': SFX.play(String(f[1]), f[2]); break;
+        case 'f': if (G.flashes.length < 20) G.flashes.push({ x: num(f[1]), y: num(f[2]), r: num(f[3], 60), life: 0.35, max: 0.35 }); break;  // 彗星爆炸的閃光
         case 'r': if (G.rings.length < 40) G.rings.push({ x: num(f[1]), y: num(f[2]), r: num(f[3], 40), life: 0.3, max: 0.3, color: String(f[4]) }); break;
         case 'z': if (G.zaps.length < 60) G.zaps.push({ x1: num(f[1]), y1: num(f[2]), x2: num(f[3]), y2: num(f[4]), life: 0.18, max: 0.18, c: typeof f[5] === 'string' ? f[5].slice(0, 9) : null }); break;
       }

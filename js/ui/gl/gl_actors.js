@@ -166,6 +166,10 @@ const GLActors = {
     if (A.id === 'gate') sprL(GLR.T('s/gate_ring'), -9, 0, 1 / 4, t * 2);  // 星門號：船尾旋轉的傳送環
     // 船身（重裝甲層數決定哪一張）
     sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4);
+    if (p.frostT > 0) {  // 被彗星凍住：船身蓋一層淡藍的霜＋冷光
+      const fr = sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4); fr.tint = 0xbfe9ff; fr.blendMode = 'add'; fr.alpha = fade * 0.5;
+      this.glowAt(P, p.x, p.y, 30, 0x9fdcff, 0.35 * fade);
+    }
     // 背包模組（船上面那層）
     if (mod === 'shield') sprL(GLR.T('m/shield'), 0, 0, 1 / 3, t * 0.3);
     if (mod === 'reactive') sprL(GLR.T('m/reactive'), 0, 0, 1 / 3);

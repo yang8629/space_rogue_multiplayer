@@ -129,6 +129,17 @@ function artHoleSwirl(ctx, R) {
   }
   ctx.restore();
 }
+// 彗星的冰晶碎片（船頭朝 +x，半徑約 1；白色切面，遊戲裡染成淡藍、加法混色）
+function artIceShard(ctx) {
+  const pts = [[1.3, 0], [0.1, -0.45], [-0.8, -0.2], [-0.6, 0.35], [0.2, 0.5]];
+  ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+  for (let i = 0; i < pts.length; i++) {  // 切面：上半亮、下半暗
+    const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length], up = (y0 + y1) / 2 < 0;
+    ctx.fillStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.45)';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(x0, y0); ctx.lineTo(x1, y1); ctx.closePath(); ctx.fill();
+  }
+}
 // 出口箭頭（船頭朝 +x）：切面上色的綠色 V 形箭頭＋深色描邊
 function artExitArrow(ctx) {
   faceted(ctx, [[11, 0], [-6, -9], [-2, 0], [-6, 9]], '#2ee6a6', { outline: 2.4, bright: 0.45 });

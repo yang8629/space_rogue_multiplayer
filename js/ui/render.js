@@ -120,6 +120,11 @@ function drawWorld() {
     for (let k = 1; k < 6; k++) { const j = rand(-10, 10); ctx.lineTo(z.x1 + dx * k / 6 + nx * j, z.y1 + dy * k / 6 + ny * j); }
     ctx.lineTo(z.x2, z.y2); ctx.stroke();
   }
+  for (const f of Game.flashes || []) {  // 彗星爆炸的閃光
+    const k = f.life / f.max, g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * (0.7 + 0.5 * (1 - k)));
+    g.addColorStop(0, `rgba(235,250,255,${0.9 * k})`); g.addColorStop(0.4, `rgba(190,233,255,${0.45 * k})`); g.addColorStop(1, 'rgba(190,233,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.2, 0, TAU); ctx.fill();
+  }
   for (const r of Game.rings) {  // 爆炸光圈
     const t = 1 - r.life / r.max;
     ctx.globalAlpha = r.life / r.max;
@@ -534,6 +539,10 @@ function drawPlayer(p, tag = '') {
   }
   drawShipArt(ctx, S, { moving: p.moving, booster: n('booster'), armor: n('armor'), hot: p.dashT > 0 || p.overdrive > 0 });
   ctx.rotate(-p.aim);
+  if (p.frostT > 0) {  // 被彗星凍住：淡藍的霜
+    ctx.fillStyle = 'rgba(160, 220, 255, 0.28)'; ctx.beginPath(); ctx.arc(0, 0, 20, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(200, 240, 255, 0.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 20, 0, TAU); ctx.stroke();
+  }
   for (let i = 0; i < Math.min(3, n('larmor')); i++) {  // 輕裝甲：外圈薄殼
     ctx.strokeStyle = 'rgba(159, 232, 255, 0.45)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(0, 0, 22 + i * 4, 0, TAU); ctx.stroke();

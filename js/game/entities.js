@@ -92,6 +92,7 @@ class Player {
   update(dt) {
     const K = Input.keys, P = Game.passives;
     let mx = 0, my = 0;
+    if (this.frostT > 0) this.frostT -= dt;  // 被彗星凍到：移動變慢（見 Objects.cometFrost）
     if (K.has('w') || K.has('arrowup')) my -= 1;
     if (K.has('s') || K.has('arrowdown')) my += 1;
     if (K.has('a') || K.has('arrowleft')) mx -= 1;
@@ -159,7 +160,7 @@ class Player {
     } else if (this.kbT > 0) {  // 被彈開（盾衛的盾）：這段時間不吃操控，速度慢慢減
       this.kbT -= dt; const f = Math.max(0, 1 - dt * 4); this.vx *= f; this.vy *= f;
     } else {
-      const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed) * Game.mech.speed, k = Math.min(1, dt * 12);
+      const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed) * Game.mech.speed * (this.frostT > 0 ? 1 - OBJ.COMET_FROST.slow : 1), k = Math.min(1, dt * 12);
       this.vx += (mx / l * spd - this.vx) * k;
       this.vy += (my / l * spd - this.vy) * k;
     }
@@ -484,10 +485,10 @@ const ENEMY_TYPES = {
   elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
   // 主題小兵（每場隨機抽幾種，越後面越多，見 Game.pickThemes）
   gunboat:  { name: '彈幕艇', hp: 60, speed: 70, radius: 16, dmg: 10, color: '#ff6b9d', credits: 3, shape: 8 },    // 停在 420～520 外，每 3 秒放一圈 8 發慢速彈（先閃 0.6 秒；從 8 根砲管射出，砲塔慢慢轉）
-  worm:     { name: '列隊蟲', hp: 14, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
+  worm:     { name: '列隊蟲', hp: 35, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
   shield:   { name: '盾衛', hp: 110, speed: 55, radius: 20, dmg: 20, color: '#5ec8ff', credits: 4, shape: 6 },    // 出生時隨機決定盾的方向（120°），之後不轉；打到盾的子彈反彈回去（傷害 ×0.5，最多 25）
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 0, shape: 5 },   // 死掉時分成 3 隻碎裂體（本體不掉晶體，晶體和成長都在碎裂體身上）
-  splitling:{ name: '碎裂體', hp: 20, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },  // 每隻掉 1 顆（一隻分裂體總共 3 顆，跟以前一樣）
+  splitling:{ name: '碎裂體', hp: 30, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },  // 每隻掉 1 顆（一隻分裂體總共 3 顆，跟以前一樣）
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
   hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9 },      // 不會動，每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不給成長）
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位

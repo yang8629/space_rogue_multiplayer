@@ -64,6 +64,7 @@ function fxFrames() {
   sq('b/halo', 1, 32, artBulletHalo);
   add('b/line', 1, 1, 1, 0.5, 32, artBulletLine);  // 原點在右邊中間（子彈頭）
   sq('b/dart', 2.3, 16, artBulletDart);
+  sq('b/ice', 1.4, 24, artIceShard);  // 彗星的冰晶碎片
   sq('b/blade', 1.1, 48, artBulletBlade);
   sq('b/ring', 1, 64, artRing);
   sq('eb', 2.05, 16, artEnemyBullet);
@@ -100,7 +101,7 @@ function buildAtlas() {
   enemyFrames(); shipFrames(); fxFrames(); objFrames(); wallFrames();
   const P = 2048, PAD = 2, items = ENTRIES.map(e => ({ e, pw: Math.ceil(e.w * e.res) + PAD * 2, ph: Math.ceil(e.h * e.res) + PAD * 2 }));
   // 子彈、粒子這組放在第 0 頁、自己一頁（遊戲用粒子容器一次畫，同一個容器的貼圖要在同一頁）
-  const FX = n => /^(b\/|p\/)|^(eb|glow|pickup)$/.test(n);
+  const FX = n => /^(b\/|p\/)|^(eb|eb_rim|eb_fill|glow|pickup)$/.test(n);  // 子彈、粒子、敵彈（含反彈的）：同一個 ParticleContainer 的貼圖要在同一頁
   items.sort((a, b) => (FX(b.e.name) - FX(a.e.name)) || b.ph - a.ph || b.pw - a.pw);
   const pages = [], frames = {};
   let page = null, x = 0, y = 0, rowH = 0;
