@@ -16,12 +16,12 @@ const SHIPS = {
     hull: [[18, 0], [6, -14], [-12, -14], [-8, 0], [-12, 14], [6, 14]],
     parts: { armor: 2 }, partSlots: 6,
     desc: '開局重裝甲 2 層，直接開啟「厚甲」。',
-    ability: 'heavy', abilityName: '重裝甲 ×2', abilityDesc: '開局重裝甲 2 層：最大 HP +40、速度 −8%，開啟厚甲（單次受傷最多扣 20% 最大 HP）。' },
+    ability: 'heavy', abilityName: '重裝甲 ×2', abilityDesc: null },  // 開局零件的說明照零件資料產生（見最下面）
   wraith: { name: '幻影號', en: 'WRAITH', color: '#c77dff', hp: 100, speed: 270, radius: 12, dashCd: 1.8,
     hull: [[21, 0], [-12, -8], [-4, 0], [-12, 8]],
     parts: { larmor: 1, booster: 1 }, partSlots: 6,
     desc: '開局輕裝甲、加速器各 1 層。',
-    ability: 'light', abilityName: '輕裝甲＋加速器', abilityDesc: '開局輕裝甲 1 層（HP +15、衝刺冷卻 +3%）、加速器 1 層（速度 +6%、HP −10）。' },
+    ability: 'light', abilityName: '輕裝甲＋加速器', abilityDesc: null },
   gate: { name: '星門號', en: 'GATE', color: '#2ee6a6', hp: 90, speed: 270, radius: 12, dashCd: 2.4,
     hull: [[18, 0], [2, -12], [-11, -7], [-6, 0], [-11, 7], [2, 12]],
     parts: {}, partSlots: 6,
@@ -29,6 +29,13 @@ const SHIPS = {
     ability: 'portal', abilityName: '星門',
     abilityDesc: '衝刺時在起點和落點各開一個門（3 秒，同時只有一對）。自己和隊友的子彈、飛船穿過門會從另一個門出來；敵彈也會穿門，敵人不會。' },
 };
+
+// 開局零件的說明：跟零件卡同一個寫法（每層：好處（綠）｜代價（紅）），數值直接從 PARTS 來，改零件時這裡會跟著變
+const startPartsDesc = parts => '開局' + Object.entries(parts).map(([id, n]) => {
+  const P = PARTS[id], tr = [n >= 2 && P.t2, n >= 4 && P.t4].filter(Boolean);
+  return `${P.name} ${n} 層（${partLine(id)}）${tr.map(t => `，開啟「${t.name}」：${t.desc}`).join('')}`;
+}).join('、') + '。';
+for (const S of Object.values(SHIPS)) if (S.abilityDesc == null) S.abilityDesc = startPartsDesc(S.parts);
 
 // 開局數值（含開局零件，例如堡壘號的重裝甲 2 層）：選飛船、總覽顯示用
 function shipStart(S) {
