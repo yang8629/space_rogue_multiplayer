@@ -29,3 +29,9 @@ const SHIPS = {
     ability: 'portal', abilityName: '星門',
     abilityDesc: '衝刺時在起點和落點各開一個門（3 秒，同時只有一對）。自己和隊友的子彈、飛船穿過門會從另一個門出來；敵彈也會穿門，敵人不會。' },
 };
+
+// 開局數值（含開局零件，例如堡壘號的重裝甲 2 層）：選飛船、總覽顯示用
+function shipStart(S) {
+  const M = mechStats(S.parts);
+  return { hp: Math.max(20, Math.round((S.hp + M.maxHp) * M.hpMul)), speed: Math.round(S.speed * M.speed), dashCd: +(S.dashCd * M.dashCd).toFixed(2) };
+}
