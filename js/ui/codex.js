@@ -421,7 +421,7 @@ const Codex = {
   // 機體與地圖：飛船、零件、背包模組、地圖物件
   bodyTab() {
     const ships = Object.values(SHIPS).map(S => `<div class="card" style="border-color:${S.color}"><div class="ttl" style="color:${S.color}">${S.name}</div>
-      <div class="ty">船體 ${shipStart(S).hp}　·　衝刺冷卻 ${shipStart(S).dashCd} 秒　·　零件格 ${S.partSlots}</div><div class="ds">${S.desc}<br><b style="color:${S.color}">${S.abilityName}</b>：${S.abilityDesc}</div></div>`).join('');
+      ${shipStatLine(S)}${shipDescHtml(S)}</div>`).join('');
     const parts = PART_IDS.map(id => partCard(id, '', this.hasRun() ? Game.parts : {})).join('');
     const mods = Object.keys(MODULES).map(id => moduleCard(id)).join('');
     const R = (t, d) => `<div><b>${t}</b><br>${d}</div>`;

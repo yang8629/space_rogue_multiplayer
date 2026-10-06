@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>介面圖示產生工具</title>
+<!-- 星環電路 介面圖示：用 art_ui.js 畫出數值圖示；mp_tests/perf/builduiicons.mjs 打開這頁、呼叫 window.buildIcons()，存成 assets/ui/stat_*.png -->
+<body style="background:#0b1024;color:#ccc;font:13px sans-serif">
+<script src="../../js/core/config.js"></script>
+<script src="art_world.js"></script>
+<script src="art_ui.js"></script>
+<div id="sheet"></div>
+<script>
+'use strict';
+// 預覽：每個圖示畫大、中、小三種尺寸
+const sheet = document.getElementById('sheet');
+for (const id of STAT_ICON_IDS) {
+  const row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:14px;margin:6px';
+  row.append(Object.assign(document.createElement('span'), { textContent: id, style: 'width:60px' }));
+  for (const s of [64, 32, 18]) { const c = statIconCanvas(id, s * 2); c.style.width = c.style.height = s + 'px'; row.append(c); }
+  sheet.append(row);
+}
+window.buildIcons = () => Object.fromEntries(STAT_ICON_IDS.map(id => [id, statIconCanvas(id, 64).toDataURL('image/png')]));
+</script>

@@ -6,24 +6,39 @@
 // 零件：每層小好處＋小代價，同種疊到 2 層、4 層開啟特性；零件格有限（開局 6 格，打倒旗艦 +1）
 //   5 種零件都至少 1 層時開啟「均衡」：每層的好處 +30%
 // =====================================================================
+// 數值：名稱、越大越好（good 1）還是越小越好（-1）；圖示是 assets/ui/stat_<id>.png（tools/art/art_ui.js 畫的）
+const STATS = {
+  hp: { name: '最大 HP', good: 1 }, speed: { name: '移動速度', good: 1 }, dashCd: { name: '衝刺冷卻', good: -1 },
+  taken: { name: '受到的傷害', good: -1 }, rate: { name: '射速', good: 1 }, bspeed: { name: '子彈速度', good: 1 }, slots: { name: '零件格', good: 1 },
+};
+const statIcon = id => `<img class="si" src="assets/ui/stat_${id}.png" alt="${STATS[id].name}" title="${STATS[id].name}">`;
+const signed = (v, pct) => `${v > 0 ? '+' : '−'}${Math.abs(v)}${pct ? '%' : ''}`;
+// 一項效果：圖示＋數值，對玩家有利綠色、不利紅色（例：受到的傷害 +3% 紅、衝刺冷卻 −8% 綠）
+const statFx = ({ stat, v, pct }) => `<span class="sv ${v * STATS[stat].good > 0 ? 'good' : 'bad'}">${statIcon(stat)}${signed(v, pct)}</span>`;
+const statFxText = ({ stat, v, pct }) => `${STATS[stat].name} ${signed(v, pct)}`;  // 純文字（複製紀錄、滑鼠提示）
+// 疊 n 層的總效果：百分比是相乘（0.96² = −8%），數值是相加
+const fxTimes = (f, n) => ({ ...f, v: f.pct ? Math.round(((1 + f.v / 100) ** n - 1) * 100) : f.v * n });
+
 const PART_IDS = ['armor', 'larmor', 'booster', 'sink', 'sensor'];
+// fx：每層的效果（第一項是好處、第二項是代價）；up／dn 是同樣內容的文字（由 fx 產生）
 const PARTS = {
-  armor:   { name: '重裝甲', color: '#ffd166', up: '最大 HP +20', dn: '移動速度 −4%',
+  armor:   { name: '重裝甲', color: '#ffd166', fx: [{ stat: 'hp', v: 20 }, { stat: 'speed', v: -4, pct: true }],
     t2: { id: 'thick', name: '厚甲', desc: '單次受傷最多扣最大 HP 的 20%' },
     t4: { id: 'ram', name: '衝撞', desc: '撞到敵人造成「重裝甲層數 × 20」傷害並撞飛，自己不受碰撞傷害' } },
-  larmor:  { name: '輕裝甲', color: '#9fe8ff', up: '衝刺冷卻 −8%', dn: '受到的傷害 +3%',
+  larmor:  { name: '輕裝甲', color: '#9fe8ff', fx: [{ stat: 'dashCd', v: -8, pct: true }, { stat: 'taken', v: 3, pct: true }],
     t2: { id: 'deflect', name: '偏折', desc: '被打到後的無敵時間 +0.8 秒' },
     t4: { id: 'counter', name: '反擊裝甲', desc: '被打到時，朝打你的方向回射 8 發子彈' } },
-  booster: { name: '加速器', color: '#4cc9f0', up: '移動速度 +6%', dn: '最大 HP −10',
+  booster: { name: '加速器', color: '#4cc9f0', fx: [{ stat: 'speed', v: 6, pct: true }, { stat: 'hp', v: -10 }],
     t2: { id: 'gale', name: '疾風', desc: '移動中射速 +20%' },
     t4: { id: 'assault', name: '突擊', desc: '衝刺穿過的敵人受到「武器傷害 × 4」' } },
-  sink:    { name: '散熱片', color: '#ff9f1c', up: '射速 +6%', dn: '受到的傷害 +4%',
+  sink:    { name: '散熱片', color: '#ff9f1c', fx: [{ stat: 'rate', v: 6, pct: true }, { stat: 'taken', v: 4, pct: true }],
     t2: { id: 'quench', name: '急冷', desc: '衝刺後 2 秒內射速 +30%' },
     t4: { id: 'vent', name: '排熱爆發', desc: '衝刺時朝四周放出 12 發子彈' } },
-  sensor:  { name: '感測器', color: '#9dff6b', up: '子彈速度 +8%', dn: '衝刺冷卻 +5%',
+  sensor:  { name: '感測器', color: '#9dff6b', fx: [{ stat: 'bspeed', v: 8, pct: true }, { stat: 'dashCd', v: 5, pct: true }],
     t2: { id: 'lock', name: '鎖定', desc: '打中敵人後 1 秒內，子彈會追蹤那一隻（第一發要自己打中）' },
     t4: { id: 'mark', name: '弱點標記', desc: '被打中的敵人 3 秒內受到的傷害 +25%；看得到小行星後面的敵人' } },
 };
+for (const P of Object.values(PARTS)) { P.up = statFxText(P.fx[0]); P.dn = statFxText(P.fx[1]); }
 const BALANCE = { id: 'balance', name: '均衡', desc: '5 種零件都至少 1 層：每層的好處 +30%' };
 const PART_SWAP_PRICE = 30;  // 改裝廠：把 1 層零件換成另一種
 
@@ -32,15 +47,15 @@ const PART_SWAP_PRICE = 30;  // 改裝廠：把 1 層零件換成另一種
 //   重裝甲 ≥ 2 層開啟「裝甲加成」、加速器 ≥ 2 層開啟「加速加成」（旗艦模組沒有加成）
 // =====================================================================
 const MODULES = {
-  shield:   { name: '護盾產生器', icon: '⛨', eff: '擋下一次傷害，8 秒回復', cost: '移動速度 −10%', heavy: '2 層護盾', light: '4 秒回復' },
-  blink:    { name: '相位跳躍', icon: '⤳', eff: '衝刺變成瞬移（距離 150）', cost: '衝刺冷卻 +50%', heavy: '瞬移落地放出震波', light: '沒有冷卻代價' },
-  gravity:  { name: '重力井', icon: '◎', eff: '身邊 150 內的敵人和敵彈速度 −40%', cost: '射速 −10%', heavy: '減速 −60%', light: '範圍 220' },
-  drone:    { name: '修復無人機', icon: '✚', eff: '每次受傷的 65% 之後可以補回（最多最大 HP 的 35%）：5 秒沒受傷後每秒補 8，戰鬥結束時沒補完的直接補回', cost: '最大 HP −20%', heavy: '回血 ×2', light: '3 秒就開始回血' },
-  reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
+  shield:   { name: '護盾產生器', icon: '⛨', eff: '擋下一次傷害，8 秒回復', cost: '移動速度 −10%', costFx: [{ stat: 'speed', v: -10, pct: true }], heavy: '2 層護盾', light: '4 秒回復' },
+  blink:    { name: '相位跳躍', icon: '⤳', eff: '衝刺變成瞬移（距離 150）', cost: '衝刺冷卻 +50%', costFx: [{ stat: 'dashCd', v: 50, pct: true }], heavy: '瞬移落地放出震波', light: '沒有冷卻代價' },
+  gravity:  { name: '重力井', icon: '◎', eff: '身邊 150 內的敵人和敵彈速度 −40%', cost: '射速 −10%', costFx: [{ stat: 'rate', v: -10, pct: true }], heavy: '減速 −60%', light: '範圍 220' },
+  drone:    { name: '修復無人機', icon: '✚', eff: '每次受傷的 65% 之後可以補回（最多最大 HP 的 35%）：5 秒沒受傷後每秒補 8，戰鬥結束時沒補完的直接補回', cost: '最大 HP −20%', costFx: [{ stat: 'hp', v: -20, pct: true }], heavy: '回血 ×2', light: '3 秒就開始回血' },
+  reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', costFx: [{ stat: 'taken', v: 5, pct: true }], heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
   // 旗艦專屬（擊沉旗艦時可以裝上）
-  swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 6 秒朝四周 6 個方向各開一槍（用你的電路射，吃全部晶片效果；有環繞時直接射出不存彈）', cost: '最大 HP −10' },
+  swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 6 秒朝四周 6 個方向各開一槍（用你的電路射，吃全部晶片效果；有環繞時直接射出不存彈）', cost: '最大 HP −10', costFx: [{ stat: 'hp', v: -10 }] },
   thruster:  { name: '裂界推進器', icon: '➹', boss: 'boss2', eff: '衝刺距離 ×2、衝刺冷卻 −30%', cost: '衝刺後 0.5 秒不能射擊' },
-  endshell:  { name: '終焉護殼', icon: '⬡', boss: 'boss3', eff: '受到致命傷害時留 1 HP 並無敵 2 秒（每場戰鬥 1 次）', cost: '受到的傷害 +10%' },
+  endshell:  { name: '終焉護殼', icon: '⬡', boss: 'boss3', eff: '受到致命傷害時留 1 HP 並無敵 2 秒（每場戰鬥 1 次）', cost: '受到的傷害 +10%', costFx: [{ stat: 'taken', v: 10, pct: true }] },
 };
 const NORMAL_MODULES = Object.keys(MODULES).filter(id => !MODULES[id].boss);
 const bossModuleOf = bossId => Object.keys(MODULES).find(id => MODULES[id].boss === bossId) || null;
@@ -74,10 +89,12 @@ function mechStats(parts, module) {
 }
 const partsUsed = parts => PART_IDS.reduce((a, id) => a + ((parts && parts[id]) || 0), 0);
 // 零件的一句話說明（卡片、編輯器用）
-const partLine = id => { const P = PARTS[id]; return `每層：<span style="color:#9dff6b">${P.up}</span>｜<span style="color:#ff8f8f">${P.dn}</span>`; };
+// 每層的效果（圖示＋數值）；n：疊 n 層的總效果
+const partLine = (id, n = 1) => PARTS[id].fx.map(f => statFx(fxTimes(f, n))).join('');
 const moduleLine = (id, full = true) => {
   const M = MODULES[id];
   if (!M) return '';
-  return `${M.eff}<br><span style="color:#ff8f8f">代價：${M.cost}</span>` +
-    (full && !M.boss ? `<br><span style="color:#ffd166">重裝甲 ≥ 2：${M.heavy}</span>　<span style="color:#4cc9f0">加速器 ≥ 2：${M.light}</span>` : '');
+  // 紅色就是代價（不用再寫「代價：」）；數值類的代價用圖示
+  return `${M.eff}<div class="fxl">${M.costFx ? M.costFx.map(statFx).join('') : `<span class="sv bad">${M.cost}</span>`}</div>` +
+    (full && !M.boss ? `<div class="trl"><b style="color:#ffd166">重裝甲 2+</b>${M.heavy}</div><div class="trl"><b style="color:#4cc9f0">加速器 2+</b>${M.light}</div>` : '');
 };

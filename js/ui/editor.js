@@ -201,20 +201,28 @@ const Editor = {
     const partCards = PART_IDS.map(id => partCard(id, free ? `<div class="bar"><button data-pick="part:${id}:-1">−1 層</button><button data-pick="part:${id}:1">+1 層</button></div>` : '')).join('');
     const modCards = (free ? Object.keys(MODULES) : Game.module ? [Game.module] : []).map(id =>
       moduleCard(id, free ? `<button data-pick="module:${id}">${Game.module === id ? '使用中' : '裝上'}</button>` : '')).join('');
-    const SH = SHIPS[Game.shipId];  // 目前的飛船：名稱、特殊能力（遠征中也看得到）
-    const mech = (SH ? `<h3 style="color:${SH.color}">${SH.name}</h3>
-      <div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.abilityDesc}　·　目前：船體 ${Game.player.maxHp}　·　速度 ${Math.round(SH.speed * Game.mech.speed)}　·　衝刺冷卻 ${+(SH.dashCd * Game.mech.dashCd).toFixed(2)} 秒　·　零件格 ${Game.partSlots}</div>` : '') +
-      `<h3>零件 ${partsUsed(Game.parts)} / ${Game.partSlots} 格${free ? '（靶場不受格數限制）' : ''}</h3>
-      <div class="sub">最大 HP ${Game.player.maxHp}　·　移動速度 ×${M.speed.toFixed(2)}　·　受到的傷害 ×${M.taken.toFixed(2)}　·　射速 ×${M.rate.toFixed(2)}　·　子彈速度 ×${M.bspeed.toFixed(2)}　·　衝刺冷卻 ×${M.dashCd.toFixed(2)}
-        <br>已開啟的特性：${traits.length ? traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`).join('、') : '無'}${M.heavy ? '　·　<span style="color:#ffd166">模組裝甲加成</span>' : ''}${M.light ? '　·　<span style="color:#4cc9f0">模組加速加成</span>' : ''}</div>
+    const SH = SHIPS[Game.shipId];  // 目前的飛船
+    // 跟原本比變了多少（%）：沒變就不寫；好綠壞紅
+    const pct = (mul, good) => { const v = Math.round((mul - 1) * 100); return v ? `<span class="sv ${v * good > 0 ? 'good' : 'bad'}">${signed(v, true)}</span>` : ''; };
+    const stat = (id, val, mul) => {  // 圖示＋數值（＋變化%）；只有變化的（受傷、射速、子彈速度）就只寫 %
+      const p = mul != null ? pct(mul, STATS[id].good) : '';
+      return `<span>${statIcon(id)}${val}${p ? (val !== '' ? `（${p}）` : p) : ''}</span>`;
+    };
+    const rows = [stat('hp', Game.player.maxHp), SH && stat('speed', Math.round(SH.speed * M.speed), M.speed), SH && stat('dashCd', `${+(SH.dashCd * M.dashCd).toFixed(2)} 秒`, M.dashCd),
+      ...[['taken', M.taken], ['rate', M.rate], ['bspeed', M.bspeed]].filter(([, m]) => Math.round((m - 1) * 100)).map(([id, m]) => stat(id, '', m))].filter(Boolean);
+    const on2 = [...traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`), ...(M.heavy ? ['<span style="color:#ffd166">模組裝甲加成</span>'] : []), ...(M.light ? ['<span style="color:#4cc9f0">模組加速加成</span>'] : [])];
+    const ability = SH && !Object.keys(SH.parts).length && SH.ability !== 'slots' ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.abilityDesc}</div>` : '';  // 星門號的傳送門這種飛船本身的能力
+    const mech = `<h3 class="between" style="margin-top:4px"><span style="color:${SH ? SH.color : '#8fa3d9'}">${SH ? SH.name : ''}</span><span>零件 ${partsUsed(Game.parts)} / ${Game.partSlots}${free ? '（靶場不受格數限制）' : ''}</span></h3>
+      <div class="statl big">${rows.join('')}</div>${ability}
+      <div class="sub">已開啟：${on2.length ? on2.join(' · ') : '無'}</div>
       <div class="cards" style="margin:8px 0">${partCards}</div>
       <h3>背包模組${free ? ` <button data-pick="module:none">拿掉模組</button>` : ''}</h3>
       <div class="cards" style="margin:8px 0">${modCards || '<div class="sub">還沒有背包模組（精英戰鬥勝利後三選一）。</div>'}</div>`;
     if (!free) { this.shipEl.innerHTML = mech + '<p class="hint">零件在「🔧 改裝廠」取得或更換，背包模組來自精英戰鬥與擊沉旗艦。</p>'; return; }
     const ships = Object.entries(SHIPS).map(([id, S]) => `<div class="card" style="border-color:${S.color};${on(Game.shipId === id, S.color)}">
         <div class="ttl" style="color:${S.color}">${S.name}</div>
-        <div class="ty">船體 ${shipStart(S).hp}　·　速度 ${shipStart(S).speed}　·　衝刺冷卻 ${shipStart(S).dashCd} 秒　·　零件格 ${S.partSlots}</div>
-        <div class="ds">${S.desc}<br><b style="color:${S.color}">${S.abilityName}</b>：${S.abilityDesc}</div>
+        ${shipStatLine(S)}
+        ${shipDescHtml(S)}
         <button data-pick="ship:${id}">${Game.shipId === id ? '使用中' : '換成' + S.name}</button></div>`).join('');
     const weapons = Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
