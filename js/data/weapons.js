@@ -69,7 +69,7 @@ const WEAPONS = {
           { name: '雙軌', desc: '一次射出 2 發。', apply: p => { p.count = 2; p.spread = 0.06; } }] },
       B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，' + rateTxt(1.3) + '。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
         next: [
-          { name: '衝擊波', desc: '命中時爆炸（半徑 70，70% 傷害）。', apply: p => { p.explode = { r: 70, ratio: 0.7 }; } },
+          { name: '裝甲供能', desc: '最大 HP 超過 100 的部分，每 1 點射速 +0.5%（最多 +60%）：疊血就是疊火力。', apply: p => { p.hpRate = { per: 0.005, max: 0.6 }; } },
           { name: '無限貫穿', desc: '可以穿透所有敵人。', apply: p => { p.pierce = 99; } }] },
       C: { name: '磁暴線圈', desc: '命中時放出 2 道電弧，瞬間打中附近 2 隻敵人（每道 50% 傷害）；附近沒有其他敵人時，電弧打回目標本身（25%）。',
         apply: p => { p.arcs = { n: 2, ratio: 0.5 }; },

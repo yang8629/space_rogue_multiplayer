@@ -127,7 +127,7 @@ const CHIPS = {
 
   // ---------- 元素組件：命中效果，跟武器升級的爆炸／燃燒／減速／電弧疊加（elem: true） ----------
   blast: { name: '爆裂彈頭', short: '爆裂', type: 'comp', comp: true, elem: true, cost: 2,
-    desc: '命中時爆炸（半徑 60，子彈傷害的 50%）。武器本身就會爆炸（新星、衝擊波…）時，爆炸傷害相加、半徑取大的。插在玩法晶片上只作用在它的產物（黏著：爆炸時再炸一圈）。',
+    desc: '命中時爆炸（半徑 60，子彈傷害的 50%）。武器本身就會爆炸（新星…）時，爆炸傷害相加、半徑取大的。插在玩法晶片上只作用在它的產物（黏著：爆炸時再炸一圈）。',
     apply: (list, pw) => list.map(b => ({ ...b, explode: { r: Math.max(60, b.explode ? b.explode.r : 0), ratio: (b.explode ? b.explode.ratio : 0) + 0.5 * pw } })) },
   ignite: { name: '燃燒彈頭', short: '燃燒', type: 'comp', comp: true, elem: true, cost: 1,
     desc: '命中附加燃燒 3 秒，每秒是這一下傷害的 30%（跟著倍增、蓄力變強）。武器本身有燃燒（龍息彈…）時相加。插在玩法晶片上只作用在它的產物。',
