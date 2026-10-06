@@ -29,20 +29,21 @@ function sockLine(id) {
   return `<div class="ty sockln">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}${P ? `<br>產物：${P}` : ''}</div>`;
 }
 
-// 背包模組卡片
-function moduleCard(id, footer = '') {
+// 背包模組卡片：效果、代價（紅）、重裝甲／加速器 2 層以上的加成；band：跟晶片混在一起選的時候標「機體強化」
+function moduleCard(id, footer = '', band = false) {
   const M = MODULES[id];
-  return `<div class="card cat-mech">${catBand('mech')}
-    <div class="ty" style="color:${M.boss ? '#ff4d6d' : '#cfe8ff'}">${M.icon} 背包模組${M.boss ? '・旗艦專屬' : ''}</div>
-    <div class="ttl">${M.name}</div><div class="ds brief">${M.eff}</div><div class="ds det">${moduleLine(id)}</div>${footer}</div>`;
+  return `<div class="card cat-mech">${band ? catBand('mech') : ''}
+    <div class="ttl">${M.icon} ${M.name}${M.boss ? '<span class="tag boss">旗艦專屬</span>' : ''}</div>
+    <div class="ds">${moduleLine(id)}</div>${footer}</div>`;
 }
-// 零件卡片：每層效果、目前層數、2／4 層特性（已開啟的亮起來）
-function partCard(id, footer = '', parts = Game.parts) {
+// 零件卡片：名稱＋層數（圓點，4 層開滿）、每層效果（圖示）、2／4 層特性（已開啟的亮起來）
+function partCard(id, footer = '', parts = Game.parts, band = false) {
   const P = PARTS[id], n = (parts && parts[id]) || 0;
-  const tr = (t, need) => `<div class="ds" style="opacity:${n >= need ? 1 : 0.6}"><b style="color:${n >= need ? '#9dff6b' : P.color}">${need} 層・${t.name}</b>${n >= need ? '（已開啟）' : ''}：${t.desc}</div>`;
-  return `<div class="card cat-mech">${catBand('mech')}
-    <div class="ty" style="color:${P.color}">⚙ 零件　目前 ${n} 層</div>
-    <div class="ttl">${P.name}</div><div class="ds">${partLine(id)}</div><div class="det">${tr(P.t2, 2)}${tr(P.t4, 4)}</div>${footer}</div>`;
+  const pips = `<span class="pips" style="color:${P.color}">${'●'.repeat(Math.min(n, 4))}${'○'.repeat(Math.max(0, 4 - n))}${n > 4 ? '+' + (n - 4) : ''}　${n} 層</span>`;
+  const tr = (t, need) => `<div class="trl${n >= need ? ' on' : ''}"><b style="color:${n >= need ? '#9dff6b' : P.color}">${need} 層　${t.name}</b>${t.desc}</div>`;
+  return `<div class="card cat-mech">${band ? catBand('mech') : ''}
+    <div class="ttl between">${P.name}${pips}</div>
+    <div class="fxl">${partLine(id)}</div>${tr(P.t2, 2)}${tr(P.t4, 4)}${footer}</div>`;
 }
 
 const Screen = {
@@ -58,9 +59,9 @@ const Screen = {
   },
   status() {
     const p = Game.player;
-    return `<div class="row"><span class="pill">HP ${Math.ceil(p.hp)} / ${p.maxHp}</span>
+    return `<div class="row"><span class="pill">${statIcon('hp')}${Math.ceil(p.hp)} / ${p.maxHp}</span>
       <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體兩人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
-      <span class="pill" title="零件已用／零件格">⚙ 零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>${Game.module ? `<span class="pill">${MODULES[Game.module].icon} ${MODULES[Game.module].name}</span>` : ''}
+      <span class="pill" title="零件已用／零件格">${statIcon('slots')}零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>${Game.module ? `<span class="pill">${MODULES[Game.module].icon} ${MODULES[Game.module].name}</span>` : ''}
       <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
   // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
@@ -158,9 +159,8 @@ const Screen = {
         ${icon ? `<img src="${icon}" width="72" height="72" alt="${S.name}" style="margin:0 auto;display:block">` : `<svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
           <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>`}
         <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
-        <div class="ds brief">${S.desc}</div>
-        <div class="ty">船體 ${shipStart(S).hp}　·　速度 ${shipStart(S).speed}　·　衝刺冷卻 ${shipStart(S).dashCd} 秒　·　零件格 ${S.partSlots}</div>
-        <div class="det"><div class="ds"><b style="color:${S.color}">${S.abilityName}</b><br>${S.abilityDesc}</div></div>
+        ${shipStatLine(S)}
+        ${shipDescHtml(S)}
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">
@@ -397,7 +397,7 @@ const Screen = {
       : R.options.map(id => {
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
-        return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`);
+        return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
       }
       const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);

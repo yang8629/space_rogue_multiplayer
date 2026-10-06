@@ -394,3 +394,20 @@ body.detail .detail-hint button { background: #1c3a6e; }
 .slot.nogo, .sock.nogo { opacity: .25; filter: grayscale(1); }
 .slot.go { box-shadow: 0 0 0 2px #4cc9f0, 0 0 10px #4cc9f066; }
 .sock.go { box-shadow: 0 0 0 3px #4cc9f0; }
+/* 數值圖示（assets/ui/stat_*.png）：好處綠、代價紅 */
+.si { width: 1.3em; height: 1.3em; vertical-align: -0.32em; margin-right: 2px; }
+.sv { white-space: nowrap; font-weight: 600; margin-right: 10px; }
+.sv.good { color: #9dff6b; } .sv.bad { color: #ff8f8f; }
+.fxl { margin: 4px 0; line-height: 1.7; }
+.fxl b { margin-right: 8px; color: #dfe6ff; }
+.trl { font-size: 12px; color: #9aa6c4; margin: 4px 0; line-height: 1.5; opacity: .75; }
+.trl b { margin-right: 8px; white-space: nowrap; }
+.trl.on { opacity: 1; color: #c9d4ff; }
+.statl { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: #dfe6ff; margin: 4px 0; }
+.statl.big { font-size: 15px; }
+.pips { font-size: 12px; letter-spacing: 1px; white-space: nowrap; }
+.tag { font-size: 11px; margin-left: 8px; padding: 1px 6px; border-radius: 6px; border: 1px solid currentColor; vertical-align: 2px; }
+.tag.boss { color: #ff4d6d; }
+.card > .ttl:first-child { margin-top: 6px; }  /* 沒有分類標籤的卡片：標題別貼著上框 */
+.statl .sv { margin-right: 0; }
+.card .statl { gap: 3px 9px; font-size: 12px; }
