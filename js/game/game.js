@@ -325,6 +325,7 @@ const Game = {
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false };
+      if (this.mode === 'coop' && Net.role === 'host') Net.mateModWait = !!this.victory.module && this.coopOn();  // 雙人：等隊友裝上或略過旗艦模組才能前往
       this.state = 'victory';
       Screen.victory();
       return;
@@ -393,6 +394,14 @@ const Game = {
     V.took = true;
     this.setModule(V.module);
     SFX.play('upgrade');
+    if (this.isClient()) Net.send({ t: 'moddone' });
+    Screen.victory();
+  },
+  skipBossModule() {  // 雙人的隊友：不裝旗艦模組（房主才能前往）
+    const V = this.victory;
+    if (!V || V.took || V.skip) return;
+    V.skip = true;
+    if (this.isClient()) Net.send({ t: 'moddone' });
     Screen.victory();
   },
   // ---------- 改裝廠：零件三選一、付錢換零件 ----------

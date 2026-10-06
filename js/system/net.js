@@ -386,7 +386,10 @@ const Net = {
       G.combat.wave = num(C.wave);
       if (Y.dead) P.dead = true;
     } else if (m.state === 'victory' && G.node) {
-      G.inArena = false; G.victory = { slot: false, boss: G.bossId }; G.state = 'victory'; Screen.victory();
+      G.inArena = false; G.state = 'victory';
+      if (!(soft && G.victory)) G.victory = { slot: false, boss: G.bossId };  // 同一個頁面：保留原本的勝利畫面（模組還能裝）
+      Screen.victory();
+      if (!G.victory.module || G.victory.took || G.victory.skip) this.send({ t: 'moddone' });  // 房主可能在等隊友選模組
     } else G.showMap('已重新連線，回到這一局。');
     this.send({ t: 'back' });
   },
@@ -516,6 +519,9 @@ const Net = {
         }
         break;
       case 'finish': if (this.role === 'client' && Game.state === 'victory') Game.finishRun(); break;
+      case 'moddone':  // 隊友裝上或略過了旗艦模組：房主可以前往下一星區
+        if (this.role === 'host' && this.mateModWait) { this.mateModWait = false; if (Game.state === 'victory') Screen.victory(); }
+        break;
       case 'ping': this.send({ t: 'pong', at: m.at }); break;
       case 'pong': {
         const ms = Math.round(now - num(m.at, now));

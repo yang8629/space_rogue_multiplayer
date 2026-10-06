@@ -116,9 +116,9 @@ function runOps(ops, depth) {
     if (o.flaky && flakyOff()) continue;  // 奇異點：間歇失效
     if (def.type === 'source') {
       const src = o.key || 'weapon';
-      list.push(...def.emit(o.pw).map(b => Object.assign(b, { src, cr: null })));
+      list.push(...def.emit(o.pw, depth).map(b => Object.assign(b, { src, cr: null })));
       for (const x of o.extra || []) if (!(x.flaky && flakyOff()))  // 鏡像：武器多射一次（基礎傷害算鏡像的）
-        list.push(...def.emit(o.pw).map(b => Object.assign(b, { src: 'mirror', cr: null })));
+        list.push(...def.emit(o.pw, depth).map(b => Object.assign(b, { src: 'mirror', cr: null })));
       list = runComps(list, o.comps || [], 'w');  // 武器、回響的插座
       for (const b of list) b.wsb = b.bonus || 0;  // 武器插座上的傷害加成：只算直擊，產物出現時拿掉（見 stripW）
     } else if (def.type === 'trigger') {
