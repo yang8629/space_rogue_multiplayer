@@ -7,13 +7,7 @@ const GLFx = {
   init() {
     const L = GLR.L, S = () => new PIXI.Sprite();
     this.pB = new GLParticles(L.bullets, 'add');   // 我方子彈（加法混色）
-    this.pP = new GLParticles(L.fx, 'add');        // 彗星爆炸的閃光：淡藍白的光暈很快擴大變淡＋中心亮點
-    for (const f of G.flashes) {
-      const k = f.life / f.max;
-      const h = this.spr(this.pP, tx.halo, f.x, f.y); h.scaleX = h.scaleY = f.r * (0.7 + 0.5 * (1 - k)) / R.dot; h.tint = 0xd8f4ff; h.alpha = k * 0.9;
-      const d = this.spr(this.pP, tx.dot, f.x, f.y); d.scaleX = d.scaleY = f.r * 0.3 * k / R.dot; d.alpha = k;
-    }
-    // 粒子
+    this.pP = new GLParticles(L.fx, 'add');        // 粒子
     this.pEB = new GLParticles(L.eBullets, 'normal');  // 敵彈（畫在敵人底下：看起來從砲管／機身邊緣射出）
     this.g = new PIXI.Graphics(); L.fx.addChild(this.g);           // 電弧、光圈（每幀重畫）
     this.g.blendMode = 'add';
@@ -64,6 +58,12 @@ const GLFx = {
         const s = this.spr(P, tx.dot, b.x, b.y); s.scaleX = s.scaleY = b.r / R.dot; s.tint = col; s.alpha = fa;
       }
       if (b.payload) { const r = this.spr(P, tx.ring, b.x, b.y); r.scaleX = r.scaleY = (b.r + 4) / R.ring; r.tint = 0xff6b9d; r.alpha = fa; }
+    }
+    // 彗星爆炸的閃光：淡藍白的光暈很快擴大變淡＋中心亮點
+    for (const f of G.flashes) {
+      const k = f.life / f.max;
+      const h = this.spr(this.pP, tx.halo, f.x, f.y); h.scaleX = h.scaleY = f.r * (0.7 + 0.5 * (1 - k)) / R.dot; h.tint = 0xd8f4ff; h.alpha = k * 0.9;
+      const d = this.spr(this.pP, tx.dot, f.x, f.y); d.scaleX = d.scaleY = f.r * 0.3 * k / R.dot; d.alpha = k;
     }
     // 粒子
     for (const q of G.particles) { const s = this.spr(this.pP, tx.sq, q.x, q.y); s.scaleX = s.scaleY = q.size / R.sq; s.tint = glColor(q.color); s.alpha = q.life / q.max; }
