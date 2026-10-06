@@ -580,6 +580,7 @@ const Game = {
   },
   quitRun() {
     this.pauseMenu = false;
+    if (this.freePlay()) { this.state = 'title'; this.inArena = false; this.view(); return; }  // 靶場、沙盒：沒有結算，直接回標題
     this.saveRecord('retired');
     this.state = 'ended'; this.inArena = false;
     this.view();

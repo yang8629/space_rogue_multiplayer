@@ -125,6 +125,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .arrow.trig { color: #ff6b9d; font-size: 11px; width: 38px; line-height: 1.1; }
 /* 電路：每一格一欄，晶片卡靠上，下面固定留一排插座（大圓，組件插在裡面；滑鼠移上去看是什麼） */
 .chain { align-items: flex-start; }
+#edMain.free #chain { position: sticky; top: -1px; z-index: 3; background: #0b1024; box-shadow: 0 6px 10px -6px #000; }  /* 沙盒／靶場：電路固定在上方 */
 .chain .arrow { margin-top: 30px; }
 .hgroup { display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .socks { display: flex; gap: 5px; justify-content: center; align-items: center; height: 42px; padding: 0 6px; border-radius: 21px; }
@@ -200,7 +201,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .stat b { display: block; font-size: 18px; color: #fff; margin-top: 2px; }
 .layers { margin-top: 8px; font-size: 12px; color: #ff9dbd; min-height: 16px; }
 .passives { font-size: 12px; color: #2ee6a6; margin-top: 8px; min-height: 16px; }
-.info { margin-top: 12px; height: 118px; overflow-y: auto; font-size: 13px; color: #c9d4ff; background: #070b1a;
+.info { margin-top: 12px; height: 172px; overflow-y: auto; font-size: 13px; color: #c9d4ff; background: #070b1a;
   border-radius: 8px; padding: 10px 12px; line-height: 1.6; }
 .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .bar span { font-size: 12px; color: #6a79ad; margin-right: 4px; }
