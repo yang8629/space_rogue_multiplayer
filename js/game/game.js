@@ -313,6 +313,7 @@ const Game = {
     if (!client) for (const q of this.players()) if (q && !q.dead && q.drRec > 0) { q.hp = Math.min(q.maxHp, q.hp + q.drRec); q.drRec = 0; }  // 修復無人機：沒補完的補回
     if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
+    Screen.clickLock = performance.now() + 600;  // 戰鬥中連點射擊：勝利／三選一畫面剛出現 0.6 秒內不接受點擊（免得直接按到按鈕）
     const type = this.node.type;
     if (type === 'boss') {  // 擊敗旗艦：插槽 +1、晶體獎勵，可前往下一星區
       const slot = this.chain.length < CFG.MAX_SLOTS;
