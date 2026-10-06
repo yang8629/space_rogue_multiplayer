@@ -110,6 +110,7 @@ const Screen = {
       case 'bhfuse': Game.bhFuse(); break;
       case 'next': {  // 還沒裝上旗艦模組：先提醒一次（可以勾「不再提醒」）
         const V = Game.victory;
+        if (Net.mateModWait && Game.coopOn()) { this.victory(); break; }  // 雙人：隊友還沒裝上或略過旗艦模組
         let warn = true;
         try { warn = localStorage.getItem('noModWarn') !== '1'; } catch (e) {}
         if (V && V.module && !V.took && warn) this.victory(true); else Game.nextSector();
@@ -118,10 +119,11 @@ const Screen = {
       case 'nextok': {
         const cb = document.getElementById('noModWarn');
         if (cb && cb.checked) try { localStorage.setItem('noModWarn', '1'); } catch (e) {}
-        Game.nextSector();
+        if (Net.mateModWait && Game.coopOn()) this.victory(); else Game.nextSector();
         break;
       }
       case 'nextno': this.victory(); break;
+      case 'modskip': Game.skipBossModule(); break;
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
       case 'refresh': Screen.hardRefresh(); break;
@@ -512,8 +514,10 @@ const Screen = {
     const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
     const cleared = Game.sector === CFG.CAMPAIGN_SECTORS;  // 剛打完第三關：遠征完成
     const reward = `獎勵：◆ +50　${V.slot ? '· <b style="color:#4cc9f0">電路插槽 +1</b>' : '· 插槽已達上限'}　· <b style="color:#9fe8ff">零件格 +1</b>${V.ws ? `　· <b style="color:#ffd166">武器插座 +1（${Game.wSock} 個）</b>` : ''}`;
-    const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>'
-      : `<button data-act="bossmod">裝上${Game.module && Game.module !== V.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>`)}</div>` : '';
+    const skipBtn = Game.isClient() ? '<button data-act="modskip">略過</button>' : '';  // 雙人的隊友：房主等你裝上或略過才能前往
+    const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>' : V.skip ? '<button disabled>已略過</button>'
+      : `<button data-act="bossmod">裝上${Game.module && Game.module !== V.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>${skipBtn}`)}</div>` : '';
+    const wait = !Game.isClient() && Net.mateModWait && Game.coopOn();  // 房主：隊友還沒裝上或略過旗艦模組
     const head = cleared
       ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">遠征完成！</h1>
         <div class="sub">${boss.name}已被擊沉，${CFG.CAMPAIGN_SECTORS} 個星區全部突破。<br>${reward}<br>
@@ -523,11 +527,12 @@ const Screen = {
       ${mod}
       ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
-      ${Game.isClient() ? '<div class="sub" style="color:#ff9dbd">👥 等待房主決定：前往下一星區，或結束遠征…</div>' : askMod ? `
+      ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${V.module && !V.took && !V.skip ? '👥 房主在等你：裝上旗艦模組，或按「略過」' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : askMod ? `
       <div class="sub" style="color:#ffd166">還沒裝上旗艦模組「${MODULES[V.module].name}」，離開這個畫面就拿不到了。確定要前往？</div>
       <div class="row"><button class="big" data-act="nextok">確定前往</button><button class="big" data-act="nextno">返回</button></div>
       <div class="row" style="margin-top:0"><label style="cursor:pointer"><input type="checkbox" id="noModWarn"> 不再提醒</label></div>` : `
-      <div class="row"><button class="big" data-act="next">${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
+      ${wait ? '<div class="sub" style="color:#ff9dbd">👥 等隊友裝上或略過旗艦模組…</div>' : ''}
+      <div class="row"><button class="big" data-act="next"${wait ? ' style="opacity:.45"' : ''}>${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
         <button class="big" data-act="finish">結束遠征</button></div>`}
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },
