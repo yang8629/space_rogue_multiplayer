@@ -657,6 +657,7 @@ function recordText(r) {
   const cd = (r.chipDmg || []).map(([k, v]) => (/^武器・/.test(k) ? '武器' : /^機體/.test(k) ? '機體' : chip(k)) + v).join(' ');
   L.push(`傷害 ${r.dmg} 最大${r.maxHit}｜${src}｜${cd}`);
   if (r.taken) L.push(`被打 ${r.hits}下 衝刺${r.dashes}｜${Object.entries(r.taken).map(([k, v]) => hurt(k) + v).join(' ')}`);
+  if (r.perf && r.perf.worst) L.push(`效能 最慢一幀${r.perf.worst}ms(${r.perf.worstAt}) 卡>100ms ${r.perf.slow}次`);  // 戰鬥中最慢的一幀在哪（第幾層、第幾波、場上子彈數）
   // 每個星區一行：摘要＋走過的節點（戰28-10 ＝ 戰鬥 28 秒、掉 10 血）
   const nodes = {};
   for (const p of r.path || []) {
@@ -685,8 +686,10 @@ function recordText(r) {
   if (got.length) L.push('取得 ' + got.map(g => { const k = g.s + '-' + g.l, t = (k === last ? '' : k) + g.b; last = k; return t; }).join(' '));
   if (r.coop) {
     const c = r.coop, ping = typeof c.ping === 'object' ? `延遲${c.ping.avg}ms(最高${c.ping.max})` : '';
-    L.push(`雙人 ${c.role}｜隊友 ${c.mate}${c.mateDown ? '(倒下)' : ''}｜${ping} 同步最長${c.sync.maxGapMs}ms`);
-    if (c.team) L.push(`分工 ${c.team.map(t => `${t.who} ${t.ship} ${t.dmg}(殺${t.kills})`).join('｜')}`);
+    // 同步最長的那次在哪（第幾層、第幾波、場上子彈數）、超過 150ms 的停頓幾次
+    L.push(`雙人 ${c.role}｜隊友 ${c.mate}${c.mateDown ? '(倒下)' : ''}｜${ping} 同步最長${c.sync.maxGapMs}ms${c.sync.maxGapAt ? `(${c.sync.maxGapAt})` : ''}${c.sync.gaps150 != null ? ` 停頓>150ms ${c.sync.gaps150}次` : ''}`);
+    if (c.team) L.push(`分工 ${c.team.map(t => `${t.who} ${t.ship} ${t.dmg}(殺${t.kills}${t.downs ? ` 倒${t.downs}` : ''}${t.revives ? ` 救${t.revives}` : ''})`).join('｜')}`);
+    if (c.matePerf && c.matePerf.worst) L.push(`隊友效能 最慢一幀${c.matePerf.worst}ms(${c.matePerf.at}) 卡>100ms ${c.matePerf.slow}次`);
     if (c.mateChipDmg && c.mateChipDmg.length) L.push(`隊友晶片 ${c.mateChipDmg.map(([k, v]) => (/^武器・/.test(k) ? '武器' : chip(k)) + v).join(' ')}`);
   }
   return L.join('\n');

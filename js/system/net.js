@@ -29,7 +29,7 @@ const Net = {
   active() { return !!this.role; },
   fx(e) { if (this.conn && this.fxBuf.length < 400) this.fxBuf.push(e); },
   send(msg) { try { if (this.conn && this.conn.open) this.conn.send(msg); } catch (e) {} },
-  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0 }; this.team = null; },
+  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; },
   close() {
     const peer = this.peer, conn = this.conn;
     this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
@@ -66,7 +66,8 @@ const Net = {
     this.pingT += dt;
     if (this.pingT >= 1) {
       this.pingT = 0;
-      this.send({ t: 'ping', at: performance.now() });
+      const PF = Game.runStats && Game.runStats.perf;
+      this.send({ t: 'ping', at: performance.now(), wf: PF ? PF.worst : 0, wfAt: PF ? PF.worstAt : '', sl: PF ? PF.slow : 0 });  // 順便告訴對方自己最慢的一幀（雙人紀錄用）
       if (this.role === 'host' && Game.mode === 'coop' && Game.inArena) this.sendDmg();  // 每秒同步一次兩人的傷害統計
     }
   },
@@ -76,7 +77,7 @@ const Net = {
     if (!R) return null;
     const rd = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v)]));
     const nm = Game.withLoadout(L, () => Object.fromEntries(Object.keys(R.chips).map(k => [k, [dmgKeyName(k), dmgKeyColor(k)]])));
-    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit), nm };
+    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit), nm, downs: R.downs || 0, revives: R.revives || 0 };
   },
   sendDmg() {
     if (!Game.mate || !Game.mate.L) return;
@@ -91,10 +92,10 @@ const Net = {
         .filter(([k]) => !mine || CHIPS[k] || k === 'weapon' || k === 'ship')),
       nm: Object.fromEntries(Object.entries(p.nm && typeof p.nm === 'object' ? p.nm : {}).slice(0, 60)
         .map(([k, v]) => [String(k).slice(0, 40), Array.isArray(v) ? [esc(v[0]), /^#[0-9a-f]{3,8}$/i.test(v[1]) ? v[1] : '#8fa3d9'] : [esc(k), '#8fa3d9']])),
-      kills: num(p.kills), maxHit: num(p.maxHit) } : null);
+      kills: num(p.kills), maxHit: num(p.maxHit), downs: num(p.downs), revives: num(p.revives) } : null);
     this.team = { h: clean(m.h, false), m: clean(m.m, true) };
     const R = Game.runStats, mine = this.team.m;
-    if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit });
+    if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit, downs: mine.downs, revives: mine.revives });
   },
   // 隊友的晶片傷害 [名稱, 顏色, 傷害]（房主直接讀隊友的配裝；隊友這邊用房主傳來的名稱）：傷害分頁與遊玩紀錄用
   mateChipRows() {
@@ -120,8 +121,8 @@ const Net = {
     const h = host ? Game.runStats : this.team && this.team.h, m = host ? Game.mate && Game.mate.L && Game.mate.L.R : Game.runStats;
     const mp = this.matePick, myShip = Game.shipId, mateShip = mp ? mp.ship : null;
     return [
-      { tag: '1P', ship: host ? myShip : mateShip, me: host, dmg: total(h), kills: h ? h.kills : 0, maxHit: h ? h.maxHit : 0 },
-      { tag: '2P', ship: host ? mateShip : myShip, me: !host, dmg: total(m), kills: m ? m.kills : 0, maxHit: m ? m.maxHit : 0 },
+      { tag: '1P', ship: host ? myShip : mateShip, me: host, dmg: total(h), kills: h ? h.kills : 0, maxHit: h ? h.maxHit : 0, downs: h ? h.downs || 0 : 0, revives: h ? h.revives || 0 : 0 },
+      { tag: '2P', ship: host ? mateShip : myShip, me: !host, dmg: total(m), kills: m ? m.kills : 0, maxHit: m ? m.maxHit : 0, downs: m ? m.downs || 0 : 0, revives: m ? m.revives || 0 : 0 },
     ];
   },
   teamSummaryHtml() {
@@ -423,7 +424,11 @@ const Net = {
     const now = performance.now(), S = this.stats;
     if (S && (m.t === 's' || m.t === 'i')) {  // 同步訊息之間最長隔多久（卡頓的指標；暫停中不算）
       if (Game.state === 'play' && !this.pauseReason()) {
-        if (S.lastRecv) S.maxGap = Math.max(S.maxGap, now - S.lastRecv);
+        if (S.lastRecv) {  // 超過 150ms 算一次停頓；最長的那次記下在哪裡（第幾層、第幾波、場上多少子彈）
+          const gap = now - S.lastRecv;
+          if (gap > 150) S.gaps++;
+          if (gap > S.maxGap) { S.maxGap = gap; S.maxGapAt = Game.whereNow(); }
+        }
         S.lastRecv = now;
       } else S.lastRecv = 0;
       if (m.t === 's') S.snaps++; else S.inputs++;
@@ -526,7 +531,10 @@ const Net = {
       case 'moddone':  // 隊友裝上或略過了旗艦模組：房主可以前往下一星區
         if (this.role === 'host' && this.mateModWait) { this.mateModWait = false; if (Game.state === 'victory') Screen.victory(); }
         break;
-      case 'ping': this.send({ t: 'pong', at: m.at }); break;
+      case 'ping':
+        this.send({ t: 'pong', at: m.at });
+        if (m.wf != null) this.matePerf = { worst: Math.round(num(m.wf)), at: String(m.wfAt || '').slice(0, 40), slow: Math.round(num(m.sl)) };
+        break;
       case 'pong': {
         const ms = Math.round(now - num(m.at, now));
         if (ms < 0 || ms > 60000) break;
@@ -783,9 +791,10 @@ const Net = {
         mateDown: !!(G.mate && G.mate.dead),
         ping: ps.length ? { avg: Math.round(ps.reduce((a, b) => a + b, 0) / ps.length), min: ps[0],
           p90: ps[Math.floor(ps.length * 0.9)], max: ps[ps.length - 1], samples: ps.length } : '沒有量到',
-        sync: host ? { inputsReceived: S.inputs, maxGapMs: Math.round(S.maxGap) } : { snapshotsReceived: S.snaps, maxGapMs: Math.round(S.maxGap) },
+        sync: { ...(host ? { inputsReceived: S.inputs } : { snapshotsReceived: S.snaps }), maxGapMs: Math.round(S.maxGap), maxGapAt: S.maxGapAt || '', gaps150: S.gaps || 0 },
+        matePerf: this.matePerf,  // 隊友那邊最慢的一幀（每秒的 ping 帶過來）
         team: this.teamRows().map(r => ({ who: `${r.tag}${r.me ? '（你）' : ''}`, ship: SHIPS[r.ship] ? SHIPS[r.ship].name : '？',
-          dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit) })),
+          dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit), downs: r.downs, revives: r.revives })),
         mateChipDmg: (this.mateChipRows() || { rows: [] }).rows.map(([n, , v]) => [n, Math.round(v)]),  // 隊友的晶片傷害（整局）
       },
     };

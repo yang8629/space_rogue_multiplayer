@@ -75,7 +75,8 @@ const Game = {
     this.runStats = { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0, time: 0,
       bosses: [], started: Date.now(), recorded: false,
       // 遊玩紀錄用的判斷資料：受到的傷害來源、被打中次數、衝刺次數、走過的節點、取得的晶片、武器升級、各關摘要
-      taken: {}, hits: 0, dashes: 0, path: [], got: [], upgrades: [], sectors: [] };
+      taken: {}, hits: 0, dashes: 0, path: [], got: [], upgrades: [], sectors: [],
+      perf: { worst: 0, worstAt: '', slow: 0 } };  // 效能：戰鬥中最慢的一幀（ms）、在哪裡、超過 100ms 的幀數
     this.sectorStats = { chips: {}, t0: 0, kills0: 0, dmg0: 0 };  // 「本關」＝目前這個星區
     this.nodeLog = null;
     this.lastHit = '';
@@ -89,6 +90,15 @@ const Game = {
   },
   // ---------- 遊玩紀錄：走過的節點 ----------
   here() { return `${this.sector}-${this.node ? this.node.L + 1 : 0}`; },
+  // 現在在哪、場上多少子彈（效能、連線卡頓的紀錄用）
+  whereNow() { const C = this.combat; return `${this.here()}${C && this.inArena ? ` 第${C.wave}波` : ''}・子彈${this.bullets.length + this.eBullets.length}`; },
+  // 每幀（main.js）：戰鬥中這一幀花了 ms 毫秒；超過 2 秒的不算（切到別的分頁回來）
+  notePerf(ms) {
+    const R = this.runStats;
+    if (!R || !R.perf || this.state !== 'play' || !this.inArena || ms > 2000) return;
+    if (ms > 100) R.perf.slow++;
+    if (ms > R.perf.worst) { R.perf.worst = Math.round(ms); R.perf.worstAt = this.whereNow(); }
+  },
   totalDmg() { return this.runStats ? Object.values(this.runStats.dmg).reduce((a, b) => a + b, 0) : 0; },
   logNodeStart(node) {
     const R = this.runStats;
@@ -648,6 +658,7 @@ const Game = {
       sectors: [...R.sectors, this.sectorSummary() + (result === 'cleared' || result === 'retired' ? '' : ' ←目前')],
       path: [...R.path, ...(inFight ? [this.nodeSummary(true)] : [])],
       upgrades: R.upgrades.slice(), got: R.got.slice(),
+      perf: R.perf ? { ...R.perf } : null,
     };
     return rec;
   },
@@ -947,8 +958,11 @@ const Game = {
   },
 
   // 雙人：一方被擊墜 → 等隊友；兩人都被擊墜 → 結束（房主判定）
+  // 這個人的統計（房主：自己的 runStats、隊友的 mate.L.R）：倒下、救人次數記在這裡
+  statsOf(p) { return p === this.player ? this.runStats : p && p.L ? p.L.R : null; },
   playerDown(p) {
     p.hp = 0; p.dead = true;
+    const RS = this.statsOf(p); if (RS) RS.downs = (RS.downs || 0) + 1;  // 雙人紀錄：被擊墜幾次
     burst(p.x, p.y, p.ship.color, 80, 400, 1.2, 3);
     if (this.players().length) {
       bannerFx(`${p === this.player ? '1P' : '2P'} 被擊墜！`, `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, 2.5);
@@ -975,6 +989,7 @@ const Game = {
     const give = q.hp / 2, tag = x => (x === this.player ? '1P' : '2P');  // 只在房主執行：自己是 1P
     q.hp -= give;
     p.hp = give; p.dead = false; p.reviveT = 0; p.iframe = CFG.REVIVE.iframe;
+    const RS = this.statsOf(q); if (RS) RS.revives = (RS.revives || 0) + 1;  // 雙人紀錄：救起隊友幾次
     bannerFx(`${tag(p)} 救援成功！`, `${tag(q)} 分出 ${Math.ceil(give)} HP`, 2);
     burst(p.x, p.y, '#9dff6b', 40, 260, 0.8, 3);
     Events.emit('revive', { p, q });
