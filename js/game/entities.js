@@ -609,9 +609,13 @@ class Enemy {
       }
     }
 
-    // 看不到玩家（中間有行星或小行星）：照尋路方向繞過去或鑽縫
+    // 看不到玩家（中間有行星、小行星，或大地圖的牆）：照尋路方向繞過去或鑽縫
     let bx = dx / d, by = dy / d;
-    const blocked = Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8);
+    if (!((this.losT -= dt) > 0)) {  // 視線每 0.15 秒重算一次（沿線取樣，每幀算太貴）
+      this.losT = 0.15;
+      this.losBlk = !!((Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) || Arena.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8));
+    }
+    const blocked = this.losBlk;
     if (blocked) { const f = Objects.flowDir(this, p); if (f) [bx, by] = f; }
     let mx = bx, my = by;
     if (this.type === 'swarmer') {
@@ -624,7 +628,7 @@ class Enemy {
       else if (d < R * 0.55) { mx = -mx; my = -my; }
       else if (d < R * 0.9) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s; my = dx / d * s; }
       this.cd -= dt * endlessAtk();
-      if (this.cd <= 0 && d < R + 120) {
+      if (this.cd <= 0 && d < R + 120 && !blocked) {  // 看不到玩家（被牆、行星擋住）就不開火，先繞過去
         this.cd = t.ranged.cd;
         const a = Math.atan2(dy, dx);
         const mz = this.type === 'spitter' ? this.r * 1.55 : 0;  // 噴吐者：從噴管口射出
