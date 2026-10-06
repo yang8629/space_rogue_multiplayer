@@ -117,7 +117,6 @@ const Music = {
   init() {
     const c = SFX.ctx;
     if (!c || this.gain) return;
-    try { if (localStorage.getItem('music') === '0') this.on = false; } catch (e) {}
     this.gain = c.createGain(); this.gain.gain.value = 0;
     this.gain.connect(SFX.master);
     // 殘響（大廳效果）：用衰減的雜訊產生脈衝響應，王戰的合唱、銅管、定音鼓送一部分進來
@@ -271,6 +270,7 @@ const Music = {
     if (i === 0 || i === 14) for (const n of ch) this.note('sawtooth', n - 12, t, dt * 2.5, 0.03, { cutoff: 1200, detune: 6, attack: 0.015, rev: 0.4 });
   },
 };
+try { if (localStorage.getItem('music') === '0') Music.on = false; } catch (e) {}  // 載入時就讀，標題畫面的按鈕才不會先顯示「開」
 
 addEventListener('pointerdown', () => SFX.init(), { capture: true });
 addEventListener('keydown', e => {

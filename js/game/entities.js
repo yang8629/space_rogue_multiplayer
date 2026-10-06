@@ -594,7 +594,7 @@ class Enemy {
       } };
       if (this.ring2T > 0 && (this.ring2T -= dt) <= 0) eliteRing(0.5);
       this.skillCd -= dt * endlessAtk();
-      if (this.skillCd <= 0) {
+      if (this.skillCd <= 0 && !Objects.inHole(this)) {
         this.skillCd = 2.2;
         if (this.nextSkill === 'charge') {
           this.mode = 'windup'; this.modeT = 0.65; this.chargeA = Math.atan2(dy, dx); this.nextSkill = 'ring';
@@ -693,7 +693,7 @@ class Enemy {
       return true;
     }
     this.rollCd -= dt * endlessAtk();
-    if (this.rollCd <= 0 && d < B.range) { this.mode = 'windup'; this.modeT = B.windup; this.chargeA = Math.atan2(dy, dx); return true; }
+    if (this.rollCd <= 0 && d < B.range && !Objects.inHole(this)) { this.mode = 'windup'; this.modeT = B.windup; this.chargeA = Math.atan2(dy, dx); return true; }
     return false;
   }
   // ---------- 旗艦（三隻共用框架，技能清單寫在 ENEMY_TYPES.skills；半血後暴走） ----------
@@ -888,7 +888,7 @@ const THEME_AI = {
     if (d < 420) { mx = -dx / d; my = -dy / d; }
     else if (d < 520) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s * 0.5; my = dx / d * s * 0.5; }
     this.cd -= dt * endlessAtk();
-    if (this.cd <= 0 && d < 750) { this.mode = 'windup'; this.modeT = 0.6; }
+    if (this.cd <= 0 && d < 750 && !Objects.inHole(this)) { this.mode = 'windup'; this.modeT = 0.6; }
     this.steerMove(dt, mx, my, this.t.speed);
     return true;
   },
@@ -919,7 +919,7 @@ const THEME_AI = {
     }
     if (this.mode === 'charge') { this.modeT -= dt; this.move(dt); if (this.modeT <= 0) { this.mode = 'shown'; this.modeT = 2; } return true; }
     if (this.mode === 'shown' && (this.modeT -= dt) <= 0) this.mode = 'stalk';
-    if (this.mode === 'stalk' && d < 140 && this.cloak >= 1) { this.mode = 'windup'; this.modeT = 0.4; this.chargeA = Math.atan2(dy, dx); return true; }
+    if (this.mode === 'stalk' && d < 140 && this.cloak >= 1 && !Objects.inHole(this)) { this.mode = 'windup'; this.modeT = 0.4; this.chargeA = Math.atan2(dy, dx); return true; }
     const [mx, my] = this.chaseDir(p, dx, dy, d);
     this.steerMove(dt, mx, my, this.t.speed);
     return true;

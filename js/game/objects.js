@@ -13,7 +13,7 @@
 // =====================================================================
 const OBJ = {
   PLANET_GM: 1.2e7, HOLE_GM: 2.4e7,  // 引力強度（加速度 = GM / 距離²）
-  HOLE_R: 280, HOLE_CORE: 34, HOLE_BLOCK: 70, HOLE_PCT: 0.1,  // HOLE_PCT：核心每秒扣敵人最大 HP 的比例；  // HOLE_BLOCK：核心外多少算擋住視線（敵人尋路繞開）
+  HOLE_R: 280, HOLE_CORE: 34, HOLE_BLOCK: 70, HOLE_PCT: 0.1, HOLE_ESCAPE: [0.3, 1.05], HOLE_NOESC: 130,  // HOLE_NOESC：會走路的敵人從靜止起步、離核心多遠以內走不出來（實測最快的蟲群約 95，留餘裕）：敵人不生在這裡面；  // HOLE_ESCAPE：拉敵人最多到牠原本移動速度的 0.3 + 1.05 ×（1 − 距離 / 範圍）² 倍（繞路時往外最多約速度的 0.89 倍，所以離核心約 72 內走不出來；外圍只拖慢；被減速時界線往外推）；  // HOLE_PCT：核心每秒扣敵人最大 HP 的比例；  // HOLE_BLOCK：核心外多少算擋住視線（敵人尋路繞開）
   ROCK_MIN_DMG: 30, ROCK_CREDIT_HP: 32,  // 小行星：單發至少 30 才打得動；打爆掉晶體（耐久每 32 一顆）
   PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
   FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
@@ -139,7 +139,9 @@ const Objects = {
           if (e.dead || e.spawnT > 0 || e.t.boss) continue;
           const d = Math.hypot(o.x - e.x, o.y - e.y);
           if (d > o.R || d < 1) continue;
-          const pull = 60 + 160 * (1 - d / o.R);
+          const sp = e.frozen || e.t.dummy ? 0 : e.t.speed * endlessSpd();  // 不會動的（標靶、母巢）照原本的拉力
+          const [e0, e1] = OBJ.HOLE_ESCAPE, k = 1 - d / o.R;
+          const pull = Math.min(60 + 160 * k, sp > 0 ? sp * (e0 + e1 * k * k) : Infinity);
           e.x += (o.x - e.x) / d * pull * dt; e.y += (o.y - e.y) / d * pull * dt;
           if (hurt && d < o.r + e.r) e.hurt(Math.max(10, e.maxHp * OBJ.HOLE_PCT * 0.25), 0, 0, 'explode', e.lastAtt || null);  // 核心每秒扣最大 HP 的 10%（至少每 0.25 秒 10）：掉進去的一定會死，不會卡住戰鬥
         }
@@ -251,6 +253,11 @@ const Objects = {
       mx += nx * w; my += ny * w;
     }
     return [mx, my];
+  },
+  // 敵人在黑洞的引力範圍內（R：改用離核心多遠算，預設整個引力範圍）：會停下來的招式（衝鋒、縮球、蓄力射擊、撲擊）先不放，走出來再放（停下來會被吸進核心）
+  inHole(e, R) {
+    for (const o of Game.objs) if (o.type === 'hole' && dist2(e.x, e.y, o.x, o.y) < ((R || o.R) + e.r) ** 2) return true;
+    return false;
   },
   // 圓形物體 a 被推出圓 o 外面；回傳有沒有碰到
   pushOut(a, o, r) {

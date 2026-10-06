@@ -217,11 +217,17 @@ const Game = {
     return { list: pickN(pool, Math.min(n, pool.length)), share };
   },
   spawnEnemy(type) {
-    const C = this.combat, p = this.player, a = rand(0, TAU), d = rand(520, 780);
-    let x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
-    let y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
-    const zone = Math.max(0, C.wave - 1);
-    if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 500, 60);  // 大地圖：散在這一波的區域各處（離在這一區的玩家至少 500）
+    const C = this.combat, p = this.player, zone = Math.max(0, C.wave - 1);
+    let x, y;
+    for (let t = 0; t < 30; t++) {
+      const a = rand(0, TAU), d = rand(520, 780);
+      x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
+      y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
+      if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 500, 60);  // 大地圖：散在這一波的區域各處（離在這一區的玩家至少 500）
+      // 不生在黑洞出不來的範圍：母巢不會動，整個引力範圍都不行；列隊蟲後面 5 節往外排到 110
+      const R = type === 'hive' ? OBJ.HOLE_R : OBJ.HOLE_NOESC + (type === 'worm' ? 110 : 0);
+      if (!Objects.inHole({ x, y, r: ENEMY_TYPES[type].radius }, R)) break;
+    }
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
       (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
       (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）
@@ -1136,7 +1142,8 @@ const Game = {
         const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
-        floatText(e.x, e.y - e.r, Math.round(dmg), b.depth > 0 ? '#ff9dbd' : '#ffffff', dmg >= 40);
+        const wid = (b.owner && this.mate && this.mate.L ? this.mate.L.weapon : this.weapon).id;
+        floatText(e.x, e.y - e.r, Math.round(dmg), ...dmgTextStyle(dmg, WEAPONS[wid] && WEAPONS[wid].base.damage));
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
         SFX.play('hit');
         this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素組件）：燃燒、減速、爆炸、電弧

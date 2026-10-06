@@ -292,7 +292,7 @@ const Screen = {
       </div>
       <div class="row"><button data-act="codex">📖 電路總覽</button>
         <button data-act="records">📜 遊玩紀錄</button>
-        <button data-act="music">${Music.on ? '🎵 音樂開' : '🎵 音樂關'}</button>
+        <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button>
         <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button>
         <button data-act="renderer" title="新畫面（WebGL）／舊畫面；遊戲中按 F2 切換">${GLR.label()}</button></div>
       <div class="keys">電腦：WASD 移動　·　滑鼠左鍵 射擊　·　Space / 右鍵 衝刺（無敵）　·　Tab 隨時編輯電路（暫停）　·　M 靜音<br>
