@@ -12,7 +12,7 @@ const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 function chipCard(id, footer = '') {
   const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip';
   const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
-  const lv = !d.lv && LV_INFO[id] ? `<div class="ty" style="line-height:1.6">${lvLine(id, 1)}</div>` : '';  // Lv2+ 的說明已寫在 desc 裡
+  const lv = levelOf(id) <= 1 && LV_INFO[baseOf(id)] ? `<div class="ty" style="line-height:1.6">${lvLine(baseOf(id), 1)}</div>` : '';  // Lv2+ 的說明已寫在 desc 裡；有插座的 Lv1（orbit~2）也要列
   return `<div class="card cat-${cat}">${catBand(cat)}
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
     <div class="ttl">${d.name}</div>
