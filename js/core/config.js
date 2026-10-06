@@ -38,6 +38,7 @@ const CFG = {
   RICOCHET_RANGE: 420,      // 彈射尋找下一個目標的距離
   ARC_RANGE: 260,           // 電弧（軌道砲・磁暴線圈）找附近敵人的距離
   // 刺殼：距離 range 內開始縮球 windup 秒（最後 lock 秒鎖定方向）→ 以 rollSpeed 滾 rollT 秒 → 暈眩 stunT 秒 → 冷卻 cooldown 秒
+  CHARGE: { elite: { speed: 800, t: 0.45 }, boss2: { speed: 760, t: 0.6 }, lurker: { speed: 520, t: 0.4 } },  // 衝鋒：速度、時間（預警線長度也照這個算，見 telegraphLen）
   BRUTE: { range: 350, windup: 0.7, lock: 0.3, rollSpeed: 520, rollT: 0.9, stunT: 1, cooldown: 1.5 },
   BOSS_KNOCK: 30,          // 推王：每超過抗擊退 1 點，每次命中推 30（王會慢慢拉回自己的速度）
   REPAIR_RATIO: 0.5,        // 維修站修復 50% 最大 HP

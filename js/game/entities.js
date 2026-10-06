@@ -499,6 +499,14 @@ function nearestEnemy(x, y, range, exclude, visible = false) {  // visible：略
   return best;
 }
 
+// 衝鋒預警線的長度：衝鋒距離＋身體半徑（刺殼再加上暈眩滑行的距離）；畫面兩種繪圖都用這個
+const BRUTE_SKID = 0.88;  // 刺殼暈眩時每 1/60 秒速度剩幾成
+function telegraphLen(e) {
+  if (e.type === 'brute') { const B = CFG.BRUTE, s = B.rollSpeed * (e.spdMul || 1); return s * (B.rollT + 1 / 60) + s / 60 * BRUTE_SKID / (1 - BRUTE_SKID) + e.r; }
+  const C = CFG.CHARGE[e.type];
+  return C ? C.speed * (C.t + 1 / 60) + e.r : 0;  // 多算一幀：計時器的最後一幀
+}
+
 const ENEMY_TYPES = {
   swarmer: { name: '蟲群', hp: 18, speed: 150, radius: 10, dmg: 10, color: '#ff4d6d', credits: 1, shape: 3 },
   brute:   { name: '刺殼', hp: 130, speed: 65, radius: 22, dmg: 25, color: '#ff9f1c', credits: 4, shape: 6 },  // 靠近時縮成球滾過來（見 updateBrute）
@@ -597,8 +605,9 @@ class Enemy {
       if (this.mode === 'windup') {
         this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
         if (this.modeT <= 0) {
-          this.mode = 'charge'; this.modeT = 0.45;
-          this.vx = Math.cos(this.chargeA) * 800; this.vy = Math.sin(this.chargeA) * 800;
+          const C = CFG.CHARGE.elite;
+          this.mode = 'charge'; this.modeT = C.t;
+          this.vx = Math.cos(this.chargeA) * C.speed; this.vy = Math.sin(this.chargeA) * C.speed;
         }
         return;
       }
@@ -606,7 +615,7 @@ class Enemy {
         this.modeT -= dt; this.move(dt);
         if (Game.particles.length < 1500)
           Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.3, max: 0.3, color: t.color, size: 6 });
-        if (this.modeT <= 0) this.mode = 'chase';
+        if (this.modeT <= 0) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
         return;
       }
       // 環形彈：20 發，0.35 秒後錯開半格再放一圈（兩圈之間有縫可以鑽）
@@ -714,7 +723,7 @@ class Enemy {
       return true;
     }
     if (this.mode === 'stun') {  // 暈眩：滑行停下，這段時間是反擊的機會
-      this.modeT -= dt; this.vx *= 0.88; this.vy *= 0.88; this.move(dt);
+      const k = Math.pow(BRUTE_SKID, dt * 60); this.modeT -= dt; this.vx *= k; this.vy *= k; this.move(dt);
       if (this.modeT <= 0) { this.mode = 'chase'; this.rollCd = B.cooldown; }
       return true;
     }
@@ -769,8 +778,9 @@ class Enemy {
     if (this.mode === 'windup') {  // 裂界獵艦：蓄力（畫面上有預警線），期間慢慢停下
       this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
       if (this.modeT <= 0) {
-        this.mode = 'charge'; this.modeT = 0.6; this.fireAcc = 0;
-        this.vx = Math.cos(this.chargeA) * 760; this.vy = Math.sin(this.chargeA) * 760;
+        const C = CFG.CHARGE.boss2;
+        this.mode = 'charge'; this.modeT = C.t; this.fireAcc = 0;
+        this.vx = Math.cos(this.chargeA) * C.speed; this.vy = Math.sin(this.chargeA) * C.speed;
         Game.shake(6);
       }
     } else if (this.mode === 'charge') {  // 衝鋒：往兩側灑出慢速彈，撞牆或時間到就停
@@ -783,7 +793,7 @@ class Enemy {
       if (Game.particles.length < 1500)
         Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: t.color, size: 8 });
       const wall = Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN;  // 大地圖：撞牆（move 記下的 wallN）
-      if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx *= 0.3; this.vy *= 0.3; }
+      if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
     } else {
       // 與玩家保持距離並緩慢繞行（獵艦貼得比較近，核心幾乎不動）
       const [far, near, orbit] = this.type === 'boss2' ? [300, 180, 60] : this.type === 'boss3' ? [460, 260, 18] : [340, 220, 35];
@@ -940,10 +950,10 @@ const THEME_AI = {
     if (this.mode === 'windup') {
       this.modeT -= dt; this.vx *= 0.8; this.vy *= 0.8; this.move(dt);
       if (this.modeT > 0.15) this.chargeA = Math.atan2(dy, dx);
-      if (this.modeT <= 0) { this.mode = 'charge'; this.modeT = 0.4; this.vx = Math.cos(this.chargeA) * 520; this.vy = Math.sin(this.chargeA) * 520; }
+      if (this.modeT <= 0) { const C = CFG.CHARGE.lurker; this.mode = 'charge'; this.modeT = C.t; this.vx = Math.cos(this.chargeA) * C.speed; this.vy = Math.sin(this.chargeA) * C.speed; }
       return true;
     }
-    if (this.mode === 'charge') { this.modeT -= dt; this.move(dt); if (this.modeT <= 0) { this.mode = 'shown'; this.modeT = 2; } return true; }
+    if (this.mode === 'charge') { this.modeT -= dt; this.move(dt); if (this.modeT <= 0) { this.mode = 'shown'; this.modeT = 2; this.vx = this.vy = 0; } return true; }  // 撲完停住（不滑出預警線）
     if (this.mode === 'shown' && (this.modeT -= dt) <= 0) this.mode = 'stalk';
     if (this.mode === 'stalk' && d < 140 && this.cloak >= 1 && !Objects.inHole(this)) { this.mode = 'windup'; this.modeT = 0.4; this.chargeA = Math.atan2(dy, dx); return true; }
     const [mx, my] = this.chaseDir(p, dx, dy, d);
