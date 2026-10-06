@@ -417,8 +417,9 @@ const Editor = {
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
       `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span>` +
       (CHIPS[baseOf(id)].grow ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '') +  // 成長進度放在名稱下面（以前在最後一行，說明框要往下捲才看得到）
-      `<br>${d.desc}` +
-      `${!d.lv && LV_INFO[id] ? '<br>' + lvLine(id, 1) : ''}${ps}` +
+      // 各等級效果放在說明前面（說明框高度有限，放最後會被切掉）；Lv2 以上的 desc 本身尾巴就有等級列，改用基本說明避免重複
+      (LV_INFO[baseOf(id)] ? '<br>' + lvLine(baseOf(id), levelOf(id)) + `<br>${CHIPS[baseOf(id)].desc}` : `<br>${d.desc}`) +
+      `${ps}` +
       (slot > 0 ? slotAttrLine(slot) : '') + (J && J.idle ? `<br><b style="color:#ff8a8a">✖ 這個插座沒有作用：${J.why}</b>` : '');
   },
 
