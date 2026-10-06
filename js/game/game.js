@@ -10,8 +10,8 @@ const Game = {
   chain: [], socks: [], inventory: [], slotAttr: [], credits: 0,  // socks[i]：插在第 i 格晶片上的組件
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
-  cam: { x: 0, y: 0, shake: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], rings: [], flashes: [], zaps: [], zones: [],
+  cam: { x: 0, y: 0 },
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -153,8 +153,8 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.pickups = []; this.triggerQueue = []; this.rings = []; this.flashes = []; this.zaps = []; this.vortices = []; this.portals = []; this.zones = [];
-    this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
+    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = [];
+    this.kills = 0; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
     else if (this.usesAreas()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal, this.areaScale(this.combat.level));
@@ -183,7 +183,7 @@ const Game = {
     C.wave = n;
     if (C.boss) {
       C.pending = [this.bossId];
-      this.banner = { text: `♛ ${ENEMY_TYPES[this.bossId].name}`, sub: '守關旗艦接近中', t: 2.5 };
+      bannerFx(`♛ ${ENEMY_TYPES[this.bossId].name}`, '守關旗艦接近中', 2.5);
       Events.emit('bossArrive', this.bossId);
       return;
     }
@@ -205,10 +205,9 @@ const Game = {
     if (sbBoss) list.push(sbBoss);
     else if (C.sandbox && n % 5 === 0) list.push('elite');
     C.pending = list;
-    this.banner = { text: C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`, t: 2 };
+    const bText = C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`;
     Events.emit('waveStart', { n, boss: !!sbBoss });
-    if (sbBoss) this.banner.sub = `♛ ${ENEMY_TYPES[sbBoss].name}接近中`;
-    else if (list.includes('elite')) this.banner.sub = '⚠ 精英反應接近中';
+    bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : list.includes('elite') ? '⚠ 精英反應接近中' : '', 2);
   },
   // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
   pickThemes(sector, late) {
@@ -263,7 +262,7 @@ const Game = {
       for (const c of this.pickups) c.vacuum = true;  // 每一波清完就把地上的晶體全部吸過來
       if (C.wave >= C.wavesTotal) {
         C.cleared = true; C.clearT = this.simFast ? 0 : 1.6;  // simFast：模擬（電腦不用看「區域肅清」）
-        this.banner = { text: '區域肅清', t: 1.6 };
+        bannerFx('區域肅清', '', 1.6);
         Events.emit('areaClear', { last: true });
         return;
       }
@@ -288,7 +287,7 @@ const Game = {
     if (!g) { this.combat.exitUsed = this.combat.wave; return; }  // 不該發生（大地圖的閘門數 = 區域數 - 1）：直接開始下一波
     g.open = true;
     this.exit = { x: g.x, y: g.y, r: 40, gate: true };
-    this.banner = { text: '區域肅清', sub: '閘門已開啟，穿過閘門前往下一區', t: 2 };
+    bannerFx('區域肅清', '閘門已開啟，穿過閘門前往下一區', 2);
     Events.emit('areaClear', { last: false });
   },
   // 換區：地上的晶體直接收下；倒下的人如果留在後面的區域，搬到新區域的入口（閘門不能回頭，不搬隊友救不到）；下一波照常倒數
@@ -736,7 +735,7 @@ const Game = {
       Events.emit('editor', { open: true });
     }
   },
-  shake(v) { this.cam.shake = Math.max(this.cam.shake, v); },
+  shake(v) { Events.emit('shake', v); },  // 畫面震動（ui/fx.js）
   recordDamage(source, amount, att) {  // 本局傷害統計：依來源分類，並依晶片分攤（見 splitDamage）
     if (att && att.nobody) return;  // 不算任何人的（彗星自己撞爆、飛行中撞到）
     // 雙人：記在打出這一擊的人身上（owner = 隊友的配裝；null = 房主自己）
@@ -777,7 +776,7 @@ const Game = {
       burst(e.x, e.y, '#ffd166', 80, 400, 1.2, 3);
       for (const o of this.enemies) if (o !== e && !o.dead) { o.dead = true; burst(o.x, o.y, o.t.color, 10, 200, 0.5, 2); }
       this.eBullets = [];
-      this.banner = { text: '旗艦擊沉！', t: 2 };
+      bannerFx('旗艦擊沉！', '', 2);
     }
     const base = e.summoned ? 0 : e.t.credits;  // 旗艦叫出來的小怪不掉晶體
     let n = base;
@@ -951,7 +950,7 @@ const Game = {
     p.hp = 0; p.dead = true;
     burst(p.x, p.y, p.ship.color, 80, 400, 1.2, 3);
     if (this.players().length) {
-      this.banner = { text: `${p === this.player ? '1P' : '2P'} 被擊墜！`, sub: `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, t: 2.5 };
+      bannerFx(`${p === this.player ? '1P' : '2P'} 被擊墜！`, `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, 2.5);
       return;
     }
     this.state = 'dead'; Input.down = false;
@@ -975,7 +974,7 @@ const Game = {
     const give = q.hp / 2, tag = x => (x === this.player ? '1P' : '2P');  // 只在房主執行：自己是 1P
     q.hp -= give;
     p.hp = give; p.dead = false; p.reviveT = 0; p.iframe = CFG.REVIVE.iframe;
-    this.banner = { text: `${tag(p)} 救援成功！`, sub: `${tag(q)} 分出 ${Math.ceil(give)} HP`, t: 2 };
+    bannerFx(`${tag(p)} 救援成功！`, `${tag(q)} 分出 ${Math.ceil(give)} HP`, 2);
     burst(p.x, p.y, '#9dff6b', 40, 260, 0.8, 3);
     Events.emit('revive', { p, q });
   },
@@ -1204,8 +1203,7 @@ const Game = {
       if (b.slow) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, b.slow); t.slowT = Math.max(t.slowT, b.slowDur || 1.5); }
       t.hurt(d, 0, 0, 'arc', b.att);
       floatText(t.x, t.y - t.r, Math.round(d), '#9fe8ff');
-      if (this.zaps.length < 60) this.zaps.push({ x1: hit.x, y1: hit.y, x2: t.x + rand(-6, 6), y2: t.y + rand(-6, 6), life: 0.18, max: 0.18 });
-      if (Net.role === 'host') Net.fx(['z', Math.round(hit.x), Math.round(hit.y), Math.round(t.x), Math.round(t.y)]);
+      zapFx(hit.x, hit.y, t.x, t.y, { jitter: 6 });
     }
   },
   // ---------- V2 改玩法的晶片（房主執行） ----------
@@ -1242,8 +1240,7 @@ const Game = {
       }
       if (v.fx <= 0) {
         v.fx = 0.3;
-        if (this.rings.length < 40) this.rings.push({ x: v.x, y: v.y, r: v.r, life: 0.3, max: 0.3, color: '#f78cff' });
-        if (Net.role === 'host') Net.fx(['r', Math.round(v.x), Math.round(v.y), v.r, '#f78cff']);
+        ringFx(v.x, v.y, v.r, '#f78cff');
       }
     }
     this.vortices = this.vortices.filter(v => v.t > 0);
@@ -1270,10 +1267,8 @@ const Game = {
         if (!links.has(id)) { links.add(id); pairs.push([p, q]); }
       }
     }
-    let sent = 0;
     for (const [p, q] of pairs) {
-      if (this.zaps.length < 400) this.zaps.push({ x1: p.x, y1: p.y, x2: q.x, y2: q.y, life: 0.22, max: 0.22 });
-      if (Net.role === 'host' && sent < 60 && Math.random() < 60 / pairs.length) { sent++; Net.fx(['z', Math.round(p.x), Math.round(p.y), Math.round(q.x), Math.round(q.y)]); }
+      zapFx(p.x, p.y, q.x, q.y, { life: 0.22, cap: 400, share: 60 / pairs.length });
       for (const e of this.enemies) {
         if (e.dead || e.spawnT > 0) continue;
         if (segDist2(p.x, p.y, q.x, q.y, e.x, e.y) < (e.r + 5) ** 2) e.hurt(p.damage * 0.4, 0, 0, 'arc', p.arcAtt || (p.arcAtt = { ...p.att, src: 'stasis' }));  // 電弧的傷害算伏擊網的
@@ -1291,10 +1286,7 @@ const Game = {
     const x = e.x, y = e.y, H = this.stickyHost(S, total, att);  // 插在黏著上的組件
     total = H.total; att = H.att;
     this.tagGrow(e, S[0].owner, 'sticky');
-    const ring = (r, c) => {
-      if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color: c });
-      if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), c]);
-    };
+    const ring = (r, c) => ringFx(x, y, r, c);
     ring(e.r + 20 + n * 3, '#f78cff');
     e.hurt(total, 0, 0, 'explode', att);
     floatText(x, y - e.r, Math.round(total), '#f78cff', true);
@@ -1388,8 +1380,7 @@ const Game = {
       } else {
         W.n++;
         const k = this.counterMult(W.n);
-        if (this.zaps.length < 60) this.zaps.push({ x1: eb.x, y1: eb.y, x2: W.x, y2: W.y, life: 0.18, max: 0.18, c: '#9dff6b' });
-        if (Net.role === 'host') Net.fx(['z', Math.round(eb.x), Math.round(eb.y), Math.round(W.x), Math.round(W.y), '#9dff6b']);
+        zapFx(eb.x, eb.y, W.x, W.y, { c: '#9dff6b' });
         this.fxRing(W.x, W.y, 18 + (k - 1) * 14, mixWhite('#9dff6b', this.counterWhite(k)));
       }
       this.withLoadout(b.owner, () => {
@@ -1402,10 +1393,7 @@ const Game = {
   },
   counterMult(n) { const C = CFG.COUNTER; return Math.min(C.max, 1 + C.per * (n - 1)); },
   counterWhite(k) { return Math.min(0.75, (k - 1) * 0.4); },  // 倍率越高越白：×2 約 4 成白
-  fxRing(x, y, r, color) {
-    if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color });
-    if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
-  },
+  fxRing(x, y, r, color) { ringFx(x, y, r, color); },
   // 合併回射的計時（在 withLoadout 裡呼叫）：每個池時間到就從它的集結點回射
   tickCounter(p, dt) {
     const Ws = p.icWs;
@@ -1496,8 +1484,7 @@ const Game = {
       floatText(e.x, e.y - e.r, Math.round(dmg), '#ffd166');
     }
     Objects.explodeRocks(x, y, r, dmg, att);
-    if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color });
-    if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
+    ringFx(x, y, r, color);
     Events.emit('explode', { x, y });
   },
   healPlayer(v, p = this.player) {  // 吸血：每秒最多回復 4 HP（每位玩家各自計算）
@@ -1549,8 +1536,7 @@ const Game = {
       if ((z.t -= dt) > 0) continue;
       for (const p of this.players()) if (dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2) this.hurtPlayer(z.dmg, z.from, p, z.x, z.y);
       burst(z.x, z.y, '#ff4d6d', 24, 260, 0.5, 3);
-      if (this.rings.length < 40) this.rings.push({ x: z.x, y: z.y, r: z.r, life: 0.3, max: 0.3, color: '#ff4d6d' });
-      if (Net.role === 'host') Net.fx(['r', Math.round(z.x), Math.round(z.y), z.r, '#ff4d6d']);
+      ringFx(z.x, z.y, z.r, '#ff4d6d');
       this.shake(4); Events.emit('explode', z);
     }
     this.zones = this.zones.filter(z => z.t > 0);
@@ -1569,14 +1555,7 @@ const Game = {
     this.pickups = this.pickups.filter(c => c.life > 0);
   },
   updateFx(dt) {
-    Events.emit('fxTick', dt);  // 粒子、浮動數字（ui/fx.js）
-    for (const r of this.rings) r.life -= dt;
-    this.rings = this.rings.filter(r => r.life > 0);
-    for (const f of this.flashes) f.life -= dt;
-    this.flashes = this.flashes.filter(f => f.life > 0);
-    for (const z of this.zaps) z.life -= dt;
-    this.zaps = this.zaps.filter(z => z.life > 0);
-    if (this.banner) { this.banner.t -= dt; if (this.banner.t <= 0) this.banner = null; }
+    Events.emit('fxTick', dt);  // 粒子、浮動數字、光圈、電弧、閃光、橫幅、震動（ui/fx.js）
   },
   updateCamera(dt) {
     const p = this.player.dead && this.mate && !this.mate.dead ? this.mate : this.player, c = this.cam;  // 自己被擊墜時看隊友
@@ -1584,7 +1563,6 @@ const Game = {
     const ty = clamp(p.y - ZH / 2, -80, Arena.H - ZH + 80);
     c.x += (tx - c.x) * Math.min(1, dt * 8);
     c.y += (ty - c.y) * Math.min(1, dt * 8);
-    c.shake = Math.max(0, c.shake - dt * 40);
   },
 };
 

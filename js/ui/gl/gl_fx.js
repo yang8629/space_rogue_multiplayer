@@ -60,7 +60,7 @@ const GLFx = {
       if (b.payload) { const r = this.spr(P, tx.ring, b.x, b.y); r.scaleX = r.scaleY = (b.r + 4) / R.ring; r.tint = 0xff6b9d; r.alpha = fa; }
     }
     // 彗星爆炸的閃光：淡藍白的光暈很快擴大變淡＋中心亮點
-    for (const f of G.flashes) {
+    for (const f of FX.flashes) {
       const k = f.life / f.max;
       const h = this.spr(this.pP, tx.halo, f.x, f.y); h.scaleX = h.scaleY = f.r * (0.7 + 0.5 * (1 - k)) / R.dot; h.tint = 0xd8f4ff; h.alpha = k * 0.9;
       const d = this.spr(this.pP, tx.dot, f.x, f.y); d.scaleX = d.scaleY = f.r * 0.3 * k / R.dot; d.alpha = k;
@@ -69,13 +69,13 @@ const GLFx = {
     for (const q of FX.particles) { const s = this.spr(this.pP, tx.sq, q.x, q.y); s.scaleX = s.scaleY = q.size / R.sq; s.tint = glColor(q.color); s.alpha = q.life / q.max; }
     // 電弧、光圈
     const g = this.g; g.clear();
-    for (const z of G.zaps) {
+    for (const z of FX.zaps) {
       const dx = z.x2 - z.x1, dy = z.y2 - z.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
       g.moveTo(z.x1, z.y1);
       for (let k = 1; k < 6; k++) { const j = rand(-10, 10); g.lineTo(z.x1 + dx * k / 6 + nx * j, z.y1 + dy * k / 6 + ny * j); }
       g.lineTo(z.x2, z.y2); g.stroke({ width: 2, color: glColor(z.c || '#9fe8ff'), alpha: z.life / z.max });
     }
-    for (const r of G.rings) { const t = 1 - r.life / r.max; g.circle(r.x, r.y, r.r * (0.4 + 0.6 * t)).stroke({ width: 3, color: glColor(r.color), alpha: r.life / r.max }); }
+    for (const r of FX.rings) { const t = 1 - r.life / r.max; g.circle(r.x, r.y, r.r * (0.4 + 0.6 * t)).stroke({ width: 3, color: glColor(r.color), alpha: r.life / r.max }); }
     // 敵彈（不用加法混色：紅色實心＋深色外框，才不會被我方彈幕蓋掉）
     for (const b of G.eBullets) {
       const s = this.spr(this.pEB, b.col ? tx.ebRim : tx.eb, b.x, b.y); s.scaleX = s.scaleY = b.r / R.eb;

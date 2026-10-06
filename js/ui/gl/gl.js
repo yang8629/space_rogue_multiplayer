@@ -111,7 +111,7 @@ const GLR = {
     GLWorld.drawBg();
     L.world.visible = !!Game.inArena;
     if (Game.inArena) {
-      const sx = c.shake ? rand(-c.shake, c.shake) : 0, sy = c.shake ? rand(-c.shake, c.shake) : 0;
+      const sh = FX.shake, sx = sh ? rand(-sh, sh) : 0, sy = sh ? rand(-sh, sh) : 0;
       L.world.scale.set(ZOOM); L.world.position.set((-c.x + sx) * ZOOM, (-c.y + sy) * ZOOM);
       GLWorld.draw(); GLFx.draw(); GLActors.draw(); GLFx.drawTexts();
     }

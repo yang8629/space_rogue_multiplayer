@@ -854,7 +854,7 @@ const Net = {
       mg: r(CFG.MAGNET_RANGE * (1 + G.passives.magnet)),  // 房主的拾取範圍（隊友那邊模擬晶體飛向房主時用）
       pal, lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r, G.exit.gate ? 1 : 0] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
       as: Arena.rect ? 0 : [Arena.seed, Arena.n, Arena.bossId || 0, Arena.sc || 1], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
-      bn: G.banner ? [G.banner.text, G.banner.sub || '', r2(G.banner.t)] : null,
+      bn: FX.banner ? [FX.banner.text, FX.banner.sub || '', r2(FX.banner.t)] : null,
       fx: this.fxBuf,
     });
     this.fxBuf = [];
@@ -985,16 +985,16 @@ const Net = {
       if (!Arena.rect) { if (G.player.dead) G.toEntry(G.player, G.combat.areaN); }
       else { G.player.resetPos(); G.player.x += 50; G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2; }
     }
-    G.banner = Array.isArray(s.bn) ? { text: String(s.bn[0]), sub: String(s.bn[1] || ''), t: num(s.bn[2], 1) } : null;
+    FX.banner = Array.isArray(s.bn) ? { text: String(s.bn[0]), sub: String(s.bn[1] || ''), t: num(s.bn[2], 1) } : null;
     for (const f of arr(s.fx)) {  // 房主那邊發生的特效與音效
       if (!Array.isArray(f)) continue;
       switch (f[0]) {
         case 'b': burst(num(f[1]), num(f[2]), String(f[3]), Math.min(150, num(f[4])), num(f[5], 200), num(f[6], 0.5), num(f[7], 2)); break;
         case 't': floatText(num(f[1]), num(f[2]), String(f[3]), String(f[4]), !!f[5]); break;
         case 's': SFX.play(String(f[1]), f[2]); break;
-        case 'f': if (G.flashes.length < 20) G.flashes.push({ x: num(f[1]), y: num(f[2]), r: num(f[3], 60), life: 0.35, max: 0.35 }); break;  // 彗星爆炸的閃光
-        case 'r': if (G.rings.length < 40) G.rings.push({ x: num(f[1]), y: num(f[2]), r: num(f[3], 40), life: 0.3, max: 0.3, color: String(f[4]) }); break;
-        case 'z': if (G.zaps.length < 60) G.zaps.push({ x1: num(f[1]), y1: num(f[2]), x2: num(f[3]), y2: num(f[4]), life: 0.18, max: 0.18, c: typeof f[5] === 'string' ? f[5].slice(0, 9) : null }); break;
+        case 'f': flashFx(num(f[1]), num(f[2]), num(f[3], 60)); break;  // 彗星爆炸的閃光
+        case 'r': ringFx(num(f[1]), num(f[2]), num(f[3], 40), String(f[4])); break;
+        case 'z': zapFx(num(f[1]), num(f[2]), num(f[3]), num(f[4]), { c: typeof f[5] === 'string' ? f[5].slice(0, 9) : null }); break;
       }
     }
   },
