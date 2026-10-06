@@ -120,8 +120,10 @@ const Game = {
   showMap(toast = '') {
     this.inArena = false; this.state = 'map';
     if (this.mode === 'coop') Net.atMap();  // 雙人：告訴隊友「我回到航圖了」（隊友這邊順便送出最新配裝）
-    Screen.map(toast);
+    this.view(toast);
   },
+  // 畫面：照目前的 state 顯示對應的畫面（怎麼畫由 ui/listeners.js 決定）；msg：畫面上的提示文字
+  view(msg = '') { Events.emit('view', { state: this.state, msg }); },
   enterNode(node) {
     if (!this.reachable().includes(node)) return;
     this.node = node; this.visited.push(node.id);
@@ -135,7 +137,7 @@ const Game = {
       case 'shop':   this.openShop(); break;
       case 'blackhole': this.openBlackhole(); break;  // 航圖節點「奇異點」（程式代號沿用 blackhole）
       case 'workshop': this.openWorkshop(); break;
-      case 'armory': this.state = 'armory'; this.armorySource = 'armory'; Screen.armory('armory'); break;
+      case 'armory': this.state = 'armory'; this.armorySource = 'armory'; this.view(); break;
       case 'repair': {
         const p = this.player, heal = Math.round(p.maxHp * CFG.REPAIR_RATIO);
         p.hp = Math.min(p.maxHp, p.hp + heal);
@@ -172,7 +174,7 @@ const Game = {
     Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
     try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
     this.inArena = true; this.state = 'play';
-    Screen.hide();
+    this.view();
   },
   // 區域大小照難度縮放：前面敵人少，地圖小一點（第 1 星區 0.72～0.84、第 2 星區 0.86～0.98、之後 1）
   areaScale(level) { return clamp(0.7 + 0.02 * (level || 0), 0.7, 1); },
@@ -313,7 +315,7 @@ const Game = {
     if (!client) for (const q of this.players()) if (q && !q.dead && q.drRec > 0) { q.hp = Math.min(q.maxHp, q.hp + q.drRec); q.drRec = 0; }  // 修復無人機：沒補完的補回
     if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
-    Screen.clickLock = performance.now() + 600;  // 戰鬥中連點射擊：勝利／三選一畫面剛出現 0.6 秒內不接受點擊（免得直接按到按鈕）
+    Events.emit('combatWon', { boss: this.node.type === 'boss' });
     const type = this.node.type;
     if (type === 'boss') {  // 擊敗旗艦：插槽 +1、晶體獎勵，可前往下一星區
       const slot = this.chain.length < CFG.MAX_SLOTS;
@@ -327,7 +329,7 @@ const Game = {
       this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false };
       if (this.mode === 'coop' && Net.role === 'host') Net.mateModWait = !!this.victory.module && this.coopOn();  // 雙人：等隊友裝上或略過旗艦模組才能前往
       this.state = 'victory';
-      Screen.victory();
+      this.view();
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
@@ -335,7 +337,7 @@ const Game = {
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
-    Screen.reward();
+    this.view();
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
   // 保底：電路有空格時，零件只會出現在最後一格；上一次三選一沒有玩法晶片，這一次一定有（刷新也算一次）
@@ -362,7 +364,7 @@ const Game = {
   rerollReward() {
     const R = this.reward;
     if (!R || R.kind === 'elite' || this.credits < R.reroll) return;
-    this.pay(R.reroll, () => { R.reroll += this.shopPrice(10); R.options = this.rewardOptions(); Screen.reward(); });
+    this.pay(R.reroll, () => { R.reroll += this.shopPrice(10); R.options = this.rewardOptions(); this.view(); });
   },
   // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
   chipOffers() {
@@ -395,36 +397,36 @@ const Game = {
     this.setModule(V.module);
     Events.emit('upgrade');
     if (this.isClient()) Net.send({ t: 'moddone' });
-    Screen.victory();
+    this.view();
   },
   skipBossModule() {  // 雙人的隊友：不裝旗艦模組（房主才能前往）
     const V = this.victory;
     if (!V || V.took || V.skip) return;
     V.skip = true;
     if (this.isClient()) Net.send({ t: 'moddone' });
-    Screen.victory();
+    this.view();
   },
   // ---------- 改裝廠：零件三選一、付錢換零件 ----------
   openWorkshop() {
     this.ws = { options: pickN(PART_IDS, 3), picked: false, from: null, msg: '' };
     this.state = 'workshop';
-    Screen.workshop();
+    this.view();
   },
   wsPick(id) {
     const W = this.ws;
     if (!W || W.picked || !W.options.includes(id)) return;
-    if (!this.addPart(id)) { W.msg = '零件格已滿：可以用「換零件」改成別種'; Screen.workshop(); return; }
+    if (!this.addPart(id)) { W.msg = '零件格已滿：可以用「換零件」改成別種'; this.view(); return; }
     W.picked = true; W.msg = `裝上 ${PARTS[id].name}（${this.parts[id]} 層）` + this.mechGain();
     Events.emit('upgrade');
-    Screen.workshop();
+    this.view();
   },
-  wsFrom(id) { if (this.ws) { this.ws.from = this.ws.from === id ? null : id; Screen.workshop(); } },
+  wsFrom(id) { if (this.ws) { this.ws.from = this.ws.from === id ? null : id; this.view(); } },
   wsTo(id) {
     const W = this.ws;
     if (!W || !W.from) return;
     const from = W.from;
     if (this.swapPart(from, id)) { W.msg = `改裝完成：${PARTS[from].name} → ${PARTS[id].name}`; W.from = null; Events.emit('upgrade'); }
-    Screen.workshop();
+    this.view();
   },
   takeReward(id) {
     let msg;
@@ -457,7 +459,7 @@ const Game = {
   },
   openEditorWith(msg) {
     this.toggleEditor();
-    if (this.state === 'editor') Editor.infoEl.innerHTML = `<b style="color:#9dff6b">${msg}</b><br>新晶片在下方倉庫：拖到上方電路（或點一下再點插槽）就能裝上。按 Tab 或「返回」回到航圖。`;
+    if (this.state === 'editor') Events.emit('editorMsg', { msg, hint: 'newChip' });  // 編輯器上方的說明：新晶片放在倉庫
   },
 
   // ---------- 商店 ----------
@@ -470,7 +472,7 @@ const Game = {
     if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: this.shopPrice(chipPrice(id)), sold: false }); }
     this.shop = { items, slotBought: false, healed: false };
     this.state = 'shop';
-    Screen.shop();
+    this.view();
   },
   shopHeal() {  // 補給站補血：回復最大 HP 的 20%，每間限 1 次
     const p = this.player, price = this.shopPrice(CFG.SHOP_REPAIR.price), hp = this.shopHealHp(p);
@@ -478,13 +480,13 @@ const Game = {
     this.pay(price, () => {
       this.shop.healed = true;
       p.hp = Math.min(p.maxHp, p.hp + hp);
-      Screen.shop(`補血完成：HP +${hp}`);
+      this.view(`補血完成：HP +${hp}`);
     });
   },
   buy(idx) {
     const it = this.shop.items[idx];
     if (!it || it.sold || this.credits < it.price || !this.canAcquire(it.id)) return;
-    this.pay(it.price, () => { it.sold = true; Screen.shop(this.acquire(it.id)); });
+    this.pay(it.price, () => { it.sold = true; this.view(this.acquire(it.id)); });
   },
   // ---------- 武器 ----------
   refreshWeapon() {  // 重新計算武器參數，並更新電路第 1 格的顯示
@@ -535,7 +537,7 @@ const Game = {
     Events.emit('upgrade');
     if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（${{ shop: '補給站', reward: '精英獎勵', armory: '軍械台' }[source] || source}）`);
     const msg = `電路擴充：插槽 +1（目前 ${this.chain.length} 格）`;
-    if (source === 'shop') Screen.shop(msg);
+    if (source === 'shop') this.view(msg);
     else this.showMap(msg);
   },
   armoryBonus() {
@@ -575,13 +577,13 @@ const Game = {
   togglePauseMenu(open = !this.pauseMenu) {
     this.pauseMenu = open;
     Input.down = false; Input.dash = false; Input.dashHeld = false; Input.joy = null; Input.aimStick = null;
-    if (open) Screen.pauseMenu(); else Screen.hide();
+    this.view();  // 戰鬥中：開著選單就畫選單，沒開就收起畫面
   },
   quitRun() {
     this.pauseMenu = false;
     this.saveRecord('retired');
     this.state = 'ended'; this.inArena = false;
-    Screen.ended();
+    this.view();
     if (this.mode === 'coop') Net.leave();  // 雙人：自己離開，隊友可以一個人繼續（跟隊友離線一樣）
   },
   // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到標題
@@ -593,7 +595,7 @@ const Game = {
       return;
     }
     this.state = 'title'; this.inArena = false;
-    Screen.title();
+    this.view();
   },
 
   // ---------- 遊玩紀錄（存在瀏覽器；標題畫面「遊玩紀錄」可以查看、複製） ----------
@@ -670,11 +672,11 @@ const Game = {
   openBlackhole() {
     this.bh = { sel: null, result: null };
     this.state = 'blackhole';
-    Screen.blackhole();
+    this.view();
   },
   bhToggle(key) {
     this.bh.sel = this.bh.sel === key ? null : key;
-    Screen.blackhole();
+    this.view();
   },
   bhFuse() {
     const a = this.ownedFusable().find(o => o.key === this.bh.sel), free = this.bhFreeSlots();
@@ -689,13 +691,13 @@ const Game = {
     this.slotAttr[slot] = attr;
     this.recalc();
     this.bh = { sel: null, result: { good, attr, slot, chip: CHIPS[a.id].name }, fusing: true };
-    Screen.blackhole();
+    this.view();
     Events.emit('fuseStart');
     setTimeout(() => {
       if (this.state !== 'blackhole') return;
       this.bh.fusing = false;
       Events.emit('fuseEnd', { good });
-      Screen.blackhole();
+      this.view();
     }, 1200);
   },
 
@@ -716,7 +718,7 @@ const Game = {
     // 雙人：戰鬥中按 Tab → 兩邊一起暫停，關掉編輯器時把新電路傳給房主再繼續
     if (this.state === 'editor') {
       this.state = this.returnState;
-      Editor.close();
+      Events.emit('editor', { open: false });
       this.recalc();
       if (this.mode === 'range') Range.clearStats();  // 靶場：改完電路重新計算
       if (this.mode === 'coop') {
@@ -724,18 +726,14 @@ const Game = {
         if (this.state === 'play') Net.setEditing(false);
         if (this.state === 'map') { Net.checkVoteTimer(); Net.tryResolve(); }  // 時間到的情況由 Net.tick 處理
       }
-      if (this.state === 'map') Screen.map();
-      else if (this.state === 'reward') Screen.reward();
-      else if (this.state === 'shop') Screen.shop();
-      else if (this.state === 'blackhole') { this.bh.sel = []; Screen.blackhole(); }
-      else if (this.state === 'armory') Screen.armory(this.armorySource || 'armory');
-      else if (this.state === 'workshop') Screen.workshop();
+      if (this.state === 'blackhole') this.bh.sel = [];
+      this.view();
     } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'armory', 'workshop'].includes(this.state)) {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
       if (this.mode === 'coop' && this.returnState === 'play') Net.setEditing(true);
-      Editor.open();
+      Events.emit('editor', { open: true });
     }
   },
   shake(v) { this.cam.shake = Math.max(this.cam.shake, v); },
@@ -754,20 +752,8 @@ const Game = {
       if (sec) sec[k] = (sec[k] || 0) + parts[k];
     }
   },
-  restoreScreen() {  // 依目前狀態重畫對應的畫面（機制檢查跑完後用）
-    const st = this.state === 'editor' ? this.returnState : this.state;
-    switch (st) {
-      case 'title': Screen.title(); break;
-      case 'map': Screen.map(); break;
-      case 'reward': Screen.reward(); break;
-      case 'shop': Screen.shop(); break;
-      case 'blackhole': Screen.blackhole(); break;
-      case 'armory': Screen.armory(this.armorySource || 'armory'); break;
-      case 'workshop': Screen.workshop(); break;
-      case 'victory': Screen.victory(); break;
-      case 'dead': Screen.dead(); break;
-      default: Screen.hide();
-    }
+  restoreScreen() {  // 依目前狀態重畫對應的畫面（機制檢查跑完後用）；開著編輯器時畫底下那一頁
+    Events.emit('view', { state: this.state === 'editor' ? this.returnState : this.state, msg: '' });
   },
 
   onEnemyKilled(e) {
@@ -839,7 +825,7 @@ const Game = {
       this.saveRecord('dead');
       burst(p.x, p.y, '#4cc9f0', 80, 400, 1.2, 3);
       this.shake(20);
-      setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
+      Events.emit('died');
     }
   },
 
@@ -973,7 +959,7 @@ const Game = {
     Net.sendDmg();
     Net.send({ t: 'over', wave: this.combat.wave, cause: this.mate ? this.mate.lastHit || '' : '' });
     this.saveRecord('dead');
-    setTimeout(() => { if (this.state === 'dead') Screen.dead(); }, 900);
+    Events.emit('died');
   },
   // 雙人救援（房主判定）：倒下的人留在原地，活著的隊友待在範圍內累積秒數，離開就慢慢退回
   updateRevive(dt) {
