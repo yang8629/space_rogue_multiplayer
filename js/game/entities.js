@@ -29,7 +29,7 @@ class Player {
       if (this.ohLock > 0) { this.ohLock -= dt; want = false; }
       else if (want) {
         this.ohT += dt;
-        if (this.ohT >= S.heatLimit) { this.ohLock = 1.5; this.ohT = 0; burst(this.x, this.y, '#ff9f1c', 14, 160, 0.5, 3); SFX.play('hurt'); }
+        if (this.ohT >= S.heatLimit) { this.ohLock = 1.5; this.ohT = 0; burst(this.x, this.y, '#ff9f1c', 14, 160, 0.5, 3); Events.emit('overheat', this); }
       } else this.ohT = Math.max(0, this.ohT - dt * 1.5);
     } else { this.ohT = 0; this.ohLock = 0; }
     // 停火蓄力：沒按射擊時累積，再按下的第一發依蓄力程度變強（之後照常連射）
@@ -145,7 +145,7 @@ class Player {
         this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
         burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
         if (Game.runStats) Game.runStats.dashes++;
-        SFX.play('dash');
+        Events.emit('dash', this);
         this.onDash();
       }
     }
@@ -212,7 +212,7 @@ class Player {
     const nx = this.x + Math.cos(this.aim) * 16, ny = this.y + Math.sin(this.aim) * 16;
     // 子彈從船身中心附近發出：怪物貼臉時也打得到（槍口火光仍在船頭）
     spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
-    SFX.play('shoot', Game.weapon.id);
+    Events.emit('shoot', { p: this, weapon: Game.weapon.id });
     burst(nx, ny, list[0].color, 3, 120, 0.15, 2);
   }
 }
@@ -652,7 +652,7 @@ class Enemy {
         const mz = this.type === 'spitter' ? this.r * 1.55 : 0;  // 噴吐者：從噴管口射出
         Game.eBullets.push({ x: this.x + Math.cos(a) * mz, y: this.y + Math.sin(a) * mz, vx: Math.cos(a) * t.ranged.speed, vy: Math.sin(a) * t.ranged.speed,
           r: 5, dmg: t.ranged.dmg, life: 3, from: t.name });
-        SFX.play('eshot');
+        Events.emit('enemyShot', this);
       }
     }
     if (Game.objs.length) [mx, my] = Objects.steer(this, mx, my);  // 繞開黑洞
@@ -871,7 +871,7 @@ class Enemy {
           const [x, y] = Arena.clampIn(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20);
           Game.zones.push({ x, y, r: B.r, t: B.delay, max: B.delay, dmg: B.dmg, from: t.name + '（轟炸）' });
         }
-        SFX.play('boss');
+        Events.emit('bossSkill', this);
         this.skillCd = rage ? 2.2 : 2.8; break;
       }
       case 'guard':
@@ -906,7 +906,7 @@ const THEME_AI = {
       if (this.modeT <= 0) {
         this.mode = 'chase'; this.cd = 3;
         for (let i = 0; i < 8; i++) { const a = this.rot + i / 8 * TAU; Game.eBullets.push({ x: this.x + Math.cos(a) * this.r * 1.3, y: this.y + Math.sin(a) * this.r * 1.3, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 6, dmg: 10, life: 5, from: this.t.name }); }
-        SFX.play('eshot');
+        Events.emit('enemyShot', this);
       }
       return true;
     }

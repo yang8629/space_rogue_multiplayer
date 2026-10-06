@@ -370,7 +370,7 @@ const Objects = {
     if (o.r >= o.r0 * 0.5) return;
     o.dead = true;
     burst(o.x, o.y, '#6c7fb8', 40, 300, 0.8, 4);
-    Game.shake(10); SFX.play('bigkill');
+    Game.shake(10); Events.emit('objBreak', { o, big: true });
     floatText(o.x, o.y - o.r0, '行星崩解', '#9fb4ff', true);
     if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r0), '行星崩解', '#9fb4ff', 1]);
   },
@@ -381,7 +381,7 @@ const Objects = {
     if (byBoss) {
       o.hp -= dmg;
       if (Math.random() < 0.3) burst(x, y, '#c9b79c', 3, 100, 0.3, 2);
-      if (o.hp <= 0) { o.dead = true; burst(o.x, o.y, '#c9b79c', 20, 220, 0.6, 3); SFX.play('explode'); }
+      if (o.hp <= 0) { o.dead = true; burst(o.x, o.y, '#c9b79c', 20, 220, 0.6, 3); Events.emit('objBreak', { o, big: false }); }
       return;
     }
     if (dmg < OBJ.ROCK_MIN_DMG) { if (Math.random() < 0.3) burst(x, y, '#8a8f98', 2, 80, 0.2, 2); return; }
@@ -390,7 +390,7 @@ const Objects = {
     if (o.hp > 0) return;
     o.dead = true;
     burst(o.x, o.y, '#c9b79c', 24, 220, 0.6, 3);
-    SFX.play('bigkill');
+    Events.emit('objBreak', { o, big: true });
     // 掉晶體：耐久 ÷ 32（大約 2～4 顆，跟刺殼差不多）；晶體由房主產生，隨同步傳給隊友
     const G = Game;
     if (!G.isClient()) for (let i = 0, n = Math.max(1, Math.round(o.maxHp / OBJ.ROCK_CREDIT_HP)); i < n; i++)
@@ -419,7 +419,7 @@ const Objects = {
     const r = randInt(12, 30), k = r / 18, spd = OBJ.COMET_SPEED / k;
     Game.objs.push({ type: 'comet', id: Game.nextId++, x: edge[0], y: edge[1], vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
       r, hp: Math.round(OBJ.COMET_HP * k), maxHp: Math.round(OBJ.COMET_HP * k), warn: OBJ.COMET_WARN, hits: new Set(), age: 0 });
-    SFX.play('boss');
+    Events.emit('cometIncoming');
   },
   updateComet(o, dt) {
     const G = Game;
@@ -455,7 +455,7 @@ const Objects = {
     o.dead = true;
     this.cometShards(o, this.cometAtt(o, true));
     this.cometFx(o.x, o.y, 40 + o.r * 2);
-    SFX.play('explode');
+    Events.emit('objBreak', { o, big: false });
   },
   // 彗星傷害的歸屬：被玩家打爆的 = 那個玩家的「彗星」傷害；撞爆、飛行中撞到 = 不算任何人的（nobody，傷害統計不記）
   cometAtt(o, broken) {
