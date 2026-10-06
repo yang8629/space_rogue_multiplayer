@@ -107,7 +107,7 @@ class Player {
       else {
         // 自動攻擊的索敵距離依武器射程調整（近戰武器只在敵人靠近時攻擊）
         const wp = Game.wp, reach = clamp(wp.speed * wp.life + 40, 140, CFG.AUTO_RANGE);
-        target = nearestEnemy(this.x, this.y, a ? 900 : reach, null, true);
+        target = this.autoTarget(a ? 900 : reach, dt);
         if (target) this.aim = Math.atan2(target.y - this.y, target.x - this.x);
       }
       Input.down = !!a || (Input.autoFire && !!target);
@@ -183,6 +183,24 @@ class Player {
     if (Net.role === 'client') return;  // 連線的隊友：開火交給房主（子彈、傷害都由房主計算）
     this.tickDash();
     this.tickFire(dt, Input.down);
+  }
+  // 自動瞄準：最近的敵人；被牆、行星擋住打不到時，改打最近的打得到的那隻（都打不到就照樣打最近的）
+  //   每 0.1 秒重選一次（沿線檢查視線，每幀算太貴），中間照原本的目標瞄
+  autoTarget(range, dt) {
+    const T = this.autoT;
+    if ((this.autoCd = (this.autoCd || 0) - dt) > 0 && T && !T.dead && dist2(this.x, this.y, T.x, T.y) < range * range) return T;
+    this.autoCd = 0.1;
+    const near = nearestEnemy(this.x, this.y, range, null, true);
+    let pickE = near;
+    if (near && !Arena.clearLine(this.x, this.y, near.x, near.y, 4)) {
+      let bd = Infinity;
+      for (const e of range <= 600 ? enemiesNear(this.x, this.y, range) : Game.enemies) {
+        if (e.dead || e.cloak > 0.5) continue;
+        const d = dist2(this.x, this.y, e.x, e.y);
+        if (d < bd && d < range * range && Arena.clearLine(this.x, this.y, e.x, e.y, 4)) { bd = d; pickE = e; }
+      }
+    }
+    return (this.autoT = pickE);
   }
   // 背包模組對飛船移動的影響：目前沒有（重力井改成減速場，見 Game.tickModules）
   moduleMove(dt) {}
