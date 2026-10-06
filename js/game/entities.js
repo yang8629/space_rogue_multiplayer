@@ -40,7 +40,9 @@ class Player {
       const M = Game.mech, rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1) * hpRateMul(this);  // 散熱片、疾風、急冷、裝甲供能
       Game.chargeC = S.charge ? this.chargeC : null;
       try { this.fire(); } finally { Game.chargeC = null; }
-      this.chargeC = 0; this.fireCd = S.interval / rate;
+      // 這一幀多過的時間留到下一發（以前直接設成間隔，多過的被丟掉：射速會照幀率變慢，60Hz 和 144Hz 不一樣）；
+      //   停火一陣子再按不會累積成連發（最多帶一幀）
+      this.chargeC = 0; this.fireCd = Math.max(this.fireCd, -dt) + S.interval / rate;
     }
   }
   // 衝刺相關的晶片（房主執行）：衝刺中的流星、衝刺結束時的衝刺射擊

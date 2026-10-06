@@ -151,6 +151,22 @@ const MechCheck = {
       return { ok: B.n === 5 && near1(B.sum, A.sum * 1.3) && B.r > A.r * 1.5 && C.n === 15 && D.n === 15 && near1(C.sum, D.sum),
         got: `${B.n} 發，總傷害 ${A.sum.toFixed(1)} → ${B.sum.toFixed(1)}（應 ×1.3）；巨彈→分裂 ${C.n} 發 ${C.sum.toFixed(1)}、分裂→巨彈 ${D.n} 發 ${D.sum.toFixed(1)}` };
     }],
+    ['電路晶片', '射速跟幀率無關', '一直按住 20 秒：30／60／144Hz 射出的發數一樣，都接近 20 ÷ 射擊間隔（多過的時間留到下一發）', M => {
+      const rows = [];
+      let ok = true;
+      for (const w of ['laser', 'railgun']) {
+        M.setup('sandbox', 'vanguard', w, null, null, ['weapon', null, null, null]);
+        const P = Game.player, iv = Game.stats.interval, want = 20 / iv, ns = [];
+        for (const hz of [30, 60, 144]) {
+          let n = 0; const orig = P.fire; P.fireCd = 0; P.fire = () => { n++; };
+          try { for (let f = 0; f < 20 * hz; f++) P.tickFire(1 / hz, true); } finally { P.fire = orig; }
+          ns.push(n);
+          if (Math.abs(n - want) > 1.5) ok = false;
+        }
+        rows.push(`${WEAPONS[w].name} 理論 ${want.toFixed(0)} 發：${ns.join('／')}`);
+      }
+      return { ok, got: rows.join('；') };
+    }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
       Game.player.x = CFG.WORLD_W - 40;
