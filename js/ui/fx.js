@@ -1,10 +1,10 @@
-// 星環電路 雙人版 · fx.js：粒子、浮動數字（畫面用；遊戲邏輯只發事件 burst／floatText／trail，見 game/effects.js）
+// 星環電路 雙人版 · fx.js：粒子、浮動數字、爆炸光圈、電弧、閃光、橫幅、畫面震動（畫面用；遊戲邏輯只發事件，見 game/effects.js）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 const FX = {
-  particles: [], texts: [],
-  clear() { this.particles = []; this.texts = []; },
+  particles: [], texts: [], rings: [], zaps: [], flashes: [], banner: null, shake: 0, zapSent: 0,
+  clear() { this.particles = []; this.texts = []; this.rings = []; this.zaps = []; this.flashes = []; this.banner = null; this.shake = 0; },
   // 往四周噴 n 顆粒子
   burst(d) {
     const P = this.particles;
@@ -27,6 +27,15 @@ const FX = {
     this.particles = this.particles.filter(q => q.life > 0);
     for (const t of this.texts) { t.y -= 40 * dt; t.life -= dt; }
     this.texts = this.texts.filter(t => t.life > 0);
+    for (const r of this.rings) r.life -= dt;
+    this.rings = this.rings.filter(r => r.life > 0);
+    for (const z of this.zaps) z.life -= dt;
+    this.zaps = this.zaps.filter(z => z.life > 0);
+    for (const q of this.flashes) q.life -= dt;
+    this.flashes = this.flashes.filter(q => q.life > 0);
+    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    this.shake = Math.max(0, this.shake - dt * 40);
+    this.zapSent = 0;
   },
 };
 
@@ -40,5 +49,23 @@ Events.on('floatText', d => {
   FX.text(d);
 });
 Events.on('trail', d => FX.trail(d));
+Events.on('ring', d => {
+  if (Net.role === 'host') Net.fx(['r', Math.round(d.x), Math.round(d.y), Math.round(d.r), d.color]);
+  if (FX.rings.length < 40) FX.rings.push({ x: d.x, y: d.y, r: d.r, life: 0.3, max: 0.3, color: d.color });
+});
+Events.on('zap', d => {
+  // 轉給隊友：share 是機率（電網一次幾百條時只傳一部分），每幀最多 60 條
+  if (Net.role === 'host' && (d.share == null || (FX.zapSent < 60 && Math.random() < d.share))) {
+    if (d.share != null) FX.zapSent++;
+    Net.fx(['z', Math.round(d.x1), Math.round(d.y1), Math.round(d.x2), Math.round(d.y2), ...(d.c ? [d.c] : [])]);
+  }
+  if (FX.zaps.length < d.cap) FX.zaps.push({ x1: d.x1, y1: d.y1, x2: d.x2 + (d.jitter ? rand(-d.jitter, d.jitter) : 0), y2: d.y2 + (d.jitter ? rand(-d.jitter, d.jitter) : 0), life: d.life, max: d.life, c: d.c });
+});
+Events.on('flash', d => {
+  if (Net.role === 'host') Net.fx(['f', Math.round(d.x), Math.round(d.y), Math.round(d.r)]);
+  if (FX.flashes.length < 20) FX.flashes.push({ x: d.x, y: d.y, r: d.r, life: 0.35, max: 0.35 });
+});
+Events.on('banner', d => { FX.banner = { text: d.text, sub: d.sub, t: d.t }; });  // 隊友那邊由房主的同步蓋過去（net.js 的 bn）
+Events.on('shake', v => { FX.shake = Math.max(FX.shake, v); });
 Events.on('fxTick', dt => FX.update(dt));  // 跟著遊戲時間走（暫停時粒子也停）
 Events.on('fxClear', () => FX.clear());

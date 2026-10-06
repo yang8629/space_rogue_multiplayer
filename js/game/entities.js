@@ -768,7 +768,7 @@ class Enemy {
     this.blocked = (Game.objs.length ? Objects.losBlocked(this.x, this.y, this.x + dx, this.y + dy, 6) : null) || Arena.losPoint(this.x, this.y, this.x + dx, this.y + dy, 6);  // 大地圖：牆、柱子也算
     if (rage && !this.enraged) {
       this.enraged = true; this.skillCd = Math.min(this.skillCd, 1);
-      Game.banner = { text: t.rage, sub: '攻擊頻率上升', t: 2 };
+      bannerFx(t.rage, '攻擊頻率上升', 2);
       Game.shake(14);
       burst(this.x, this.y, t.color, 60, 380, 0.8, 3);
     }

@@ -372,7 +372,6 @@ const Objects = {
     burst(o.x, o.y, '#6c7fb8', 40, 300, 0.8, 4);
     Game.shake(10); Events.emit('objBreak', { o, big: true });
     floatText(o.x, o.y - o.r0, '行星崩解', '#9fb4ff', true);
-    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r0), '行星崩解', '#9fb4ff', 1]);
   },
   // 小行星受傷：單發至少 30 才算；打爆掉晶體
   //   byBoss：旗艦的子彈或撞擊、滾動的刺殼（沒有最低傷害，打碎不給成長）
@@ -396,7 +395,6 @@ const Objects = {
     if (!G.isClient()) for (let i = 0, n = Math.max(1, Math.round(o.maxHp / OBJ.ROCK_CREDIT_HP)); i < n; i++)
       G.pickups.push({ id: G.nextId++, x: o.x + rand(-10, 10), y: o.y + rand(-10, 10), vx: rand(-90, 90), vy: rand(-90, 90), life: 14 });
     floatText(o.x, o.y - o.r, '小行星碎裂', '#9dff6b', true);
-    if (Net.role === 'host') Net.fx(['t', Math.round(o.x), Math.round(o.y - o.r), '小行星碎裂', '#9dff6b', 1]);
   },
   // 爆炸波及小行星
   explodeRocks(x, y, r, dmg, att) {
@@ -476,10 +474,9 @@ const Objects = {
       Game.bullets.push(b);
     }
   },
-  // 新畫面風格的爆炸：淡藍白閃光＋往外擴的衝擊波＋殘留的冰霧（雙人：閃光用 'f' 事件傳給隊友，冰霧的 burst 自己會傳）
+  // 新畫面風格的爆炸：淡藍白閃光＋往外擴的衝擊波＋殘留的冰霧
   cometFx(x, y, r) {
-    if (Game.flashes.length < 20) Game.flashes.push({ x, y, r, life: 0.35, max: 0.35 });
-    if (Net.role === 'host') Net.fx(['f', Math.round(x), Math.round(y), Math.round(r)]);
+    flashFx(x, y, r);
     Game.fxRing(x, y, r, '#bfe9ff');
     burst(x, y, '#cfefff', 22, 90, 1.1, 4);
   },

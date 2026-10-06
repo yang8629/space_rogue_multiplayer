@@ -22,7 +22,7 @@ const MechCheck = {
     Game.recalc();
     const p = Game.player;
     p.x = 1200; p.y = 800; p.aim = 0; p.vx = p.vy = 0;
-    Game.bullets = []; Game.eBullets = []; Game.triggerQueue = []; Game.rings = []; Game.pickups = [];
+    Game.bullets = []; Game.eBullets = []; Game.triggerQueue = []; Events.emit('fxClear'); Game.pickups = [];
   },
   // 在玩家前方擺靶（dx, dy 相對玩家）；frozen 的靶不會動也不會攻擊
   targets(list, type = 'brute', frozen = true, hpScale = 60) {

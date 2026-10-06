@@ -40,7 +40,7 @@ function render() {
   ctx.globalAlpha = 1;
   if (!Game.inArena) return;
 
-  const sx = c.shake ? rand(-c.shake, c.shake) : 0, sy = c.shake ? rand(-c.shake, c.shake) : 0;
+  const sh = FX.shake, sx = sh ? rand(-sh, sh) : 0, sy = sh ? rand(-sh, sh) : 0;
   ctx.save();
   ctx.scale(ZOOM, ZOOM);
   ctx.translate(-c.x + sx, -c.y + sy);
@@ -112,7 +112,7 @@ function drawWorld() {
     if (b.shape !== 'blade') for (const p of ships) fa = Math.min(fa, 0.2 + 0.8 * Math.min(1, Math.hypot(b.x - p.x, b.y - p.y) / FADE));
     drawBullet(b, fa);
   }
-  for (const z of Game.zaps) {  // 電弧：鋸齒狀的閃電
+  for (const z of FX.zaps) {  // 電弧：鋸齒狀的閃電
     ctx.globalAlpha = z.life / z.max;
     ctx.strokeStyle = z.c || '#9fe8ff'; ctx.lineWidth = 2;  // c：攔截合併的綠色電弧
     const dx = z.x2 - z.x1, dy = z.y2 - z.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
@@ -120,12 +120,12 @@ function drawWorld() {
     for (let k = 1; k < 6; k++) { const j = rand(-10, 10); ctx.lineTo(z.x1 + dx * k / 6 + nx * j, z.y1 + dy * k / 6 + ny * j); }
     ctx.lineTo(z.x2, z.y2); ctx.stroke();
   }
-  for (const f of Game.flashes || []) {  // 彗星爆炸的閃光
+  for (const f of FX.flashes) {  // 彗星爆炸的閃光
     const k = f.life / f.max, g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * (0.7 + 0.5 * (1 - k)));
     g.addColorStop(0, `rgba(235,250,255,${0.9 * k})`); g.addColorStop(0.4, `rgba(190,233,255,${0.45 * k})`); g.addColorStop(1, 'rgba(190,233,255,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.2, 0, TAU); ctx.fill();
   }
-  for (const r of Game.rings) {  // 爆炸光圈
+  for (const r of FX.rings) {  // 爆炸光圈
     const t = 1 - r.life / r.max;
     ctx.globalAlpha = r.life / r.max;
     ctx.strokeStyle = r.color; ctx.lineWidth = 3;
@@ -730,13 +730,14 @@ function drawHUD() {
     ctx.font = '14px Microsoft JhengHei'; ctx.fillStyle = '#cfe8ff';
     ctx.fillText(Input.touch ? '暫停中　·　你也可以按「電路」整理自己的電路' : '暫停中　·　你也可以按 Tab 整理自己的電路', VW / 2, VH * 0.45 + 30);
   }
-  if (Game.banner) {
-    ctx.globalAlpha = Math.min(1, Game.banner.t);
+  const BN = FX.banner;
+  if (BN) {
+    ctx.globalAlpha = Math.min(1, BN.t);
     ctx.textAlign = 'center'; ctx.font = 'bold 36px Microsoft JhengHei'; ctx.fillStyle = '#4cc9f0';
-    ctx.fillText(Game.banner.text, VW / 2, VH * 0.22);
-    if (Game.banner.sub) {
+    ctx.fillText(BN.text, VW / 2, VH * 0.22);
+    if (BN.sub) {
       ctx.font = 'bold 16px Microsoft JhengHei'; ctx.fillStyle = '#ffd400';
-      ctx.fillText(Game.banner.sub, VW / 2, VH * 0.22 + 30);
+      ctx.fillText(BN.sub, VW / 2, VH * 0.22 + 30);
     }
     ctx.globalAlpha = 1;
   }
