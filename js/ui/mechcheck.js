@@ -455,12 +455,12 @@ const MechCheck = {
       return { ok: big && linked && blocked && exits === 2 && areas === 2 && passed && back && spawnOk && credit >= 1 && won && bossRect,
         got: `${big ? '大地圖 3 區、2 道閘門' : '不是大地圖（錯誤）'}；${linked ? '每道閘門兩側都走得到' : '有地方走不到'}；閘門關著${blocked ? '過不去' : '穿過去了（錯誤）'}；閘門打開 ${exits} 次、換區 ${areas} 次（應各 2）${passed ? '' : '、穿閘門失敗'}${back ? '、不能回頭' : '、可以回頭（錯誤）'}；${spawnOk ? '敵人都在目前的區域' : '有敵人生在別區'}；晶體收下 ${credit}；${won ? '戰鬥結束' : '戰鬥沒結束'}；旗艦戰${bossRect ? '是王關場地' : '不是王關場地（錯誤）'}` };
     }],
-    ['航圖與戰鬥', '大地圖的牆', '牆反彈的子彈照牆面法線反彈（入射角 = 反射角）、沒有反彈的子彈打到牆消失；敵人、敵彈不會穿牆；彗星碎片會打到飛船', M => {
+    ['航圖與戰鬥', '大地圖的牆', '牆反彈的子彈照牆面法線反彈（入射角 = 反射角）、沒有反彈的子彈打到牆消失（消失觸發器照樣觸發，回響往反彈方向射）；敵人、敵彈不會穿牆；彗星碎片會打到飛船', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]);
       Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0 });
       const p = Game.player;
       // 1. 反彈：從出生點朝 8 個方向各找一面牆，在牆前 160 朝牆射（斜 25°）
-      let tries = 0, okRef = 0, nRef = 0, diesOk = 0, nDie = 0, worst = 0;
+      let tries = 0, okRef = 0, nRef = 0, diesOk = 0, nDie = 0, worst = 0, nEnd = 0, endOk = 0;
       const nearGate = (x, y) => Arena.gates.some(g => segDist2(g.x - g.ny * g.L, g.y + g.nx * g.L, g.x + g.ny * g.L, g.y - g.nx * g.L, x, y) < 60 * 60);
       for (let k = 0; k < 8; k++) {
         const a = k / 8 * TAU, ux = Math.cos(a), uy = Math.sin(a);
@@ -491,6 +491,18 @@ const MechCheck = {
           }
           if (chain[1] === null && b.dead && !b.bounced && !nearGate(b.x, b.y) && b.life > 0) { nDie++; if (Arena.f(b.x, b.y) < 2) diesOk++; }  // 射程用完才消失的不算
         }
+        // 消失觸發器：撞牆算消失，回響從牆面往反彈的方向射（離開牆面）
+        const sp = splitChain(['weapon', 'trigend', null, null].map(fullChip)); Game.chain = sp.chain; Game.socks = sp.socks; Game.recalc();
+        p.x = Arena.start.x + ux * (d - 160); p.y = Arena.start.y + uy * (d - 160);
+        p.aim = a + 0.44; Game.bullets = []; p.fire();
+        const b = Game.bullets[0], got = [], orig = window.spawnShots;
+        window.spawnShots = (list, x, y, ang, depth, ...r) => { if (depth > 0) got.push({ x, y, ang }); return orig(list, x, y, ang, depth, ...r); };
+        try { for (let f = 0; f < 90 && b && !b.dead; f++) Game.updateBullets(1 / 60); } finally { window.spawnShots = orig; }
+        if (b && b.dead && b.life > 0 && !nearGate(b.x, b.y)) {
+          nEnd++;
+          const e = got[0], g = e && Arena.grad(e.x, e.y);
+          if (e && Arena.f(e.x, e.y) > 0 && Math.cos(e.ang) * g[0] + Math.sin(e.ang) * g[1] > 0) endOk++;
+        }
       }
       // 2. 敵人、敵彈不穿牆：真正打 25 秒（飛船無敵、不開火）
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
@@ -510,8 +522,8 @@ const MechCheck = {
       Game.objs = [o]; Objects.breakComet(o);
       for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
       const shardHit = P.hp < hp0 && /彗星（碎片）/.test(Game.lastHit || '');
-      return { ok: tries >= 3 && nRef >= 3 && okRef === nRef && nDie >= 3 && diesOk === nDie && worst > -40 && seenE > 100 && inWall === 0 && ebBad === 0 && shardHit,
-        got: `反彈 ${okRef} / ${nRef} 次角度正確，沒反彈的子彈 ${diesOk} / ${nDie} 撞牆消失（最深進牆 ${(-worst).toFixed(0)}）；敵人 ${inWall ? inWall + ' 次在牆裡或別區（錯誤）' : '沒有穿牆'}（${seenE} 隻·幀），敵彈 ${eb} 個·幀 ${ebBad ? '有 ' + ebBad + ' 個在牆裡（錯誤）' : '沒有穿牆'}；彗星碎片${shardHit ? `打到飛船（-${Math.round(hp0 - P.hp)}）` : '沒打到飛船（錯誤）'}` };
+      return { ok: tries >= 3 && nRef >= 3 && okRef === nRef && nDie >= 3 && diesOk === nDie && nEnd >= 3 && endOk === nEnd && worst > -40 && seenE > 100 && inWall === 0 && ebBad === 0 && shardHit,
+        got: `反彈 ${okRef} / ${nRef} 次角度正確，沒反彈的子彈 ${diesOk} / ${nDie} 撞牆消失（最深進牆 ${(-worst).toFixed(0)}）、消失觸發器撞牆 ${endOk} / ${nEnd} 次從牆面往外射回響；敵人 ${inWall ? inWall + ' 次在牆裡或別區（錯誤）' : '沒有穿牆'}（${seenE} 隻·幀），敵彈 ${eb} 個·幀 ${ebBad ? '有 ' + ebBad + ' 個在牆裡（錯誤）' : '沒有穿牆'}；彗星碎片${shardHit ? `打到飛船（-${Math.round(hp0 - P.hp)}）` : '沒打到飛船（錯誤）'}` };
     }],
     ['航圖與戰鬥', '選單（Esc）', '戰鬥中按 Esc：跳出選單、單人時暫停（時間、敵人都不動）；再按一次繼續；選「離開遊戲」：這一局中途結束，顯示結算畫面', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

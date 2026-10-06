@@ -268,11 +268,11 @@ class Bullet {
     }
   }
   // 消失觸發器：子彈消失時從這裡沿原本的方向射出回響
-  endTrig() {
+  endTrig(x = this.x, y = this.y, angle = this.angle) {  // 撞牆：從牆面射、方向是反彈後的方向
     const P = this.payload, Q = Game.triggerQueue;
     if (!P || P[0].trig !== 'end' || this.endDone || Q.length >= CFG.MAX_TRIGGERS_PER_FRAME) return;
     this.endDone = true;
-    Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept });
+    Q.push({ payload: P, x, y, angle, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept });
   }
   // 定時觸發器：飛行中每 0.3 秒往左右兩側各射一次回響（每顆最多 5 次；停住的地雷不算）
   tickTimer(dt) {
@@ -402,7 +402,11 @@ class Bullet {
         } else if (this.boom && this.mode === 'fly') { this.x = hit.x; this.y = hit.y; this.startReturn(); }  // 迴旋：撞牆折返
         else {
           if (this.endBoom) Game.explode(hit.x, hit.y, 90, this.damage, this.color, null, this.att);
-          this.dead = true; return;
+          this.dead = true;
+          // 撞牆算消失：回響從牆面反彈的方向射出（照原方向會馬上又撞牆）
+          const vx = Math.cos(this.angle), vy = Math.sin(this.angle), dot = vx * hit.nx + vy * hit.ny;
+          this.endTrig(hit.x + hit.nx * 2, hit.y + hit.ny * 2, dot < 0 ? Math.atan2(vy - 2 * dot * hit.ny, vx - 2 * dot * hit.nx) : this.angle);
+          return;
         }
       }
     } else {
