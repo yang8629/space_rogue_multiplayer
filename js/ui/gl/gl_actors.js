@@ -101,13 +101,15 @@ const GLActors = {
     }
     main.alpha = (main.alpha < 1 ? main.alpha : 1) * alpha;
     if (e.flash > 0) { const f = GLR.sprite(this.pE, main.texture); f.position.copyFrom(main.position); f.scale.copyFrom(main.scale); f.rotation = main.rotation; f.blendMode = 'add'; f.alpha = 0.85; }  // 受傷閃白
-    // 狀態圈
-    const g = this.gE;
-    if (e.slowT > 0) g.circle(e.x, e.y, e.r + 5).stroke({ width: 1.5, color: 0x7fd4ff, alpha: 0.8 });
-    if (e.markT > 0 || e.shredT > 0) for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + t; glArc(g, e.x, e.y, e.r + 8, a, a + 0.5); g.stroke({ width: 1.5, color: 0xff5a5a, alpha: 0.8 }); }
-    if (e.burnT > 0) g.circle(e.x, e.y, e.r + 2).stroke({ width: 2, color: 0xff9f1c, alpha: 0.4 + 0.4 * Math.sin(t * 20) });
-    const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
-    if (stuck) { const n = Math.min(stuck, 16); for (let i = 0; i < n; i++) { const a = i / n * TAU + t * 2; g.circle(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5).fill({ color: 0xf78cff }); } }
+    // 狀態圈：跟著隱形一起淡掉（潛伏者隱形時不能被狀態圈暴露位置）
+    const g = this.gE, cv = 1 - (e.cloak || 0);
+    if (cv > 0.05) {
+      if (e.slowT > 0) g.circle(e.x, e.y, e.r + 5).stroke({ width: 1.5, color: 0x7fd4ff, alpha: 0.8 * cv });
+      if (e.markT > 0 || e.shredT > 0) for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + t; glArc(g, e.x, e.y, e.r + 8, a, a + 0.5); g.stroke({ width: 1.5, color: 0xff5a5a, alpha: 0.8 * cv }); }
+      if (e.burnT > 0) g.circle(e.x, e.y, e.r + 2).stroke({ width: 2, color: 0xff9f1c, alpha: (0.4 + 0.4 * Math.sin(t * 20)) * cv });
+      const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
+      if (stuck) { const n = Math.min(stuck, 16); for (let i = 0; i < n; i++) { const a = i / n * TAU + t * 2; g.circle(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5).fill({ color: 0xf78cff, alpha: cv }); } }
+    }
     if (e.spawnT > 0) g.circle(e.x, e.y, e.r * (2.2 - sp)).stroke({ width: 1, color: glColor(T.color), alpha: 0.8 });
     if (e.hp < e.maxHp && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !(e.cloak > 0.5)) {
       const w = ty === 'elite' ? e.r * 3 : e.r * 2;
@@ -121,10 +123,10 @@ const GLActors = {
     if (e.mode !== 'windup') return;
     const g = this.gE, t = Game.time;
     let len, alpha, w = e.r * 1.6;
-    if (e.type === 'elite') { len = 320; alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; w = e.r * 1.4; }
-    else if (e.type === 'brute') { len = CFG.BRUTE.rollSpeed * CFG.BRUTE.rollT; alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }
-    else if (e.type === 'boss2') { len = 520; alpha = 0.25 + 0.45 * Math.sin(t * 30) ** 2; }
-    else if (e.type === 'lurker') { len = 520 * 0.4; alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; }
+    if (e.type === 'elite') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; w = e.r * 1.4; }
+    else if (e.type === 'brute') { len = telegraphLen(e); alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }
+    else if (e.type === 'boss2') { len = telegraphLen(e); alpha = 0.25 + 0.45 * Math.sin(t * 30) ** 2; }
+    else if (e.type === 'lurker') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; }
     else if (e.type === 'gunboat') { g.circle(e.x, e.y, e.r + 6 + 40 * Math.max(0, e.modeT) / 0.6).stroke({ width: 3, color: 0xff2a2a, alpha: 0.35 + 0.4 * Math.sin(t * 30) ** 2 }); return; }
     else return;
     g.moveTo(e.x, e.y).lineTo(e.x + Math.cos(e.chargeA) * len, e.y + Math.sin(e.chargeA) * len).stroke({ width: w, color: 0xff2a2a, alpha });

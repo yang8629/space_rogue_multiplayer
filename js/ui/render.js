@@ -225,10 +225,10 @@ function drawExit() {
 function drawTelegraph(e) {
   if (e.mode !== 'windup') return;
   let len, alpha, w = e.r * 1.6;
-  if (e.type === 'elite') { len = 320; alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; w = e.r * 1.4; }
-  else if (e.type === 'brute') { len = CFG.BRUTE.rollSpeed * CFG.BRUTE.rollT; alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }  // 最後鎖定方向時變亮
-  else if (e.type === 'boss2') { len = 520; alpha = 0.25 + 0.45 * Math.sin(Game.time * 30) ** 2; }
-  else if (e.type === 'lurker') { len = 520 * 0.4; alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; }
+  if (e.type === 'elite') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; w = e.r * 1.4; }
+  else if (e.type === 'brute') { len = telegraphLen(e); alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }  // 最後鎖定方向時變亮
+  else if (e.type === 'boss2') { len = telegraphLen(e); alpha = 0.25 + 0.45 * Math.sin(Game.time * 30) ** 2; }
+  else if (e.type === 'lurker') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; }
   else if (e.type === 'gunboat') {  // 彈幕艇：蓄力中，外圈縮小的紅圈（縮到身上就放彈）
     ctx.globalAlpha = 0.35 + 0.4 * Math.sin(Game.time * 30) ** 2; ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6 + 40 * Math.max(0, e.modeT) / 0.6, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
@@ -321,6 +321,7 @@ function drawEnemy(e) {
     ctx.fillStyle = e.t.color; ctx.globalAlpha *= 0.4 + 0.3 * Math.sin(Game.time * 4);
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.45, 0, TAU); ctx.fill(); ctx.globalAlpha = 0.3 + 0.7 * sp;
   }
+  if (!(e.cloak > 0.5)) {  // 狀態圈：潛伏者隱形時不畫（不能被狀態圈暴露位置）
   if (e.slowT > 0) {  // 減速：藍色外圈
     ctx.strokeStyle = 'rgba(127, 212, 255, 0.8)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, TAU); ctx.stroke();
@@ -340,6 +341,7 @@ function drawEnemy(e) {
       const a = i / Math.min(stuck, 16) * TAU + Game.time * 2;
       ctx.beginPath(); ctx.arc(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5, 0, TAU); ctx.fill();
     }
+  }
   }
   if (e.spawnT > 0) {
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (2.2 - sp), 0, TAU);
