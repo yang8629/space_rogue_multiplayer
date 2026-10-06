@@ -155,8 +155,7 @@ class Player {
       this.blinkT -= dt;
       this.vx = Math.cos(this.dashA) * sp;
       this.vy = Math.sin(this.dashA) * sp;
-      if (Game.particles.length < 1500)
-        Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.ship.color, size: 5 });
+      trail(this.x, this.y, this.ship.color, 0.25, 5);
     } else if (this.kbT > 0) {  // 被彈開（盾衛的盾）：這段時間不吃操控，速度慢慢減
       this.kbT -= dt; const f = Math.max(0, 1 - dt * 4); this.vx *= f; this.vy *= f;
     } else {
@@ -613,8 +612,7 @@ class Enemy {
       }
       if (this.mode === 'charge') {
         this.modeT -= dt; this.move(dt);
-        if (Game.particles.length < 1500)
-          Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.3, max: 0.3, color: t.color, size: 6 });
+        trail(this.x, this.y, t.color, 0.3, 6);
         if (this.modeT <= 0) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
         return;
       }
@@ -717,8 +715,7 @@ class Enemy {
         else { this.bounced = true; if (hitX) this.vx = -this.vx; if (hitY) this.vy = -this.vy; this.chargeA = Math.atan2(this.vy, this.vx); Game.shake(3); }
       }
       }
-      if (Game.particles.length < 1500 && Math.random() < 0.5)
-        Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: this.t.color, size: 5 });
+      trail(this.x, this.y, this.t.color, 0.25, 5, 0.5);
       if (this.modeT <= 0) { this.mode = 'stun'; this.modeT = B.stunT; }
       return true;
     }
@@ -790,8 +787,7 @@ class Enemy {
         this.shootAt(this.chargeA + Math.PI / 2, 110, 5, 12);
         this.shootAt(this.chargeA - Math.PI / 2, 110, 5, 12);
       }
-      if (Game.particles.length < 1500)
-        Game.particles.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: t.color, size: 8 });
+      trail(this.x, this.y, t.color, 0.35, 8);
       const wall = Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN;  // 大地圖：撞牆（move 記下的 wallN）
       if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
     } else {

@@ -41,7 +41,7 @@ const Range = {
     this.layout = layout; this.live = false;
     const G = Game, p = G.player;
     G.combat.range = true;
-    G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; G.texts = []; G.nextId = 1;
+    G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; Events.emit('fxClear'); G.nextId = 1;
     p.x = CFG.WORLD_W / 2 - 300; p.y = CFG.WORLD_H / 2; p.vx = p.vy = 0;
     const cx = p.x + 400, cy = p.y;
     const pts = {
@@ -102,7 +102,7 @@ const Range = {
     const G = Game, C = G.combat;
     this.live = true;
     Object.assign(C, { range: false, wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false });
-    G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; G.texts = []; G.kills = 0;
+    G.enemies = []; G.bullets = []; G.eBullets = []; G.triggerQueue = []; Events.emit('fxClear'); G.kills = 0;
     G.player.hp = G.player.maxHp;
     this.clearStats();
   },

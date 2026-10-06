@@ -11,7 +11,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0, shake: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], particles: [], texts: [], pickups: [], triggerQueue: [], rings: [], flashes: [], zaps: [], zones: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], rings: [], flashes: [], zaps: [], zones: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -151,9 +151,9 @@ const Game = {
   startCombat(cfg) {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
-    this.bullets = []; this.enemies = []; this.eBullets = []; this.particles = [];
+    this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.texts = []; this.pickups = []; this.triggerQueue = []; this.rings = []; this.flashes = []; this.zaps = []; this.vortices = []; this.portals = []; this.zones = [];
+    this.pickups = []; this.triggerQueue = []; this.rings = []; this.flashes = []; this.zaps = []; this.vortices = []; this.portals = []; this.zones = [];
     this.kills = 0; this.banner = null; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -1569,16 +1569,13 @@ const Game = {
     this.pickups = this.pickups.filter(c => c.life > 0);
   },
   updateFx(dt) {
-    for (const q of this.particles) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.94; q.vy *= 0.94; q.life -= dt; }
-    this.particles = this.particles.filter(q => q.life > 0);
+    Events.emit('fxTick', dt);  // 粒子、浮動數字（ui/fx.js）
     for (const r of this.rings) r.life -= dt;
     this.rings = this.rings.filter(r => r.life > 0);
     for (const f of this.flashes) f.life -= dt;
     this.flashes = this.flashes.filter(f => f.life > 0);
     for (const z of this.zaps) z.life -= dt;
     this.zaps = this.zaps.filter(z => z.life > 0);
-    for (const t of this.texts) { t.y -= 40 * dt; t.life -= dt; }
-    this.texts = this.texts.filter(t => t.life > 0);
     if (this.banner) { this.banner.t -= dt; if (this.banner.t <= 0) this.banner = null; }
   },
   updateCamera(dt) {
