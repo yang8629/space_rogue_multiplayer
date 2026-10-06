@@ -336,7 +336,14 @@ const Arena = {
     if (G) return { nx: G.nx, ny: G.ny, x: G.x + G.nx * (ARENA.GATE_T + r + 1), y: G.y + G.ny * (ARENA.GATE_T + r + 1) };
     const v = this.f(x, y);
     if (v >= 0) return null;
-    const [nx, ny] = this.grad(x, y);
+    // 牆面方向照「路徑穿過牆面的那一點」算：子彈一幀可以衝進牆裡 10～30，牆裡那一點的方向在彎處、牆角會差很多（反彈角度歪掉）
+    if (this.f(px, py) >= 0) {
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; if (this.f(px + (x - px) * m, py + (y - py) * m) >= 0) lo = m; else hi = m; }
+      const hx = px + (x - px) * lo, hy = py + (y - py) * lo, [nx, ny] = this.grad(hx, hy);
+      return { nx, ny, x: hx + nx, y: hy + ny };
+    }
+    const [nx, ny] = this.grad(x, y);  // 起點就在牆裡（不該發生）：照舊推出去
     return { nx, ny, x: x + nx * (1 - v), y: y + ny * (1 - v) };
   },
   // 直線上有沒有牆或閘門（pad：線的半寬）；每 16 取一點
