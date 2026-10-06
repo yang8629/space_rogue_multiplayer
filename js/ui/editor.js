@@ -108,12 +108,16 @@ const Editor = {
       const el = chipEl(id);
       el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'lib', id })); this.markTargets({ from: 'lib', id }); });
       el.addEventListener('dragend', () => this.clearMarks());
-      el.addEventListener('click', () => {  // 點選後再點插槽放入
+      el.addEventListener('click', () => {  // 點選後再點插槽放入；0.4 秒內點同一個兩下：直接裝上
+        const now = performance.now(), dbl = this.libLast && this.libLast.id === id && now - this.libLast.t < 400;
+        this.libLast = dbl ? null : { id, t: now };
+        if (dbl) { this.sel = null; return this.libQuickAdd(id); }  // 不用瀏覽器的 dblclick：第一下會重畫編輯器，第二下常常收不到
         const same = this.sel && this.sel.from === 'lib' && this.sel.id === id;
         this.sel = same ? null : { from: 'lib', id };
         this.showInfo(id);
         this.render();
       });
+      el.title = '點兩下直接裝上';
       this.libChips[id] = el;
       const g = SECS.findIndex(([, , f]) => f(id));
       (grids[g] || this.libEl).appendChild(el);
@@ -170,6 +174,7 @@ const Editor = {
     this.sel = null;
     this.toolsEl.classList.toggle('hidden', !Game.freePlay());
     this.quitEl.classList.toggle('hidden', !Game.freePlay());
+    document.getElementById('edMain').classList.toggle('free', Game.freePlay());  // 沙盒／靶場：電路固定在上方，往下捲晶片庫時還看得到
     const noInv = Game.mode === 'range';  // 靶場沒有倉庫：晶片直接從下面的晶片庫拿
     this.invEl.classList.toggle('hidden', noInv); document.getElementById('invTitle').classList.toggle('hidden', noInv);
     this.showDefaultInfo();
@@ -402,6 +407,17 @@ const Editor = {
     if (k > 0) return this.dropOn(Game.chain, k, { from: 'inv', index: i });
     this.warn('電路沒有空格');
   },
+  // 晶片庫點兩下（沙盒／靶場）：晶片放到電路第一個空格；組件插進武器或第一個還有空插座、可以插的晶片
+  libQuickAdd(id) {
+    const d = { from: 'lib', id };
+    if (isComp(id)) {
+      const h = Game.chain.findIndex((c, k) => c && !this.canPlug(k, id, (Game.socks[k] || []).length));
+      return h >= 0 ? this.plug(h, d) : this.warn('電路上沒有可以插這個組件的空插座');
+    }
+    const k = Game.chain.indexOf(null, 1);
+    if (k > 0) return this.dropOn(Game.chain, k, d);
+    this.warn('電路沒有空格');
+  },
   showDefaultInfo() {
     this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b> → <b style="color:#5ef2d0">玩法晶片</b>依序改變子彈的玩法。' +
       '晶片下面的圓是<b style="color:#ffd166">插座</b>：把組件（分裂、巨彈、穿甲、倍增、超頻、鏡像、爆裂、燃燒、冰凍、電擊、破甲）拖進去（組件不佔電路格）。插在武器上作用在全部子彈（倍增、巨彈的傷害加成只算直擊，產物不吃），插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。' +
@@ -440,6 +456,7 @@ const Editor = {
       el.addEventListener('dragstart', e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ from: 'sock', h, k })); this.markTargets({ from: 'sock', h, k }); });
       el.addEventListener('dragend', () => this.clearMarks());
       el.addEventListener('mouseenter', () => {
+        if (this.sel) return;  // 選取中：說明框固定顯示選取的那一個
         this.showInfo(id, -1, J);
         this.infoEl.innerHTML = `<b style="color:${J && J.idle ? '#ff8a8a' : '#ffd166'}">◆ ${CHIPS[id].name}插在${h === 0 ? '武器' : CHIPS[C[h]].name}上：${fx}</b><br>` + this.infoEl.innerHTML;
       });
@@ -480,13 +497,13 @@ const Editor = {
       if (this.sel && this.sel.from === from && this.sel.index === i) el.classList.add('sel');
       el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ from, index: i })); this.markTargets({ from, index: i }); });
       el.addEventListener('dragend', () => this.clearMarks());
-      if (from === 'slot') el.addEventListener('mouseenter', e => { e.stopImmediatePropagation(); Editor.showInfo(id, i); }, true);
+      if (from === 'slot') el.addEventListener('mouseenter', e => { e.stopImmediatePropagation(); if (!Editor.sel) Editor.showInfo(id, i); }, true);
       slot.appendChild(el);
       const g = growBar(id);
       if (g) slot.insertAdjacentHTML('beforeend', g);
     } else {
       slot.insertAdjacentHTML('beforeend', `<span class="empty">空插槽</span>`);
-      if (from === 'slot') slot.addEventListener('mouseenter', () => this.showInfo(null, i));
+      if (from === 'slot') slot.addEventListener('mouseenter', () => { if (!this.sel) this.showInfo(null, i); });
     }
     slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('over'); });
     slot.addEventListener('dragleave', () => slot.classList.remove('over'));
@@ -642,7 +659,7 @@ function chipEl(id) {
   el.draggable = !d.locked;
   const sk = isHost(id) && id !== 'weapon' ? `<span class="sk">${'◇'.repeat(socketsOf(id))}</span>` : '';  // 組件的卡片本身就是金色圓角，不用再標
   el.innerHTML = `<div class="top"><span>${m.icon} ${m.label}</span><span>⚡${d.cost}</span></div><div class="nm">${d.name}</div>${sk}`;
-  el.addEventListener('mouseenter', () => Editor.showInfo(id));
+  el.addEventListener('mouseenter', () => { if (!Editor.sel) Editor.showInfo(id); });  // 選取中：說明框固定顯示選取的那一個（滑鼠移去目標格的路上不要亂切）
   return el;
 }
 

@@ -25,7 +25,8 @@ function sockLine(id) {
   if (isComp(id)) return '<div class="ty sockln">◆ 組件：拖進武器、玩法晶片或觸發器的插座（不佔電路格）</div>';
   if (!isHost(id) || id === 'weapon') return '';
   const n = socketsOf(id), P = HOST_PRODUCT[baseOf(id)] || '';
-  return `<div class="ty sockln" title="插在它上面的組件只作用在：${P}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}<span class="det">　產物：${P}</span></div>`;
+  // 產物（插在上面的組件作用在哪裡）縮起來時也顯示：選晶片時常常要看
+  return `<div class="ty sockln">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}${P ? `<br>產物：${P}` : ''}</div>`;
 }
 
 // 背包模組卡片
@@ -468,7 +469,7 @@ const Screen = {
     const coop = Game.mode === 'coop';
     this.show(`<div class="scr title-wrap">
       <h1>${coop ? '選單' : '暫停'}</h1>
-      <div class="sub">${coop ? '雙人模式不會暫停，隊友那邊照常進行。<br>' : ''}離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。</div>
+      <div class="sub">${coop ? '雙人模式不會暫停，隊友那邊照常進行。<br>' : ''}${Game.freePlay() ? '離開 = 回到標題。' : '離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。'}</div>
       <div class="row"><button class="big" data-act="resume" data-back>繼續 (Esc)</button>
         <button class="big" data-act="quitrun">離開遊戲</button></div></div>`);
   },
