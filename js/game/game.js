@@ -182,7 +182,7 @@ const Game = {
     if (C.boss) {
       C.pending = [this.bossId];
       this.banner = { text: `♛ ${ENEMY_TYPES[this.bossId].name}`, sub: '守關旗艦接近中', t: 2.5 };
-      SFX.play('boss');
+      Events.emit('bossArrive', this.bossId);
       return;
     }
     let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopMul(CFG.COOP_COUNT, C.level) : 1);  // 雙人：敵人數量 ×2 → ×2.5（隨難度）
@@ -204,7 +204,7 @@ const Game = {
     else if (C.sandbox && n % 5 === 0) list.push('elite');
     C.pending = list;
     this.banner = { text: C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`, t: 2 };
-    SFX.play(sbBoss ? 'boss' : 'wave');
+    Events.emit('waveStart', { n, boss: !!sbBoss });
     if (sbBoss) this.banner.sub = `♛ ${ENEMY_TYPES[sbBoss].name}接近中`;
     else if (list.includes('elite')) this.banner.sub = '⚠ 精英反應接近中';
   },
@@ -262,7 +262,7 @@ const Game = {
       if (C.wave >= C.wavesTotal) {
         C.cleared = true; C.clearT = this.simFast ? 0 : 1.6;  // simFast：模擬（電腦不用看「區域肅清」）
         this.banner = { text: '區域肅清', t: 1.6 };
-        SFX.play('clear');
+        Events.emit('areaClear', { last: true });
         return;
       }
       // 一場戰鬥分成幾個區域（一區一波）：清完打開閘門，有人穿過閘門就開始下一區（另一個人之後自己飛過去加入）
@@ -287,7 +287,7 @@ const Game = {
     g.open = true;
     this.exit = { x: g.x, y: g.y, r: 40, gate: true };
     this.banner = { text: '區域肅清', sub: '閘門已開啟，穿過閘門前往下一區', t: 2 };
-    SFX.play('clear');
+    Events.emit('areaClear', { last: false });
   },
   // 換區：地上的晶體直接收下；倒下的人如果留在後面的區域，搬到新區域的入口（閘門不能回頭，不搬隊友救不到）；下一波照常倒數
   nextArea() {
@@ -385,7 +385,7 @@ const Game = {
   takeModule(id) {  // 精英獎勵：裝上背包模組（取代目前的）
     if (!MODULES[id]) return;
     this.setModule(id);
-    SFX.play('upgrade');
+    Events.emit('upgrade');
     this.showMap(`裝上背包模組「${MODULES[id].name}」`);  // 背包模組本身就是強化，不算機體強化（不加電路格）
   },
   takeBossModule() {  // 擊沉旗艦：裝上旗艦專屬模組
@@ -393,7 +393,7 @@ const Game = {
     if (!V || V.took || !V.module) return;
     V.took = true;
     this.setModule(V.module);
-    SFX.play('upgrade');
+    Events.emit('upgrade');
     if (this.isClient()) Net.send({ t: 'moddone' });
     Screen.victory();
   },
@@ -415,7 +415,7 @@ const Game = {
     if (!W || W.picked || !W.options.includes(id)) return;
     if (!this.addPart(id)) { W.msg = '零件格已滿：可以用「換零件」改成別種'; Screen.workshop(); return; }
     W.picked = true; W.msg = `裝上 ${PARTS[id].name}（${this.parts[id]} 層）` + this.mechGain();
-    SFX.play('upgrade');
+    Events.emit('upgrade');
     Screen.workshop();
   },
   wsFrom(id) { if (this.ws) { this.ws.from = this.ws.from === id ? null : id; Screen.workshop(); } },
@@ -423,7 +423,7 @@ const Game = {
     const W = this.ws;
     if (!W || !W.from) return;
     const from = W.from;
-    if (this.swapPart(from, id)) { W.msg = `改裝完成：${PARTS[from].name} → ${PARTS[id].name}`; W.from = null; SFX.play('upgrade'); }
+    if (this.swapPart(from, id)) { W.msg = `改裝完成：${PARTS[from].name} → ${PARTS[id].name}`; W.from = null; Events.emit('upgrade'); }
     Screen.workshop();
   },
   takeReward(id) {
@@ -431,7 +431,7 @@ const Game = {
     if (id && id.startsWith('part:')) {  // 零件
       const k = id.slice(5);
       if (!this.addPart(k)) return;
-      SFX.play('upgrade');
+      Events.emit('upgrade');
       this.showMap(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）` + this.mechGain());
       return;
     }
@@ -515,7 +515,7 @@ const Game = {
     if (!st.path) st.path = choice; else st.final = +choice;
     this.refreshWeapon();
     if (this.runStats) this.runStats.upgrades.push(`${this.here()} ${weaponTitle(st)}`);
-    SFX.play('upgrade');
+    Events.emit('upgrade');
     this.showMap(`武器升級：${weaponTitle(st)}`);
   },
   // 電路擴充（插槽 +1）的來源：補給站購買、精英獎勵、武器升滿後的軍械台、擊敗 Boss
@@ -532,7 +532,7 @@ const Game = {
   addSlot(source) {
     this.chain.push(null);
     this.recalc();
-    SFX.play('upgrade');
+    Events.emit('upgrade');
     if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（${{ shop: '補給站', reward: '精英獎勵', armory: '軍械台' }[source] || source}）`);
     const msg = `電路擴充：插槽 +1（目前 ${this.chain.length} 格）`;
     if (source === 'shop') Screen.shop(msg);
@@ -690,11 +690,11 @@ const Game = {
     this.recalc();
     this.bh = { sel: null, result: { good, attr, slot, chip: CHIPS[a.id].name }, fusing: true };
     Screen.blackhole();
-    SFX.play('fusing');
+    Events.emit('fuseStart');
     setTimeout(() => {
       if (this.state !== 'blackhole') return;
       this.bh.fusing = false;
-      SFX.play(good ? 'fuseok' : 'fusefail');
+      Events.emit('fuseEnd', { good });
       Screen.blackhole();
     }, 1200);
   },
@@ -783,7 +783,7 @@ const Game = {
       }
     }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
-    SFX.play(e.t.boss ? 'bossdeath' : big ? 'bigkill' : 'kill');
+    Events.emit('enemyKilled', { e, big });
     if (big) this.shake(e.type === 'elite' ? 14 : 6);
     if (e.t.boss) {  // 母艦爆炸：清除所有小怪與敵彈
       this.shake(28);
@@ -832,7 +832,7 @@ const Game = {
     const R = this.runStats;
     if (R) { const k = cause || '其他'; R.taken[k] = (R.taken[k] || 0) + dmg; R.hits++; }
     this.shake(9);
-    SFX.play(p.hp <= 0 ? 'death' : 'hurt');
+    Events.emit('playerHurt', { p, dead: p.hp <= 0 });
     if (p.hp <= 0 && this.mode === 'coop') { this.playerDown(p); return; }
     if (p.hp <= 0) {
       p.hp = 0; this.state = 'dead'; Input.down = false;
@@ -991,7 +991,7 @@ const Game = {
     p.hp = give; p.dead = false; p.reviveT = 0; p.iframe = CFG.REVIVE.iframe;
     this.banner = { text: `${tag(p)} 救援成功！`, sub: `${tag(q)} 分出 ${Math.ceil(give)} HP`, t: 2 };
     burst(p.x, p.y, '#9dff6b', 40, 260, 0.8, 3);
-    SFX.play('clear');
+    Events.emit('revive', { p, q });
   },
 
   // ---------- 主更新 ----------
@@ -1155,7 +1155,7 @@ const Game = {
         const wid = (b.owner && this.mate && this.mate.L ? this.mate.L.weapon : this.weapon).id;
         floatText(e.x, e.y - e.r, Math.round(dmg), ...dmgTextStyle(dmg, WEAPONS[wid] && WEAPONS[wid].base.damage));
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
-        SFX.play('hit');
+        Events.emit('hit', { e, b, dmg });
         this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素組件）：燃燒、減速、爆炸、電弧
         if (b.lifesteal) this.healPlayer(b.lifesteal, b.owner ? this.mate : this.player);
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
@@ -1316,7 +1316,7 @@ const Game = {
       const fb = runComps([shot({ damage: total, color: S[0].color || '#f78cff', cr: att.cr })], H.el, 'h')[0];
       this.hitFx(e, { ...fb, att }, total, x, y);
     }
-    SFX.play('explode');
+    Events.emit('explode', { x, y });
     if (lv >= 3) {  // 連鎖引爆：立刻引爆周圍敵人身上的子彈（範圍 90，插巨彈時取波及範圍；波及傷害交給巨彈）
       const R = Math.max(90, H.splash);
       for (const o of this.enemies) {
@@ -1496,7 +1496,7 @@ const Game = {
     this.recalc();
     const p = this.player;
     for (const [k, m] of msgs.entries()) floatText(p.x, p.y - 40 - k * 20, m, '#ffd166', true);
-    SFX.play('upgrade');
+    Events.emit('upgrade');
     if (this.runStats) for (const m of msgs) this.runStats.got.push(`${this.here()} ${m}（用量成長）`);
     if (this.isClient()) Net.sendLoadout();
   },
@@ -1512,7 +1512,7 @@ const Game = {
     Objects.explodeRocks(x, y, r, dmg, att);
     if (this.rings.length < 40) this.rings.push({ x, y, r, life: 0.3, max: 0.3, color });
     if (Net.role === 'host') Net.fx(['r', Math.round(x), Math.round(y), Math.round(r), color]);
-    SFX.play('explode');
+    Events.emit('explode', { x, y });
   },
   healPlayer(v, p = this.player) {  // 吸血：每秒最多回復 4 HP（每位玩家各自計算）
     if (!p || p.dead) return;
@@ -1565,7 +1565,7 @@ const Game = {
       burst(z.x, z.y, '#ff4d6d', 24, 260, 0.5, 3);
       if (this.rings.length < 40) this.rings.push({ x: z.x, y: z.y, r: z.r, life: 0.3, max: 0.3, color: '#ff4d6d' });
       if (Net.role === 'host') Net.fx(['r', Math.round(z.x), Math.round(z.y), z.r, '#ff4d6d']);
-      this.shake(4); SFX.play('explode');
+      this.shake(4); Events.emit('explode', z);
     }
     this.zones = this.zones.filter(z => z.t > 0);
   },
@@ -1576,7 +1576,7 @@ const Game = {
       stepPickup(c, p, range, d2, dt);
       if (!Arena.rect && !c.vacuum && Arena.f(c.x, c.y) < 6) [c.x, c.y] = Arena.clampIn(c.x, c.y, 6);  // 大地圖：晶體不會飛進牆裡（全場吸取時直接穿過）
       if (d2 < 20 * 20) {
-        c.life = 0; this.credits++; SFX.play('pickup');
+        c.life = 0; this.credits++; Events.emit('pickup', c);
         if (this.mode === 'coop') Net.lootTotal++;  // 雙人：不管誰撿到，隊友也 +1（透過同步傳過去）
       }
     }

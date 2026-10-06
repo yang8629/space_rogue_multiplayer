@@ -693,7 +693,7 @@ const Net = {
     if (!el) { el = document.createElement('div'); el.id = 'netNudge'; document.body.appendChild(el); }
     el.textContent = '👥 隊友已經選好下一個節點，等你選擇（在航圖點一個發光的節點）';
     el.hidden = false;
-    SFX.play('click');
+    Events.emit('nudge');
   },
   voteLeft() { return this.voteEnd ? Math.max(0, Math.ceil((this.voteEnd - performance.now()) / 1000)) : null; },
 
@@ -916,7 +916,7 @@ const Net = {
     if (Array.isArray(s.me)) {  // 自己的血量以房主為準
       const hp = num(s.me[0], P.hp);
       if (hp < P.hp - 0.01 && !P.dead) {
-        G.shake(9); SFX.play(hp <= 0 ? 'death' : 'hurt');
+        G.shake(9); Events.emit('playerHurt', { p: G.player, dead: hp <= 0 });
         burst(P.x, P.y, '#ff4d6d', 16, 240, 0.4, 2);
       }
       P.hp = hp; P.maxHp = num(s.me[1], P.maxHp); P.drRec = num(s.me[10], 0);
