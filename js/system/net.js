@@ -676,13 +676,15 @@ const Net = {
     this.mateAt = null; this.voteEnd = 0; this.votes = { h: null, c: null };
     this.nudge(false);
     const label = NODE_META[node.type].label;
+    const T = this.goTime != null ? this.goTime : NET_GO_TIME;  // goTime：模擬用（電腦不用等，設 0）
+    if (!(T > 0)) { Game.enterNode(node); return; }
     Game.state = 'going';
-    this.goUntil = performance.now() + NET_GO_TIME * 1000;  // 兩人都選好（或投票時間到）：倒數 3 秒再進關卡
+    this.goUntil = performance.now() + T * 1000;  // 兩人都選好（或投票時間到）：倒數 3 秒再進關卡
     Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">${drawn ? '🎲 意見分歧，抽籤決定' : '➜ 出發'}</h1>
       <div class="sub">${drawn ? `1P 投「${NODE_META[Game.nodeById(votes.h).type].label}」、2P 投「${NODE_META[Game.nodeById(votes.c).type].label}」，各 50%。<br>` : ''}
         目的地：<b style="color:${NODE_META[node.type].color};font-size:22px">${NODE_META[node.type].icon} ${label}</b></div>
-      <h1 style="font-size:64px;margin:10px 0 0" id="goLeft">${NET_GO_TIME}</h1></div>`);
-    setTimeout(() => { if (Game.state === 'going') { this.goUntil = 0; Game.enterNode(node); } }, NET_GO_TIME * 1000);
+      <h1 style="font-size:64px;margin:10px 0 0" id="goLeft">${T}</h1></div>`);
+    setTimeout(() => { if (Game.state === 'going') { this.goUntil = 0; Game.enterNode(node); } }, T * 1000);
   },
   // 提醒還沒選節點的人：畫面最上面的橫幅（開著電路編輯器、在商店也看得到），自己投了票或出發時收起來
   nudge(on) {
