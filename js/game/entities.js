@@ -37,7 +37,7 @@ class Player {
     else if (!held) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
     this.quenchT -= dt;
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1);  // 散熱片、疾風、急冷
+      const M = Game.mech, rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1) * hpRateMul(this);  // 散熱片、疾風、急冷、裝甲供能
       Game.chargeC = S.charge ? this.chargeC : null;
       try { this.fire(); } finally { Game.chargeC = null; }
       this.chargeC = 0; this.fireCd = S.interval / rate;
@@ -496,6 +496,12 @@ function nearestEnemy(x, y, range, exclude, visible = false) {  // visible：略
     if (d < bd) { bd = d; best = e; }
   }
   return best;
+}
+
+// 裝甲供能（軌道砲・攻城砲的升級）：最大 HP 超過 100 的部分換成射速
+function hpRateMul(p) {
+  const H = Game.wp && Game.wp.hpRate;
+  return H ? 1 + Math.min(H.max, Math.max(0, p.maxHp - 100) * H.per) : 1;
 }
 
 // 衝鋒預警線的長度：衝鋒距離＋身體半徑（刺殼再加上暈眩滑行的距離）；畫面兩種繪圖都用這個
