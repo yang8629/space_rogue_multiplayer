@@ -12,6 +12,8 @@ button { background: #13204a; color: #cfe8ff; border: 1px solid #2f4a9a; border-
 button:focus-visible { outline: 2px solid #4cc9f0; outline-offset: 2px; }
 button:hover:not(:disabled) { background: #1c2f68; }
 button:disabled { opacity: .4; cursor: default; }
+.slash { position: relative; }  /* 關掉的圖示畫紅色斜線（音樂沒有像 🔇 那樣的 emoji） */
+.slash::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; border-top: 2px solid #ff3b3b; transform: rotate(-45deg); }
 button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .hidden { display: none !important; }
 

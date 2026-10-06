@@ -13,6 +13,11 @@ function burst(x, y, color, n, spd = 200, life = 0.5, size = 2) {
     P.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: l, max: l, color, size });
   }
 }
+// 命中數字的顏色照倍數（這發傷害 ÷ 武器基礎傷害）：1 倍以下灰、1～2 倍白、2～4 倍黃、4 倍以上紅＋大字
+function dmgTextStyle(dmg, base) {
+  const m = dmg / (base || 10);
+  return m >= 4 ? ['#ff4d4d', true] : m >= 2 ? ['#ffe14d', false] : m >= 1 ? ['#ffffff', false] : ['#9aa3b8', false];
+}
 function floatText(x, y, text, color, big = false) {
   if (Net.role === 'host') Net.fx(['t', Math.round(x), Math.round(y), text, color, big ? 1 : 0]);
   if (Game.texts.length > 120) return;
