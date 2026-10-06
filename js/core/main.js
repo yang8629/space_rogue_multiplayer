@@ -25,6 +25,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   FPS.tick(now);
+  Game.notePerf(now - last);  // 遊玩紀錄：最慢的一幀
   last = now;
   TouchUI.sync();
   Music.update();
