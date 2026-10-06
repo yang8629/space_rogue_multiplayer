@@ -766,24 +766,17 @@ const Net = {
     const at = n ? `${G.isEndless() ? '無盡 · ' : ''}星區 ${G.sector} 第 ${n.L + 1} 層（${NODE_META[n.type].label}）` : `星區 ${G.sector} 航圖`;
     return at + (n && C && G.inArena && C.wavesTotal !== Infinity ? ` 第 ${C.wave} / ${C.wavesTotal} ${G.usesAreas() ? "區" : "波"}` : '');
   },
+  // 雙人紀錄：跟單人同一份（受傷來源、各關摘要、走過的節點、取得的晶片、電路數值…，見 Game.buildRecord），再加上雙人的欄位
   buildRecord(result) {
-    const G = Game, R = G.runStats, S = this.stats || { pings: [], snaps: 0, inputs: 0, maxGap: 0 };
-    const total = R ? Object.values(R.dmg).reduce((a, b) => a + b, 0) : 0;
+    const G = Game, S = this.stats || { pings: [], snaps: 0, inputs: 0, maxGap: 0 };
     const name = id => (id && CHIPS[id] ? CHIPS[id].name : null);
     const mp = this.matePick, ps = [...S.pings].sort((a, b) => a - b);
     const host = this.role === 'host' || (!this.role && G.mate && G.mate.L);
+    const base = G.buildRecord(result);
     return {
-      v: 2, build: CFG.VERSION, at: new Date().toISOString(), result, mode: 'coop',
+      ...base, mode: 'coop',
       where: `雙人 · ${this.whereText()}（${host ? '房主 1P' : '隊友 2P'}）`,
-      sector: G.sector, layer: G.node ? G.node.L + 1 : 0, endless: G.isEndless(),
-      input: Input.touch ? `觸控（自動攻擊${Input.autoFire ? '開' : '關'}）` : '滑鼠鍵盤',
-      ship: SHIPS[G.shipId].name, weapon: weaponTitle(G.weapon),
-      time: Math.round(R ? R.time : 0), kills: R ? R.kills : 0, dmg: Math.round(total), maxHit: Math.round(R ? R.maxHit : 0),
-      dmgBySource: R ? Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])) : {},
-      chain: G.chain.map((id, i) => id && (G.socks[i] || []).length ? `${name(id)}［${G.socks[i].map(name).join('、')}］` : name(id)), inv: G.inventory.filter(Boolean).map(name),
-      chipDmg: R ? Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]) : [],
-      credits: G.credits, hp: Math.max(0, Math.ceil(G.player.hp)), maxHp: G.player.maxHp, mech: G.mechRecord(),
-      cause: G.player.dead ? G.lastHit : '',
+      cause: G.player.dead ? G.lastHit : base.cause,
       coop: {
         role: host ? '房主' : '隊友',
         mate: mp ? `${SHIPS[mp.ship].name} · ${WEAPONS[mp.weapon].name} · 起始晶片 ${name(mp.chip) || '無'}` : '（不明）',
@@ -916,6 +909,8 @@ const Net = {
     if (Array.isArray(s.me)) {  // 自己的血量以房主為準
       const hp = num(s.me[0], P.hp);
       if (hp < P.hp - 0.01 && !P.dead) {
+        const R = G.runStats, k = typeof s.me[4] === 'string' && s.me[4] ? s.me[4].slice(0, 60) : '其他';  // 遊玩紀錄：受到的傷害依來源（房主算的，這邊照血量差記）
+        if (R) { R.taken[k] = (R.taken[k] || 0) + (P.hp - hp); R.hits++; }
         G.shake(9); Events.emit('playerHurt', { p: G.player, dead: hp <= 0 });
         burst(P.x, P.y, '#ff4d6d', 16, 240, 0.4, 2);
       }
