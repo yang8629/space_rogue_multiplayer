@@ -260,7 +260,7 @@ const Game = {
     } else if (this.enemies.length === 0) {
       for (const c of this.pickups) c.vacuum = true;  // 每一波清完就把地上的晶體全部吸過來
       if (C.wave >= C.wavesTotal) {
-        C.cleared = true; C.clearT = 1.6;
+        C.cleared = true; C.clearT = this.simFast ? 0 : 1.6;  // simFast：模擬（電腦不用看「區域肅清」）
         this.banner = { text: '區域肅清', t: 1.6 };
         SFX.play('clear');
         return;
