@@ -204,7 +204,7 @@ const Editor = {
     const SH = SHIPS[Game.shipId];  // 目前的飛船：名稱、特殊能力（遠征中也看得到）
     const mech = (SH ? `<h3 style="color:${SH.color}">${SH.name}</h3>
       <div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.abilityDesc}　·　目前：船體 ${Game.player.maxHp}　·　速度 ${Math.round(SH.speed * Game.mech.speed)}　·　衝刺冷卻 ${+(SH.dashCd * Game.mech.dashCd).toFixed(2)} 秒　·　零件格 ${Game.partSlots}</div>` : '') +
-      `<h3>零件 ${partsUsed(Game.parts)} / ${Game.partSlots} 格${free ? '（沙盒／靶場不受格數限制）' : ''}</h3>
+      `<h3>零件 ${partsUsed(Game.parts)} / ${Game.partSlots} 格${free ? '（靶場不受格數限制）' : ''}</h3>
       <div class="sub">最大 HP ${Game.player.maxHp}　·　移動速度 ×${M.speed.toFixed(2)}　·　受到的傷害 ×${M.taken.toFixed(2)}　·　射速 ×${M.rate.toFixed(2)}　·　子彈速度 ×${M.bspeed.toFixed(2)}　·　衝刺冷卻 ×${M.dashCd.toFixed(2)}
         <br>已開啟的特性：${traits.length ? traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`).join('、') : '無'}${M.heavy ? '　·　<span style="color:#ffd166">模組裝甲加成</span>' : ''}${M.light ? '　·　<span style="color:#4cc9f0">模組加速加成</span>' : ''}</div>
       <div class="cards" style="margin:8px 0">${partCards}</div>
@@ -432,7 +432,7 @@ const Editor = {
     const price = !Game.freePlay() ? `　回收價 ◆${sellPrice(id)}` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
       `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span>` +
-      (CHIPS[baseOf(id)].grow ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '') +  // 成長進度放在名稱下面（以前在最後一行，說明框要往下捲才看得到）
+      (CHIPS[baseOf(id)].grow && !Game.freePlay() ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '') +  // 成長進度放在名稱下面（以前在最後一行，說明框要往下捲才看得到）
       // 各等級效果放在說明前面（說明框高度有限，放最後會被切掉）；Lv2 以上的 desc 本身尾巴就有等級列，改用基本說明避免重複
       (LV_INFO[baseOf(id)] ? '<br>' + lvLine(baseOf(id), levelOf(id)) + `<br>${CHIPS[baseOf(id)].desc}` : `<br>${d.desc}`) +
       `${ps}` +
@@ -499,7 +499,7 @@ const Editor = {
       el.addEventListener('dragend', () => this.clearMarks());
       if (from === 'slot') el.addEventListener('mouseenter', e => { e.stopImmediatePropagation(); if (!Editor.sel) Editor.showInfo(id, i); }, true);
       slot.appendChild(el);
-      const g = growBar(id);
+      const g = Game.freePlay() ? '' : growBar(id);  // 靶場直接切等級，不顯示成長進度
       if (g) slot.insertAdjacentHTML('beforeend', g);
     } else {
       slot.insertAdjacentHTML('beforeend', `<span class="empty">空插槽</span>`);
@@ -598,7 +598,7 @@ const Editor = {
           `<button data-sel="lv" data-lv="${l}" style="${levelOf(selId) === l ? 'border-color:#9dff6b;color:#9dff6b' : ''}">Lv${l}</button>`).join('') : '';
       this.selbarEl.innerHTML = `<span class="hint" style="margin:0">已選取「${CHIPS[selId].name}」：點其他插槽移動或交換</span>
         ${lvs}
-        <button data-sel="move">${inChain || S.from === 'sock' ? (Game.mode === 'range' ? '拿掉' : '移到倉庫') : '裝上電路'}</button>
+        ${Game.mode === 'range' && (inChain || S.from === 'sock') ? '' : `<button data-sel="move">${inChain || S.from === 'sock' ? '移到倉庫' : '裝上電路'}</button>`}
         <button data-sel="recycle">${!Game.freePlay() ? `回收 ◆${sellPrice(selId)}` : '移除'}</button>
         <button data-sel="cancel">取消</button>`;
     } else this.selbarEl.innerHTML = '';
