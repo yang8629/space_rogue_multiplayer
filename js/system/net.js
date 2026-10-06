@@ -13,6 +13,7 @@ const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
 const NET_VOTE_TIME = 20;  // 兩人都回到航圖後的投票時間（秒）
+const NET_GO_TIME = 3;     // 兩人都選好節點後，倒數幾秒進關卡
 const NET_REJOIN_TIME = 120;  // 斷線後房間保留多久等隊友重連（秒）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
@@ -40,7 +41,7 @@ const Net = {
   leave() {
     if (Game.mode === 'coop' && Game.inArena && Game.state === 'play') Game.saveRecord('retired');
     this.waiting = null; this.solo = false; this.rejoin = null; this.rejoining = false; this.runId = null; this.mateAway = false;
-    this.hideOverlay();
+    this.hideOverlay(); this.nudge(false);
     this.close();
   },
   // 每一幀呼叫：連上之後每秒量一次延遲
@@ -59,6 +60,8 @@ const Net = {
       if (this.role === 'host' && this.voteEnd && performance.now() >= this.voteEnd && !this.pauseReason()) this.tryResolve(true);  // 投票時間到
       const vt = document.getElementById('voteTimer'), left = this.voteLeft();
       if (vt) vt.textContent = left != null ? `剩 ${left} 秒` : '';
+      const gl = this.goUntil && document.getElementById('goLeft');  // 出發倒數
+      if (gl) gl.textContent = Math.max(1, Math.ceil((this.goUntil - performance.now()) / 1000));
     }
     this.pingT += dt;
     if (this.pingT >= 1) {
@@ -487,6 +490,7 @@ const Net = {
         const node = typeof m.node === 'string' && Game.map ? Game.nodeById(m.node) : null;
         if (!node || !Game.reachable().includes(node)) break;
         this.votes[this.role === 'host' ? 'c' : 'h'] = m.node;
+        if (!this.votes[this.myVoteKey()]) this.nudge(true);  // 隊友選好了、自己還沒：提醒（可能還在整理電路、商店）
         if (Game.state === 'map') Screen.map();
         if (this.role === 'host') this.tryResolve();
         break;
@@ -644,6 +648,7 @@ const Net = {
     if (!node || !Game.reachable().includes(node) || Game.state !== 'map') return;
     if (!this.linked) { Game.enterNode(node); return; }  // 隊友已離線：自己走
     this.votes[this.myVoteKey()] = id;
+    this.nudge(false);
     this.send({ t: 'vote', node: id });
     Screen.map();
     if (this.role === 'host') this.tryResolve();
@@ -669,12 +674,24 @@ const Net = {
     const node = Game.nodeById(id);
     if (!node) return;
     this.mateAt = null; this.voteEnd = 0; this.votes = { h: null, c: null };
+    this.nudge(false);
     const label = NODE_META[node.type].label;
     Game.state = 'going';
+    this.goUntil = performance.now() + NET_GO_TIME * 1000;  // 兩人都選好（或投票時間到）：倒數 3 秒再進關卡
     Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">${drawn ? '🎲 意見分歧，抽籤決定' : '➜ 出發'}</h1>
       <div class="sub">${drawn ? `1P 投「${NODE_META[Game.nodeById(votes.h).type].label}」、2P 投「${NODE_META[Game.nodeById(votes.c).type].label}」，各 50%。<br>` : ''}
-        目的地：<b style="color:${NODE_META[node.type].color};font-size:22px">${NODE_META[node.type].icon} ${label}</b></div></div>`);
-    setTimeout(() => { if (Game.state === 'going') Game.enterNode(node); }, drawn ? 1800 : 900);
+        目的地：<b style="color:${NODE_META[node.type].color};font-size:22px">${NODE_META[node.type].icon} ${label}</b></div>
+      <h1 style="font-size:64px;margin:10px 0 0" id="goLeft">${NET_GO_TIME}</h1></div>`);
+    setTimeout(() => { if (Game.state === 'going') { this.goUntil = 0; Game.enterNode(node); } }, NET_GO_TIME * 1000);
+  },
+  // 提醒還沒選節點的人：畫面最上面的橫幅（開著電路編輯器、在商店也看得到），自己投了票或出發時收起來
+  nudge(on) {
+    let el = document.getElementById('netNudge');
+    if (!on) { if (el) el.hidden = true; return; }
+    if (!el) { el = document.createElement('div'); el.id = 'netNudge'; document.body.appendChild(el); }
+    el.textContent = '👥 隊友已經選好下一個節點，等你選擇（在航圖點一個發光的節點）';
+    el.hidden = false;
+    SFX.play('click');
   },
   voteLeft() { return this.voteEnd ? Math.max(0, Math.ceil((this.voteEnd - performance.now()) / 1000)) : null; },
 
