@@ -132,7 +132,7 @@ function drawWorld() {
     ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.4 + 0.6 * t), 0, TAU); ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  for (const q of Game.particles) {
+  for (const q of FX.particles) {
     ctx.globalAlpha = q.life / q.max;
     ctx.fillStyle = q.color;
     ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
@@ -178,7 +178,7 @@ function drawWorld() {
   for (const big of [false, true]) {
     ctx.font = big ? 'bold 21px Microsoft JhengHei' : 'bold 15px Segoe UI';
     ctx.lineWidth = big ? 4 : 3.5;
-    for (const t of Game.texts) {
+    for (const t of FX.texts) {
       if (!t.big !== !big) continue;
       ctx.globalAlpha = Math.min(1, t.life * 2);
       ctx.strokeText(t.text, t.x, t.y);

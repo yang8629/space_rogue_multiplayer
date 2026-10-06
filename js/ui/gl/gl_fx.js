@@ -66,7 +66,7 @@ const GLFx = {
       const d = this.spr(this.pP, tx.dot, f.x, f.y); d.scaleX = d.scaleY = f.r * 0.3 * k / R.dot; d.alpha = k;
     }
     // 粒子
-    for (const q of G.particles) { const s = this.spr(this.pP, tx.sq, q.x, q.y); s.scaleX = s.scaleY = q.size / R.sq; s.tint = glColor(q.color); s.alpha = q.life / q.max; }
+    for (const q of FX.particles) { const s = this.spr(this.pP, tx.sq, q.x, q.y); s.scaleX = s.scaleY = q.size / R.sq; s.tint = glColor(q.color); s.alpha = q.life / q.max; }
     // 電弧、光圈
     const g = this.g; g.clear();
     for (const z of G.zaps) {
@@ -87,7 +87,7 @@ const GLFx = {
   drawTexts() {
     for (const big of [false, true]) {
       const P = big ? this.pTb : this.pTs;
-      for (const t of Game.texts) {
+      for (const t of FX.texts) {
         if (!t.big !== !big) continue;
         const s = GLR.take(P);
         const txt = String(t.text); if (s.text !== txt) s.text = txt;
