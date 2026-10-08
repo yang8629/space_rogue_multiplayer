@@ -146,7 +146,6 @@ const Screen = {
       case 'wsfrom': Game.wsFrom(arg); break;
       case 'wsto': Game.wsTo(arg); break;
       case 'music': Music.toggle(); Screen.title(); break;
-      case 'renderer': GLR.toggle(); Screen.title(); break;
     }
   },
 
@@ -312,8 +311,7 @@ const Screen = {
       <div class="row"><button data-act="codex">📖 電路總覽</button>
         <button data-act="records">📜 遊玩紀錄</button>
         <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button>
-        <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button>
-        <button data-act="renderer" title="新畫面（WebGL）／舊畫面；遊戲中按 F2 切換">${GLR.label()}</button></div>
+        <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
       <div class="keys">電腦：WASD 移動　·　滑鼠左鍵 射擊　·　Space / 右鍵 衝刺（無敵）　·　Tab 隨時編輯電路（暫停）　·　M 靜音<br>
       手機：自動攻擊時任意位置拖曳移動；關閉自動攻擊後，左半邊移動、右半邊瞄準射擊　·　「衝刺」「電路」「自動」按鈕　·　建議橫向遊玩</div>
       <div class="ver">版本 ${CFG.VERSION}</div>

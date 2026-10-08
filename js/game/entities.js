@@ -36,7 +36,7 @@ class Player {
     if (!S.charge) this.chargeC = 0;
     else if (!held) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
     this.quenchT -= dt;
-    // 架設：站著不動每 0.5 秒射速 +10%（Lv1 最多 6 層、Lv2 起 8 層），移動或衝刺超過 0.15 秒就歸零
+    // 架設：站著不動 2 秒疊滿，每層射速 +10%（Lv1 最多 6 層、Lv2 起 8 層），移動或衝刺超過 0.15 秒就歸零
     if (!S.stand) { this.standT = 0; this.standMv = 0; }
     else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
     else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
@@ -505,9 +505,10 @@ function nearestEnemy(x, y, range, exclude, visible = false) {  // visible：略
   return best;
 }
 
-// 架設：目前幾層（每 0.5 秒 1 層，射速 +10%／層）
+// 架設：目前幾層（站 STAND_FULL 秒疊滿，射速 +10%／層）
+const STAND_FULL = 2;
 const standMax = lv => lv >= 2 ? 8 : 6;
-const standStacks = (p, lv) => lv ? Math.min(standMax(lv), Math.floor((p.standT || 0) / 0.5)) : 0;
+const standStacks = (p, lv) => lv ? Math.min(standMax(lv), Math.floor((p.standT || 0) / STAND_FULL * standMax(lv) + 1e-9)) : 0;
 
 // 裝甲供能（軌道砲・攻城砲的升級）：最大 HP 超過 100 的部分換成射速
 function hpRateAdd(p) {

@@ -3,6 +3,9 @@
 //   我方子彈、粒子、電弧、光圈用加法混色（跟舊畫面的 lighter 一樣）；子彈的貼圖是白色，照子彈顏色染色
 'use strict';
 
+// 子彈尾巴的長度：最長 max，但不超過從發射點飛過的距離
+const tail = (b, max) => Math.min(max, Math.hypot(b.x - b.sx, b.y - b.sy));
+
 const GLFx = {
   init() {
     const L = GLR.L, S = () => new PIXI.Sprite();

@@ -186,19 +186,21 @@ const MechCheck = {
       return { ok: near1(a1.d, a0.d * 1.6) && m1.n === 2 && near1(m1.d, m0.d * 1.45) && near1(m2.d, m1.d) && s1.n === 5 && near1(s1.d, s0.d) && idle,
         got: `雷射 1 發 ${a0.d.toFixed(1)} → ${a1.d.toFixed(1)}；鏡像 ${m1.n} 發 ${m0.d.toFixed(1)} → ${m1.d.toFixed(1)}（插座順序對調 ${m2.d.toFixed(1)}）；散彈 ${s1.n} 發 ${s0.d.toFixed(1)} → ${s1.d.toFixed(1)}；插在迴旋上${idle ? '沒有作用' : '有作用（錯）'}` };
     }],
-    ['電路晶片', '架設', '站著不動每 0.5 秒射速 +10%（Lv1 最多 6 層）；滿層時射出的才是產物；移動 0.15 秒內不歸零，超過就歸零', M => {
+    ['電路晶片', '架設', '站著不動 2 秒疊滿（Lv1 6 層，每層射速 +10%）；滿層時射出的才是產物；移動 0.15 秒內不歸零，超過就歸零', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'stand', null, null]); M.targets([]);
       const P = Game.player, iv = Game.stats.interval, tick = (sec, want) => { for (let f = 0; f < Math.round(sec * 60); f++) P.tickFire(1 / 60, want); };
-      P.moving = false; tick(3.05, false);
+      P.moving = false; tick(1.9, false);
+      const sk0 = standStacks(P, Game.stats.stand);
+      tick(0.15, false);
       const sk = standStacks(P, Game.stats.stand);
       let n = 0, full = 0; const orig = P.fire; P.fireCd = 0;
       P.fire = () => { n++; if (Game.standFull) full++; };
       try { tick(2, true); } finally { P.fire = orig; }
       const want = 2 / (iv / 1.6);
-      P.moving = true; tick(0.1, false); const keep = P.standT > 3;
+      P.moving = true; tick(0.1, false); const keep = P.standT > 2;
       tick(0.2, false); const reset = P.standT === 0;
-      return { ok: sk === 6 && Math.abs(n - want) <= 1.5 && full === n && keep && reset,
-        got: `站 3 秒 ${sk} 層；接著 2 秒射 ${n} 發（要 ${want.toFixed(1)}），其中滿層 ${full} 發；移動 0.1 秒${keep ? '還在' : '就歸零（錯）'}，0.3 秒${reset ? '歸零' : '沒歸零（錯）'}` };
+      return { ok: sk0 === 5 && sk === 6 && Math.abs(n - want) <= 1.5 && full === n && keep && reset,
+        got: `站 1.9 秒 ${sk0} 層（要 5）、2.05 秒 ${sk} 層（要 6）；接著 2 秒射 ${n} 發（要 ${want.toFixed(1)}），其中滿層 ${full} 發；移動 0.1 秒${keep ? '還在' : '就歸零（錯）'}，0.3 秒${reset ? '歸零' : '沒歸零（錯）'}` };
     }],
     ['武器命中效果', '動能彈頭', '雷射・貫穿光束・動能彈頭：命中時子彈比原本彈速快多少 %，傷害加一半（沒有上限）；感測器也算', M => {
       const one = sensor => {

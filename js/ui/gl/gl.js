@@ -6,25 +6,14 @@
 'use strict';
 
 const GLR = {
-  on: false, ready: false, failed: false, app: null, L: {}, tex: {}, frames: null,
-  // 開關：設定存在本機（'gl' = 新畫面）；PixiJS 或圖集沒載入就一律用舊畫面
-  wanted() { try { return localStorage.getItem('renderer') !== '2d'; } catch (e) { return true; } },  // 預設新畫面；按 F2 或標題畫面的按鈕切換
-  available() { return typeof PIXI !== 'undefined' && typeof window !== 'undefined' && !!window.ATLAS && !this.failed; },
-  toggle() {
-    const next = !(this.on && this.ready);
-    try { localStorage.setItem('renderer', next ? 'gl' : '2d'); } catch (e) {}
-    this.setOn(next);
+  ready: false, failed: false, app: null, L: {}, tex: {}, frames: null,
+  // 啟動：PixiJS（從 CDN 載入）或圖集沒載入、WebGL 開不起來 → failed（render.js 在戰鬥畫面中間寫原因）
+  init() {
+    if (typeof PIXI === 'undefined' || typeof window === 'undefined' || !window.ATLAS) { this.failed = true; return; }
+    this.start();
   },
-  setOn(v) {
-    this.on = v && this.available();
-    const el = document.getElementById('glc');
-    if (el) el.style.display = this.on ? 'block' : 'none';
-    if (this.on && !this.app && !this.starting) this.start();
-  },
-  label() { return this.on ? '🖥 新畫面' : '🖥 舊畫面'; },
 
   async start() {
-    this.starting = true;
     try {
       const app = new PIXI.Application();
       await app.init({ canvas: document.getElementById('glc'), width: VW, height: VH, resolution: DPR, autoDensity: true, antialias: true, background: '#05060f', preference: 'webgl', autoStart: false, sharedTicker: false });
@@ -33,11 +22,9 @@ const GLR = {
       this.buildLayers();
       this.ready = true;
     } catch (e) {
-      console.error('WebGL 繪圖層啟動失敗，改用舊畫面', e);
-      this.failed = true; this.on = false;
-      const el = document.getElementById('glc'); if (el) el.style.display = 'none';
+      console.error('WebGL 繪圖層啟動失敗', e);
+      this.failed = true;
     }
-    this.starting = false;
   },
   resize() { if (this.app) this.app.renderer.resize(VW, VH, DPR); },
 

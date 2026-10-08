@@ -7,7 +7,7 @@
 // =====================================================================
 resize();
 initStars();
-GLR.setOn(GLR.wanted());  // 新畫面（WebGL）：照記住的設定；載入失敗自動用舊畫面
+GLR.init();  // WebGL 繪圖層
 Editor.init();
 TouchUI.init();
 Codex.init();
