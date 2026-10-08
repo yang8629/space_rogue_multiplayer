@@ -19,7 +19,7 @@ const Game = {
   mate: null, shooter: null,
   // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
   parts: {}, module: null, partSlots: 6, mech: mechStats({}, null), objs: [], portals: [],
-  growth: {}, fireMode: null, chargeC: null, vortices: [], pullHits: 0, arcT: 0,
+  growth: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
   players() { return [this.player, this.mate].filter(p => p && !p.dead && !p.gone); },  // gone：隊友離線，房主一個人繼續
@@ -1131,6 +1131,7 @@ const Game = {
         if (b.full) this.tagGrow(e, own, 'charge');
         if (b.rear) this.tagGrow(e, own, 'rear');
         if (b.dashShot) this.tagGrow(e, own, 'dashfire');
+        if (b.stand) this.tagGrow(e, own, 'stand');
         if (b.infGen > 0) this.tagGrow(e, own, 'infect');
         if (b.att.src === 'intercept') this.tagGrow(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
         if (b.pull && b.mode !== 'orbit') this.pullAt(b, e);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
@@ -1140,6 +1141,7 @@ const Game = {
           const ks = [b.orbShot && 'orbit', b.accel && 'accel', b.quick && 'quick'].filter(Boolean);
           for (const k of ks) att = attCredit(att, k, Math.pow(dmg / b.damage, 1 / ks.length));
         }
+        if (b.kin) dmg *= kineticMul(b);  // 動能彈頭（雷射升級）：子彈越快越痛（算武器本身的傷害）
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）

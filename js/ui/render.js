@@ -639,18 +639,24 @@ function drawHUD() {
   ctx.fillText(T ? '衝刺' : '衝刺 [Space/右鍵]', 136, 50);
   // 蓄力／超頻模組過熱（隊友：數值由房主同步過來）
   const heat = Net.role === 'client' ? p.heatR || 0 : s.heatLimit ? p.ohT / s.heatLimit : 0;
-  const bar = (x, label, k, col) => {
-    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(x, 42, 70, 8);
-    ctx.fillStyle = col; ctx.fillRect(x + 1, 43, 68 * clamp(k, 0, 1), 6);
-    ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = col; ctx.fillText(label, x + 74, 50);
+  let bx = T ? 180 : 250;  // 小條由左往右排（文字長短不一）
+  const bar = (label, k, col) => {
+    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(bx, 42, 70, 8);
+    ctx.fillStyle = col; ctx.fillRect(bx + 1, 43, 68 * clamp(k, 0, 1), 6);
+    ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = col; ctx.fillText(label, bx + 74, 50);
+    bx += 84 + ctx.measureText(label).width;
   };
-  if (s.charge) bar(T ? 180 : 250, p.chargeC >= 1 ? '蓄滿' : '蓄力', p.chargeC || 0, p.chargeC >= 1 ? '#ffffff' : '#ffb347');
-  if (s.heatLimit) bar(T ? 250 : 330, p.ohLock > 0 ? '過熱！' : '熱度', p.ohLock > 0 ? 1 : heat, p.ohLock > 0 ? '#ff4d6d' : '#ff9f1c');
+  if (s.charge) bar(p.chargeC >= 1 ? '蓄滿' : '蓄力', p.chargeC || 0, p.chargeC >= 1 ? '#ffffff' : '#ffb347');
+  if (s.heatLimit) bar(p.ohLock > 0 ? '過熱！' : `熱度 傷害 +${Math.round(heat * 40)}%`, p.ohLock > 0 ? 1 : heat, p.ohLock > 0 ? '#ff4d6d' : '#ff9f1c');
+  if (s.stand) {  // 架設：站著不動的層數（隊友：房主同步過來）
+    const sk = Net.role === 'client' ? p.standK || 0 : standStacks(p, s.stand), mx = standMax(s.stand);
+    bar(`架設 射速 +${sk * 10}%`, sk / mx, sk >= mx ? '#ffffff' : '#9dff6b');
+  }
   // 奇異點「間歇失效」的格子：失效的那 2 秒標出來
   const fk = (Game.slotAttr || []).map((a, i) => a === 'flaky' && Game.chain[i] ? i : -1).filter(i => i >= 0);
   if (fk.length && flakyOff()) {
     ctx.font = 'bold 11px Microsoft JhengHei'; ctx.fillStyle = '#ff6b6b';
-    ctx.fillText(`✖ 間歇失效中：${fk.map(i => CHIPS[Game.chain[i]].short || CHIPS[Game.chain[i]].name).join('、')}`, T ? 320 : 410, 50);
+    ctx.fillText(`✖ 間歇失效中：${fk.map(i => CHIPS[Game.chain[i]].short || CHIPS[Game.chain[i]].name).join('、')}`, Math.max(bx, T ? 320 : 410), 50);
   }
   ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px Segoe UI';
   ctx.fillText(`◆ ${Game.credits}`, 20, 72);

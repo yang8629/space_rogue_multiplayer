@@ -23,7 +23,8 @@ const WEAPONS = {
           { name: '高頻', desc: rateTxt(0.7) + '。', apply: p => { p.rate *= 0.7; } }] },
       C: { name: '貫穿光束', desc: '穿透 +2，彈速 ×1.3，傷害 ×1.25。', apply: p => { p.pierce += 2; p.speed *= 1.3; p.damage *= 1.25; },
         next: [
-          { name: '粒子光束', desc: '穿透再 +4，傷害 ×1.5。', apply: p => { p.pierce += 4; p.damage *= 1.5; } },
+          { name: '動能彈頭', desc: '打中的那一刻，子彈比雷射原本的彈速快多少 %，傷害就加那個數的一半（最多 +80%）：疊彈速就是疊火力（感測器、加速晶片都算）。',
+            apply: p => { p.kinetic = { per: 0.5, max: 0.8, ref: WEAPONS.laser.base.speed }; } },
           { name: '過載射線', desc: '命中時爆炸（半徑 50，60% 傷害）。', apply: p => { p.explode = { r: 50, ratio: 0.6 }; } }] },
     } },
   scatter: { name: '散彈砲', short: '散彈', color: '#ffb347', desc: '扇形噴出 5 顆短程彈丸，近距離爆發高。',
@@ -53,7 +54,7 @@ const WEAPONS = {
       B: { name: '重力井', desc: '電漿更慢、更大、存在更久，穿透 +4。', apply: p => {
           p.speed *= 0.6; p.radius *= 1.6; p.life *= 1.5; p.pierce += 4; },
         next: [
-          { name: '事件視界', desc: '傷害 ×1.5，體積再 ×1.3。', apply: p => { p.damage *= 1.5; p.radius *= 1.3; } },
+          { name: '重量砲', desc: '飛船的移動速度每比原本慢 1%，傷害 +2%（最多 +80%）：越重越痛（重裝甲、護盾產生器、被凍住都算）。', apply: p => { p.weight = { per: 2, max: 0.8 }; } },
           { name: '黑潮', desc: '命中的敵人減速 50%。', apply: p => { p.slow = 0.5; } }] },
       C: { name: '新星', desc: '命中時爆炸（半徑 90，80% 傷害）。', apply: p => { p.explode = { r: 90, ratio: 0.8 }; },
         next: [
@@ -115,15 +116,27 @@ function weaponParams(state) {
   return p;
 }
 function weaponEmit(p, pw) {
-  const out = [];
+  const out = [], sm = statDmgMul(p);
   for (let k = 0; k < p.count; k++) {
     const a = (p.count > 1 ? -p.spread / 2 + p.spread * k / (p.count - 1) : 0) + (p.jitter ? rand(-p.jitter, p.jitter) : 0);
-    out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw,
+    out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm, kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: p.color, shape: p.shape,
       explode: p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry }));
   }
   return out;
 }
+// 數值換傷害（武器升級）：重量砲（移動速度越慢越痛）；照開火的人現在的機體算（雙人在 withLoadout 裡就是隊友的）
+function statDmgMul(p) {
+  if (!p.weight) return 1;
+  return 1 + Math.min(p.weight.max, Math.max(0, 1 - shipSpeedNow()) * p.weight.per);
+}
+// 開火的人現在的移動速度倍率（機體：重裝甲、加速器、護盾產生器；被彗星凍住）
+function shipSpeedNow() {
+  const P = Game.shooter ? Game.mate : Game.player;
+  return Game.mech.speed * (P && P.frostT > 0 ? 1 - OBJ.COMET_FROST.slow : 1);
+}
+// 動能彈頭（雷射升級）：命中時照子彈當下的速度加傷害
+const kineticMul = b => 1 + Math.min(b.kin.max, Math.max(0, b.speed / b.kin.ref - 1) * b.kin.per);
 function weaponTitle(state) {
   const W = WEAPONS[state.id], P = state.path && W.paths[state.path];
   return [W.name, P && P.name, P && state.final != null && P.next[state.final].name].filter(Boolean).join('・');

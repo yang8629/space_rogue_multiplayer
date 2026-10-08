@@ -36,7 +36,7 @@ function shot(o) {
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, shard: false, src: 'weapon', cr: null,
     // V2 改玩法的晶片（見 chips.js）：各自的等級，0 = 沒有
     boom: 0, orbit: 0, stasis: 0, accel: 0, quick: 0, intercept: 0, parry: false, prism: false, rear: false, full: 0, endBoom: false, sticky: 0, infect: 0, pull: 0,
-    dashShot: false, infGen: 0 }, o);
+    dashShot: false, infGen: 0, kin: null }, o);
 }
 
 // ---------- 增幅相加：每顆子彈記住累積的加成 bonus，傷害 ＝ 基礎 ×（1 ＋ 所有加成的總和） ----------

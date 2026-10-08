@@ -167,6 +167,64 @@ const MechCheck = {
       }
       return { ok, got: rows.join('；') };
     }],
+    ['電路晶片', '超頻熱度', '超頻模組：熱度越高越痛，傷害 +（熱度 × 40%）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'overclock', null, null]); M.targets([]);
+      const P = Game.player, lim = Game.stats.heatLimit, one = h0 => {
+        Game.bullets = []; P.ohT = h0; P.ohLock = 0; P.fireCd = 0; P.tickFire(1 / 60, true);
+        return { d: Game.bullets[0] ? Game.bullets[0].damage : 0, h: P.ohT / lim };
+      };
+      const A = one(0), B = one(lim * 0.75), want = (1 + 0.4 * B.h) / (1 + 0.4 * A.h);
+      return { ok: A.d > 0 && near1(B.d / A.d, want), got: `熱度 ${Math.round(A.h * 100)}% 傷害 ${A.d.toFixed(1)}；熱度 ${Math.round(B.h * 100)}% 傷害 ${B.d.toFixed(1)}（比值 ${(B.d / A.d).toFixed(2)}，要 ${want.toFixed(2)}）` };
+    }],
+    ['電路晶片', '收束透鏡', '武器每次射出 1 發 +60%、每多 1 發少 15%、4 發以上沒有；只能插在武器上', M => {
+      const run = (w, chain) => { M.setup('sandbox', 'vanguard', w, null, null, chain); const L = runOps(Game.stats.ops, 0); return { n: L.length, d: L[0] ? L[0].damage : 0 }; };
+      const a0 = run('laser', ['weapon', null, null, null]), a1 = run('laser', ['weapon', 'focus', null, null]);
+      const m0 = run('laser', ['weapon', 'mirror', null, null]), m1 = run('laser', ['weapon', 'mirror', 'focus', null]), m2 = run('laser', ['weapon', 'focus', 'mirror', null]);
+      const s0 = run('scatter', ['weapon', null, null, null]), s1 = run('scatter', ['weapon', 'focus', null, null]);
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', 'focus', null]);
+      const idle = Game.stats.info.socks[1][0].idle;
+      return { ok: near1(a1.d, a0.d * 1.6) && m1.n === 2 && near1(m1.d, m0.d * 1.45) && near1(m2.d, m1.d) && s1.n === 5 && near1(s1.d, s0.d) && idle,
+        got: `雷射 1 發 ${a0.d.toFixed(1)} → ${a1.d.toFixed(1)}；鏡像 ${m1.n} 發 ${m0.d.toFixed(1)} → ${m1.d.toFixed(1)}（插座順序對調 ${m2.d.toFixed(1)}）；散彈 ${s1.n} 發 ${s0.d.toFixed(1)} → ${s1.d.toFixed(1)}；插在迴旋上${idle ? '沒有作用' : '有作用（錯）'}` };
+    }],
+    ['電路晶片', '架設', '站著不動每 0.5 秒射速 +10%（Lv1 最多 6 層）；滿層時射出的才是產物；移動 0.15 秒內不歸零，超過就歸零', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'stand', null, null]); M.targets([]);
+      const P = Game.player, iv = Game.stats.interval, tick = (sec, want) => { for (let f = 0; f < Math.round(sec * 60); f++) P.tickFire(1 / 60, want); };
+      P.moving = false; tick(3.05, false);
+      const sk = standStacks(P, Game.stats.stand);
+      let n = 0, full = 0; const orig = P.fire; P.fireCd = 0;
+      P.fire = () => { n++; if (Game.standFull) full++; };
+      try { tick(2, true); } finally { P.fire = orig; }
+      const want = 2 / (iv / 1.6);
+      P.moving = true; tick(0.1, false); const keep = P.standT > 3;
+      tick(0.2, false); const reset = P.standT === 0;
+      return { ok: sk === 6 && Math.abs(n - want) <= 1.5 && full === n && keep && reset,
+        got: `站 3 秒 ${sk} 層；接著 2 秒射 ${n} 發（要 ${want.toFixed(1)}），其中滿層 ${full} 發；移動 0.1 秒${keep ? '還在' : '就歸零（錯）'}，0.3 秒${reset ? '歸零' : '沒歸零（錯）'}` };
+    }],
+    ['武器命中效果', '動能彈頭', '雷射・貫穿光束・動能彈頭：命中時子彈比原本彈速快多少 %，傷害加一半（最多 +80%）；感測器也算', M => {
+      const one = sensor => {
+        M.setup('sandbox', 'vanguard', 'laser', 'C', 0, ['weapon', null, null, null]);
+        Game.parts.sensor = sensor; Game.recalc();
+        const e = M.targets([[200, 0]])[0], got = [], h = e.hurt.bind(e);
+        e.hurt = (d, ...r) => { got.push(d); return h(d, ...r); };
+        Game.player.fire(); const b = Game.bullets[0], d0 = b.damage, want = 1 + Math.min(0.8, (b.speed / WEAPONS.laser.base.speed - 1) * 0.5);
+        for (let f = 0; f < 30 && !got.length; f++) Game.updateBullets(1 / 60);
+        return { d0, d: got[0] || 0, want };
+      };
+      const A = one(0), B = one(3);
+      return { ok: near1(A.d, A.d0 * A.want) && near1(B.d, B.d0 * B.want) && near1(A.want, 1.15) && B.want > A.want,
+        got: `沒感測器：子彈 ${A.d0.toFixed(1)} 打中 ${A.d.toFixed(1)}（×${A.want.toFixed(2)}）；感測器 3 層：${B.d0.toFixed(1)} → ${B.d.toFixed(1)}（×${B.want.toFixed(2)}）` };
+    }],
+    ['武器命中效果', '重量砲', '電漿・重力井・重量砲：移動速度每慢 1% 傷害 +2%（最多 +80%）；重裝甲、被凍住都算', M => {
+      const one = (armor, frost) => {
+        M.setup('sandbox', 'vanguard', 'plasma', 'B', 0, ['weapon', null, null, null]);
+        Game.parts.armor = armor; Game.recalc(); Game.player.frostT = frost ? 1 : 0;
+        const L = runOps(Game.stats.ops, 0); return { d: L[0].damage, spd: shipSpeedNow() };
+      };
+      const A = one(0), B = one(5), C = one(5, true);
+      const wantB = 1 + (1 - B.spd) * 2;
+      return { ok: near1(A.spd, 1) && near1(B.d / A.d, wantB) && near1(C.d / A.d, 1.8),
+        got: `沒重裝甲 ${A.d.toFixed(1)}；重裝甲 5 層（速度 ×${B.spd.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / A.d).toFixed(2)}，要 ×${wantB.toFixed(2)}）；再被凍住（×${C.spd.toFixed(3)}）${C.d.toFixed(1)}（×${(C.d / A.d).toFixed(2)}，上限 ×1.8）` };
+    }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
       Game.player.x = CFG.WORLD_W - 40;
@@ -1235,13 +1293,14 @@ const SockCheck = {
   effectOk(c, x) { return SockCheck.EL[c] ? SockCheck.elUp(c, x.before.el, x.after.el) : c === 'mirror' ? x.after.n - x.before.n >= 1 : c === 'amp' ? x.after.hb - x.before.hb > 0.9 : c === 'split' ? x.after.n - x.before.n >= 2
     : c === 'pierce' ? x.after.pierce - x.before.pierce >= 2 : x.after.r > x.before.r * 1.3; },
   // 開火當下就出現的產物：同一個電路有沒有插組件，比較產物和其他子彈
-  shots(mode, charge) { Game.fireMode = mode; Game.chargeC = charge; try { return runOps(Game.stats.ops, 0); } finally { Game.fireMode = null; Game.chargeC = null; } },
+  shots(mode, charge, stand) { Game.fireMode = mode; Game.chargeC = charge; Game.standFull = !!stand; try { return runOps(Game.stats.ops, 0); } finally { Game.fireMode = null; Game.chargeC = null; Game.standFull = false; } },
   launch(w, host, c) {
     const grab = flat => {
       this.setup(w, flat);
       if (host === 'rear') { const L = this.shots(null, 0); return { prod: L.filter(b => b.rear), other: L.filter(b => !b.rear) }; }
       if (host === 'charge') return { prod: this.shots(null, 1), other: this.shots(null, 0) };
       if (host === 'dashfire') return { prod: this.shots('dashfire', 0), other: this.shots(null, 0) };
+      if (host === 'stand') return { prod: this.shots(null, 0, 1), other: this.shots(null, 0) };  // 架設：滿層時射出的
       if (host === 'intercept') return { prod: this.shots('intercept', 0), other: this.shots(null, 0) };
       return { prod: this.shots(null, 0), other: [] };  // 疾射：出手就是高速段
     };
