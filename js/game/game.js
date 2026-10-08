@@ -1053,12 +1053,13 @@ const Game = {
         const rr = e.r + p.r;
         if (dist2(e.x, e.y, p.x, p.y) >= rr * rr) continue;
         const M = this.mechOf(p);
-        if (M.traits.ram) {  // 衝撞（重裝甲 4 層）：撞到的敵人受傷並被撞飛，自己不受碰撞傷害
+        if (M.traits.ram) {  // 衝撞（重裝甲 4 層）：撞到的敵人受到「最大 HP × 45%」並被撞飛，自己不受碰撞傷害
           if (this.time < (e.ramT || 0)) continue;
           e.ramT = this.time + 0.5;
           const d = Math.hypot(e.x - p.x, e.y - p.y) || 1, k = 520 * (14 / e.r);
-          e.hurt(M.armor * 20, (e.x - p.x) / d * k, (e.y - p.y) / d * k, 'shock', { src: 'ship', cr: null, owner: p.L || null }, 3);
-          floatText(e.x, e.y - e.r, M.armor * 20, '#ffd166', true);
+          const rd = Math.round(p.maxHp * RAM_HP);
+          e.hurt(rd, (e.x - p.x) / d * k, (e.y - p.y) / d * k, 'shock', { src: 'ship', cr: null, owner: p.L || null }, 3);
+          floatText(e.x, e.y - e.r, rd, '#ffd166', true);
           continue;
         }
         this.hurtPlayer(e.t.dmg, e.t.name + '（撞擊）', p, e.x, e.y);

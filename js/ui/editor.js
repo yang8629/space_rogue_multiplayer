@@ -209,7 +209,7 @@ const Editor = {
       return `<span>${statIcon(id)}${val}${p ? (val !== '' ? `（${p}）` : p) : ''}</span>`;
     };
     const rows = [stat('hp', Game.player.maxHp), SH && stat('speed', Math.round(SH.speed * M.speed), M.speed), SH && stat('dashCd', `${+(SH.dashCd * M.dashCd).toFixed(2)} 秒`, M.dashCd),
-      ...[['taken', M.taken], ['rate', M.rate], ['bspeed', M.bspeed]].filter(([, m]) => Math.round((m - 1) * 100)).map(([id, m]) => stat(id, '', m))].filter(Boolean);
+      ...[['taken', M.taken], ['rate', M.rate * M.rateMul], ['bspeed', M.bspeed]].filter(([, m]) => Math.round((m - 1) * 100)).map(([id, m]) => stat(id, '', m))].filter(Boolean);
     const on2 = [...traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`), ...(M.heavy ? ['<span style="color:#ffd166">模組裝甲加成</span>'] : []), ...(M.light ? ['<span style="color:#4cc9f0">模組加速加成</span>'] : [])];
     const ability = SH && !Object.keys(SH.parts).length && SH.ability !== 'slots' ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.abilityDesc}</div>` : '';  // 星門號的傳送門這種飛船本身的能力
     const mech = `<h3 class="between" style="margin-top:4px"><span style="color:${SH ? SH.color : '#8fa3d9'}">${SH ? SH.name : ''}</span><span>零件 ${partsUsed(Game.parts)} / ${Game.partSlots}${free ? '（靶場不受格數限制）' : ''}</span></h3>

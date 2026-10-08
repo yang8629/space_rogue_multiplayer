@@ -41,7 +41,7 @@ class Player {
     else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
     else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, sk = standStacks(this, S.stand), rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1) * hpRateMul(this) * (1 + 0.1 * sk);  // 散熱片、疾風、急冷、裝甲供能、架設
+      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設），減少相乘（重力井）
       Game.standFull = !!S.stand && sk >= standMax(S.stand);
       Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
       try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
@@ -510,9 +510,9 @@ const standMax = lv => lv >= 2 ? 8 : 6;
 const standStacks = (p, lv) => lv ? Math.min(standMax(lv), Math.floor((p.standT || 0) / 0.5)) : 0;
 
 // 裝甲供能（軌道砲・攻城砲的升級）：最大 HP 超過 100 的部分換成射速
-function hpRateMul(p) {
+function hpRateAdd(p) {
   const H = Game.wp && Game.wp.hpRate;
-  return H ? 1 + Math.min(H.max, Math.max(0, p.maxHp - 100) * H.per) : 1;
+  return H ? Math.min(H.max, Math.max(0, p.maxHp - 100) * H.per) : 0;
 }
 
 // 衝鋒預警線的長度：衝鋒距離＋身體半徑（刺殼再加上暈眩滑行的距離）；畫面兩種繪圖都用這個
