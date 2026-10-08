@@ -5,6 +5,9 @@
 // =====================================================================
 // GAME
 // =====================================================================
+// 吸引：被拉的敵人往中心的速度（同時被拉很多次也只到這個速度）
+const PULL_V = 380;
+
 const Game = {
   state: 'title', returnState: null, mode: null,
   chain: [], socks: [], inventory: [], slotAttr: [], credits: 0,  // socks[i]：插在第 i 格晶片上的組件
@@ -1240,6 +1243,7 @@ const Game = {
   // 吸引：命中時把附近的敵人往命中點拉（旗艦不會被拉）；引力漩渦：每命中 8 次生成一個
   // 吸引：把被打中那一隻附近的敵人拉向牠的中心（被打中的那一隻不動）
   //   以前是拉向子彈的位置，連被打中的那一隻也拉；命中點在牠靠近飛船的那一側，等於每打一下就把敵人往飛船拖
+  //   往中心的速度「補到」PULL_V，不相加：以前每次命中 +380 疊上去，散彈＋鏡像＋分裂一幀命中 20 次以上，敵人被甩到每秒幾萬、飛進牆裡卡住（2026-10-09）
   pullAt(b, hit) {
     const R = (b.pull >= 2 ? 130 : 90) * (b.pullMul || 1);  // 巨彈插在吸引上：範圍 ×1.5
     const cx = hit.x, cy = hit.y;
@@ -1248,7 +1252,8 @@ const Game = {
       if (o === hit || o.dead || o.t.boss || o.spawnT > 0) continue;
       const d = Math.hypot(o.x - cx, o.y - cy);
       if (d > R + o.r || d < 1) continue;
-      o.vx += (cx - o.x) / d * 380; o.vy += (cy - o.y) / d * 380;
+      const ux = (cx - o.x) / d, uy = (cy - o.y) / d, add = Math.max(0, PULL_V - (o.vx * ux + o.vy * uy));
+      o.vx += ux * add; o.vy += uy * add;
       this.tagGrow(o, b.owner, 'pull');
       n++;
     }
