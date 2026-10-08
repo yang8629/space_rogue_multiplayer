@@ -906,6 +906,14 @@ class Enemy {
   }
   // knock：子彈的擊退值（只有子彈命中會帶）。旗艦只有在擊退值超過自己的抗擊退時才會被推，力道只看超過的部分；
   // 爆炸、震波、電弧不會推王。衝鋒中的敵人不會被推
+  // 擊退不疊加：推完的速度最多是「原本的速度」和「這一發的擊退」比較大的那個（單發效果不變）。
+  //   以前每發都加上去，散彈＋鏡像＋分裂＋穿甲一幀打中很多發，敵人被推到每秒幾千、飛進牆裡卡住（2026-10-09 整局模擬）
+  push(kx, ky) {
+    const v0 = Math.hypot(this.vx, this.vy), lim = Math.max(v0, Math.hypot(kx, ky));
+    this.vx += kx; this.vy += ky;
+    const v1 = Math.hypot(this.vx, this.vy);
+    if (v1 > lim) { this.vx *= lim / v1; this.vy *= lim / v1; }
+  }
   hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
     const vul = (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，相加最多 +50%
     if (vul > 0) dmg *= 1 + Math.min(0.5, vul);
@@ -916,8 +924,8 @@ class Enemy {
     if ((this.t.dummy || this.immortal) && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶（和靶場手動生的「打不死」）打不死
     if (this.t.boss) {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
-      if (over > 0 && l > 0 && this.mode !== 'charge') { this.vx += kx / l * over * CFG.BOSS_KNOCK; this.vy += ky / l * over * CFG.BOSS_KNOCK; }
-    } else if (this.mode !== 'charge') { this.vx += kx; this.vy += ky; }
+      if (over > 0 && l > 0 && this.mode !== 'charge') this.push(kx / l * over * CFG.BOSS_KNOCK, ky / l * over * CFG.BOSS_KNOCK);
+    } else if (this.mode !== 'charge') this.push(kx, ky);
     if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; this.killAtt = att; Game.onEnemyKilled(this); }
   }
 }
