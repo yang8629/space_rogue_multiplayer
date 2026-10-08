@@ -110,8 +110,10 @@ const Screen = {
       case 'slot': Game.expandSlot(arg); break;
       case 'bhpick': Game.bhToggle(arg); break;
       case 'bhfuse': Game.bhFuse(); break;
+      case 'bossslot': Game.pickBossSlot(arg); break;
       case 'next': {  // 還沒裝上旗艦模組：先提醒一次（可以勾「不再提醒」）
         const V = Game.victory;
+        if (V && !V.pick) { this.victory(); break; }  // 二選一還沒選
         if (Net.mateModWait && Game.coopOn()) { this.victory(); break; }  // 雙人：隊友還沒裝上或略過旗艦模組
         let warn = true;
         try { warn = localStorage.getItem('noModWarn') !== '1'; } catch (e) {}
@@ -514,26 +516,32 @@ const Screen = {
   victory(askMod = false) {  // askMod：按了前往但還沒裝上旗艦模組 → 先確認
     const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
     const cleared = Game.sector === CFG.CAMPAIGN_SECTORS;  // 剛打完第三關：遠征完成
-    const reward = `獎勵：◆ +50　${V.slot ? '· <b style="color:#4cc9f0">電路插槽 +1</b>' : '· 插槽已達上限'}　· <b style="color:#9fe8ff">零件格 +1</b>${V.ws ? `　· <b style="color:#ffd166">武器插座 +1（${Game.wSock} 個）</b>` : ''}`;
+    const reward = `獎勵：◆ +50${!V.slot && V.pick ? '　· <b style="color:#9fe8ff">零件格 +1</b>（電路插槽已達上限）' : ''}${V.ws ? `　· <b style="color:#ffd166">武器插座 +1（${Game.wSock} 個）</b>` : ''}`;
     const skipBtn = Game.isClient() ? '<button data-act="modskip">略過</button>' : '';  // 雙人的隊友：房主等你裝上或略過才能前往
     const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>' : V.skip ? '<button disabled>已略過</button>'
       : `<button data-act="bossmod">裝上${Game.module && Game.module !== V.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>${skipBtn}`)}</div>` : '';
-    const wait = !Game.isClient() && Net.mateModWait && Game.coopOn();  // 房主：隊友還沒裝上或略過旗艦模組
+    const wait = !Game.isClient() && Net.mateModWait && Game.coopOn();  // 房主：隊友還沒選好二選一、裝上或略過旗艦模組
+    // 二選一：電路插槽 +1（多一格放晶片）或零件格 +1（多疊一層零件）；電路已滿時直接給零件格
+    const pk = (k, icon, name, note, col) => `<button class="big" data-act="bossslot" data-arg="${k}"${V.pick ? ' disabled' : ''} style="min-width:230px;line-height:1.5${V.pick === k ? `;opacity:1;border-color:${col};box-shadow:0 0 14px ${col}` : ''}"><b style="color:${col}">${icon} ${name}</b>${V.pick === k ? ' ✓' : ''}<br><small style="color:#8fa3d9">${note}</small></button>`;
+    const pick = !V.slot || V.pick === 'lost' ? '' : `<div class="sub" style="margin-bottom:4px;color:${V.pick ? '#8fa3d9' : '#ffd166'}">${V.pick ? '已選好' : '二選一：'}</div><div class="row" style="margin-top:0">
+      ${pk('chain', '⚡', '電路插槽 +1', `多一格放晶片（${V.pick === 'chain' ? '現在' : '目前'} ${Game.chain.length} 格）`, '#4cc9f0')}
+      ${pk('part', '⚙', '零件格 +1', `多疊一層零件（${V.pick === 'part' ? '現在' : '目前'} ${Game.partSlots} 格，已用 ${partsUsed(Game.parts)}）`, '#9fe8ff')}</div>`;
     const head = cleared
       ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">遠征完成！</h1>
         <div class="sub">${boss.name}已被擊沉，${CFG.CAMPAIGN_SECTORS} 個星區全部突破。<br>${reward}<br>
           可以帶著目前的電路繼續挑戰<b style="color:#ff9dbd">無盡模式</b>：敵人持續變強，旗艦隨機出現。選「結束遠征」會存下通關紀錄。</div>`
       : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
     this.show(`<div class="scr title-wrap">${head}
+      ${pick}
       ${mod}
       ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
-      ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${V.module && !V.took && !V.skip ? '👥 房主在等你：裝上旗艦模組，或按「略過」' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : askMod ? `
+      ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${!V.pick ? '👥 房主在等你：先選二選一的獎勵' : V.module && !V.took && !V.skip ? '👥 房主在等你：裝上旗艦模組，或按「略過」' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : askMod ? `
       <div class="sub" style="color:#ffd166">還沒裝上旗艦模組「${MODULES[V.module].name}」，離開這個畫面就拿不到了。確定要前往？</div>
       <div class="row"><button class="big" data-act="nextok">確定前往</button><button class="big" data-act="nextno">返回</button></div>
       <div class="row" style="margin-top:0"><label style="cursor:pointer"><input type="checkbox" id="noModWarn"> 不再提醒</label></div>` : `
-      ${wait ? '<div class="sub" style="color:#ff9dbd">👥 等隊友裝上或略過旗艦模組…</div>' : ''}
-      <div class="row"><button class="big" data-act="next"${wait ? ' style="opacity:.45"' : ''}>${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
+      ${!V.pick ? '<div class="sub" style="color:#ffd166">先選一個獎勵才能前往</div>' : ''}${wait ? '<div class="sub" style="color:#ff9dbd">👥 等隊友選好獎勵、裝上或略過旗艦模組…</div>' : ''}
+      <div class="row"><button class="big" data-act="next"${wait || !V.pick ? ' style="opacity:.45"' : ''}>${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
         <button class="big" data-act="finish">結束遠征</button></div>`}
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },

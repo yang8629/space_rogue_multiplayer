@@ -326,17 +326,17 @@ const Game = {
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
     Events.emit('combatWon', { boss: this.node.type === 'boss' });
     const type = this.node.type;
-    if (type === 'boss') {  // 擊敗旗艦：插槽 +1、晶體獎勵，可前往下一星區
+    if (type === 'boss') {  // 擊敗旗艦：電路插槽 +1／零件格 +1 二選一（勝利畫面上選）、晶體獎勵，可前往下一星區
       const slot = this.chain.length < CFG.MAX_SLOTS;
-      if (slot) this.chain.push(null);
       this.credits += 50;  // 雙人：兩人各自拿
-      this.partSlots++;    // 零件格 +1
+      if (!slot) this.partSlots++;  // 電路已滿：沒得選，直接給零件格
       const ws = (this.wSock || CFG.START_WSOCK) < CFG.WEAPON_SOCKETS;
       if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
-      this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false };
-      if (this.mode === 'coop' && Net.role === 'host') Net.mateModWait = !!this.victory.module && this.coopOn();  // 雙人：等隊友裝上或略過旗艦模組才能前往
+      this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
+      if (this.mode === 'coop' && Net.role === 'host') Net.mateModWait = this.coopOn();  // 雙人：等隊友選好二選一、裝上或略過旗艦模組才能前往
+      if (client && bossDone(this.victory)) Net.send({ t: 'moddone' });
       this.state = 'victory';
       this.view();
       return;
@@ -399,20 +399,31 @@ const Game = {
     Events.emit('upgrade');
     this.showMap(`裝上背包模組「${MODULES[id].name}」`);  // 背包模組本身就是強化，不算機體強化（不加電路格）
   },
+  pickBossSlot(k) {  // 擊沉旗艦的二選一：電路插槽 +1 或零件格 +1
+    const V = this.victory;
+    if (!V || V.pick || (k !== 'chain' && k !== 'part') || (k === 'chain' && this.chain.length >= CFG.MAX_SLOTS)) return;
+    V.pick = k;
+    if (k === 'chain') this.chain.push(null); else this.partSlots++;
+    this.recalc();
+    if (this.runStats) this.runStats.got.push(`${this.here()} ${k === 'chain' ? '插槽 +1' : '零件格 +1'}（旗艦二選一）`);
+    Events.emit('upgrade');
+    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
+    this.view();
+  },
   takeBossModule() {  // 擊沉旗艦：裝上旗艦專屬模組
     const V = this.victory;
     if (!V || V.took || !V.module) return;
     V.took = true;
     this.setModule(V.module);
     Events.emit('upgrade');
-    if (this.isClient()) Net.send({ t: 'moddone' });
+    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
     this.view();
   },
   skipBossModule() {  // 雙人的隊友：不裝旗艦模組（房主才能前往）
     const V = this.victory;
     if (!V || V.took || V.skip) return;
     V.skip = true;
-    if (this.isClient()) Net.send({ t: 'moddone' });
+    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
     this.view();
   },
   // ---------- 改裝廠：零件三選一、付錢換零件 ----------
@@ -1589,3 +1600,5 @@ const THEMES = {
   gunboat: { cost: 3, from: 1 }, worm: { cost: 4, from: 1 }, splitter: { cost: 4, from: 1 },
   shield: { cost: 5, from: 2 }, lurker: { cost: 3, from: 2 }, hive: { cost: 8, from: 3, max: 1 },
 };
+// 擊沉旗艦的勝利畫面：二選一選好了、旗艦模組裝上或略過了（雙人的隊友這時才通知房主可以前往）
+function bossDone(V) { return !!V && !!V.pick && (!V.module || !!V.took || !!V.skip); }
