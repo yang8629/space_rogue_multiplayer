@@ -1062,6 +1062,17 @@ const MechCheck = {
       const len = Math.hypot(sx, sy), side = (sx * -(e.y - hy) + sy * (e.x - hx)) / d;  // 繞的分量（照 holeSide 那一邊）
       return { ok: len > 0.5 && side > 0.5, got: `閃避後的方向長度 ${len.toFixed(2)}（要 > 0.5），往繞的那一邊 ${side.toFixed(2)}（要 > 0.5）` };
     }],
+    ['地圖物件', '黑洞脫困', '敵人在黑洞附近 3 秒都沒移動（例如黑洞堵住通道）→ 接下來 2 秒不閃黑洞，直接照想去的方向走', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player, hx = p.x + 450, hy = p.y - 200;
+      Game.objs = [{ type: 'hole', x: hx, y: hy, r: 34, R: 280, tick: 0 }];
+      const e = new Enemy('lurker', hx - 300, hy, 1); e.spawnT = 0; Game.enemies = [e];
+      const t0 = Game.time, first = Objects.steer(e, 1, 0);
+      let freed = null;
+      for (let i = 1; i <= 60 * 4 && !freed; i++) { Game.time = t0 + i / 60; const s = Objects.steer(e, 1, 0); if (s[0] === 1 && s[1] === 0) freed = i / 60; }
+      Game.time = t0;
+      return { ok: !(first[0] === 1 && first[1] === 0) && freed > 2.9 && freed < 3.3, got: `一開始照常閃（${first.map(v => v.toFixed(2))}）；停住 ${freed ? freed.toFixed(2) + ' 秒後不閃了（要約 3 秒）' : '4 秒都沒脫困'}` };
+    }],
     ['地圖物件', '彗星', '有預警線；打爆、撞爆都往四周噴 12 片冰晶碎片（命中會冰凍）；被玩家打爆的算那個玩家的「彗星」傷害；撞爆的爆炸會傷玩家、冰凍，不算任何人的', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       Game.objs = [];
