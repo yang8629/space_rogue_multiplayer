@@ -837,7 +837,7 @@ const Net = {
         P.overdrive > 0 ? 1 : 0, P.moving ? 1 : 0, P.dead ? 1 : 0, r(P.vx), r(P.vy), r2(P.reviveT),
         P.gravField ? P.gravField.R : 0, P.shield || 0, P.frostT > 0 ? 1 : 0],  // 重力井範圍、護盾層數、被凍住（隊友那邊畫房主的船用）
       me: m ? [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), m.gravField ? m.gravField.R : 0, r2(Math.max(0, m.frostT || 0))] : null,  // 修復無人機的可回復量（畫血條用）、重力井範圍、被凍住剩幾秒（隊友自己的船要變慢）
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), m.gravField ? m.gravField.R : 0, r2(Math.max(0, m.frostT || 0)), standStacks(m, m.L.stats.stand)] : null,  // 修復無人機的可回復量（畫血條用）、重力井範圍、被凍住剩幾秒（隊友自己的船要變慢）
       gr: m ? m.L.growth : null,  // 隊友各晶片的累積用量（隊友那邊照這個升級）
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
@@ -931,7 +931,8 @@ const Net = {
       P.reviveT = num(s.me[5]);
       P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]); P.shield = num(s.me[9]);
       P.gravField = s.me[11] > 0 ? { R: num(s.me[11]), slow: 0 } : null;
-      if (s.me[12] > 0) P.frostT = Math.max(P.frostT || 0, num(s.me[12]));  // 被彗星凍住（房主判定，自己的船自己變慢）
+      if (s.me[12] > 0) P.frostT = Math.max(P.frostT || 0, num(s.me[12]));
+      P.standK = num(s.me[13], 0);  // 架設的層數  // 被彗星凍住（房主判定，自己的船自己變慢）
     }
     if (s.gr && typeof s.gr === 'object') {  // 用量成長：房主算好的累積量，這邊只增不減，到了就升級
       let up = false;

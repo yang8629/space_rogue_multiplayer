@@ -36,10 +36,15 @@ class Player {
     if (!S.charge) this.chargeC = 0;
     else if (!held) this.chargeC = Math.min(1, this.chargeC + dt / S.chargeTime);
     this.quenchT -= dt;
+    // 架設：站著不動每 0.5 秒射速 +10%（Lv1 最多 6 層、Lv2 起 8 層），移動或衝刺超過 0.15 秒就歸零
+    if (!S.stand) { this.standT = 0; this.standMv = 0; }
+    else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
+    else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1) * hpRateMul(this);  // 散熱片、疾風、急冷、裝甲供能
-      Game.chargeC = S.charge ? this.chargeC : null;
-      try { this.fire(); } finally { Game.chargeC = null; }
+      const M = Game.mech, sk = standStacks(this, S.stand), rate = M.rate * (M.traits.gale && this.moving ? 1.2 : 1) * (this.quenchT > 0 ? 1.3 : 1) * hpRateMul(this) * (1 + 0.1 * sk);  // 散熱片、疾風、急冷、裝甲供能、架設
+      Game.standFull = !!S.stand && sk >= standMax(S.stand);
+      Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
+      try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
       // 這一幀多過的時間留到下一發（以前直接設成間隔，多過的被丟掉：射速會照幀率變慢，60Hz 和 144Hz 不一樣）；
       //   停火一陣子再按不會累積成連發（最多帶一幀）
       this.chargeC = 0; this.fireCd = Math.max(this.fireCd, -dt) + S.interval / rate;
@@ -239,7 +244,7 @@ class Bullet {
     this.life = s.life; this.color = s.color; this.shape = s.shape;
     this.payload = s.payload; this.depth = depth;
     this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
-    this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.shred = s.shred || 0; this.knock = s.knock; this.lifesteal = s.lifesteal;
+    this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.shred = s.shred || 0; this.knock = s.knock; this.lifesteal = s.lifesteal; this.kin = s.kin || null;  // kin：動能彈頭（命中時照速度加傷害）
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -499,6 +504,10 @@ function nearestEnemy(x, y, range, exclude, visible = false) {  // visible：略
   }
   return best;
 }
+
+// 架設：目前幾層（每 0.5 秒 1 層，射速 +10%／層）
+const standMax = lv => lv >= 2 ? 8 : 6;
+const standStacks = (p, lv) => lv ? Math.min(standMax(lv), Math.floor((p.standT || 0) / 0.5)) : 0;
 
 // 裝甲供能（軌道砲・攻城砲的升級）：最大 HP 超過 100 的部分換成射速
 function hpRateMul(p) {

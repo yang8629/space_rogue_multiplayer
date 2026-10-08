@@ -13,7 +13,7 @@
 // 玩法晶片（彈道／發射／命中／機體）
 const PLAY_TYPES = ['path', 'launch', 'impact', 'body'];
 // 不能放在觸發器右邊（回響那一段）的玩法晶片：回響不會進環繞的圈、沒有停火蓄力、不是衝刺那一槍
-const NO_ECHO = ['orbit', 'charge', 'dashfire'];
+const NO_ECHO = ['orbit', 'charge', 'dashfire', 'stand'];
 // 組件在開火當下就套用（其餘的插在黏著上的組件等爆炸時才套用）
 const STICKY_NOW = ['pierce', 'ov_pierce', 'ov_seek'];
 
@@ -35,7 +35,7 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
     I.role = 'host';
     const sockIdle = why => info.socks[i].forEach(J => idle(J, why));
     if (dead) { sockIdle('它插的晶片沒有作用'); return idle(I, '前面的觸發器超過層數上限，這格不會執行'); }
-    if (seg > 0 && NO_ECHO.includes(baseOf(id))) { sockIdle('它插的晶片沒有作用'); return idle(I, `${CHIPS[baseOf(id)].name}不能放在觸發器右邊（回響不會進圈、沒有蓄力、不是衝刺那一槍）`); }
+    if (seg > 0 && NO_ECHO.includes(baseOf(id))) { sockIdle('它插的晶片沒有作用'); return idle(I, `${CHIPS[baseOf(id)].name}不能放在觸發器右邊（回響不會進圈、沒有蓄力、不是衝刺那一槍、不算架設）`); }
     if (def.type === 'trigger' && seg >= CFG.MAX_TRIGGER_DEPTH) { dead = true; sockIdle('它插的晶片沒有作用'); return idle(I, `已達觸發層數上限（${CFG.MAX_TRIGGER_DEPTH} 層）`); }
     const o = { id, pw: def.lvMul || 1, lv: levelOf(id), slot: i, key: baseOf(id), comps: [], am, flaky,
       wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層
@@ -47,6 +47,7 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
       const J = info.socks[i][k], cb = baseOf(cid);
       if (k >= cap) return idle(J, `插座不夠：${CHIPS[id].name}只有 ${cap} 個插座`);
       if (cb === 'overclock' && id !== 'weapon') return idle(J, '超頻是整條電路的射速，只能插在武器上');
+      if (cb === 'focus' && id !== 'weapon') return idle(J, '收束看武器每次射出幾發，只能插在武器上');
       if (cb === 'mirror') {  // 鏡像 = 再來一次（插在哪個插座都一樣）
         if (o.wlike) {  // 武器（或觸發器）多射一次（回響也一樣；兩個鏡像 = 射 3 次）
           (o.extra = o.extra || []).push({ slot: i, key: 'mirror' });
@@ -69,6 +70,7 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
 
 // 一組組件依序作用在 list 上；layer：'w' 武器層（武器、回響的插座）／'h' 宿主層（玩法晶片的插座）
 function runComps(list, comps, layer) {
+  if (comps.some(c => CHIPS[c.id].atEnd)) comps = [...comps.filter(c => !CHIPS[c.id].atEnd), ...comps.filter(c => CHIPS[c.id].atEnd)];  // 收束：等其他組件（分裂…）算完才數子彈
   for (const c of comps) {
     if (!list.length) break;
     const def = CHIPS[c.id];
@@ -91,6 +93,7 @@ function attachHost(list, o, n0) {
     case 'rear': return [...list.slice(0, n0), ...runComps(list.slice(n0), comps, 'h')];  // 只有多射出來（往後）的那一份
     case 'charge': return Game.chargeC >= 0.999 ? runComps(list, comps, 'h') : list;
     case 'dashfire': return Game.fireMode === 'dashfire' ? runComps(list, comps, 'h') : list;
+    case 'stand': return Game.standFull ? runComps(list, comps, 'h') : list;
     case 'intercept': return Game.fireMode === 'intercept' ? runComps(list, comps, 'h') : list;
     case 'quick': {  // 高速段：出手就套用，傷害加成記在 qhb，速度掉到 1.5 倍以下時拿掉（見 Bullet.setMul）
       const hb0 = list.map(b => b.hb || 0), out = runComps(list.map((b, k) => ({ ...b, k })), comps, 'h');
@@ -175,6 +178,7 @@ function productNow(list, o, n0) {
     case 'rear': return [...list.slice(0, n0), ...list.slice(n0).map(b => stripW({ ...b }))];
     case 'charge': return Game.chargeC >= 0.999 ? list.map(b => stripW({ ...b })) : list;
     case 'dashfire': return Game.fireMode === 'dashfire' ? list.map(b => stripW({ ...b })) : list;
+    case 'stand': return Game.standFull ? list.map(b => stripW({ ...b })) : list;
     case 'intercept': return Game.fireMode === 'intercept' ? list.map(b => stripW({ ...b })) : list;
     default: return list;
   }
@@ -245,7 +249,7 @@ function analyzeChain(chain) {
     carrier = sub.find(s => s.payload);
   }
   return { ops, info: ops.info, heat, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
-    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept') };
+    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept'), stand: lvOf('stand') };
 }
 
 function computePassives(inventory) {
