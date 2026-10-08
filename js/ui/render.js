@@ -19,33 +19,19 @@ function polygon(x, y, r, sides, rot) {
   ctx.closePath();
 }
 
+// 世界（背景、地圖、子彈、敵人、飛船、數字）由 WebGL 繪圖層畫（js/ui/gl/），這層 2D 畫布只畫 HUD
+//   繪圖層還沒準備好（載入中）或啟動失敗時：深色底，失敗的話中間寫原因
 function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (GLR.on && GLR.ready) {  // 新畫面：世界（背景、地圖、子彈、敵人、飛船、數字）交給 WebGL 繪圖層，這層只畫 HUD
-    ctx.clearRect(0, 0, VW, VH);
-    GLR.render();
-    if (!Game.inArena) return;
-    drawHUD();
-    if (Input.touch && Game.state === 'play') drawSticks();
-    return;
+  ctx.clearRect(0, 0, VW, VH);
+  if (!GLR.render()) {
+    ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, VW, VH);
+    if (GLR.failed && Game.inArena) {
+      ctx.fillStyle = '#ffd166'; ctx.font = 'bold 16px Microsoft JhengHei'; ctx.textAlign = 'center';
+      ctx.fillText('畫面載入失敗：請檢查網路後重新整理；還是不行的話，請開啟瀏覽器的硬體加速或更新顯示卡驅動', VW / 2, VH / 2);
+    }
   }
-  ctx.fillStyle = '#05060f';
-  ctx.fillRect(0, 0, VW, VH);
-  const c = Game.cam;
-  for (const s of Game.stars) {
-    ctx.globalAlpha = s.a;
-    ctx.fillStyle = '#9fb4ff';
-    ctx.fillRect(mod(s.u * VW - c.x * s.z, VW), mod(s.v * VH - c.y * s.z, VH), s.s, s.s);
-  }
-  ctx.globalAlpha = 1;
   if (!Game.inArena) return;
-
-  const sh = FX.shake, sx = sh ? rand(-sh, sh) : 0, sy = sh ? rand(-sh, sh) : 0;
-  ctx.save();
-  ctx.scale(ZOOM, ZOOM);
-  ctx.translate(-c.x + sx, -c.y + sy);
-  drawWorld();
-  ctx.restore();
   drawHUD();
   if (Input.touch && Game.state === 'play') drawSticks();
 }
@@ -72,188 +58,6 @@ function drawSticks() {
   }
 }
 
-function drawWorld() {
-  const c = Game.cam, W = Arena.W, H = Arena.H;
-  ctx.strokeStyle = 'rgba(60, 90, 180, 0.12)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const g = 80;
-  for (let x = Math.max(0, Math.floor(c.x / g) * g); x <= Math.min(W, c.x + ZW); x += g) { ctx.moveTo(x, Math.max(0, c.y)); ctx.lineTo(x, Math.min(H, c.y + ZH)); }
-  for (let y = Math.max(0, Math.floor(c.y / g) * g); y <= Math.min(H, c.y + ZH); y += g) { ctx.moveTo(Math.max(0, c.x), y); ctx.lineTo(Math.min(W, c.x + ZW), y); }
-  ctx.stroke();
-  if (Arena.rect) {
-    ctx.strokeStyle = 'rgba(76, 201, 240, 0.6)';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(0, 0, W, H);
-  } else WorldView.drawArena(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 大地圖：牆、閘門
-
-  WorldView.drawObjects(Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player);  // 行星、黑洞、小行星（含視野陰影）、彗星、星門
-  drawExit();
-  for (const z of Game.zones) {  // 王的落點轟炸：紅圈，裡面的實心圓越長越大，滿了就爆炸
-    const k = 1 - Math.max(0, z.t) / z.max;
-    ctx.globalAlpha = 0.5 + 0.4 * Math.sin(Game.time * 20) ** 2; ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.stroke();
-    ctx.globalAlpha = 0.18 + 0.2 * k; ctx.fillStyle = '#ff2a2a';
-    ctx.beginPath(); ctx.arc(z.x, z.y, z.r * k, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  ctx.fillStyle = '#ffd166';
-  for (const p of Game.pickups) {
-    if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;
-    polygon(p.x, p.y, 5, 4, Game.time * 3);
-    ctx.fill();
-  }
-
-  ctx.globalCompositeOperation = 'lighter';
-  // 我方子彈在飛船 50px 內變淡（最淡 20%），免得後期彈幕把船蓋住；相位刃本來就只在身邊，不變淡
-  const ships = [Game.player, Game.mate].filter(p => p && !p.dead && !p.gone), FADE = 50;
-  for (const b of Game.bullets) {
-    let fa = 1;
-    if (b.shape !== 'blade') for (const p of ships) fa = Math.min(fa, 0.2 + 0.8 * Math.min(1, Math.hypot(b.x - p.x, b.y - p.y) / FADE));
-    drawBullet(b, fa);
-  }
-  for (const z of FX.zaps) {  // 電弧：鋸齒狀的閃電
-    ctx.globalAlpha = z.life / z.max;
-    ctx.strokeStyle = z.c || '#9fe8ff'; ctx.lineWidth = 2;  // c：攔截合併的綠色電弧
-    const dx = z.x2 - z.x1, dy = z.y2 - z.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
-    ctx.beginPath(); ctx.moveTo(z.x1, z.y1);
-    for (let k = 1; k < 6; k++) { const j = rand(-10, 10); ctx.lineTo(z.x1 + dx * k / 6 + nx * j, z.y1 + dy * k / 6 + ny * j); }
-    ctx.lineTo(z.x2, z.y2); ctx.stroke();
-  }
-  for (const f of FX.flashes) {  // 彗星爆炸的閃光
-    const k = f.life / f.max, g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * (0.7 + 0.5 * (1 - k)));
-    g.addColorStop(0, `rgba(235,250,255,${0.9 * k})`); g.addColorStop(0.4, `rgba(190,233,255,${0.45 * k})`); g.addColorStop(1, 'rgba(190,233,255,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.2, 0, TAU); ctx.fill();
-  }
-  for (const r of FX.rings) {  // 爆炸光圈
-    const t = 1 - r.life / r.max;
-    ctx.globalAlpha = r.life / r.max;
-    ctx.strokeStyle = r.color; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.4 + 0.6 * t), 0, TAU); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  for (const q of FX.particles) {
-    ctx.globalAlpha = q.life / q.max;
-    ctx.fillStyle = q.color;
-    ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
-  }
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
-
-  drawEnemyBullets();  // 敵彈畫在敵人底下（看起來從砲管／機身邊緣射出），我方子彈之上（看起來從砲管／機身邊緣射出）
-  // 敵人畫在我方子彈之上，才不會被彈幕蓋住
-  // 被小行星擋住的敵人看不到：只在那顆小行星邊緣畫一個淡淡的「？」
-  const viewer = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player;
-  for (const e of Game.enemies) {
-    const rock = e.t.boss ? null : Objects.blocker(viewer, e);
-    if (!rock) { drawEnemy(e); continue; }
-    const a = Math.atan2(e.y - rock.y, e.x - rock.x);
-    ctx.globalAlpha = 0.35; ctx.fillStyle = '#ff8f8f'; ctx.font = 'bold 14px Segoe UI'; ctx.textAlign = 'center';
-    ctx.fillText('?', rock.x + Math.cos(a) * (rock.r + 10), rock.y + Math.sin(a) * (rock.r + 10) + 5);
-  }
-  ctx.globalAlpha = 1;
-
-  // 敵方攻擊畫在我方子彈之上、不用 lighter 疊色：紅色實心＋深色外框，才不會被我方彈幕蓋掉
-  for (const e of Game.enemies) drawTelegraph(e);
-
-  const tg = Game.player.target;
-  if (Input.touch && tg && !tg.dead) {  // 自動攻擊的鎖定框
-    const r = tg.r + 10, s = Game.time * 3;
-    ctx.strokeStyle = 'rgba(157, 255, 107, 0.85)'; ctx.lineWidth = 2;
-    for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.arc(tg.x, tg.y, r, s + i * TAU / 4, s + i * TAU / 4 + 0.6); ctx.stroke();
-    }
-  }
-  if (Game.mate && Game.state === 'play') {  // 雙人：倒下的人畫在原地，外圈是救援範圍與進度
-    if (Game.mate.dead && !Game.mate.gone) drawDowned(Game.mate, Net.role === 'host' ? '2P' : '1P', !Game.player.dead);
-    if (Game.player.dead) drawDowned(Game.player, Net.role === 'host' ? '1P' : '2P', false);
-  }
-  if (Game.mate && !Game.mate.dead && !Game.mate.gone) drawPlayer(Game.mate, Net.role === 'host' ? '2P' : '1P');
-  if (Game.state !== 'dead' && !Game.player.dead) drawPlayer(Game.player, Game.mate ? (Net.role === 'host' ? '1P' : '2P') : '');
-
-  ctx.textAlign = 'center';
-  // 浮動數字：深色外框再填色（疊在一起、壓在亮色彈幕上時才分得開）
-  //   分兩批：先一般數字、再大數字（大的永遠在最上層）；每批只設一次字型和外框粗細
-  ctx.lineJoin = 'round'; ctx.strokeStyle = '#03050c';
-  for (const big of [false, true]) {
-    ctx.font = big ? 'bold 21px Microsoft JhengHei' : 'bold 15px Segoe UI';
-    ctx.lineWidth = big ? 4 : 3.5;
-    for (const t of FX.texts) {
-      if (!t.big !== !big) continue;
-      ctx.globalAlpha = Math.min(1, t.life * 2);
-      ctx.strokeText(t.text, t.x, t.y);
-      ctx.fillStyle = t.color;
-      ctx.fillText(t.text, t.x, t.y);
-    }
-  }
-  ctx.globalAlpha = 1; ctx.lineJoin = 'miter';
-}
-
-// 衝鋒／滾球預警線：跟敵方子彈一起畫在我方子彈之上，一律紅色
-// 區域出口：旋轉的綠色光環；出口不在畫面裡時，飛船旁邊畫一個箭頭指過去
-function drawExit() {
-  const X = Game.exit;
-  if (!X) return;
-  const t = Game.time, pulse = 1 + 0.08 * Math.sin(t * 5);
-  if (X.gate) {  // 大地圖：閘門本身由 WorldView.drawArena 畫，這裡只寫字＋畫箭頭（已經穿過去的人不畫）
-    const me = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, g = Arena.gates[me.zone];
-    if (!g || !g.open) return;
-    ctx.globalAlpha = 1; ctx.fillStyle = '#c9fff3'; ctx.font = 'bold 14px Microsoft JhengHei'; ctx.textAlign = 'center';
-    ctx.fillText('閘門', g.x - g.nx * 30, g.y - g.ny * 30 - 10);
-  } else {
-  ctx.strokeStyle = '#2ee6a6'; ctx.lineWidth = 4; ctx.globalAlpha = 0.9;
-  ctx.beginPath(); ctx.arc(X.x, X.y, X.r * pulse, 0, TAU); ctx.stroke();
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 3; i++) { const a = t * 2 + i * TAU / 3; ctx.beginPath(); ctx.arc(X.x, X.y, X.r * 0.6, a, a + 1.2); ctx.stroke(); }
-  ctx.globalAlpha = 0.15; ctx.fillStyle = '#2ee6a6'; ctx.beginPath(); ctx.arc(X.x, X.y, X.r * pulse, 0, TAU); ctx.fill();
-  ctx.globalAlpha = 1; ctx.fillStyle = '#c9fff3'; ctx.font = 'bold 14px Microsoft JhengHei'; ctx.textAlign = 'center';
-  ctx.fillText('出口', X.x, X.y - X.r - 10);
-  }
-  const p = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, c = Game.cam;
-  if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;  // 看得到就不畫箭頭
-  const dir = X.gate ? Arena.exitDir(p.x, p.y, p.zone, p.r) : null;  // 大地圖：箭頭照繞牆的路線指
-  const a0 = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x);
-  // 角度慢慢轉過去（不跟著每一幀的方向跳）
-  const a = drawExit.a = drawExit.a == null || drawExit.key !== X.x + ',' + X.y ? a0 : drawExit.a + angleDiff(drawExit.a, a0) * 0.15;
-  drawExit.key = X.x + ',' + X.y;  // 雙人的隊友每次同步都會換一個新的 exit 物件，用位置判斷是不是同一個出口
-  const ax = p.x + Math.cos(a) * 60, ay = p.y + Math.sin(a) * 60;
-  ctx.fillStyle = '#2ee6a6'; ctx.globalAlpha = 0.6 + 0.3 * Math.sin(t * 6);
-  ctx.beginPath(); ctx.moveTo(ax + Math.cos(a) * 12, ay + Math.sin(a) * 12);
-  ctx.lineTo(ax + Math.cos(a + 2.5) * 10, ay + Math.sin(a + 2.5) * 10); ctx.lineTo(ax + Math.cos(a - 2.5) * 10, ay + Math.sin(a - 2.5) * 10);
-  ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-}
-function drawTelegraph(e) {
-  if (e.mode !== 'windup') return;
-  let len, alpha, w = e.r * 1.6;
-  if (e.type === 'elite') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; w = e.r * 1.4; }
-  else if (e.type === 'brute') { len = telegraphLen(e); alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }  // 最後鎖定方向時變亮
-  else if (e.type === 'boss2') { len = telegraphLen(e); alpha = 0.25 + 0.45 * Math.sin(Game.time * 30) ** 2; }
-  else if (e.type === 'lurker') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(Game.time * 30) ** 2; }
-  else if (e.type === 'gunboat') {  // 彈幕艇：蓄力中，外圈縮小的紅圈（縮到身上就放彈）
-    ctx.globalAlpha = 0.35 + 0.4 * Math.sin(Game.time * 30) ** 2; ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6 + 40 * Math.max(0, e.modeT) / 0.6, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
-    return;
-  }
-  else return;
-  ctx.globalAlpha = alpha;
-  ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = w;
-  ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(e.chargeA) * len, e.y + Math.sin(e.chargeA) * len); ctx.stroke();
-  ctx.globalAlpha = 1;
-}
-
-// 潛伏者的殘影：記住最近幾個位置（依敵人 id；雙人的隊友那邊也畫得出來）
-const LURK_TRAIL = new Map();
-function drawLurkerTrail(e) {
-  let T = LURK_TRAIL.get(e.id);
-  if (!T) { T = []; LURK_TRAIL.set(e.id, T); if (LURK_TRAIL.size > 80) for (const k of LURK_TRAIL.keys()) { if (!Game.enemies.some(q => q.id === k)) LURK_TRAIL.delete(k); } }
-  const last = T[T.length - 1];
-  if (!last || Math.hypot(e.x - last.x, e.y - last.y) > 10) { T.push({ x: e.x, y: e.y }); if (T.length > 6) T.shift(); }
-  ctx.strokeStyle = e.t.color; ctx.lineWidth = 1.5;
-  T.forEach((q, i) => {
-    ctx.globalAlpha = 0.08 + 0.1 * (i / T.length) * (0.4 + (e.cloak || 0));
-    polygon(q.x, q.y, e.r * (0.6 + 0.4 * i / T.length), e.t.shape, Math.atan2(e.vy, e.vx)); ctx.stroke();
-  });
-}
 // 虛空獵手、裂界獵艦的畫面朝向（只影響繪圖；e.rot 還是環形彈的起始角）：蓄力／衝鋒等招式朝 chargeA，
 //   追人時船頭轉向最近的玩家（每秒最多轉 6 弧度）。隊友那邊的敵人每次同步都重建，所以角度記在這裡（用 id）
 const ENEMY_FACE = new Map();
@@ -272,154 +76,7 @@ function enemyFace(e) {
   if (ENEMY_FACE.size > 100) for (const k of ENEMY_FACE.keys()) if (!G.enemies.some(o => o.id === k)) ENEMY_FACE.delete(k);
   return m.a;
 }
-function drawEnemyBullets() {
-  for (const b of Game.eBullets) {
-    ctx.fillStyle = 'rgba(255, 30, 30, 0.35)';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
-    ctx.fillStyle = b.col || '#ff2a2a'; ctx.strokeStyle = b.col ? '#ff2a2a' : '#2a0000'; ctx.lineWidth = 2;  // 盾衛反彈：芯是原本子彈的顏色、紅框
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = b.col ? '#ffffff' : '#ffd0d0';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
-  }
-}
 function spitterFace(e) { const q = nearestShip(e); return q ? Math.atan2(q.y - e.y, q.x - e.x) : Math.atan2(e.vy, e.vx); }  // 噴吐者：嘴對著瞄準的玩家
-function drawEnemy(e) {
-  const sp = e.spawnT > 0 ? 1 - e.spawnT / e.spawnMax : 1;
-  if (e.type === 'lurker') drawLurkerTrail(e);
-  ctx.globalAlpha = (0.3 + 0.7 * sp) * (1 - 0.9 * (e.cloak || 0));  // 潛伏者隱形時幾乎看不到（殘影還在）
-  const rot = ['swarmer', 'worm', 'splitling', 'lurker'].includes(e.type) ? Math.atan2(e.vy, e.vx)
-    : e.type === 'spitter' ? spitterFace(e) : e.type === 'elite' || e.type === 'boss2' ? enemyFace(e) : e.rot;
-  if (e.type === 'elite') {
-    ctx.strokeStyle = 'rgba(255, 212, 0, 0.35)'; ctx.lineWidth = 1;
-    polygon(e.x, e.y, e.r * 1.5 * sp, 5, -e.rot * 0.7); ctx.stroke();
-  }
-  // 刺殼縮球／滾動時變小、變成圓一點（12 邊形）；暈眩時閃爍
-  const curled = e.type === 'brute' && (e.mode === 'windup' || e.mode === 'charge');
-  if (e.type === 'brute' && e.mode === 'stun' && Math.floor(Game.time * 10) % 2) ctx.globalAlpha *= 0.5;
-  polygon(e.x, e.y, e.r * sp * (curled ? 0.85 : 1), curled ? 12 : e.t.shape, e.type === 'boss2' && e.mode !== 'chase' ? e.chargeA : rot);
-  ctx.fillStyle = e.flash > 0 ? '#ffffff' : e.t.color + '33';
-  ctx.fill();
-  ctx.strokeStyle = e.flash > 0 ? '#ffffff' : e.t.color;
-  ctx.lineWidth = e.type === 'elite' || e.t.boss ? 3 : 2;
-  ctx.stroke();
-  if (e.t.boss) {  // 旗艦：反向旋轉的內環與脈動核心（暴走時轉成金色）
-    const inner = { boss: 4, boss2: 3, boss3: 6 }[e.type] || 4;
-    ctx.strokeStyle = e.enraged ? '#ffd166' : e.t.color; ctx.lineWidth = 2;
-    polygon(e.x, e.y, e.r * 0.62 * sp, inner, -e.rot * 1.6); ctx.stroke();
-    if (e.type === 'boss3') { polygon(e.x, e.y, e.r * 1.35 * sp, 6, e.rot * 0.5); ctx.globalAlpha *= 0.4; ctx.stroke(); ctx.globalAlpha = 0.3 + 0.7 * sp; }
-    const pulse = 0.5 + 0.5 * Math.sin(Game.time * (e.enraged ? 12 : 5));
-    ctx.globalAlpha = (0.3 + 0.7 * sp) * (0.4 + pulse * 0.5);
-    ctx.fillStyle = e.enraged ? '#ffd166' : e.t.color;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.28 * sp, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.3 + 0.7 * sp;
-  }
-  if (e.shieldA != null) {  // 盾衛：朝固定方向的弧形盾（120°）
-    ctx.strokeStyle = '#bfefff'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 7, e.shieldA - Math.PI / 3, e.shieldA + Math.PI / 3); ctx.stroke();
-  }
-  if (e.type === 'hive') {  // 母巢：脈動的核心
-    ctx.fillStyle = e.t.color; ctx.globalAlpha *= 0.4 + 0.3 * Math.sin(Game.time * 4);
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.45, 0, TAU); ctx.fill(); ctx.globalAlpha = 0.3 + 0.7 * sp;
-  }
-  if (!(e.cloak > 0.5)) {  // 狀態圈：潛伏者隱形時不畫（不能被狀態圈暴露位置）
-  if (e.slowT > 0) {  // 減速：藍色外圈
-    ctx.strokeStyle = 'rgba(127, 212, 255, 0.8)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, TAU); ctx.stroke();
-  }
-  if (e.markT > 0 || e.shredT > 0) {  // 弱點標記、破甲：紅色準星
-    ctx.strokeStyle = 'rgba(255, 90, 90, 0.8)'; ctx.lineWidth = 1.5;
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Game.time; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 8, a, a + 0.5); ctx.stroke(); }
-  }
-  if (e.burnT > 0) {  // 燃燒：橘色閃爍
-    ctx.strokeStyle = `rgba(255, 159, 28, ${0.4 + 0.4 * Math.sin(Game.time * 20)})`; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2, 0, TAU); ctx.stroke();
-  }
-  const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
-  if (stuck) {  // 黏著：身上黏了幾發（粉紅小點繞一圈）
-    ctx.fillStyle = '#f78cff';
-    for (let i = 0; i < Math.min(stuck, 16); i++) {
-      const a = i / Math.min(stuck, 16) * TAU + Game.time * 2;
-      ctx.beginPath(); ctx.arc(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5, 0, TAU); ctx.fill();
-    }
-  }
-  }
-  if (e.spawnT > 0) {
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (2.2 - sp), 0, TAU);
-    ctx.strokeStyle = e.t.color; ctx.lineWidth = 1; ctx.stroke();
-  }
-  if (e.hp < e.maxHp && !['swarmer', 'worm', 'splitling'].includes(e.type) && !e.t.boss && !(e.cloak > 0.5)) {
-    const w = e.type === 'elite' ? e.r * 3 : e.r * 2;
-    ctx.fillStyle = '#300'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 4);
-    ctx.fillStyle = e.t.color; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4);
-  }
-}
-
-// 子彈尾巴的長度：最長 max，但不超過從發射點飛過的距離
-const tail = (b, max) => Math.min(max, Math.hypot(b.x - b.sx, b.y - b.sy));
-
-function drawBullet(b, fa = 1) {  // fa：整體透明度（飛船附近變淡用）
-  const cos = Math.cos(b.angle), sin = Math.sin(b.angle);
-  ctx.fillStyle = b.color; ctx.strokeStyle = b.color;
-  ctx.globalAlpha = fa;
-  if (b.shape === 'rail') {
-    ctx.lineWidth = b.r + 2; ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.35 * fa;
-    const t1 = tail(b, 60), t2 = tail(b, 34);
-    ctx.beginPath(); ctx.moveTo(b.x - cos * t1, b.y - sin * t1); ctx.lineTo(b.x, b.y); ctx.stroke();
-    ctx.globalAlpha = fa; ctx.lineWidth = b.r * 0.6; ctx.strokeStyle = '#fff6d8';
-    ctx.beginPath(); ctx.moveTo(b.x - cos * t2, b.y - sin * t2); ctx.lineTo(b.x, b.y); ctx.stroke();
-  } else if (b.shape === 'blade') {  // 垂直於飛行方向、中間往前凸的弧形刃片
-    const w = b.r * 1.6, a0 = Math.min(1, b.life * 6);
-    const arc = (bx, by, ww) => {  // 兩端在刃的左右，控制點在前方 → 弧形
-      ctx.beginPath(); ctx.moveTo(bx - sin * ww, by + cos * ww);
-      ctx.quadraticCurveTo(bx + cos * ww * 0.9, by + sin * ww * 0.9, bx + sin * ww, by - cos * ww); ctx.stroke();
-    };
-    ctx.lineWidth = 3; ctx.lineCap = 'round';
-    // 被分裂過的刃片：後方拖出殘影、中心變白。分裂出的刃片會疊在一起，沒有這個提示看起來就像同一片
-    for (let k = b.splits * 2; k >= 1; k--) {
-      ctx.globalAlpha = a0 * 0.35 / k;
-      arc(b.x - cos * k * 6, b.y - sin * k * 6, w * (1 - k * 0.08));
-    }
-    ctx.globalAlpha = a0;
-    arc(b.x, b.y, w);
-    if (b.splits) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; arc(b.x, b.y, w * 0.7); }
-    if (b.payload) {  // 帶觸發器：刃的中心與兩端點上粉紅點（不用大圈，免得把刃整個包住看不出形狀）
-      ctx.fillStyle = '#ff6b9d';
-      for (const [px, py, pr] of [[b.x + cos * w * 0.45, b.y + sin * w * 0.45, 2.6], [b.x - sin * w, b.y + cos * w, 2], [b.x + sin * w, b.y - cos * w, 2]]) {
-        ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.fill();
-      }
-    }
-    ctx.globalAlpha = 1;
-    return;
-  } else if (b.shape === 'line') {
-    ctx.lineWidth = b.r; ctx.lineCap = 'round';
-    const t = tail(b, 18);
-    ctx.beginPath(); ctx.moveTo(b.x - cos * t, b.y - sin * t); ctx.lineTo(b.x, b.y); ctx.stroke();
-  } else if (b.shape === 'reflect') {  // 反射鏡反彈：敵彈的圓球外形（外圈＋實心＋亮芯）、我方的顏色
-    ctx.globalAlpha = 0.25 * fa; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.7 * fa; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
-    ctx.globalAlpha = fa; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, TAU); ctx.fill();
-  } else if (b.shape === 'dart') {
-    ctx.beginPath();
-    ctx.moveTo(b.x + cos * b.r * 2.2, b.y + sin * b.r * 2.2);
-    ctx.lineTo(b.x - cos * b.r * 1.5 - sin * b.r, b.y - sin * b.r * 1.5 + cos * b.r);
-    ctx.lineTo(b.x - cos * b.r * 1.5 + sin * b.r, b.y - sin * b.r * 1.5 - cos * b.r);
-    ctx.closePath(); ctx.fill();
-  } else {
-    if (b.shape === 'orb') {
-      ctx.globalAlpha = 0.3 * fa;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 1.8, 0, TAU); ctx.fill();
-      ctx.globalAlpha = fa;
-    }
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
-  }
-  if (b.payload) {  // 帶觸發器的子彈：粉色外環
-    ctx.strokeStyle = '#ff6b9d'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 4, 0, TAU); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-}
-
 // 飛船本體（D 版：實心塗裝＋金屬噴嘴＋藍色噴焰）；在飛船自己的座標（船頭朝 +x）裡畫
 //   船身：深色描邊、上亮下暗的船色漸層、中線高光、深色玻璃駕駛艙；各船專屬零件；衝刺／超頻時外框發出船色光暈
 //   o：moving（有噴焰）、booster（加速器層數：噴焰更長）、armor（重裝甲層數：裝甲板線）、hot（衝刺／超頻）
@@ -511,88 +168,6 @@ function shipIconURL(S) {
   return url;
 }
 
-function drawPlayer(p, tag = '') {
-  if (tag) {  // 雙人：船上方標示 1P / 2P
-    ctx.font = 'bold 11px Segoe UI'; ctx.textAlign = 'center'; ctx.fillStyle = p.ship.color;
-    ctx.fillText(tag, p.x, p.y - p.r - 12);
-  }
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(p.aim);
-  if (p.iframe > 0 && Math.floor(Game.time * 20) % 2) ctx.globalAlpha = 0.35;
-  const S = p.ship, own = p === Game.player;
-  const parts = own ? Game.parts : p.L ? p.L.parts : p.parts || {}, mod = own ? Game.module : p.L ? p.L.module : p.module;
-  const n = id => (parts && parts[id]) || 0;
-  // 外觀跟著零件變：加速器 → 噴焰變長變亮、散熱片 → 兩側散熱鰭、感測器 → 船頭天線、輕裝甲 → 外圈薄殼、重裝甲 → 船身裝甲板線
-  if (n('sink')) {
-    ctx.strokeStyle = '#8f9bb8'; ctx.lineWidth = 2;
-    for (let i = 0; i < Math.min(4, n('sink')); i++) for (const sgn of [-1, 1]) {
-      ctx.beginPath(); ctx.moveTo(-2 - i * 4, sgn * 9); ctx.lineTo(-5 - i * 4, sgn * 16); ctx.stroke();
-    }
-  }
-  if (n('sensor')) {
-    ctx.strokeStyle = '#8f9bb8'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(22 + n('sensor') * 2, 0); ctx.stroke();
-    ctx.fillStyle = '#9dff6b'; ctx.beginPath(); ctx.arc(22 + n('sensor') * 2, 0, 2, 0, TAU); ctx.fill();
-  }
-  if (mod && MODULES[mod]) {  // 背包模組畫在船尾
-    ctx.fillStyle = '#2a3150'; ctx.strokeStyle = '#9aa6c4'; ctx.lineWidth = 1.5;
-    ctx.fillRect(-19, -5, 8, 10); ctx.strokeRect(-19, -5, 8, 10);
-  }
-  drawShipArt(ctx, S, { moving: p.moving, booster: n('booster'), armor: n('armor'), hot: p.dashT > 0 || p.overdrive > 0 });
-  ctx.rotate(-p.aim);
-  if (p.frostT > 0) {  // 被彗星凍住：淡藍的霜
-    ctx.fillStyle = 'rgba(160, 220, 255, 0.28)'; ctx.beginPath(); ctx.arc(0, 0, 20, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(200, 240, 255, 0.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 20, 0, TAU); ctx.stroke();
-  }
-  for (let i = 0; i < Math.min(3, n('larmor')); i++) {  // 輕裝甲：外圈薄殼
-    ctx.strokeStyle = 'rgba(159, 232, 255, 0.45)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(0, 0, 22 + i * 4, 0, TAU); ctx.stroke();
-  }
-  for (let i = 0; i < (p.shield || 0); i++) {  // 護盾產生器
-    ctx.strokeStyle = 'rgba(76, 201, 240, 0.85)'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(0, 0, 26 + i * 5, 0, TAU); ctx.stroke();
-  }
-  if (p.gravField) {  // 重力井：減速場範圍
-    ctx.strokeStyle = 'rgba(179, 136, 255, 0.35)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 8]);
-    ctx.beginPath(); ctx.arc(0, 0, p.gravField.R, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
-  }
-  if (own && Game.stats && Game.stats.charge && (p.chargeC || 0) > 0.02) {  // 停火蓄力：船身外圈的蓄力環（蓄滿時變白、閃動）
-    const k = Math.min(1, p.chargeC), full = k >= 1;
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(255, 179, 71, 0.18)'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = full ? '#ffffff' : '#ffb347'; ctx.lineWidth = full ? 5 : 4;
-    if (full) { ctx.shadowBlur = 14 + 8 * Math.sin(Game.time * 10); ctx.shadowColor = '#ffffff'; }
-    ctx.beginPath(); ctx.arc(0, 0, 34, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-  ctx.restore();
-}
-
-// 雙人：倒下的飛船（灰色殘骸）＋救援範圍虛線圈＋綠色進度弧；mine = 自己是可以去救的那一方
-function drawDowned(p, tag, mine) {
-  const R = CFG.REVIVE, k = Math.min(1, (p.reviveT || 0) / R.time), pulse = 0.5 + 0.5 * Math.sin(Game.time * 4);
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.strokeStyle = `rgba(157, 255, 107, ${0.35 + 0.35 * pulse})`; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
-  ctx.beginPath(); ctx.arc(0, 0, R.range, 0, TAU); ctx.stroke();
-  ctx.setLineDash([]);
-  if (k > 0) {
-    ctx.strokeStyle = '#9dff6b'; ctx.lineWidth = 5; ctx.shadowBlur = 12; ctx.shadowColor = '#9dff6b';
-    ctx.beginPath(); ctx.arc(0, 0, R.range, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-  ctx.rotate(p.aim);
-  ctx.beginPath();
-  p.ship.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-  ctx.closePath();
-  ctx.globalAlpha = 0.5; ctx.strokeStyle = '#8a8f98'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.restore();
-  ctx.font = 'bold 12px Microsoft JhengHei'; ctx.textAlign = 'center'; ctx.fillStyle = '#9dff6b';
-  ctx.fillText(k > 0 ? `${tag} 救援中 ${Math.round(k * 100)}%` : `${tag} 倒下${mine ? ' · 靠近救援' : ' · 等隊友救援'}`, p.x, p.y - R.range - 8);
-}
-
 // 靶場數據面板（右上）：DPS、總傷害、命中次數、傷害來源、這條電路每發幾顆、觸發層
 function drawRangePanel() {
   const s = Game.stats, fmt = n => Math.round(n).toLocaleString('zh-TW');
@@ -615,6 +190,33 @@ function drawRangePanel() {
     ctx.fillText(t, x, y, w);
     y += big ? 20 : 18;
   }
+}
+
+// 小地圖（畫面右上角，螢幕座標）：整張地圖、閘門、飛船
+function drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left：左邊緣）
+  if (Arena.rect || !Arena.path) return;
+  const s = Math.min(maxW / Arena.W, maxH / Arena.H), w = Arena.W * s, h = Arena.H * s;
+  if (left) x += w;
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = 'rgba(5, 8, 20, 0.7)'; ctx.fillRect(x - w, y, w, h);
+  ctx.strokeStyle = 'rgba(130, 160, 240, 0.4)'; ctx.lineWidth = 1; ctx.strokeRect(x - w, y, w, h);
+  ctx.translate(x - w, y); ctx.scale(s, s);
+  const C = Game.combat, cur = C ? Math.max(0, (C.wave || 1) - 1) : 0;
+  ctx.fillStyle = 'rgba(70, 90, 160, 0.55)'; ctx.fill(Arena.path);
+  for (const g of Arena.gates) {
+    ctx.strokeStyle = g.open ? '#2ee6a6' : '#ff4d6d'; ctx.lineWidth = 3 / s * 0.8;
+    ctx.beginPath(); ctx.moveTo(g.x + g.ny * g.L, g.y - g.nx * g.L); ctx.lineTo(g.x - g.ny * g.L, g.y + g.nx * g.L); ctx.stroke();
+  }
+  const A = Arena.areas[cur];
+  if (A) { ctx.fillStyle = 'rgba(255, 209, 102, 0.9)'; ctx.font = `bold ${Math.round(14 / s)}px Microsoft JhengHei`; ctx.textAlign = 'center'; }
+  for (const e of Game.enemies) { if (e.dead) continue; ctx.fillStyle = '#ff4d6d'; ctx.fillRect(e.x - 1.5 / s, e.y - 1.5 / s, 3 / s, 3 / s); }
+  for (const p of [Game.player, Game.mate]) {
+    if (!p || p.gone) continue;
+    ctx.fillStyle = p.dead ? '#888' : p === Game.player ? '#fff' : (p.ship && p.ship.color) || '#4cc9f0';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3.5 / s, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
 }
 
 // 每 0.5 秒算一次 FPS（主迴圈每幀呼叫 FPS.tick）
@@ -685,8 +287,8 @@ function drawHUD() {
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
   // 大地圖：小地圖（電腦在右上角；手機的右邊有按鈕，放在左上角 HP 下面）
-  if (T) WorldView.drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
-  else WorldView.drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
+  if (T) drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
+  else drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
 
   // 電路鏈縮圖（觸控時移到上方，避開拇指）
   const n = Game.chain.length, w = T ? 40 : 54, gap = T ? 5 : 8, total = n * w + (n - 1) * gap;

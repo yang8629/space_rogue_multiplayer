@@ -41,13 +41,13 @@ function seededRand(seed) {
 const Arena = {
   rect: true, W: 2400, H: 1600, seed: 0, n: 0,
   areas: [], gates: [], start: { x: 1200, y: 800 },
-  NX: 0, NY: 0, val: null, owner: null, path: null, wallPath: null,
+  NX: 0, NY: 0, val: null, owner: null, path: null,
 
   // ---------- 方形場地（旗艦戰、沙盒、靶場；雙人的隊友收到種子之前也先用這個） ----------
   reset() {
     this.rect = true; this.W = CFG.WORLD_W; this.H = CFG.WORLD_H; this.seed = 0; this.n = 0; this.bossId = null; this.cuts = [];
     this.areas = []; this.gates = []; this.start = { x: this.W / 2, y: this.H / 2 };
-    this.val = this.owner = this.path = this.wallPath = null; this.exitFlow = null;
+    this.val = this.owner = this.path = null; this.exitFlow = null;
   },
 
   // ---------- 產生大地圖：n 個區域 ----------
@@ -512,9 +512,9 @@ const Arena = {
   },
 
   // ---------- 畫面 ----------
-  // 牆的輪廓：在格點上做 marching squares，把線段接成封閉的圈，做成 Path2D（只算一次）
+  // 牆的輪廓：在格點上做 marching squares，把線段接成封閉的圈（loops：新畫面畫牆；Path2D：小地圖），只算一次
   buildPath() {
-    this.path = this.wallPath = null;
+    this.path = null;
     this.loops = [];
     const NX = this.NX, NY = this.NY, W = NX + 1, v = this.val, CELL = ARENA.CELL;
     const V = (i, j) => v[j * W + i];
@@ -552,10 +552,7 @@ const Arena = {
     if (typeof Path2D === 'undefined') return;
     const P = new Path2D();
     for (const l of this.loops) { P.moveTo(l[0][0], l[0][1]); for (let i = 1; i < l.length; i++) P.lineTo(l[i][0], l[i][1]); P.closePath(); }
-    const WP = new Path2D();
-    WP.rect(-4000, -4000, this.W + 8000, this.H + 8000);
-    WP.addPath(P);
-    this.path = P; this.wallPath = WP;
+    this.path = P;
   },
 };
 Arena.reset();

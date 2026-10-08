@@ -19,7 +19,6 @@ addEventListener('keydown', e => {
     return;
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
-  if (k === 'f2') { e.preventDefault(); if (!e.repeat) GLR.toggle(); return; }  // 新畫面（WebGL）／舊畫面
   if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k, e.shiftKey)) return;
   if (k === ' ') { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);

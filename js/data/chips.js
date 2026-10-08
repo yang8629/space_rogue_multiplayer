@@ -93,8 +93,8 @@ const CHIPS = {
       : list.map(b => ({ ...addBonus(b, o.lv >= 3 ? 1 : 0.5), dashShot: true, pierce: o.lv >= 3 ? 99 : b.pierce })) },
   stand: { name: '架設', short: '架設', type: 'body', cost: 1, evo: '要塞',
     grow: { what: '架設滿層擊殺', need: [155, 525] },
-    desc: '站著不動時越射越快：每 0.5 秒射速 +10%（停下來就開始累積，不用一直按著射擊）。移動或衝刺就歸零（手抖 0.15 秒內不算）。跟加速器的「疾風」（移動中射速 +20%）相反。',
-    lvs: ['最多 +60%（站 3 秒）', '最多 +80%（站 4 秒）', '進化：滿層時子彈穿透 +1、擊退 ×2'],
+    desc: '站著不動時越射越快：站 2 秒疊滿，每層射速 +10%（Lv1 每 1/3 秒 1 層、最多 6 層；Lv2 每 0.25 秒 1 層、最多 8 層；停下來就開始累積，不用一直按著射擊）。移動或衝刺就歸零（手抖 0.15 秒內不算）。跟加速器的「疾風」（移動中射速 +20%）相反。',
+    lvs: ['最多 +60%（站 2 秒）', '最多 +80%（站 2 秒）', '進化：滿層時子彈穿透 +1、擊退 ×2'],
     apply: (list, pw, o) => !Game.standFull ? list
       : list.map(b => ({ ...b, stand: o.lv, pierce: o.lv >= 3 ? b.pierce + 1 : b.pierce, knock: o.lv >= 3 ? b.knock * 2 : b.knock })) },
   intercept: { name: '攔截', short: '攔截', type: 'impact', cost: 1, evo: '反射鏡',

@@ -3,7 +3,7 @@
 <title>星環電路 雙人版</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
 <link rel="stylesheet" href="css/style.css">
-<canvas id="glc" style="display:none;pointer-events:none"></canvas>
+<canvas id="glc" style="pointer-events:none"></canvas>
 <canvas id="game"></canvas>
 <div id="screen"></div>
 <div id="codex" class="hidden"><div class="panel" id="codexBody"></div></div>
@@ -84,7 +84,7 @@
 <!-- 雙人連線：WebRTC 點對點（PeerJS 只負責配對，資料直接在兩台電腦之間傳） -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <!-- 遊戲程式：依序載入（後面的檔案會用到前面定義的東西）。每個檔案的用途寫在 README 的「檔案結構」 -->
-<!-- WebGL 繪圖層：PixiJS＋bloom 濾鏡、圖集（assets/atlas_data.js 由 mp_tests/perf/buildatlas.mjs 產生）；載入失敗時自動用舊畫面 -->
+<!-- WebGL 繪圖層：PixiJS＋bloom 濾鏡、圖集（assets/atlas_data.js 由 mp_tests/perf/buildatlas.mjs 產生）；載入失敗時戰鬥畫面中間顯示原因 -->
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.22.0/dist/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.js"></script>
 <script src="assets/atlas_data.js"></script>
@@ -109,7 +109,6 @@
 <script src="js/game/range.js"></script>
 <script src="js/system/net.js"></script>
 <script src="js/ui/render.js"></script>
-<script src="js/ui/render_world.js"></script>
 <script src="js/ui/gl/gl.js"></script>
 <script src="js/ui/gl/gl_fx.js"></script>
 <script src="js/ui/gl/gl_actors.js"></script>
