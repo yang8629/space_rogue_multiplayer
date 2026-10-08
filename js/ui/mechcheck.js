@@ -676,6 +676,14 @@ const MechCheck = {
       const d1 = Math.hypot(a.x - p.x, a.y - p.y);
       return { ok: d1 >= d0 - 1 && b.y < by - 10, got: `被打中的離飛船 ${d0.toFixed(0)} → ${d1.toFixed(0)}（不能變近）；旁邊那隻往牠移動 ${(by - b.y).toFixed(0)}（應 > 10）` };
     }],
+    ['電路晶片', '擊退不疊加', '同一幀被同方向打中 25 發，速度最多是單發的擊退（以前每發都加上去，散彈＋鏡像會把敵人推進牆裡）；單發照舊', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const [a, b] = M.targets([[150, 0], [150, 120]], 'swarmer'); a.hp = b.hp = 1e9; a.vx = a.vy = b.vx = b.vy = 0;
+      for (let i = 0; i < 25; i++) a.hurt(1, 300, 0);
+      b.hurt(1, 300, 0);
+      const va = Math.hypot(a.vx, a.vy), vb = Math.hypot(b.vx, b.vy);
+      return { ok: Math.abs(va - 300) < 1 && Math.abs(vb - 300) < 1, got: `25 發後速度 ${Math.round(va)}（要 300）；單發 ${Math.round(vb)}（要 300）` };
+    }],
     ['電路晶片', '吸引不疊加', '同一幀被吸引 25 次，往中心的速度還是 380（以前每次 +380，散彈＋鏡像會把敵人甩進牆裡）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', null, null]);
       const [a, b] = M.targets([[150, 0], [150, 70]]); b.vx = b.vy = 0;
