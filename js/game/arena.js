@@ -431,7 +431,16 @@ const Arena = {
     if (!F) return null;
     const C = OBJ.FLOW_CELL, { dist, W, H } = F;
     let c = clamp(Math.floor(ty / C), 0, H - 1) * W + clamp(Math.floor(tx / C), 0, W - 1);
-    if (dist[c] < 0) return null;
+    if (dist[c] < 0) {  // 目標貼著牆（格子算成牆）：改找旁邊 3 格內走得到、步數最少的格子（以前直接放棄，電腦追不到躲在牆邊的彈幕艇）
+      const cx0 = c % W, cy0 = Math.floor(c / W);
+      let alt = -1;
+      for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) {
+        const x = cx0 + ox, y = cy0 + oy, k = y * W + x;
+        if (x >= 0 && y >= 0 && x < W && y < H && dist[k] >= 0 && (alt < 0 || dist[k] < dist[alt])) alt = k;
+      }
+      if (alt < 0) return null;
+      c = alt;
+    }
     const path = [];
     for (let s = 0; s < 400 && dist[c] > 0; s++) {
       const cx = c % W, cy = Math.floor(c / W);
