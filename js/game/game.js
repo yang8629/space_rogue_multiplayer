@@ -716,7 +716,7 @@ const Game = {
   recalc() {
     this.stats = analyzeChain(this.chain);
     this.passives = computePassives(this.inventory);
-    this.mech = mechStats(this.parts, this.module);
+    this.mech = mechStats(this.parts, this.module, this.wp);
     const p = this.player;
     if (p) {
       const newMax = this.maxHpOf(p.ship, this.passives, this.mech);

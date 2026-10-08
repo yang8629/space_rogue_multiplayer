@@ -16,8 +16,8 @@ const signed = (v, pct) => `${v > 0 ? '+' : '−'}${Math.abs(v)}${pct ? '%' : ''
 // 一項效果：圖示＋數值，對玩家有利綠色、不利紅色（例：受到的傷害 +3% 紅、衝刺冷卻 −8% 綠）
 const statFx = ({ stat, v, pct }) => `<span class="sv ${v * STATS[stat].good > 0 ? 'good' : 'bad'}">${statIcon(stat)}${signed(v, pct)}</span>`;
 const statFxText = ({ stat, v, pct }) => `${STATS[stat].name} ${signed(v, pct)}`;  // 純文字（複製紀錄、滑鼠提示）
-// 疊 n 層的總效果：百分比是相乘（0.96² = −8%），數值是相加
-const fxTimes = (f, n) => ({ ...f, v: f.pct ? Math.round(((1 + f.v / 100) ** n - 1) * 100) : f.v * n });
+// 疊 n 層的總效果：增加的百分比相加（+4% × 3 = +12%）；減少的百分比相乘（0.96² = −8%，疊再多也不會變成 0 或負的）；數值相加
+const fxTimes = (f, n) => ({ ...f, v: f.pct && f.v < 0 ? Math.round(((1 + f.v / 100) ** n - 1) * 100) : f.v * n });
 
 const PART_IDS = ['armor', 'larmor', 'booster', 'sink', 'sensor'];
 // fx：每層的效果（第一項是好處、第二項是代價）；up／dn 是同樣內容的文字（由 fx 產生）
@@ -61,7 +61,8 @@ const NORMAL_MODULES = Object.keys(MODULES).filter(id => !MODULES[id].boss);
 const bossModuleOf = bossId => Object.keys(MODULES).find(id => MODULES[id].boss === bossId) || null;
 
 // 機體數值：零件層數＋背包模組 → 倍率、特性
-function mechStats(parts, module) {
+// wp：目前的武器參數（玻璃砲自帶受到的傷害 +10%）
+function mechStats(parts, module, wp) {
   const n = id => (parts && parts[id]) || 0;
   const T = {};
   for (const id of PART_IDS) { T[PARTS[id].t2.id] = n(id) >= 2; T[PARTS[id].t4.id] = n(id) >= 4; }
@@ -70,20 +71,21 @@ function mechStats(parts, module) {
   const s = { maxHp: 0, hpMul: 1, speed: 1, taken: 1, rate: 1, bspeed: 1, dashCd: 1, dashDist: 1, traits: T,
     heavy: n('armor') >= 2, light: n('booster') >= 2, module: module || null, armor: n('armor') };
   s.maxHp += 20 * k * n('armor'); s.speed *= Math.pow(0.96, n('armor'));
-  s.dashCd *= Math.pow(1 - 0.08 * k, n('larmor')); s.taken *= Math.pow(1.03, n('larmor'));  // 輕裝甲：裝甲薄、身手快
+  s.dashCd *= Math.pow(1 - 0.08 * k, n('larmor')); s.taken += 0.03 * n('larmor');  // 輕裝甲：裝甲薄、身手快
   s.speed *= 1 + 0.06 * k * n('booster'); s.maxHp -= 10 * n('booster');
-  s.rate *= 1 + 0.06 * k * n('sink'); s.taken *= Math.pow(1.04, n('sink'));
-  s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashCd *= Math.pow(1.05, n('sensor'));
+  s.rate *= 1 + 0.06 * k * n('sink'); s.taken += 0.04 * n('sink');  // 受到的傷害：增加的都相加
+  s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashCd *= 1 + 0.05 * n('sensor');
   switch (module) {
     case 'shield': s.speed *= 0.9; break;
     case 'blink': if (!s.light) s.dashCd *= 1.5; break;
     case 'drone': s.hpMul = 0.8; break;
-    case 'reactive': if (!s.light) s.taken *= 1.05; break;
+    case 'reactive': if (!s.light) s.taken += 0.05; break;
     case 'swarmcore': s.maxHp -= 10; break;
     case 'gravity': s.rate *= 0.9; break;
     case 'thruster': s.dashCd *= 0.7; s.dashDist = 2; break;
-    case 'endshell': s.taken *= 1.1; break;
+    case 'endshell': s.taken += 0.1; break;
   }
+  if (wp && wp.glass) s.taken += wp.glass.self;  // 玻璃砲（相位刃升級）
   s.maxHp = Math.round(s.maxHp);
   return s;
 }

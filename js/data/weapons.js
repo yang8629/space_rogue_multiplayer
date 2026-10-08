@@ -85,7 +85,7 @@ const WEAPONS = {
       A: { name: '巨刃', desc: '刃片 5 段、範圍更大。', apply: p => { p.count = 5; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
           { name: '旋風斬', desc: '改成 360 度環形斬擊（12 段）。', apply: p => { p.count = 12; p.spread = TAU * 11 / 12; } },
-          { name: '玻璃砲', desc: '受到的傷害每比正常多 1%，傷害 +3%（沒有上限）：越脆越痛（輕裝甲、散熱片、反應裝甲、終焉護殼都算）。', apply: p => { p.glass = { per: 3 }; } }] },
+          { name: '玻璃砲', desc: '受到的傷害 +10%；受到的傷害每比正常多 1%，傷害 +3%（沒有上限）：越脆越痛（輕裝甲、散熱片、反應裝甲、終焉護殼都算）。', apply: p => { p.glass = { per: 3, self: 0.1 }; } }] },
       B: { name: '飛刃', desc: '刃片飛得更快更遠，變成中距離武器。', apply: p => { p.speed *= 1.8; p.life *= 2.2; },
         next: [
           { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 4; } },
