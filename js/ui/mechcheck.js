@@ -238,6 +238,18 @@ const MechCheck = {
       return { ok: near1(A.d / base, 1.3) && near1(A.t, 1.1) && near1(B.t, 1.31) && near1(B.d / base, wantB) && near1(lost, wantLost),
         got: `巨刃 ${base.toFixed(1)}；玻璃砲沒疊 ${A.d.toFixed(1)}（×${(A.d / base).toFixed(2)}）；輕裝甲 3＋散熱片 3（受傷 ×${B.t.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / base).toFixed(2)}，要 ×${wantB.toFixed(2)}）；被打 10 扣 ${lost.toFixed(1)}（要 ${wantLost.toFixed(1)}）` };
     }],
+    ['機體', '射速加成相加', '散熱片 2 層 +12%、疾風（移動中）+20%、急冷 +30% 相加 = +62%（不是相乘的 +75%）；重力井 −10% 再相乘', M => {
+      const count = (gravity) => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+        Game.parts.sink = 2; Game.parts.booster = 2; Game.module = gravity ? 'gravity' : null; Game.recalc();
+        const P = Game.player, iv = Game.stats.interval; let n = 0; const orig = P.fire; P.fire = () => { n++; };
+        P.moving = true; P.fireCd = 0;
+        try { for (let f = 0; f < 600; f++) { P.quenchT = 1; P.tickFire(1 / 60, true); } } finally { P.fire = orig; }
+        return n / (10 / iv);
+      };
+      const a = count(false), b = count(true);
+      return { ok: Math.abs(a - 1.62) < 0.03 && Math.abs(b - 1.62 * 0.9) < 0.03, got: `射速 ×${a.toFixed(2)}（要 ×1.62）；加上重力井 ×${b.toFixed(2)}（要 ×${(1.62 * 0.9).toFixed(2)}）` };
+    }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
       Game.player.x = CFG.WORLD_W - 40;
@@ -887,13 +899,13 @@ const MechCheck = {
       Game.hurtPlayer(100);
       return { ok: p.maxHp === 140 && near1(p.maxHp - p.hp, 28), got: `最大 HP ${p.maxHp}，受 100 傷害實扣 ${(p.maxHp - p.hp).toFixed(1)}` };
     }],
-    ['機體', '衝撞（重裝甲 4 層）', '撞到敵人造成 80 傷害，自己不扣血', M => {
+    ['機體', '衝撞（重裝甲 4 層）', '撞到敵人造成「最大 HP × 45%」傷害（4 層 HP 180 → 81），自己不扣血', M => {
       M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
       Game.parts.armor = 4; Game.recalc();
       const p = Game.player; p.hp = p.maxHp; Game.state = 'play';
       const e = M.targets([[10, 0]], 'brute', true, 60)[0], hp = e.hp; e.t = { ...e.t, dmg: 25 };
       Game.updateEnemies(1 / 60);
-      return { ok: near1(hp - e.hp, 80) && p.hp === p.maxHp, got: `敵人受到 ${Math.round(hp - e.hp)}，自己 HP ${p.hp}/${p.maxHp}` };
+      return { ok: near1(hp - e.hp, Math.round(p.maxHp * 0.45)) && p.hp === p.maxHp, got: `敵人受到 ${Math.round(hp - e.hp)}（要 ${Math.round(p.maxHp * 0.45)}），自己 HP ${p.hp}/${p.maxHp}` };
     }],
     ['機體', '均衡', '5 種零件各 1 層：好處 +30%（HP 100 + 20×1.3 − 10 = 116；輕裝甲衝刺冷卻 ×(1 − 0.08×1.3)）', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

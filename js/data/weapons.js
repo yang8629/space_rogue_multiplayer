@@ -126,10 +126,10 @@ function weaponEmit(p, pw) {
   return out;
 }
 // 數值換傷害（武器升級）：重量砲（移動速度越慢越痛）、玻璃砲（受到的傷害越多越痛）；照開火的人現在的機體算（雙人在 withLoadout 裡就是隊友的）
-function statDmgMul(p) {
+function statDmgMul(p) {  // 增加的相加
   let k = 1;
-  if (p.weight) k *= 1 + Math.max(0, 1 - shipSpeedNow()) * p.weight.per;
-  if (p.glass) k *= 1 + Math.max(0, Game.mech.taken - 1) * p.glass.per;
+  if (p.weight) k += Math.max(0, 1 - shipSpeedNow()) * p.weight.per;
+  if (p.glass) k += Math.max(0, Game.mech.taken - 1) * p.glass.per;
   return k;
 }
 // 開火的人現在的移動速度倍率（機體：重裝甲、加速器、護盾產生器；被彗星凍住）
