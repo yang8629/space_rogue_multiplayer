@@ -591,7 +591,7 @@ const Net = {
       parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     L.wp = weaponParams(L.weapon);
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
     return L;
   },
   startHost() {
@@ -742,7 +742,7 @@ const Net = {
     L.partSlots = clamp(Math.floor(num(m.ps, L.partSlots || 6)), 1, 20);
     L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
     L.module = typeof m.module === 'string' && MODULES[m.module] ? m.module : null;
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
     if (!Game.inArena) mate.hp = clamp(num(m.hp, mate.hp), 1, mate.maxHp);  // 戰鬥中的血量以房主為準
     else mate.hp = Math.min(mate.hp, mate.maxHp);
