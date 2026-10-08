@@ -391,9 +391,9 @@ const Net = {
       if (Y.dead) P.dead = true;
     } else if (m.state === 'victory' && G.node) {
       G.inArena = false; G.state = 'victory';
-      if (!(soft && G.victory)) G.victory = { slot: false, boss: G.bossId };  // 同一個頁面：保留原本的勝利畫面（模組還能裝）
+      if (!(soft && G.victory)) G.victory = { slot: false, boss: G.bossId, pick: 'lost' };  // pick 'lost'：重新整理過，二選一的結果已經在配裝裡  // 同一個頁面：保留原本的勝利畫面（模組還能裝）
       Screen.victory();
-      if (!G.victory.module || G.victory.took || G.victory.skip) this.send({ t: 'moddone' });  // 房主可能在等隊友選模組
+      if (bossDone(G.victory)) this.send({ t: 'moddone' });  // 房主可能在等隊友選模組
     } else G.showMap('已重新連線，回到這一局。');
     this.send({ t: 'back' });
   },
