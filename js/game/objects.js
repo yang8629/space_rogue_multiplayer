@@ -241,10 +241,15 @@ const Objects = {
   // 敵人繞開黑洞：(mx, my) 是敵人想走的方向；在引力範圍（外加 30）內時，拿掉朝核心的分量改往旁邊繞，再加上往外的力（越近越強）
   // 只影響敵人自己走路：被擊退、被減速、精英衝鋒時還是可能被吸進核心
   steer(e, mx, my) {
+    // 脫困：在黑洞附近 3 秒都沒移動超過 40（例如黑洞堵住牆邊的通道，往兩邊繞都撞牆）→ 接下來 2 秒不閃黑洞，直接走過去（2026-10-09 整局模擬卡住）
+    if (e.holeSkip > Game.time) return [mx, my];
+    let near = false;
     for (const o of Game.objs) {
       if (o.type !== 'hole') continue;
       const dx = e.x - o.x, dy = e.y - o.y, d = Math.hypot(dx, dy), zone = o.R + 30;
-      if (d > zone || d < 1) { if (e.holeSide && d > zone + 40) e.holeSide = 0; continue; }
+      // 範圍外 40 以內也照「沿著邊繞」走（只是不推開）：以前只在範圍內繞，一出範圍又照尋路方向往回走，敵人在邊界上來回、停在原地（2026-10-09）
+      if (d > zone + 40 || d < 1) { if (e.holeSide && d > zone + 40) e.holeSide = 0; continue; }
+      near = true;
       const nx = dx / d, ny = dy / d, inward = -(mx * nx + my * ny);
       if (!e.holeSide) e.holeSide = -ny * mx + nx * my < 0 ? -1 : 1;  // 進入範圍時決定往哪邊繞，之後不換（蟲群左右擺動也不會卡住）
       const tx = -ny * e.holeSide, ty = nx * e.holeSide;
@@ -255,9 +260,12 @@ const Objects = {
         const mt = mx * tx + my * ty;
         if (mt < inward) { mx += tx * (inward - mt); my += ty * (inward - mt); }
       }
-      const w = 2.5 * (1 - d / zone);
+      const w = 2.5 * Math.max(0, 1 - d / zone);
       mx += nx * w; my += ny * w;
     }
+    if (!near) e.holeT = null;
+    else if (e.holeT == null || Math.hypot(e.x - e.holeX, e.y - e.holeY) > 40) { e.holeT = Game.time; e.holeX = e.x; e.holeY = e.y; }
+    else if (Game.time - e.holeT > 3) { e.holeSkip = Game.time + 2; e.holeT = null; }
     return [mx, my];
   },
   // 敵人在黑洞的引力範圍內（R：改用離核心多遠算，預設整個引力範圍）：會停下來的招式（衝鋒、縮球、蓄力射擊、撲擊）先不放，走出來再放（停下來會被吸進核心）
