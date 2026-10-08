@@ -200,13 +200,13 @@ const MechCheck = {
       return { ok: sk === 6 && Math.abs(n - want) <= 1.5 && full === n && keep && reset,
         got: `站 3 秒 ${sk} 層；接著 2 秒射 ${n} 發（要 ${want.toFixed(1)}），其中滿層 ${full} 發；移動 0.1 秒${keep ? '還在' : '就歸零（錯）'}，0.3 秒${reset ? '歸零' : '沒歸零（錯）'}` };
     }],
-    ['武器命中效果', '動能彈頭', '雷射・貫穿光束・動能彈頭：命中時子彈比原本彈速快多少 %，傷害加一半（最多 +80%）；感測器也算', M => {
+    ['武器命中效果', '動能彈頭', '雷射・貫穿光束・動能彈頭：命中時子彈比原本彈速快多少 %，傷害加一半（沒有上限）；感測器也算', M => {
       const one = sensor => {
         M.setup('sandbox', 'vanguard', 'laser', 'C', 0, ['weapon', null, null, null]);
         Game.parts.sensor = sensor; Game.recalc();
         const e = M.targets([[200, 0]])[0], got = [], h = e.hurt.bind(e);
         e.hurt = (d, ...r) => { got.push(d); return h(d, ...r); };
-        Game.player.fire(); const b = Game.bullets[0], d0 = b.damage, want = 1 + Math.min(0.8, (b.speed / WEAPONS.laser.base.speed - 1) * 0.5);
+        Game.player.fire(); const b = Game.bullets[0], d0 = b.damage, want = 1 + (b.speed / WEAPONS.laser.base.speed - 1) * 0.5;
         for (let f = 0; f < 30 && !got.length; f++) Game.updateBullets(1 / 60);
         return { d0, d: got[0] || 0, want };
       };
@@ -214,16 +214,28 @@ const MechCheck = {
       return { ok: near1(A.d, A.d0 * A.want) && near1(B.d, B.d0 * B.want) && near1(A.want, 1.15) && B.want > A.want,
         got: `沒感測器：子彈 ${A.d0.toFixed(1)} 打中 ${A.d.toFixed(1)}（×${A.want.toFixed(2)}）；感測器 3 層：${B.d0.toFixed(1)} → ${B.d.toFixed(1)}（×${B.want.toFixed(2)}）` };
     }],
-    ['武器命中效果', '重量砲', '電漿・重力井・重量砲：移動速度每慢 1% 傷害 +2%（最多 +80%）；重裝甲、被凍住都算', M => {
+    ['武器命中效果', '重量砲', '電漿・重力井・重量砲：移動速度每慢 1% 傷害 +2%（沒有上限）；重裝甲、被凍住都算', M => {
       const one = (armor, frost) => {
         M.setup('sandbox', 'vanguard', 'plasma', 'B', 0, ['weapon', null, null, null]);
         Game.parts.armor = armor; Game.recalc(); Game.player.frostT = frost ? 1 : 0;
         const L = runOps(Game.stats.ops, 0); return { d: L[0].damage, spd: shipSpeedNow() };
       };
       const A = one(0), B = one(5), C = one(5, true);
-      const wantB = 1 + (1 - B.spd) * 2;
-      return { ok: near1(A.spd, 1) && near1(B.d / A.d, wantB) && near1(C.d / A.d, 1.8),
-        got: `沒重裝甲 ${A.d.toFixed(1)}；重裝甲 5 層（速度 ×${B.spd.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / A.d).toFixed(2)}，要 ×${wantB.toFixed(2)}）；再被凍住（×${C.spd.toFixed(3)}）${C.d.toFixed(1)}（×${(C.d / A.d).toFixed(2)}，上限 ×1.8）` };
+      const wantB = 1 + (1 - B.spd) * 2, wantC = 1 + (1 - C.spd) * 2;
+      return { ok: near1(A.spd, 1) && near1(B.d / A.d, wantB) && near1(C.d / A.d, wantC) && wantC > 1.8,
+        got: `沒重裝甲 ${A.d.toFixed(1)}；重裝甲 5 層（速度 ×${B.spd.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / A.d).toFixed(2)}，要 ×${wantB.toFixed(2)}）；再被凍住（×${C.spd.toFixed(3)}）${C.d.toFixed(1)}（×${(C.d / A.d).toFixed(2)}，要 ×${wantC.toFixed(2)}，超過舊上限 ×1.8）` };
+    }],
+    ['武器命中效果', '玻璃砲', '相位刃・巨刃・玻璃砲：傷害 ×1.4，受到的傷害每多 1% 再 +3%（沒有上限）；輕裝甲、散熱片都算', M => {
+      const one = (larmor, sink) => {
+        M.setup('sandbox', 'vanguard', 'blade', 'A', 1, ['weapon', null, null, null]);
+        Game.parts.larmor = larmor; Game.parts.sink = sink; Game.recalc();
+        return { d: runOps(Game.stats.ops, 0)[0].damage, t: Game.mech.taken };
+      };
+      M.setup('sandbox', 'vanguard', 'blade', 'A', null, ['weapon', null, null, null]);
+      const base = runOps(Game.stats.ops, 0)[0].damage;
+      const A = one(0, 0), B = one(3, 3), wantB = 1.4 * (1 + (B.t - 1) * 3);
+      return { ok: near1(A.d / base, 1.4) && near1(B.d / base, wantB) && B.d / base > 2.24,
+        got: `巨刃 ${base.toFixed(1)}；玻璃砲沒疊 ${A.d.toFixed(1)}（×${(A.d / base).toFixed(2)}）；輕裝甲 3＋散熱片 3（受傷 ×${B.t.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / base).toFixed(2)}，要 ×${wantB.toFixed(2)}）` };
     }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
