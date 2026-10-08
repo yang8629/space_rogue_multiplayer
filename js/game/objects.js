@@ -17,6 +17,7 @@ const OBJ = {
   ROCK_MIN_DMG: 30, ROCK_CREDIT_HP: 32,  // 小行星：單發至少 30 才打得動；打爆掉晶體（耐久每 32 一顆）
   PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
   FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
+  HOLE_ZONE_COST: 8, HOLE_WALL: 350,  // 尋路：黑洞閃避範圍（R + 30）裡的格子算幾步遠（有別條路就繞開，沒有才穿過）；大地圖：黑洞離牆至少多遠（閃避範圍 310 ＋ 40，不堵住通道）
   COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60, COMET_GRAV: 1.5,  // COMET_GRAV：彗星受引力影響的倍數
   COMET_FROST: { slow: 0.4, t: 2 }, COMET_SHARDS: 12,  // 被彗星打到（撞擊、爆炸、碎片）都會冰凍：減速 40%、2 秒（敵人、玩家一樣）；打爆、撞爆都往四周噴 12 片碎片
 };
@@ -63,7 +64,7 @@ const Objects = {
     return out;
   },
   // 大地圖：每個區域各自抽（規則跟方形場地一樣：一半機率沒有；一般戰 1～2 種、精英戰 1 種），開場一次放好
-  //   行星：放在空地，周圍至少留飛船過得去的寬度；黑洞：核心離牆至少 200、離入口至少 420；兩者都不能擋住閘門
+  //   行星：放在空地，周圍至少留飛船過得去的寬度；黑洞：核心離牆至少 350（敵人的閃避範圍 310 不碰到牆、不堵住通道；2026-10-09）、離入口至少 420；兩者都不能擋住閘門
   //   小行星帶：從一邊的牆拉到另一邊的牆（挑比較窄的地方），一樣留 2 個縫；不擋入口和閘門
   //   彗星：只在玩家所在的區域出現，從那一區的牆邊飛進來
   genAreas(C) {
@@ -88,7 +89,7 @@ const Objects = {
           const r = randInt(55, 95), p = spot(300, r, r + 90);
           if (p) out.push({ type: 'planet', ...p, r, r0: r, hp: r * OBJ.PLANET_HP, maxHp: r * OBJ.PLANET_HP, gm: +rand(0.7, 1.3).toFixed(2), area: k });
         }
-        if (kd === 'hole') { const p = spot(420, OBJ.HOLE_R * 0.6, 200 + OBJ.HOLE_CORE); if (p) out.push({ type: 'hole', ...p, r: OBJ.HOLE_CORE, R: OBJ.HOLE_R, tick: 0, area: k }); }
+        if (kd === 'hole') { const p = spot(420, OBJ.HOLE_R * 0.6, OBJ.HOLE_WALL); if (p && Arena.f(p.x, p.y) >= OBJ.HOLE_WALL) out.push({ type: 'hole', ...p, r: OBJ.HOLE_CORE, R: OBJ.HOLE_R, tick: 0, area: k }); }
         if (kd === 'comet') out.push({ type: 'cometgen', t: rand(4, 7), area: k });
         if (kd === 'belt') this.genBelt(k, entry, gate, out);
       }
@@ -173,6 +174,8 @@ const Objects = {
   //   場地切成 20×20 的格子，障礙物（外擴 12）佔的格子不能走；每 0.25 秒從每個玩家往外算一次步數（BFS）
   //   敵人往周圍 8 格裡步數最少的那一格走
   //   黑洞也算：核心外 70 內子彈最容易被吞掉或拉彎，敵人站在黑洞後面時玩家打不到，所以繞過去找看得到的位置
+  //   黑洞的閃避範圍（R + 30，敵人走進去會被往外推）每格算 HOLE_ZONE_COST 步：有別條路就繞開，真的沒有才穿過去
+  //     （2026-10-09 以前每格一樣遠，路線直接穿過閃避範圍，敵人走到範圍邊上被推開，卡在原地）
   blockers() { return Game.objs.filter(o => o.type === 'planet' || o.type === 'hole' || (o.type === 'rock' && !o.dead)); },
   blockR(o) { return o.type === 'hole' ? o.r + OBJ.HOLE_BLOCK : o.r; },
   buildFlow() {
@@ -183,10 +186,11 @@ const Objects = {
     // 陣列重複使用（每 0.25 秒就算一次，不要每次配新的記憶體）；col[c] = 第 c 格在第幾欄（不用每格做除法）
     let S = this._flowBuf;
     if (!S || S.N !== N) {
-      S = this._flowBuf = { N, blk: new Uint8Array(N), q: new Int32Array(N), col: new Int32Array(N), dists: [] };
+      S = this._flowBuf = { N, blk: new Uint8Array(N), zone: new Uint8Array(N), col: new Int32Array(N), dists: [],
+        bq: Array.from({ length: OBJ.HOLE_ZONE_COST + 1 }, () => new Int32Array(N * 2)), bh: new Int32Array(OBJ.HOLE_ZONE_COST + 1), bt: new Int32Array(OBJ.HOLE_ZONE_COST + 1) };
       for (let c = 0; c < N; c++) S.col[c] = c % W;
     }
-    const blk = S.blk, q = S.q, col = S.col;
+    const blk = S.blk, zone = S.zone, col = S.col;
     if (Arena.rect) blk.fill(0); else blk.set(Arena.wallMask(C, W, H, OBJ.FLOW_PAD + 8));  // 大地圖：牆（離牆不到 20 的格子）和閘門不能走
     for (const o of B) {
       const R = this.blockR(o) + OBJ.FLOW_PAD, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
@@ -194,6 +198,15 @@ const Objects = {
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
         if (dist2((x + 0.5) * C, (y + 0.5) * C, o.x, o.y) < R * R) blk[y * W + x] = 1;
     }
+    zone.fill(0);
+    for (const o of B) {
+      if (o.type !== 'hole') continue;
+      const R = o.R + 30, x0 = Math.max(0, Math.floor((o.x - R) / C)), x1 = Math.min(W - 1, Math.floor((o.x + R) / C));
+      const y0 = Math.max(0, Math.floor((o.y - R) / C)), y1 = Math.min(H - 1, Math.floor((o.y + R) / C));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+        if (dist2((x + 0.5) * C, (y + 0.5) * C, o.x, o.y) < R * R) zone[y * W + x] = 1;
+    }
+    const K = OBJ.HOLE_ZONE_COST, NB = K + 1, bq = S.bq, bh = S.bh, bt = S.bt, cap = N * 2;
     let k = 0;
     for (const p of Game.players()) {
       if (!p || p.dead) continue;
@@ -201,15 +214,25 @@ const Objects = {
       k++;
       dist.fill(-1);
       const px = clamp(Math.floor(p.x / C), 0, W - 1), py = clamp(Math.floor(p.y / C), 0, H - 1);
-      let head = 0, tail = 0;
-      dist[py * W + px] = 0; q[tail++] = py * W + px;
+      // Dial 演算法：步數只有 1（一般格）或 K（黑洞閃避範圍），用 K + 1 個輪流的桶子照步數由小到大展開
+      bh.fill(0); bt.fill(0);
+      const s0 = py * W + px; dist[s0] = 0; bq[0][bt[0]++] = s0;
       const last = N - W;  // c >= W：不是第一列；c < last：不是最後一列
-      while (head < tail) {
-        const c = q[head++], x = col[c], d = dist[c] + 1;
-        if (x > 0 && dist[c - 1] < 0 && !blk[c - 1]) { dist[c - 1] = d; q[tail++] = c - 1; }
-        if (x < W - 1 && dist[c + 1] < 0 && !blk[c + 1]) { dist[c + 1] = d; q[tail++] = c + 1; }
-        if (c >= W && dist[c - W] < 0 && !blk[c - W]) { dist[c - W] = d; q[tail++] = c - W; }
-        if (c < last && dist[c + W] < 0 && !blk[c + W]) { dist[c + W] = d; q[tail++] = c + W; }
+      const relax = (n, d) => { if (blk[n]) return; const nd = d + (zone[n] ? K : 1); if (dist[n] < 0 || nd < dist[n]) { dist[n] = nd; const b = nd % NB; if (bt[b] < cap) bq[b][bt[b]++] = n; } };
+      for (let d = 0, idle = 0; idle < NB; d++) {
+        const b = d % NB, Q = bq[b];
+        if (bh[b] >= bt[b]) { idle++; continue; }
+        idle = 0;
+        while (bh[b] < bt[b]) {
+          const c = Q[bh[b]++];
+          if (dist[c] !== d) continue;  // 後來找到更近的路，這一筆作廢
+          const x = col[c];
+          if (x > 0) relax(c - 1, d);
+          if (x < W - 1) relax(c + 1, d);
+          if (c >= W) relax(c - W, d);
+          if (c < last) relax(c + W, d);
+        }
+        bh[b] = bt[b] = 0;
       }
       this.fields.set(p, { dist, W, H });
     }
@@ -241,15 +264,11 @@ const Objects = {
   // 敵人繞開黑洞：(mx, my) 是敵人想走的方向；在引力範圍（外加 30）內時，拿掉朝核心的分量改往旁邊繞，再加上往外的力（越近越強）
   // 只影響敵人自己走路：被擊退、被減速、精英衝鋒時還是可能被吸進核心
   steer(e, mx, my) {
-    // 脫困：在黑洞附近 3 秒都沒移動超過 40（例如黑洞堵住牆邊的通道，往兩邊繞都撞牆）→ 接下來 2 秒不閃黑洞，直接走過去（2026-10-09 整局模擬卡住）
-    if (e.holeSkip > Game.time) return [mx, my];
-    let near = false;
     for (const o of Game.objs) {
       if (o.type !== 'hole') continue;
       const dx = e.x - o.x, dy = e.y - o.y, d = Math.hypot(dx, dy), zone = o.R + 30;
       // 範圍外 40 以內也照「沿著邊繞」走（只是不推開）：以前只在範圍內繞，一出範圍又照尋路方向往回走，敵人在邊界上來回、停在原地（2026-10-09）
       if (d > zone + 40 || d < 1) { if (e.holeSide && d > zone + 40) e.holeSide = 0; continue; }
-      near = true;
       const nx = dx / d, ny = dy / d, inward = -(mx * nx + my * ny);
       if (!e.holeSide) e.holeSide = -ny * mx + nx * my < 0 ? -1 : 1;  // 進入範圍時決定往哪邊繞，之後不換（蟲群左右擺動也不會卡住）
       const tx = -ny * e.holeSide, ty = nx * e.holeSide;
@@ -263,9 +282,6 @@ const Objects = {
       const w = 2.5 * Math.max(0, 1 - d / zone);
       mx += nx * w; my += ny * w;
     }
-    if (!near) e.holeT = null;
-    else if (e.holeT == null || Math.hypot(e.x - e.holeX, e.y - e.holeY) > 40) { e.holeT = Game.time; e.holeX = e.x; e.holeY = e.y; }
-    else if (Game.time - e.holeT > 3) { e.holeSkip = Game.time + 2; e.holeT = null; }
     return [mx, my];
   },
   // 敵人在黑洞的引力範圍內（R：改用離核心多遠算，預設整個引力範圍）：會停下來的招式（衝鋒、縮球、蓄力射擊、撲擊）先不放，走出來再放（停下來會被吸進核心）
