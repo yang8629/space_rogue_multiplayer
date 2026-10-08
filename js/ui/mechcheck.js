@@ -1045,6 +1045,15 @@ const MechCheck = {
       const around = !w.dead && Math.hypot(w.x - p.x, w.y - p.y) <= 120 && near > 34 + w.r + 20;
       return { ok: d1 < d0 - 20 && b.dead && around, got: `靶離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}；蟲群最靠近核心 ${Math.round(near)}，${around ? `${(t / 60).toFixed(1)} 秒繞到玩家身邊` : '沒繞過來'}` };
     }],
+    ['地圖物件', '黑洞邊不卡住', '敵人在黑洞範圍邊上，要走的方向偏向「決定好要繞的另一邊」：閃避後的方向不能是 0（以前兩股力量剛好抵銷，敵人在範圍邊上進進出出停在原地；2026-10-09 整局模擬卡住那一局的數值）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player, hx = p.x + 450, hy = p.y - 200;
+      Game.objs = [{ type: 'hole', x: hx, y: hy, r: 34, R: 280, tick: 0 }];
+      const e = new Enemy('lurker', hx - 300, hy - 76, 1); e.spawnT = 0; e.holeSide = 1; Game.enemies = [e];
+      const [sx, sy] = Objects.steer(e, 0.51, 0.86), d = Math.hypot(e.x - hx, e.y - hy);  // 那一局的尋路方向（玩家在黑洞右下）
+      const len = Math.hypot(sx, sy), side = (sx * -(e.y - hy) + sy * (e.x - hx)) / d;  // 繞的分量（照 holeSide 那一邊）
+      return { ok: len > 0.5 && side > 0.5, got: `閃避後的方向長度 ${len.toFixed(2)}（要 > 0.5），往繞的那一邊 ${side.toFixed(2)}（要 > 0.5）` };
+    }],
     ['地圖物件', '彗星', '有預警線；打爆、撞爆都往四周噴 12 片冰晶碎片（命中會冰凍）；被玩家打爆的算那個玩家的「彗星」傷害；撞爆的爆炸會傷玩家、冰凍，不算任何人的', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       Game.objs = [];
