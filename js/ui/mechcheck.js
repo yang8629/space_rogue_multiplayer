@@ -676,6 +676,13 @@ const MechCheck = {
       const d1 = Math.hypot(a.x - p.x, a.y - p.y);
       return { ok: d1 >= d0 - 1 && b.y < by - 10, got: `被打中的離飛船 ${d0.toFixed(0)} → ${d1.toFixed(0)}（不能變近）；旁邊那隻往牠移動 ${(by - b.y).toFixed(0)}（應 > 10）` };
     }],
+    ['電路晶片', '吸引不疊加', '同一幀被吸引 25 次，往中心的速度還是 380（以前每次 +380，散彈＋鏡像會把敵人甩進牆裡）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', null, null]);
+      const [a, b] = M.targets([[150, 0], [150, 70]]); b.vx = b.vy = 0;
+      for (let i = 0; i < 25; i++) Game.pullAt({ pull: 1, x: a.x, y: a.y, owner: null }, a);
+      const d = Math.hypot(a.x - b.x, a.y - b.y), vn = (b.vx * (a.x - b.x) + b.vy * (a.y - b.y)) / d;
+      return { ok: Math.abs(vn - 380) < 1 && a.vx === 0 && a.vy === 0, got: `旁邊那隻往中心的速度 ${vn.toFixed(0)}（要 380）；被打中的那隻速度 ${Math.round(Math.hypot(a.vx, a.vy))}（要 0）` };
+    }],
     ['電路晶片', '元素組件', '跟武器升級相加：新星＋爆裂 = 爆炸 130%（半徑 90）；磁暴線圈＋電擊 = 3 道電弧；黑潮＋冰凍 = 減速 70%（上限）；雷射＋燃燒實際打中：每秒燒 30% 命中傷害、3 秒；破甲 +25%，加弱點標記 +50%（上限）', M => {
       const top = (w, path, fin, flat) => { M.setup('sandbox', 'vanguard', w, path, fin, flat); return runOps(Game.stats.ops, 0)[0]; };
       const ex = top('plasma', 'C', null, ['weapon', 'blast', null, null]).explode;
