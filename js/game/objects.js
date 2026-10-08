@@ -248,7 +248,13 @@ const Objects = {
       const nx = dx / d, ny = dy / d, inward = -(mx * nx + my * ny);
       if (!e.holeSide) e.holeSide = -ny * mx + nx * my < 0 ? -1 : 1;  // 進入範圍時決定往哪邊繞，之後不換（蟲群左右擺動也不會卡住）
       const tx = -ny * e.holeSide, ty = nx * e.holeSide;
-      if (inward > 0) { mx += (nx + tx) * inward; my += (ny + ty) * inward; }
+      if (inward > 0) {
+        mx += (nx + tx) * inward; my += (ny + ty) * inward;
+        // 繞的速度至少跟擋掉的往內那一份一樣大：想去的方向偏向另一邊時，兩股力量會剛好抵銷成 0，敵人在範圍邊上進進出出、停在原地
+        //   （2026-10-09 整局模擬：隱形的潛伏者停在黑洞範圍邊上 150 秒，電腦看不到牠，戰鬥卡死）
+        const mt = mx * tx + my * ty;
+        if (mt < inward) { mx += tx * (inward - mt); my += ty * (inward - mt); }
+      }
       const w = 2.5 * (1 - d / zone);
       mx += nx * w; my += ny * w;
     }
