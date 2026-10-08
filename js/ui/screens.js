@@ -302,7 +302,7 @@ const Screen = {
     this.show(`<div class="scr title-wrap">
       <div class="refresh-corner">${this.refreshBtn()}</div>
       <h1>星環電路</h1><div class="en">CIRCUIT ROGUE</div>
-      <div class="sub">V2 · 5 把武器 · 改變玩法的晶片（越用越強、Lv3 進化）· 4 艘飛船 · 零件與背包模組 · 行星、黑洞、彗星、小行星帶 · 三星區遠征＋無盡模式</div>
+      <div class="sub">組裝電路，疊出屬於你的彈幕</div>
       <div class="row">
         <button class="big" data-act="select" data-arg="run">開始遠征</button>
         <button class="big" data-act="select" data-arg="range">🎯 靶場</button>
