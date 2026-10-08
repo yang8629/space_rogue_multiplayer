@@ -225,7 +225,7 @@ const MechCheck = {
       return { ok: near1(A.spd, 1) && near1(B.d / A.d, wantB) && near1(C.d / A.d, wantC) && wantC > 1.8,
         got: `沒重裝甲 ${A.d.toFixed(1)}；重裝甲 5 層（速度 ×${B.spd.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / A.d).toFixed(2)}，要 ×${wantB.toFixed(2)}）；再被凍住（×${C.spd.toFixed(3)}）${C.d.toFixed(1)}（×${(C.d / A.d).toFixed(2)}，要 ×${wantC.toFixed(2)}，超過舊上限 ×1.8）` };
     }],
-    ['武器命中效果', '玻璃砲', '相位刃・巨刃・玻璃砲：傷害 ×1.4，受到的傷害每多 1% 再 +3%（沒有上限）；輕裝甲、散熱片都算', M => {
+    ['武器命中效果', '玻璃砲', '相位刃・巨刃・玻璃砲：受到的傷害每多 1%，傷害 +3%（沒有上限）；輕裝甲、散熱片都算', M => {
       const one = (larmor, sink) => {
         M.setup('sandbox', 'vanguard', 'blade', 'A', 1, ['weapon', null, null, null]);
         Game.parts.larmor = larmor; Game.parts.sink = sink; Game.recalc();
@@ -233,8 +233,8 @@ const MechCheck = {
       };
       M.setup('sandbox', 'vanguard', 'blade', 'A', null, ['weapon', null, null, null]);
       const base = runOps(Game.stats.ops, 0)[0].damage;
-      const A = one(0, 0), B = one(3, 3), wantB = 1.4 * (1 + (B.t - 1) * 3);
-      return { ok: near1(A.d / base, 1.4) && near1(B.d / base, wantB) && B.d / base > 2.24,
+      const A = one(0, 0), B = one(3, 3), wantB = 1 + (B.t - 1) * 3;
+      return { ok: near1(A.d / base, 1) && near1(B.d / base, wantB) && B.d / base > 1.6,
         got: `巨刃 ${base.toFixed(1)}；玻璃砲沒疊 ${A.d.toFixed(1)}（×${(A.d / base).toFixed(2)}）；輕裝甲 3＋散熱片 3（受傷 ×${B.t.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / base).toFixed(2)}，要 ×${wantB.toFixed(2)}）` };
     }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
