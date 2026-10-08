@@ -728,9 +728,9 @@ const Game = {
 
   // ---------- 共用 ----------
   recalc() {
+    this.mech = mechStats(this.parts, this.module, this.wp);  // 先算機體：估算 DPS 會用到（玻璃砲看受到的傷害、重量砲看移動速度）
     this.stats = analyzeChain(this.chain);
     this.passives = computePassives(this.inventory);
-    this.mech = mechStats(this.parts, this.module, this.wp);
     const p = this.player;
     if (p) {
       const newMax = this.maxHpOf(p.ship, this.passives, this.mech);
