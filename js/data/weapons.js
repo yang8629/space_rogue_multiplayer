@@ -97,7 +97,7 @@ const WEAPONS = {
           { name: '連殺裝填', desc: '每擊殺一隻敵人，下一發的射擊冷卻立刻歸零：連續擊殺時變成連射。', apply: p => { p.reload = true; } }] },
       B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，' + rateTxt(1.3) + '。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
         next: [
-          { name: '裝甲供能', desc: '最大 HP 超過 100 的部分，每 1 點射速 +0.5%（最多 +60%）：疊血就是疊火力。', apply: p => { p.hpRate = { per: 0.005, max: 0.6 }; } },
+          { name: '裝甲供能', desc: '最大 HP 超過 100 的部分，每 1 點射速 +1%（最多 +100%）：疊血就是疊火力。', apply: p => { p.hpRate = { per: 0.01, max: 1 }; } },
           { name: '碎甲', desc: `每次命中，那隻敵人受到的傷害 +${CRACK.per * 100}%（疊加、沒有上限），${CRACK.t} 秒沒被打中就掉光；破甲彈頭打中時改疊 +25%：一發貫穿一排，整排一起變脆。`, apply: p => { p.crack = CRACK; } }] },
       C: { name: '磁暴線圈', desc: '命中時放出 2 道電弧，瞬間打中附近 2 隻敵人（每道 50% 傷害）；附近沒有其他敵人時，電弧打回目標本身（25%）。',
         apply: p => { p.arcs = { n: 2, ratio: 0.5 }; },
