@@ -249,6 +249,7 @@ class Bullet {
     this.wallhit = s.wallhit || null;  // 撞牆（散彈升級）：打飛的敵人撞到東西會受傷
     this.carpet = s.carpet || null;    // 火毯（散彈升級）：消失的地方留火
     this.focus = s.focus || null; this.skewer = s.skewer || null; this.skN = 0; this.spreadSh = s.spreadSh || false;  // 雷射升級：專注、串燒（穿過幾隻）、分散的碎光
+    this.frostbite = s.frostbite || null; this.aftershock = s.aftershock || null; this.res = s.res || null;  // 電漿升級：冰封、餘震、共鳴（小電漿帶著連結）
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -946,6 +947,7 @@ class Enemy {
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
     this.hp -= dmg; this.flash = 0.08;
+    if (this.link && source !== 'link') Game.shareLink(this, dmg, att);  // 共鳴（電漿升級）：分 30% 給其他連結的
     if ((this.t.dummy || this.immortal) && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶（和靶場手動生的「打不死」）打不死
     if (this.t.boss) {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);

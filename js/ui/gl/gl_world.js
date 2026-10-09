@@ -53,6 +53,19 @@ const GLWorld = {
       this.gAdd.circle(z.x, z.y, z.r * fl).fill({ color: 0xff6a1c, alpha: 0.22 * k });
       this.gAdd.circle(z.x, z.y, z.r * 0.5 * fl).fill({ color: 0xffd166, alpha: 0.28 * k });
     }
+    if (G.links.length) {  // 共鳴（電漿升級）：連結中的敵人之間畫淡紫色的線，快斷時變淡（隊友那邊只有敵人 id）
+      const byId = G.links.some(L => L.ids) ? new Map(G.enemies.map(e => [e.id, e])) : null;
+      for (const L of G.links) {
+        const es = (L.es || L.ids.map(id => byId.get(id))).filter(e => e && !e.dead && (!L.es || e.link === L));
+        const a = 0.25 + 0.35 * Math.min(1, L.t / 0.6);
+        for (let i = 1; i < es.length; i++) this.gAdd.moveTo(es[0].x, es[0].y).lineTo(es[i].x, es[i].y).stroke({ width: 2, color: 0xc77dff, alpha: a });
+      }
+    }
+    for (const q of G.quakes) {  // 餘震（電漿升級）：外圈固定，裡面的圈往內縮，縮完就炸
+      const k = Math.max(0, q.t) / q.max;
+      this.gAdd.circle(q.x, q.y, q.r).stroke({ width: 1.5, color: 0xc77dff, alpha: 0.35 });
+      this.gAdd.circle(q.x, q.y, q.r * k).stroke({ width: 3, color: 0xe0b3ff, alpha: 0.4 + 0.5 * (1 - k) });
+    }
     const pt = GLR.T('pickup'), pr = GLR.res('pickup');
     for (const p of G.pickups) {
       if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;
