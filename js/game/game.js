@@ -911,7 +911,7 @@ const Game = {
     if (!p || p.dead || !this.mechOf(p).traits.streak) return;
     p.streak = Math.min(STREAK.max, (p.streak || 0) + 1);
   },
-  // 散彈升級的每幀效果（在那個人的配裝下執行，房主）：逆襲倒數、群戰數身邊的敵人、火線在身後留火
+  // 散彈升級的每幀效果（在那個人的配裝下執行，房主）：逆襲倒數、群戰數身邊的敵人
   tickWeaponFx(p, dt) {
     const w = this.wp;
     if (p.revengeT > 0) p.revengeT -= dt;
@@ -921,13 +921,14 @@ const Game = {
       for (const e of enemiesNear(p.x, p.y, w.crowd.r)) if (!e.dead && !(e.spawnT > 0) && dist2(e.x, e.y, p.x, p.y) < R2 && ++n >= w.crowd.max) break;
       p.crowdK = n;
     } else p.crowdK = 0;
-    const F = w.fireline;
-    if (F && p.moving && (p.flameT = (p.flameT || 0) + dt) >= F.every) {
-      p.flameT -= F.every;  // 多出來的時間留到下一團（不然留火的速度會照幀率變）
-      this.flames.push({ x: p.x, y: p.y, r: F.r, t: F.t, max: F.t, dps: F.dps, att: { src: 'weapon', cr: null, owner: this.shooter || null } });
-    }
   },
-  // 火線的火：每 0.2 秒讓碰到的敵人燃燒（每秒 dps，持續 3 秒）
+  // 火毯（散彈升級）：彈丸消失的地方留一團火（場上太多時最舊的先熄）
+  dropFlame(b) {
+    const C = b.carpet;
+    this.flames.push({ x: b.x, y: b.y, r: C.r, t: C.t, max: C.t, dps: C.dps, att: b.att });
+    if (this.flames.length > C.max) this.flames.shift();
+  },
+  // 火毯的火：每 0.2 秒讓碰到的敵人燃燒（每秒 dps，持續 3 秒）
   updateFlames(dt) {
     if (!this.flames.length) return;
     this.flameTick = (this.flameTick || 0) + dt;
@@ -1009,7 +1010,7 @@ const Game = {
   resetMechCombat(p) {
     p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
     p.portalCd = 0; p.pullV = null; p.icWs = [];
-    p.revengeT = 0; p.streak = 0; p.crowdK = 0; p.flameT = 0;  // 逆襲、無傷連殺、群戰、火線
+    p.revengeT = 0; p.streak = 0; p.crowdK = 0;  // 逆襲、無傷連殺、群戰
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1291,7 +1292,7 @@ const Game = {
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }
     let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）
-    for (let i = 0; i < B.length; i++) if (!B[i].dead) B[w++] = B[i];
+    for (let i = 0; i < B.length; i++) if (!B[i].dead) B[w++] = B[i]; else if (B[i].carpet) this.dropFlame(B[i]);  // 火毯：消失的地方留火
     B.length = w;
   },
   // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加

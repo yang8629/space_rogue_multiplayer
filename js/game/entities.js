@@ -247,6 +247,7 @@ class Bullet {
     this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.shred = s.shred || 0; this.knock = s.knock; this.lifesteal = s.lifesteal; this.kin = s.kin || null;  // kin：動能彈頭（命中時照速度加傷害）
     this.wild = s.wild || null;  // 野火（散彈升級）：點燃的火會傳染
     this.wallhit = s.wallhit || null;  // 撞牆（散彈升級）：打飛的敵人撞到東西會受傷
+    this.carpet = s.carpet || null;    // 火毯（散彈升級）：消失的地方留火
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -929,8 +930,8 @@ class Enemy {
     if (v1 > lim) { this.vx *= lim / v1; this.vy *= lim / v1; }
   }
   hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
-    const vul = (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，相加最多 +50%
-    if (vul > 0) dmg *= 1 + Math.min(0.5, vul);
+    const vul = (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，各自算、相加，沒有上限
+    if (vul > 0) dmg *= 1 + vul;
     if (att) this.lastAtt = att;
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
