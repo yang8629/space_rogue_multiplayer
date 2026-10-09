@@ -41,7 +41,7 @@ class Player {
     else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
     else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設），減少相乘（重力井）
+      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + crowdRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、群戰），減少相乘（重力井）
       Game.standFull = !!S.stand && sk >= standMax(S.stand);
       Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
       try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
@@ -245,6 +245,8 @@ class Bullet {
     this.payload = s.payload; this.depth = depth;
     this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
     this.slow = s.slow; this.slowDur = s.slowDur || 0; this.burnR = s.burnR || 0; this.shred = s.shred || 0; this.knock = s.knock; this.lifesteal = s.lifesteal; this.kin = s.kin || null;  // kin：動能彈頭（命中時照速度加傷害）
+    this.wild = s.wild || null;  // 野火（散彈升級）：點燃的火會傳染
+    this.wallhit = s.wallhit || null;  // 撞牆（散彈升級）：打飛的敵人撞到東西會受傷
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -510,6 +512,8 @@ const STAND_FULL = 2;
 const standMax = lv => lv >= 2 ? 8 : 6;
 const standStacks = (p, lv) => lv ? Math.min(standMax(lv), Math.floor((p.standT || 0) / STAND_FULL * standMax(lv) + 1e-9)) : 0;
 
+// 群戰（散彈升級）：身邊的敵人數（Game.tickWeaponFx 每幀數好）換成射速
+const crowdRateAdd = p => Game.wp && Game.wp.crowd ? Math.min(Game.wp.crowd.max, p.crowdK || 0) * Game.wp.crowd.per : 0;
 // 裝甲供能（軌道砲・攻城砲的升級）：最大 HP 超過 100 的部分換成射速
 function hpRateAdd(p) {
   const H = Game.wp && Game.wp.hpRate;
@@ -579,9 +583,14 @@ class Enemy {
   }
   move(dt) {
     if (Arena.rect) {
-      this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
-      this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
-    } else { this.x += this.vx * dt; this.y += this.vy * dt; this.wallN = Arena.collide(this, this.r, null); }  // 大地圖：撞牆停住，閘門過不去
+      const nx = this.x + this.vx * dt, ny = this.y + this.vy * dt;
+      this.x = clamp(nx, this.r, CFG.WORLD_W - this.r);
+      this.y = clamp(ny, this.r, CFG.WORLD_H - this.r);
+      if (this.whT > 0 && (this.x !== nx || this.y !== ny)) Game.wallSlam(this);  // 撞牆（散彈升級）：撞到場地邊緣
+    } else {
+      this.x += this.vx * dt; this.y += this.vy * dt; this.wallN = Arena.collide(this, this.r, null);  // 大地圖：撞牆停住，閘門過不去
+      if (this.whT > 0 && this.wallN) Game.wallSlam(this);
+    }
   }
   update(dt, p) {
     this.flash = Math.max(0, this.flash - dt);
@@ -604,6 +613,11 @@ class Enemy {
     if (this.shredT > 0) this.shredT -= dt;
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
     if (this.spawnT > 0) { this.spawnT -= dt; return; }
+    if (this.whT > 0) this.whT -= dt;
+    if (this.stunT > 0) {  // 撞牆暈眩（散彈升級）：不動、不攻擊，被撞開的速度慢慢減
+      this.stunT -= dt; const f = Math.max(0, 1 - dt * 6); this.vx *= f; this.vy *= f; this.move(dt);
+      return;
+    }
     const t = this.t;
     if (t.dummy || this.frozen) {  // 標靶（和靶場手動生的「不動」敵人）：被擊退後像彈簧一樣回到原位，不移動也不攻擊
       const k = Math.min(1, dt * 6);

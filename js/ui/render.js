@@ -254,6 +254,12 @@ function drawHUD() {
     const sk = Net.role === 'client' ? p.standK || 0 : standStacks(p, s.stand), mx = standMax(s.stand);
     bar(`架設 射速 +${sk * 10}%`, sk / mx, sk >= mx ? '#ffffff' : '#9dff6b');
   }
+  // 散彈升級、輕裝甲 4 層（隊友：房主同步過來）
+  const W = Game.wp;
+  if (W.crowd) { const k = Math.min(W.crowd.max, p.crowdK || 0); bar(`群戰 射速 +${Math.round(k * W.crowd.per * 100)}%`, k / W.crowd.max, k >= W.crowd.max ? '#ffffff' : '#ffb347'); }
+  if (W.revenge && p.revengeT > 0) bar(`逆襲 ${p.revengeT.toFixed(1)} 秒`, p.revengeT / W.revenge.t, '#ff4d6d');
+  if (W.ascetic) { const n = emptySlots(); bar(`空格苦行 傷害 +${Math.round(n * W.ascetic.per * 100)}%`, n / 4, n ? '#ffd166' : '#8fa3d9'); }
+  if (Game.mech.traits.streak) { const n = p.streak || 0; bar(`無傷連殺 傷害 +${Math.round(n * STREAK.per * 100)}%`, n / STREAK.max, n >= STREAK.max ? '#ffffff' : '#9fe8ff'); }
   // 奇異點「間歇失效」的格子：失效的那 2 秒標出來
   const fk = (Game.slotAttr || []).map((a, i) => a === 'flaky' && Game.chain[i] ? i : -1).filter(i => i >= 0);
   if (fk.length && flakyOff()) {

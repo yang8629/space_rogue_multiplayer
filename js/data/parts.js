@@ -21,6 +21,7 @@ const fxTimes = (f, n) => ({ ...f, v: f.pct && f.v < 0 ? Math.round(((1 + f.v / 
 
 const PART_IDS = ['armor', 'larmor', 'booster', 'sink', 'sensor'];
 const RAM_HP = 0.45;  // 衝撞（重裝甲 4 層）：傷害 = 最大 HP × 這個比例
+const STREAK = { per: 0.03, max: 15 };  // 無傷連殺（輕裝甲 4 層，2026-10-09 取代反擊裝甲）：每層傷害 +3%
 // fx：每層的效果（第一項是好處、第二項是代價）；up／dn 是同樣內容的文字（由 fx 產生）
 const PARTS = {
   armor:   { name: '重裝甲', color: '#ffd166', fx: [{ stat: 'hp', v: 20 }, { stat: 'speed', v: -4, pct: true }],
@@ -28,7 +29,7 @@ const PARTS = {
     t4: { id: 'ram', name: '衝撞', desc: '撞到敵人造成「最大 HP × 45%」傷害並撞飛，自己不受碰撞傷害（HP 越高撞越痛）' } },
   larmor:  { name: '輕裝甲', color: '#9fe8ff', fx: [{ stat: 'dashCd', v: -8, pct: true }, { stat: 'taken', v: 3, pct: true }],
     t2: { id: 'deflect', name: '偏折', desc: '被打到後的無敵時間 +0.8 秒' },
-    t4: { id: 'counter', name: '反擊裝甲', desc: '被打到時，朝打你的方向回射 8 發子彈' } },
+    t4: { id: 'streak', name: '無傷連殺', desc: `沒被打中時每擊殺 1 隻，傷害 +${STREAK.per * 100}%（最多 ${STREAK.max} 層 +${STREAK.per * STREAK.max * 100}%）；被打中就歸零（護盾擋下不算）` } },
   booster: { name: '加速器', color: '#4cc9f0', fx: [{ stat: 'speed', v: 6, pct: true }, { stat: 'hp', v: -10 }],
     t2: { id: 'gale', name: '疾風', desc: '移動中射速 +20%' },
     t4: { id: 'assault', name: '突擊', desc: '衝刺穿過的敵人受到「武器傷害 × 4」' } },

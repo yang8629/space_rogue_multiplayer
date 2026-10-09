@@ -8,6 +8,14 @@
 //   paths : 第一段路線；每條路線的 next 是第二段的兩個選項
 //   apply : 直接修改參數物件 p
 // =====================================================================
+// 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
+const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
+const REVENGE = { t: 3, mul: 2, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 3 秒傷害 ×2＋爆炸
+const ASCETIC = { per: 0.2 };                                   // 空格苦行：每個空格傷害 +20%
+const FIRELINE = { every: 0.1, r: 30, t: 3, dps: 12 };          // 火線：移動時每 0.1 秒留一團火
+const WILDFIRE = { every: 0.5, r: 80, deathR: 120 };            // 野火：燃燒傳染
+const WALLHIT = { knock: 3, t: 0.4, mul: 2, stun: 0.5, cd: 0.5 }; // 撞牆：擊退 ×3；被打中 0.4 秒內撞到東西 → 彈丸傷害加總 ×2＋暈眩
+
 const WEAPONS = {
   laser: { name: '雷射步槍', short: '雷射', color: '#5ef2ff', desc: '高速單發雷射，射速快、彈速快，最容易上手。',
     base: { interval: 0.16, count: 1, spread: 0, damage: 10, speed: 950, radius: 3, life: 0.85, shape: 'line', knock: 0.6 },
@@ -32,17 +40,17 @@ const WEAPONS = {
     paths: {
       A: { name: '霰彈擴充', desc: '彈丸 +3。', apply: p => { p.count += 3; },
         next: [
-          { name: '地毯轟炸', desc: '彈丸增加到 12 顆，擴散更廣。', apply: p => { p.count = 12; p.spread = 0.8; } },
-          { name: '鋼珠', desc: '穿透 +1，擊退 ×2。', apply: p => { p.pierce += 1; p.knock *= 2; } }] },
+          { name: '群戰', desc: `身邊 ${CROWD.r} 以內每有 1 隻敵人，射速 +${CROWD.per * 100}%（最多算 ${CROWD.max} 隻，+${CROWD.per * CROWD.max * 100}%）：衝進怪堆越打越快。`, apply: p => { p.crowd = CROWD; } },
+          { name: '撞牆', desc: `擊退 ×${WALLHIT.knock}；被彈丸打飛的敵人 ${WALLHIT.t} 秒內撞到牆、小行星、行星或別的敵人，受到「打中牠的彈丸傷害加總 ×${WALLHIT.mul}」並暈眩 ${WALLHIT.stun} 秒（同一隻 ${WALLHIT.cd} 秒內只算一次；被撞到的敵人不受傷）：把怪推成一片、推到牆上。`, apply: p => { p.knock *= WALLHIT.knock; p.wallhit = WALLHIT; } }] },
       B: { name: '獨頭彈', desc: '改成單發大彈：傷害 ×4.5、穿透 2。', apply: p => {
           p.count = 1; p.spread = 0; p.jitter = 0; p.damage *= 4.5; p.radius = 7; p.pierce += 2; p.life = 0.7; p.shape = 'orb'; },
         next: [
-          { name: '爆裂獨頭彈', desc: '命中時爆炸（半徑 80，100% 傷害）。', apply: p => { p.explode = { r: 80, ratio: 1 }; } },
-          { name: '穿甲獨頭彈', desc: '穿透再 +5，彈速 ×1.5。', apply: p => { p.pierce += 5; p.speed *= 1.5; } }] },
+          { name: '逆襲', desc: `受傷（護盾擋下也算）之後 ${REVENGE.t} 秒內，獨頭彈傷害 ×${REVENGE.mul}、命中時爆炸（半徑 ${REVENGE.explode.r}，100% 傷害）：挨一下換一波爆發。`, apply: p => { p.revenge = REVENGE; } },
+          { name: '空格苦行', desc: `電路上每個沒裝晶片的空格，傷害 +${ASCETIC.per * 100}%（組件插座不算）：晶片越少越痛。`, apply: p => { p.ascetic = ASCETIC; } }] },
       C: { name: '龍息彈', desc: '命中附加燃燒（每秒 6，持續 3 秒）。', apply: p => { p.burn = { dps: 6, t: 3 }; },
         next: [
-          { name: '白磷', desc: '燃燒提升到每秒 12。', apply: p => { p.burn = { dps: 12, t: 3 }; } },
-          { name: '焚風', desc: '射程 ×1.6，彈丸 +2。', apply: p => { p.life *= 1.6; p.count += 2; } }] },
+          { name: '火線', desc: `移動時身後留下一路火（每團半徑 ${FIRELINE.r}、燒 ${FIRELINE.t} 秒），敵人碰到就燃燒（每秒 ${FIRELINE.dps}，持續 3 秒）：邊跑邊讓追你的敵人燒起來。`, apply: p => { p.fireline = FIRELINE; } },
+          { name: '野火', desc: `燃燒中的敵人每 ${WILDFIRE.every} 秒把火傳給 ${WILDFIRE.r} 以內一隻還沒燒的敵人；燒著死掉時，火噴到 ${WILDFIRE.deathR} 以內所有敵人身上：敵人越擠燒越快。`, apply: p => { p.wildfire = WILDFIRE; } }] },
     } },
   plasma: { name: '電漿砲', short: '電漿', color: '#c77dff', desc: '慢速的大型電漿球，單發傷害高、可穿透。',
     base: { interval: 0.45, count: 1, spread: 0, damage: 22, speed: 450, radius: 9, pierce: 2, life: 1.33, shape: 'orb', knock: 1.2 },
@@ -108,7 +116,8 @@ const WEAPON_BRIEF = {
 function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
-    explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color }, W.base);
+    explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
+    crowd: null, revenge: null, ascetic: null, fireline: null, wildfire: null, wallhit: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -116,25 +125,34 @@ function weaponParams(state) {
   return p;
 }
 function weaponEmit(p, pw) {
-  const out = [], sm = statDmgMul(p);
+  const out = [], sm = statDmgMul(p), rv = p.revenge && revengeOn();
   for (let k = 0; k < p.count; k++) {
     const a = (p.count > 1 ? -p.spread / 2 + p.spread * k / (p.count - 1) : 0) + (p.jitter ? rand(-p.jitter, p.jitter) : 0);
-    out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm, kin: p.kinetic || null,
-      radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: p.color, shape: p.shape,
-      explode: p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry }));
+    out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
+      radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
+      explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
+      wild: p.wildfire || null, wallhit: p.wallhit || null }));
   }
   return out;
 }
+// 開火的人（雙人：隊友的電路在 withLoadout 裡開火時是隊友）
+const shooterNow = () => Game.shooter ? Game.mate : Game.player;
+// 逆襲（散彈升級）：開火的人受傷後的爆發時間還在
+function revengeOn() { const P = shooterNow(); return !!P && P.revengeT > 0; }
 // 數值換傷害（武器升級）：重量砲（移動速度越慢越痛）、玻璃砲（受到的傷害越多越痛）；照開火的人現在的機體算（雙人在 withLoadout 裡就是隊友的）
+//   空格苦行（電路空格越多越痛）、無傷連殺（輕裝甲 4 層：沒被打中的連續擊殺）
 function statDmgMul(p) {  // 增加的相加
   let k = 1;
   if (p.weight) k += Math.max(0, 1 - shipSpeedNow()) * p.weight.per;
   if (p.glass) k += Math.max(0, Game.mech.taken - 1) * p.glass.per;
+  if (p.ascetic) k += emptySlots() * p.ascetic.per;
+  if (Game.mech && Game.mech.traits.streak) { const P = shooterNow(); if (P) k += (P.streak || 0) * STREAK.per; }  // 雙人開房時隊友的機體還沒算好
   return k;
 }
+const emptySlots = () => Game.chain.reduce((n, c, i) => n + (i > 0 && !c ? 1 : 0), 0);  // 電路上沒裝晶片的格子（第 0 格是武器）
 // 開火的人現在的移動速度倍率（機體：重裝甲、加速器、護盾產生器；被彗星凍住）
 function shipSpeedNow() {
-  const P = Game.shooter ? Game.mate : Game.player;
+  const P = shooterNow();
   return Game.mech.speed * (P && P.frostT > 0 ? 1 - OBJ.COMET_FROST.slow : 1);
 }
 // 動能彈頭（雷射升級）：命中時照子彈當下的速度加傷害

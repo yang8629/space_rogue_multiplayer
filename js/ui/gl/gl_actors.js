@@ -172,6 +172,10 @@ const GLActors = {
       const fr = sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4); fr.tint = 0xbfe9ff; fr.blendMode = 'add'; fr.alpha = fade * 0.5;
       this.glowAt(P, p.x, p.y, 30, 0x9fdcff, 0.35 * fade);
     }
+    if (p.revengeT > 0) {  // 逆襲（散彈升級）：受傷後的爆發時間，船身發紅光
+      const fr = sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4); fr.tint = 0xff4d6d; fr.blendMode = 'add'; fr.alpha = fade * (0.75 + 0.25 * Math.sin(t * 16));
+      this.glowAt(P, p.x, p.y, 40, 0xff4d6d, 0.8 * fade);
+    }
     // 背包模組（船上面那層）
     if (mod === 'shield') sprL(GLR.T('m/shield'), 0, 0, 1 / 3, t * 0.3);
     if (mod === 'reactive') sprL(GLR.T('m/reactive'), 0, 0, 1 / 3);
