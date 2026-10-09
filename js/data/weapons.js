@@ -20,6 +20,10 @@ const RESONANCE = { t: 2, share: 0.3 };          // 共鳴：同一發打中的�
 const FROSTBITE = { slow: 0.4, dur: 2, per: 1 }; // 冰封：命中減速 40%（2 秒）；敵人每被減速 1%，受到你的傷害 +1%
 const AFTERSHOCK = { t: 0.6 };                   // 餘震：爆炸 0.6 秒後同一點再炸一次
 const COMPRESS = { r: 70, per: 0.2 };            // 壓縮：爆炸半徑 70，第 2 隻起每多炸到 1 隻 +20%
+// 軌道砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
+const CRACK = { per: 0.1, t: 3 };             // 碎甲：每次命中那隻敵人受到傷害 +10%（疊加、沒有上限），3 秒沒被打中掉光；破甲彈頭打中改疊 +25%
+const STATIC = { dist: 100, max: 4 };         // 靜電：飛船每移動 100 充一格（最多 4 格），下一發每格多 1 道電弧
+const CONDUCT = { jumps: 3, decay: 0.7 };     // 導電：電弧打中後再跳到附近另一隻，最多 3 次，每跳一次 ×0.7
 // 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
 const REVENGE = { t: 3, mul: 2, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 3 秒傷害 ×2＋爆炸
@@ -85,17 +89,17 @@ const WEAPONS = {
     paths: {
       A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
         next: [
-          { name: '加特林', desc: rateTxt(0.7, '再') + '，但會亂飄。', apply: p => { p.rate *= 0.7; p.jitter = 0.08; } },
-          { name: '雙軌', desc: '一次射出 2 發。', apply: p => { p.count = 2; p.spread = 0.06; } }] },
+          { name: '穿牆', desc: '子彈穿過牆、小行星、行星（穿過的小行星照樣會受傷，單發夠痛才打得動），打得到躲在後面的敵人；閘門還是擋得住：躲在掩護後面射。', apply: p => { p.phase = true; } },
+          { name: '連殺裝填', desc: '每擊殺一隻敵人，下一發的射擊冷卻立刻歸零：連續擊殺時變成連射。', apply: p => { p.reload = true; } }] },
       B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，' + rateTxt(1.3) + '。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
         next: [
           { name: '裝甲供能', desc: '最大 HP 超過 100 的部分，每 1 點射速 +0.5%（最多 +60%）：疊血就是疊火力。', apply: p => { p.hpRate = { per: 0.005, max: 0.6 }; } },
-          { name: '無限貫穿', desc: '可以穿透所有敵人。', apply: p => { p.pierce = 99; } }] },
+          { name: '碎甲', desc: `每次命中，那隻敵人受到的傷害 +${CRACK.per * 100}%（疊加、沒有上限），${CRACK.t} 秒沒被打中就掉光；破甲彈頭打中時改疊 +25%：一發貫穿一排，整排一起變脆。`, apply: p => { p.crack = CRACK; } }] },
       C: { name: '磁暴線圈', desc: '命中時放出 2 道電弧，瞬間打中附近 2 隻敵人（每道 50% 傷害）；附近沒有其他敵人時，電弧打回目標本身（25%）。',
         apply: p => { p.arcs = { n: 2, ratio: 0.5 }; },
         next: [
-          { name: '電網', desc: '電弧增加到 4 道。', apply: p => { p.arcs = { n: 4, ratio: 0.5 }; } },
-          { name: '感電', desc: '命中的敵人減速 40%。', apply: p => { p.slow = 0.4; } }] },
+          { name: '靜電', desc: `飛船每移動 ${STATIC.dist} 的距離充一格電（最多 ${STATIC.max} 格），下一發每格多 1 道電弧，射出去就用掉：邊跑邊打。`, apply: p => { p.static = STATIC; } },
+          { name: '導電', desc: `電弧打中後會再跳到附近另一隻（還沒被這道電弧打過的），最多跳 ${CONDUCT.jumps} 次，每跳一次傷害 ×${CONDUCT.decay}：敵人越密集跳越多。`, apply: p => { p.arcs = { ...p.arcs, chain: CONDUCT }; } }] },
     } },
   // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段
   blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 2 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
@@ -128,7 +132,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, phase: false, reload: false, crack: null, static: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -136,15 +140,21 @@ function weaponParams(state) {
   return p;
 }
 function weaponEmit(p, pw) {
-  const out = [], sm = statDmgMul(p), rv = p.revenge && revengeOn();
+  const out = [], sm = statDmgMul(p), rv = p.revenge && revengeOn(), arcs = staticArcs(p);
   for (let k = 0; k < p.count; k++) {
     const a = (p.count > 1 ? -p.spread / 2 + p.spread * k / (p.count - 1) : 0) + (p.jitter ? rand(-p.jitter, p.jitter) : 0);
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
-      explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null }));
+      explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, phase: p.phase, crack: p.crack || null }));
   }
   return out;
+}
+// 靜電（軌道升級）：充的電每格多 1 道電弧（射出去之後在 Player.tickFire 用掉）
+function staticArcs(p) {
+  if (!p.static || !p.arcs) return p.arcs;
+  const P = shooterNow(), k = P ? P.staticK || 0 : 0;
+  return k ? { ...p.arcs, n: p.arcs.n + k } : p.arcs;
 }
 // 開火的人（雙人：隊友的電路在 withLoadout 裡開火時是隊友）
 const shooterNow = () => Game.shooter ? Game.mate : Game.player;

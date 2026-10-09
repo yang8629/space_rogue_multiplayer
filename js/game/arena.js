@@ -334,8 +334,16 @@ const Arena = {
     if (this.rect) return null;
     const G = this.gateCross(px, py, x, y);
     if (G) return { nx: G.nx, ny: G.ny, x: G.x + G.nx * (ARENA.GATE_T + r + 1), y: G.y + G.ny * (ARENA.GATE_T + r + 1) };
-    const v = this.f(x, y);
-    if (v >= 0) return null;
+    let v = this.f(x, y);
+    if (v >= 0) {  // 終點在牆外：快的子彈一幀飛 16～25，會整個跳過比這薄的牆（牆尖）→ 沿著這一幀的路徑每 4 檢查一次（2026-10-09）
+      const n = Math.ceil(Math.hypot(x - px, y - py) / 4);
+      let hit = false;
+      for (let i = 1; i < n && !hit; i++) {
+        const qx = px + (x - px) * i / n, qy = py + (y - py) * i / n, q = this.f(qx, qy);
+        if (q < 0) { x = qx; y = qy; v = q; hit = true; }
+      }
+      if (!hit) return null;
+    }
     // 牆面方向照「路徑穿過牆面的那一點」算：子彈一幀可以衝進牆裡 10～30，牆裡那一點的方向在彎處、牆角會差很多（反彈角度歪掉）
     if (this.f(px, py) >= 0) {
       let lo = 0, hi = 1;

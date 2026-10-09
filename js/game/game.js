@@ -787,7 +787,7 @@ const Game = {
     if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
     if (!this.isClient()) {
-      this.infectBurst(e); this.payGrowTags(e); this.onStreakKill(e);
+      this.infectBurst(e); this.payGrowTags(e); this.onStreakKill(e); this.onReloadKill(e);
       if (e.wild && e.burnT > 0) {  // 野火：燒著死掉 → 火噴到附近所有敵人
         const R = e.wild.deathR;
         for (const o of enemiesNear(e.x, e.y, R)) if (o !== e && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, e.x, e.y) < R * R) this.igniteFrom(e, o);
@@ -905,6 +905,11 @@ const Game = {
     if (!(p.revengeT > 0)) floatText(p.x, p.y - 30, '逆襲！', '#ff4d6d', true);
     p.revengeT = R.t;
   },
+  // 連殺裝填（軌道升級）：打出最後一擊的人下一發冷卻歸零
+  onReloadKill(e) {
+    const p = e.killer ? (this.mate && this.mate.L === e.killer ? this.mate : null) : this.player;
+    if (p && !p.dead && this.wpOf(p).reload) p.fireCd = Math.min(p.fireCd, 0);
+  },
   // 無傷連殺（輕裝甲 4 層）：打出最後一擊的人沒被打中時每殺一隻 +1 層
   onStreakKill(e) {
     const p = e.killer ? (this.mate && this.mate.L === e.killer ? this.mate : null) : this.player;
@@ -921,6 +926,13 @@ const Game = {
       for (const e of enemiesNear(p.x, p.y, w.crowd.r)) if (!e.dead && !(e.spawnT > 0) && dist2(e.x, e.y, p.x, p.y) < R2 && ++n >= w.crowd.max) break;
       p.crowdK = n;
     } else p.crowdK = 0;
+    // 靜電（軌道升級）：飛船移動的距離充電
+    if (w.static) {
+      if (p.stX != null) p.stD = (p.stD || 0) + Math.hypot(p.x - p.stX, p.y - p.stY);
+      while (p.stD >= w.static.dist && (p.staticK || 0) < w.static.max) { p.stD -= w.static.dist; p.staticK = (p.staticK || 0) + 1; }
+      if ((p.staticK || 0) >= w.static.max) p.stD = 0;
+      p.stX = p.x; p.stY = p.y;
+    } else p.staticK = 0;
     // 分散、擦彈：一段時間沒疊就開始掉層
     for (const [U, K, T] of [[w.spreadUp, 'spreadK', 'spreadT'], [w.graze, 'grazeK', 'grazeT']]) {
       if (!U) { p[K] = 0; continue; }
@@ -1062,6 +1074,7 @@ const Game = {
     p.portalCd = 0; p.pullV = null; p.icWs = [];
     p.revengeT = 0; p.streak = 0; p.crowdK = 0;  // 逆襲、無傷連殺、群戰
     p.focusId = null; p.focusK = 0; p.spreadK = 0; p.spreadT = 0; p.grazeK = 0; p.grazeT = 0;  // 專注、分散、擦彈
+    p.staticK = 0; p.stD = 0; p.stX = null; p.stY = null;  // 靜電
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1373,12 +1386,13 @@ const Game = {
       if (b.aftershock && this.quakes.length < 40)  // 餘震（電漿升級）：同一點過一下再炸一次
         this.quakes.push({ x, y, r: b.explode.r, dmg: b.damage * b.explode.ratio, color: b.color, att: b.att, t: b.aftershock.t, max: b.aftershock.t });
     }
-    if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）
+    if (b.crack) { e.shredAmt = (e.shredT > 0 ? e.shredAmt : 0) + (b.shred || b.crack.per); e.shredT = b.crack.t; }  // 碎甲（軌道升級）：每次命中疊一層（破甲彈頭改疊 +25%），沒有上限
+    else if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）
     if (b.arcs) this.arc(e, b);
   },
   // 電弧（軌道砲・磁暴線圈、電擊線圈）：命中時瞬間打中附近其他敵人；附近敵人不夠時，剩下的電弧打回目標本身（傷害減半）
   arc(hit, b) {
-    const { n, ratio } = b.arcs, R = CFG.ARC_RANGE, dmg = b.damage * ratio;
+    const { n, ratio, chain } = b.arcs, R = CFG.ARC_RANGE, dmg = b.damage * ratio;
     const near = this.enemies.filter(o => !o.dead && o !== hit && o.spawnT <= 0 && dist2(o.x, o.y, hit.x, hit.y) < (R + o.r) ** 2)
       .sort((p, q) => dist2(p.x, p.y, hit.x, hit.y) - dist2(q.x, q.y, hit.x, hit.y));
     for (let k = 0; k < n; k++) {
@@ -1388,6 +1402,25 @@ const Game = {
       t.hurt(d, 0, 0, 'arc', b.att);
       floatText(t.x, t.y - t.r, Math.round(d), '#9fe8ff');
       zapFx(hit.x, hit.y, t.x, t.y, { jitter: 6 });
+      if (chain && near[k]) this.arcChain(t, d, chain, new Set([hit, t]), b);
+    }
+  },
+  // 導電（軌道升級）：電弧打中後再跳到最近一隻還沒被這道電弧打過的，每跳一次 ×decay
+  arcChain(from, d, C, seen, b) {
+    const R2 = CFG.ARC_RANGE * CFG.ARC_RANGE;
+    for (let j = 0; j < C.jumps; j++) {
+      let best = null, bd = R2;
+      for (const o of this.enemies) {
+        if (o.dead || o.spawnT > 0 || seen.has(o)) continue;
+        const q = dist2(o.x, o.y, from.x, from.y);
+        if (q < bd) { bd = q; best = o; }
+      }
+      if (!best) return;
+      d *= C.decay; seen.add(best);
+      best.hurt(d, 0, 0, 'arc', b.att);
+      floatText(best.x, best.y - best.r, Math.round(d), '#9fe8ff');
+      zapFx(from.x, from.y, best.x, best.y, { jitter: 6 });
+      from = best;
     }
   },
   // ---------- V2 改玩法的晶片（房主執行） ----------

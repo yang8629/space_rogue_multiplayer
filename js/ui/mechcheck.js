@@ -305,6 +305,89 @@ const MechCheck = {
       return { ok: A.n === 1 && near1(A.d, 1) && B.n >= 3 && near1(B.d, wantB) && !A.far && !B.far,
         got: `炸到 ${A.n} 隻：×${A.d.toFixed(2)}（要 ×1）；炸到 ${B.n} 隻：×${B.d.toFixed(2)}（要 ×${wantB.toFixed(2)}）；140 外的${A.far || B.far ? '被炸到（錯，半徑太大）' : '沒炸到'}` };
     }],
+    ['武器命中效果', '穿牆', '軌道・自動軌道・穿牆：子彈穿過小行星（小行星照樣受傷）和大地圖的牆，打得到後面的敵人；沒有穿牆的被擋住', M => {
+      const rock = phase => {
+        M.setup('sandbox', 'vanguard', 'railgun', 'A', phase ? 0 : null, ['weapon', null, null, null]);
+        const P = Game.player, e = M.targets([[220, 0]])[0], o = { type: 'rock', x: P.x + 110, y: P.y, r: 30, hp: 5000, maxHp: 5000 };
+        Game.objs = [o]; Objects.buildGrid();
+        const hp = e.hp; P.aim = 0; P.fire(); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+        return { hit: e.hp < hp, rockHit: o.hp < 5000 };
+      };
+      // 大地圖：找「中間隔著一段厚 40 以上的牆、兩邊都是空地、沒有閘門」的兩點，飛船搬過去朝牆後的靶射；穿牆、沒穿牆打同一段牆
+      const wall = () => {
+        M.setup('run', 'vanguard', 'railgun', 'A', 0, ['weapon', null, null, null]);
+        Game.node = { type: 'combat', L: 5, id: 'mc' }; Game.startCombat({ level: 5, wavesTotal: 2, elites: 0 });
+        const P = Game.player; Game.enemies = []; Game.objs = []; Objects.buildGrid();
+        if (Arena.rect) return [{ found: false }, { found: false }];
+        for (let tries = 0; tries < 4000; tries++) {
+          const x = Math.random() * Arena.W, y = Math.random() * Arena.H, a = Math.random() * TAU;
+          if (Arena.f(x, y) < 40) continue;
+          let inWall = 0, out = 0;
+          for (let d = 20; d < 700; d += 4) {
+            const f = Arena.f(x + Math.cos(a) * d, y + Math.sin(a) * d);
+            if (f < 0) inWall = inWall || d; else if (inWall) { if (f > 40) { out = d + 30; break; } if (d - inWall < 40) { inWall = 0; break; } }
+          }
+          if (!inWall || !out || inWall < 60 || Arena.gateCross(x, y, x + Math.cos(a) * out, y + Math.sin(a) * out)) continue;
+          const shoot = fin => {
+            Game.weapon = { id: 'railgun', path: 'A', final: fin }; Game.refreshWeapon(); Game.bullets = [];
+            P.x = x; P.y = y; const e = M.targets([[Math.cos(a) * out, Math.sin(a) * out]])[0], hp = e.hp;
+            P.aim = a; P.fire(); for (let f = 0; f < 40; f++) Game.updateBullets(1 / 60);
+            return { found: true, hit: e.hp < hp };
+          };
+          return [shoot(0), shoot(null)];
+        }
+        return [{ found: false }, { found: false }];
+      };
+      const A = rock(true), B = rock(false), [C, D] = wall();
+      return { ok: A.hit && !B.hit && C.found && C.hit && !D.hit,
+        got: `小行星後面的靶：穿牆${A.hit ? '打到' : '沒打到（錯）'}（小行星${A.rockHit ? '受傷' : '沒受傷：每發 18，小行星要單發 30'}）；沒穿牆${B.hit ? '打到（錯）' : '被擋住'}；大地圖牆後的靶：${C.found ? `穿牆${C.hit ? '打到' : '沒打到（錯）'}、沒穿牆${D.hit ? '打到（錯）' : '被擋住'}` : '找不到牆（錯）'}` };
+    }],
+    ['武器命中效果', '連殺裝填', '軌道・自動軌道・連殺裝填：每擊殺一隻，下一發的射擊冷卻立刻歸零', M => {
+      const one = fin => {
+        M.setup('sandbox', 'vanguard', 'railgun', 'A', fin, ['weapon', null, null, null]);
+        const P = Game.player, e = M.targets([[150, 0]])[0]; P.fireCd = 0.5; e.hurt(1e9, 0, 0, 'mc'); return P.fireCd;
+      };
+      const A = one(1), B = one(0);
+      return { ok: A <= 0 && near1(B, 0.5), got: `擊殺後冷卻：連殺裝填 ${A.toFixed(2)}（要 0）；穿牆 ${B.toFixed(2)}（要不變 0.5）` };
+    }],
+    ['武器命中效果', '碎甲', '軌道・攻城砲・碎甲：每次命中那隻受到傷害 +10%（疊加、沒有上限），3 秒沒被打中掉光；破甲彈頭打中改疊 +25%', M => {
+      const run = (chain, shots) => {
+        M.setup('sandbox', 'vanguard', 'railgun', 'B', 1, chain);
+        const P = Game.player, es = M.targets([[150, 0], [200, 0], [250, 0]]), got = [];
+        const e0 = es[0], h = e0.hurt.bind(e0); e0.hurt = (d, ...r) => { const hp = e0.hp; const v = h(d, ...r); if (r[2] === 'direct') got.push(hp - e0.hp); return v; };
+        P.aim = 0; for (let i = 0; i < shots; i++) { P.fire(); for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60); }
+        return { got, amt: es.map(e => e.shredAmt), e: es[0] };
+      };
+      const A = run(['weapon', null, null, null], 12), B = run(['weapon', 'shred', null, null], 3);
+      const e = A.e; e.shredT = 3; for (let f = 0; f < 190; f++) e.update(1 / 60, Game.player); const left = e.shredT > 0;
+      return { ok: near1(A.got[1] / A.got[0], 1.1) && near1(A.got[11] / A.got[0], 2.1) && A.amt.every(x => near1(x, 1.2)) && near1(B.got[2] / B.got[0], 1.5) && !left,
+        got: `第 2 發 ×${(A.got[1] / A.got[0]).toFixed(2)}（要 ×1.1）、第 12 發 ×${(A.got[11] / A.got[0]).toFixed(2)}（要 ×2.1，沒有上限）；貫穿的 3 隻都疊到 ${A.amt.map(x => Math.round(x * 100) + '%').join('／')}；插破甲彈頭第 3 發 ×${(B.got[2] / B.got[0]).toFixed(2)}（要 ×1.5）；3 秒沒打${left ? '還在（錯）' : '掉光'}` };
+    }],
+    ['武器命中效果', '靜電', '軌道・磁暴線圈・靜電：飛船每移動 100 充一格（最多 4 格），下一發每格多 1 道電弧，射出去就用掉', M => {
+      M.setup('sandbox', 'vanguard', 'railgun', 'C', 0, ['weapon', null, null, null]); M.targets([]);
+      const P = Game.player, n0 = runOps(Game.stats.ops, 0)[0].arcs.n;
+      Game.tickWeaponFx(P, 1 / 60);
+      for (let i = 0; i < 5; i++) { P.x += 50; Game.tickWeaponFx(P, 1 / 60); }
+      const k1 = P.staticK, n1 = runOps(Game.stats.ops, 0)[0].arcs.n;
+      for (let i = 0; i < 10; i++) { P.x += 50; Game.tickWeaponFx(P, 1 / 60); }
+      const k2 = P.staticK;
+      let fired = 0; const orig = P.fire; P.fireCd = 0; P.fire = () => { fired = runOps(Game.stats.ops, 0)[0].arcs.n; };
+      try { P.tickFire(1 / 60, true); } finally { P.fire = orig; }
+      return { ok: n0 === 2 && k1 === 2 && n1 === 4 && k2 === 4 && fired === 6 && P.staticK === 0,
+        got: `沒充電 ${n0} 道；移動 250 充 ${k1} 格、${n1} 道；再移動 500 充到 ${k2} 格（上限 4）；開火時 ${fired} 道（要 6），開完剩 ${P.staticK} 格（要 0）` };
+    }],
+    ['武器命中效果', '導電', '軌道・磁暴線圈・導電：電弧打中後再跳到附近還沒被這道電弧打過的，最多 3 次，每跳一次 ×0.7', M => {
+      const run = fin => {
+        M.setup('sandbox', 'vanguard', 'railgun', 'C', fin, ['weapon', null, null, null]);
+        const P = Game.player, es = M.targets([[150, 0], [150, 120], [150, 240], [150, 360], [150, 480]]), got = new Map();
+        for (const e of es) { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { if (r[2] === 'arc') got.set(e, [...(got.get(e) || []), d]); return h(d, ...r); }; }
+        P.aim = 0; P.fire(); const arcD = Game.bullets[0].damage * 0.5; for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60);
+        return { far: got.get(es[4]) || [], n: [...got.values()].reduce((s, a) => s + a.length, 0), arcD };
+      };
+      const A = run(null), B = run(1);
+      return { ok: A.n === 2 && !A.far.length && B.n > 2 && B.far.length >= 1 && B.far.every(d => near1(d, B.arcD * 0.343)),
+        got: `磁暴線圈：電弧打中 ${A.n} 次、最遠那隻${A.far.length ? '被打到（錯）' : '沒打到'}；導電：打中 ${B.n} 次、最遠那隻（隔 4 隻、跳 3 次）受到 ${B.far.map(d => d.toFixed(1)).join('、') || '0'}（要 ${(B.arcD * 0.343).toFixed(1)}）` };
+    }],
     ['武器命中效果', '專注', '雷射・稜鏡・專注：碎光折回打同一隻；連續打中同一隻（碎光也算）每次 +10%，最多 +100%；打中別隻歸零', M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', 0, ['weapon', null, null, null]);
       const P = Game.player, [a, b] = M.targets([[150, 0], [0, 150]]), log = [];
@@ -824,6 +907,30 @@ const MechCheck = {
       const shardHit = P.hp < hp0 && /彗星（碎片）/.test(Game.lastHit || '');
       return { ok: tries >= 3 && nRef >= 3 && okRef === nRef && nDie >= 3 && diesOk === nDie && nEnd >= 3 && endOk === nEnd && worst > -40 && seenE > 100 && inWall === 0 && ebBad === 0 && shardHit,
         got: `反彈 ${okRef} / ${nRef} 次角度正確，沒反彈的子彈 ${diesOk} / ${nDie} 撞牆消失（最深進牆 ${(-worst).toFixed(0)}）、消失觸發器撞牆 ${endOk} / ${nEnd} 次從牆面往外射回響；敵人 ${inWall ? inWall + ' 次在牆裡或別區（錯誤）' : '沒有穿牆'}（${seenE} 隻·幀），敵彈 ${eb} 個·幀 ${ebBad ? '有 ' + ebBad + ' 個在牆裡（錯誤）' : '沒有穿牆'}；彗星碎片${shardHit ? `打到飛船（-${Math.round(hp0 - P.hp)}）` : '沒打到飛船（錯誤）'}` };
+    }],
+    ['航圖與戰鬥', '子彈不穿過薄牆', '大地圖：軌道砲（一幀飛 25）射向厚度 25 以下的牆（多半是牆尖），要撞到牆；只擦過牆角（進牆不到 1）的不算', M => {
+      let n = 0, thru = 0, maps = 0;
+      for (let m = 0; m < 150 && n < 8; m++) {
+        M.setup('run', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]);
+        Game.node = { type: 'combat', L: 5, id: 'mc' + m }; Game.startCombat({ level: 5, wavesTotal: 2, elites: 0 });
+        if (Arena.rect) continue;
+        maps++; Game.enemies = []; Game.objs = []; Objects.buildGrid();
+        const P = Game.player;
+        for (let t = 0; t < 800 && n < 8; t++) {
+          const x = Math.random() * Arena.W, y = Math.random() * Arena.H, a = Math.random() * TAU;
+          if (Arena.f(x, y) < 40) continue;
+          let inWall = 0, out = 0, deep = 0;
+          for (let d = 20; d < 700; d += 2) {
+            const f = Arena.f(x + Math.cos(a) * d, y + Math.sin(a) * d);
+            if (f < 0) { inWall = inWall || d; deep = Math.min(deep, f); } else if (inWall) { out = d; break; }
+          }
+          if (!inWall || !out || out - inWall > 25 || deep > -1 || Arena.gateCross(x, y, x + Math.cos(a) * (out + 60), y + Math.sin(a) * (out + 60))) continue;
+          n++; P.x = x; P.y = y; P.aim = a; Game.bullets = []; P.fire();
+          const b = Game.bullets[0];
+          for (let f = 0; f < 40 && !b.dead; f++) { b.update(1 / 60); if (Math.hypot(b.x - x, b.y - y) > out + 10) { thru++; break; } }
+        }
+      }
+      return { ok: n >= 3 && thru === 0, got: `${maps} 張地圖找到 ${n} 段薄牆，子彈穿過去 ${thru} 次（要 0）` };
     }],
     ['航圖與戰鬥', '選單（Esc）', '戰鬥中按 Esc：跳出選單、單人時暫停（時間、敵人都不動）；再按一次繼續；選「離開遊戲」：這一局中途結束，顯示結算畫面', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
