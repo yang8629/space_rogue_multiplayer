@@ -252,7 +252,7 @@ class Bullet {
     this.focus = s.focus || null; this.skewer = s.skewer || null; this.skN = 0; this.spreadSh = s.spreadSh || false;  // 雷射升級：專注、串燒（穿過幾隻）、分散的碎光
     this.frostbite = s.frostbite || null; this.aftershock = s.aftershock || null; this.res = s.res || null;  // 電漿升級：冰封、餘震、共鳴（小電漿帶著連結）
     this.trail = s.trail || null; this.crack = s.crack || null;  // 軌道升級：殘留彈道、碎甲
-    this.execute = s.execute || null;  // 相位刃升級：灼燒處決
+    this.inferno = !!s.inferno;  // 相位刃升級：業火（燃燒疊加）
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -593,7 +593,7 @@ class Enemy {
     this.cd = t.ranged ? rand(0.8, t.ranged.cd) : type === 'gunboat' ? rand(1.5, 3) : type === 'hive' ? 2 : 0;
     if (type === 'shield') this.shieldA = rand(0, TAU);  // 盾的方向（世界座標，不會轉）
     this.cloak = type === 'lurker' ? 1 : 0;              // 潛伏者：1 = 隱形
-    this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0; this.shredT = 0; this.shredAmt = 0;
+    this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0; this.slows = null; this.burnL = null; this.shredT = 0; this.shredAmt = 0;
     this.mode = type === 'lurker' ? 'stalk' : 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
     this.dead = false;
   }
@@ -608,11 +608,33 @@ class Enemy {
       if (this.whT > 0 && this.wallN) Game.wallSlam(this);
     }
   }
+  // 減速（2026-10-10 改相乘）：每個來源（shot 子彈、grav 重力井模組、comet 彗星的冰）各自計時；同一來源再打中取大的、刷新時間；
+  //   剩下的速度相乘（兩個 40% = 64%），沒有上限。slowAmt／slowT = 合起來的減速和最久的剩餘時間（冰封、畫面、連線用）
+  slowBy(src, amt, t) {
+    const S = this.slows || (this.slows = {}), o = S[src];
+    if (o && o.t > 0) { o.amt = Math.max(o.amt, amt); o.t = Math.max(o.t, t); } else S[src] = { amt, t };
+    this.slowTick(0);
+  }
+  slowTick(dt) {
+    let keep = 1, T = 0, any = false;
+    for (const k in this.slows) {
+      const o = this.slows[k]; o.t -= dt;
+      if (o.t > 0) { keep *= 1 - o.amt; T = Math.max(T, o.t); any = true; }
+    }
+    if (!any) this.slows = null;
+    this.slowAmt = 1 - keep; this.slowT = T;
+  }
   update(dt, p) {
     this.flash = Math.max(0, this.flash - dt);
-    if (this.burnT > 0) {  // 燃燒：持續扣血
-      this.burnT -= dt;
-      this.burnAcc += this.burnDps * dt;
+    if (this.burnT > 0 || this.burnL) {  // 燃燒：持續扣血（一般燃燒只留最強的一個；業火的燃燒層各自計時、相加）
+      let dps = 0;
+      if (this.burnT > 0) { this.burnT -= dt; dps += this.burnDps; }
+      if (this.burnL) {
+        let w = 0;
+        for (const L of this.burnL) { L.t -= dt; if (L.t > 0) { dps += L.dps; this.burnL[w++] = L; } }
+        this.burnL.length = w; if (!w) this.burnL = null;
+      }
+      this.burnAcc += dps * dt;
       if (this.burnAcc >= 1) {
         const d = Math.floor(this.burnAcc);
         this.burnAcc -= d;
@@ -624,7 +646,7 @@ class Enemy {
         if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = this.burnAtt && this.burnAtt.owner; this.killAtt = this.burnAtt; Game.onEnemyKilled(this); return; }
       }
     }
-    if (this.slowT > 0) this.slowT -= dt;
+    if (this.slows) this.slowTick(dt);
     if (this.markT > 0) this.markT -= dt;
     if (this.shredT > 0) this.shredT -= dt;
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;

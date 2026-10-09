@@ -849,7 +849,7 @@ const Net = {
       pp: [...PART_IDS.map(id => G.parts[id] || 0), G.module || ''],  // 房主的零件與模組（隊友那邊畫房主的船用）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
-        e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
+        e.slowT > 0 ? 1 : 0, e.burnT > 0 || e.burnL ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
         e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0),  // 盾衛的盾方向、潛伏者的隱形程度
         e.type === 'spitter' || e.type === 'hive' ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 開火倒數（噴吐者鼓起、母巢脈動）、弱點標記／破甲
         e.type === 'worm' ? wormAhead(e) : null]),  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
