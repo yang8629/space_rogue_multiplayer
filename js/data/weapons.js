@@ -8,6 +8,12 @@
 //   paths : 第一段路線；每條路線的 next 是第二段的兩個選項
 //   apply : 直接修改參數物件 p
 // =====================================================================
+// 雷射步槍的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
+const FOCUS = { per: 0.1, max: 10 };                                  // 專注：連續打中同一隻每次 +10%
+const SPREAD = { n: 3, ratio: 0.4, per: 0.05, max: 12, idle: 2, decay: 0.25 };  // 分散：碎光打中別隻，射速 +5% 疊層；2 秒沒疊開始每 0.25 秒掉 1 層
+const GRAZE = { r: 40, per: 0.1, max: 8, idle: 3, decay: 1 };         // 擦彈：敵彈從身邊 40 內飛過，射速 +10% 疊層；3 秒沒擦彈每秒掉 1 層
+const RAGE = { per: 1 };                                              // 狂怒：每缺 1% HP 射速 +1%
+const SKEWER = { per: 0.3 };                                          // 串燒：每穿過一隻，之後打中的傷害 +30%
 // 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
 const REVENGE = { t: 3, mul: 2, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 3 秒傷害 ×2＋爆炸
@@ -22,18 +28,17 @@ const WEAPONS = {
     paths: {
       A: { name: '稜鏡', desc: '命中時折射出 2 道碎光（每道 40% 傷害）。', apply: p => { p.shards = { n: 2, ratio: 0.4 }; },
         next: [
-          { name: '全反射', desc: '折射增加到 4 道，每道 50% 傷害。', apply: p => { p.shards = { n: 4, ratio: 0.5 }; } },
-          { name: '聚能稜鏡', desc: '不再折射，改成傷害 ×2.2，命中附加燃燒（每秒 8，持續 2 秒）。',
-            apply: p => { p.shards = null; p.damage *= 2.2; p.burn = { dps: 8, t: 2 }; } }] },
+          { name: '專注', desc: `碎光不再散開，改成折回打同一隻；連續打中同一隻（碎光也算）每次傷害 +${FOCUS.per * 100}%，最多 +${FOCUS.per * FOCUS.max * 100}%，打中別隻就歸零：盯死精英和王。`, apply: p => { p.shards = { n: 2, ratio: 0.4, focus: true }; p.focus = FOCUS; } },
+          { name: '分散', desc: `碎光增加到 ${SPREAD.n} 道；碎光每打中一隻敵人，射速 +${SPREAD.per * 100}%（最多 ${SPREAD.max} 層 +${SPREAD.per * SPREAD.max * 100}%），${SPREAD.idle} 秒沒疊就開始掉層：專清雜兵。`, apply: p => { p.shards = { n: SPREAD.n, ratio: SPREAD.ratio, spread: true }; p.spreadUp = SPREAD; } }] },
       B: { name: '連發', desc: '一次射出 2 道雷射，每道傷害 ×0.75。', apply: p => { p.count = 2; p.spread = 0.08; p.damage *= 0.75; },
         next: [
-          { name: '三連發', desc: '一次射出 3 道雷射。', apply: p => { p.count = 3; p.spread = 0.14; } },
-          { name: '高頻', desc: rateTxt(0.7) + '。', apply: p => { p.rate *= 0.7; } }] },
+          { name: '擦彈', desc: `敵彈從飛船身邊 ${GRAZE.r} 以內飛過（沒打中），射速 +${GRAZE.per * 100}%（最多 ${GRAZE.max} 層 +${GRAZE.per * GRAZE.max * 100}%）；${GRAZE.idle} 秒沒擦彈每秒掉 1 層：貼著子彈閃。`, apply: p => { p.graze = GRAZE; } },
+          { name: '狂怒', desc: `每缺 1% HP，射速 +${RAGE.per}%（剩一半血 +${RAGE.per * 50}%，沒有上限）：越殘越快。`, apply: p => { p.rage = RAGE; } }] },
       C: { name: '貫穿光束', desc: '穿透 +2，彈速 ×1.3，傷害 ×1.25。', apply: p => { p.pierce += 2; p.speed *= 1.3; p.damage *= 1.25; },
         next: [
           { name: '動能彈頭', desc: '打中的那一刻，子彈比雷射原本的彈速快多少 %，傷害就加那個數的一半（沒有上限）：疊彈速就是疊火力（感測器、加速晶片都算）。',
             apply: p => { p.kinetic = { per: 0.5, ref: WEAPONS.laser.base.speed }; } },
-          { name: '過載射線', desc: '命中時爆炸（半徑 50，60% 傷害）。', apply: p => { p.explode = { r: 50, ratio: 0.6 }; } }] },
+          { name: '串燒', desc: `光束每穿過一隻敵人，之後打中的傷害 +${SKEWER.per * 100}%（穿到第 4 隻時 ×${1 + SKEWER.per * 3}）：把敵人排成一排打。`, apply: p => { p.skewer = SKEWER; } }] },
     } },
   scatter: { name: '散彈砲', short: '散彈', color: '#ffb347', desc: '扇形噴出 5 顆短程彈丸，近距離爆發高。',
     base: { interval: 0.42, count: 5, spread: 0.5, jitter: 0.04, speedVar: true, damage: 7, speed: 650, radius: 3.5, life: 0.5, shape: 'dot', knock: 1 },
@@ -117,7 +122,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -131,7 +136,7 @@ function weaponEmit(p, pw) {
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
       explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null }));
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null }));
   }
   return out;
 }

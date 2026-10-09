@@ -41,7 +41,7 @@ class Player {
     else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
     else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + crowdRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、群戰），減少相乘（重力井）
+      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + weaponRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、武器升級的群戰／分散／擦彈／狂怒），減少相乘（重力井）
       Game.standFull = !!S.stand && sk >= standMax(S.stand);
       Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
       try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
@@ -248,6 +248,7 @@ class Bullet {
     this.wild = s.wild || null;  // 野火（散彈升級）：點燃的火會傳染
     this.wallhit = s.wallhit || null;  // 撞牆（散彈升級）：打飛的敵人撞到東西會受傷
     this.carpet = s.carpet || null;    // 火毯（散彈升級）：消失的地方留火
+    this.focus = s.focus || null; this.skewer = s.skewer || null; this.skN = 0; this.spreadSh = s.spreadSh || false;  // 雷射升級：專注、串燒（穿過幾隻）、分散的碎光
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -513,8 +514,17 @@ const STAND_FULL = 2;
 const standMax = lv => lv >= 2 ? 8 : 6;
 const standStacks = (p, lv) => lv ? Math.min(standMax(lv), Math.floor((p.standT || 0) / STAND_FULL * standMax(lv) + 1e-9)) : 0;
 
-// 群戰（散彈升級）：身邊的敵人數（Game.tickWeaponFx 每幀數好）換成射速
-const crowdRateAdd = p => Game.wp && Game.wp.crowd ? Math.min(Game.wp.crowd.max, p.crowdK || 0) * Game.wp.crowd.per : 0;
+// 武器升級的射速：群戰（身邊的敵人數，Game.tickWeaponFx 每幀數好）、分散、擦彈（疊的層數）、狂怒（缺的 HP）
+function weaponRateAdd(p) {
+  const W = Game.wp; if (!W) return 0;
+  let k = 0;
+  if (W.crowd) k += Math.min(W.crowd.max, p.crowdK || 0) * W.crowd.per;
+  if (W.spreadUp) k += (p.spreadK || 0) * W.spreadUp.per;
+  if (W.graze) k += (p.grazeK || 0) * W.graze.per;
+  if (W.rage) k += rageAdd(p, W.rage);
+  return k;
+}
+const rageAdd = (p, R) => Math.max(0, 1 - Math.max(0, p.hp) / p.maxHp) * R.per;
 // 裝甲供能（軌道砲・攻城砲的升級）：最大 HP 超過 100 的部分換成射速
 function hpRateAdd(p) {
   const H = Game.wp && Game.wp.hpRate;

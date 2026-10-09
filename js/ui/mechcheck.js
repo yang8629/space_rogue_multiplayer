@@ -254,7 +254,70 @@ const MechCheck = {
       return { ok: A.k === 0 && B.k === 5 && C.k === 8 && Math.abs(A.n - A.want) <= 1.5 && Math.abs(B.n - B.want) <= 1.5 && Math.abs(C.n - C.want) <= 1.5 && C.n > A.n * 1.5,
         got: `身邊 0 隻：算到 ${A.k}，4 秒 ${A.n} 發（要 ${A.want.toFixed(1)}）；5 隻：算到 ${B.k}，${B.n} 發（要 ${B.want.toFixed(1)}）；11 隻：算到 ${C.k}（要 8），${C.n} 發（要 ${C.want.toFixed(1)}）` };
     }],
-    ['武器命中效果', '撞牆', '散彈・霰彈擴充・撞牆：被彈丸打飛的敵人 0.4 秒內撞到別的敵人 → 受到打中牠的彈丸傷害加總 ×2、暈眩 0.5 秒；被撞的不受傷；同一隻 0.5 秒內只算一次', M => {
+    ['武器命中效果', '專注', '雷射・稜鏡・專注：碎光折回打同一隻；連續打中同一隻（碎光也算）每次 +10%，最多 +100%；打中別隻歸零', M => {
+      M.setup('sandbox', 'vanguard', 'laser', 'A', 0, ['weapon', null, null, null]);
+      const P = Game.player, [a, b] = M.targets([[150, 0], [0, 150]]), log = [];
+      for (const e of [a, b]) { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { log.push([e, d, r[2]]); return h(d, ...r); }; }
+      const shoot = (e, ang) => { P.aim = ang; const n = log.length; P.fire(); for (let f = 0; f < 30 && log.length < n + 3; f++) Game.updateBullets(1 / 60); return log.slice(n); };
+      const s1 = shoot(a, 0); for (let i = 0; i < 3; i++) shoot(a, 0); const s5 = shoot(a, 0), kA = P.focusK;
+      const t1 = shoot(b, Math.PI / 2);
+      const base = s1[0][1], shard = s1.filter(x => x[2] === 'shard');
+      return { ok: s1.length === 3 && shard.length === 2 && shard.every(x => x[0] === a) && near1(shard[0][1], base * 0.4 * 1.1) && near1(s5[0][1], base * 2) && kA === 10 && near1(t1[0][1], base) && t1[0][0] === b,
+        got: `第 1 槍打中 ${s1.length} 下（要 3：光束＋2 道碎光${shard.every(x => x[0] === a) ? '都打同一隻' : '，碎光打到別隻（錯）'}），碎光 ${shard.length ? shard[0][1].toFixed(1) : 0}（要 ${(base * 0.44).toFixed(1)}）；第 5 槍 ${s5[0][1].toFixed(1)}（要 ${(base * 2).toFixed(1)}，${kA} 層）；換一隻 ${t1[0][1].toFixed(1)}（要 ${base.toFixed(1)}）` };
+    }],
+    ['武器命中效果', '分散', '雷射・稜鏡・分散：碎光 3 道；碎光每打中一隻射速 +5%（最多 12 層）；2 秒沒疊開始每 0.25 秒掉 1 層', M => {
+      M.setup('sandbox', 'vanguard', 'laser', 'A', 1, ['weapon', null, null, null]);
+      const P = Game.player; M.targets([[150, 0], [300, -70], [320, 0], [300, 70]]); P.aim = 0;
+      let made = 0; for (let i = 0; i < 4; i++) { P.fire(); for (let f = 0; f < 40; f++) { Game.updateBullets(1 / 60); made = Math.max(made, Game.bullets.filter(q => q.spreadSh).length); } }
+      const k = P.spreadK;
+      P.spreadK = 12; P.spreadT = 99; let n = 0; const orig = P.fire, iv = Game.stats.interval; P.fireCd = 0; P.fire = () => { n++; };
+      try { for (let f = 0; f < 240; f++) P.tickFire(1 / 60, true); } finally { P.fire = orig; }
+      const want = 4 / (iv / 1.6);
+      P.spreadT = 2; for (let f = 0; f < 60 * 2.6; f++) Game.tickWeaponFx(P, 1 / 60); const kDecay = P.spreadK;
+      return { ok: made === 3 && k >= 4 && Math.abs(n - want) <= 1.5 && kDecay > 0 && kDecay < 12 && kDecay >= 9,
+        got: `一次 ${made} 道碎光（要 3）；4 槍疊到 ${k} 層；12 層時 4 秒 ${n} 發（要 ${want.toFixed(1)}）；停 2.6 秒剩 ${kDecay} 層（要 9～11）` };
+    }],
+    ['武器命中效果', '擦彈', '雷射・連發・擦彈：敵彈從身邊 40 以內飛過、沒打中 → 射速 +10%（最多 8 層）；直接打中的不算', M => {
+      M.setup('sandbox', 'vanguard', 'laser', 'B', 0, ['weapon', null, null, null]); M.targets([]);
+      const P = Game.player, hp0 = P.hp; P.iframe = 0;
+      const eb = dy => ({ x: P.x - 200, y: P.y + dy, vx: 600, vy: 0, r: 5, life: 2, dmg: 10, from: 'mc' });
+      Game.eBullets = [eb(P.r + 5 + 25)]; for (let f = 0; f < 60; f++) Game.updateEnemyBullets(1 / 60);
+      const k1 = P.grazeK, kept = P.hp === hp0;
+      Game.eBullets = [eb(0)]; for (let f = 0; f < 60; f++) Game.updateEnemyBullets(1 / 60);
+      const k2 = P.grazeK, hit = P.hp < hp0;
+      Game.eBullets = [eb(P.r + 5 + 80)]; for (let f = 0; f < 60; f++) Game.updateEnemyBullets(1 / 60);
+      const k3 = P.grazeK;
+      P.grazeK = 8; P.grazeT = 99; let n = 0; const orig = P.fire, iv = Game.stats.interval; P.fireCd = 0; P.fire = () => { n++; };
+      try { for (let f = 0; f < 240; f++) P.tickFire(1 / 60, true); } finally { P.fire = orig; }
+      const want = 4 / (iv / 1.8);
+      return { ok: k1 === 1 && kept && k2 === 1 && hit && k3 === 1 && Math.abs(n - want) <= 1.5,
+        got: `身邊 25 飛過：${k1} 層（要 1）、${kept ? '沒扣血' : '扣血了（錯）'}；直接打中：${k2} 層（要還是 1）、${hit ? '扣血' : '沒扣血（錯）'}；80 外飛過：${k3} 層（要還是 1）；8 層時 4 秒 ${n} 發（要 ${want.toFixed(1)}）` };
+    }],
+    ['武器命中效果', '狂怒', '雷射・連發・狂怒：每缺 1% HP 射速 +1%（剩一半血 +50%）', M => {
+      const rate = hpK => {
+        M.setup('sandbox', 'vanguard', 'laser', 'B', 1, ['weapon', null, null, null]); M.targets([]);
+        const P = Game.player; P.hp = P.maxHp * hpK;
+        let n = 0; const orig = P.fire; P.fireCd = 0; P.fire = () => { n++; };
+        try { for (let f = 0; f < 240; f++) P.tickFire(1 / 60, true); } finally { P.fire = orig; }
+        return { n, want: 4 / (Game.stats.interval / (1 + (1 - hpK))) };
+      };
+      const A = rate(1), B = rate(0.5), C = rate(0.1);
+      return { ok: [A, B, C].every(x => Math.abs(x.n - x.want) <= 1.5) && B.n > A.n * 1.35,
+        got: `滿血 4 秒 ${A.n} 發（要 ${A.want.toFixed(1)}）；剩一半 ${B.n} 發（要 ${B.want.toFixed(1)}）；剩 10% ${C.n} 發（要 ${C.want.toFixed(1)}）` };
+    }],
+    ['武器命中效果', '串燒', '雷射・貫穿光束・串燒：每穿過一隻，之後打中的 +30%（第 2 隻 ×1.3、第 3 隻 ×1.6）', M => {
+      const run = fin => {
+        M.setup('sandbox', 'vanguard', 'laser', 'C', fin, ['weapon', null, null, null]);
+        const P = Game.player, es = M.targets([[100, 0], [160, 0], [220, 0], [280, 0]]), d = new Map();
+        for (const e of es) { const h = e.hurt.bind(e); e.hurt = (x, ...r) => { if (!d.has(e)) d.set(e, x); return h(x, ...r); }; }
+        P.aim = 0; P.fire(); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+        return es.map(e => d.get(e) || 0);
+      };
+      const A = run(null), B = run(1);
+      return { ok: A[0] > 0 && near1(A[1], A[0]) && near1(B[0], A[0]) && near1(B[1], A[0] * 1.3) && near1(B[2], A[0] * 1.6),
+        got: `貫穿光束 ${A.map(x => x.toFixed(1)).join('／')}；串燒 ${B.map(x => x.toFixed(1)).join('／')}（第 2、3 隻要 ×1.3、×1.6）` };
+    }],
+    ['武器命中效果', '撞牆','散彈・霰彈擴充・撞牆：被彈丸打飛的敵人 0.4 秒內撞到別的敵人 → 受到打中牠的彈丸傷害加總 ×2、暈眩 0.5 秒；被撞的不受傷；同一隻 0.5 秒內只算一次', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'A', 1, ['weapon', null, null, null]);
       const [a, b] = M.targets([[90, 0], [400, 300]]), P = Game.player, got = [];
       const h = a.hurt.bind(a); a.hurt = (d, ...r) => { got.push([d, r[2]]); return h(d, ...r); };
