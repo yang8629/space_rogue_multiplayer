@@ -388,6 +388,31 @@ const MechCheck = {
       return { ok: A.n === 2 && !A.far.length && B.n > 2 && B.far.length >= 1 && B.far.every(d => near1(d, B.arcD * 0.343)),
         got: `磁暴線圈：電弧打中 ${A.n} 次、最遠那隻${A.far.length ? '被打到（錯）' : '沒打到'}；導電：打中 ${B.n} 次、最遠那隻（隔 4 隻、跳 3 次）受到 ${B.far.map(d => d.toFixed(1)).join('、') || '0'}（要 ${(B.arcD * 0.343).toFixed(1)}）` };
     }],
+    ['武器命中效果', '格擋流', '相位刃・飛刃・格擋流：刃片每砍掉一顆敵彈傷害 +5%（最多 12 層）；2 秒沒砍到開始每 0.25 秒掉 1 層', M => {
+      M.setup('sandbox', 'vanguard', 'blade', 'B', 1, ['weapon', null, null, null]); M.targets([]);
+      const P = Game.player, d0 = runOps(Game.stats.ops, 0)[0].damage;
+      Game.eBullets = [[90, 0], [110, 12], [100, -12], [130, 0]].map(([dx, dy]) => ({ x: P.x + dx, y: P.y + dy, vx: -60, vy: 0, r: 5, life: 3, dmg: 0, from: 'mc' }));
+      P.aim = 0; P.fire();
+      for (let f = 0; f < 20; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+      const k = P.parryK, d1 = runOps(Game.stats.ops, 0)[0].damage;
+      P.parryK = 12; P.parryT = 99; const d12 = runOps(Game.stats.ops, 0)[0].damage;
+      P.parryT = 2; for (let f = 0; f < 60 * 2.6; f++) Game.tickWeaponFx(P, 1 / 60); const kDecay = P.parryK;
+      return { ok: k >= 3 && near1(d1 / d0, 1 + 0.05 * k) && near1(d12 / d0, 1.6) && kDecay >= 9 && kDecay <= 11,
+        got: `砍掉 ${k} 顆（要至少 3），傷害 ×${(d1 / d0).toFixed(2)}（要 ×${(1 + 0.05 * k).toFixed(2)}）；12 層 ×${(d12 / d0).toFixed(2)}（要 ×1.6）；停 2.6 秒剩 ${kDecay} 層（要 9～11）` };
+    }],
+    ['武器命中效果', '灼燒處決', '相位刃・相位灼燒・灼燒處決：燒著的敵人血量低於 25%（精英 10%）時刃片打中直接斬殺；沒燒著的那一下不會（這條路線命中會點火，下一刀就能斬）；旗艦不會', M => {
+      const one = (type, hpK, burn) => {
+        M.setup('sandbox', 'vanguard', 'blade', 'C', 0, ['weapon', null, null, null]);
+        const P = Game.player, e = M.targets([[60, 0]], type)[0];
+        e.hp = e.maxHp * hpK; if (burn) { e.burnT = 3; e.burnDps = 0.01; }
+        let first = null; const h = e.hurt.bind(e); e.hurt = (d, ...r) => { const v = h(d, ...r); if (first === null && r[2] === 'direct') first = e.dead; return v; };
+        P.aim = 0; P.fire(); for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60);
+        return burn ? e.dead : first;  // 沒燒著：看第一刀（第一刀會點火，第二刀就能斬）
+      };
+      const A = one('brute', 0.2, true), B = one('brute', 0.2, false), C = one('brute', 0.3, true), D = one('elite', 0.2, true), E = one('elite', 0.08, true), F = one('boss', 0.05, true);
+      return { ok: A && !B && !C && !D && E && !F,
+        got: `刺殼 20% 燒著${A ? '斬殺' : '沒死（錯）'}、沒燒著的第一刀${B ? '就斬殺（錯）' : '沒斬殺'}、30% 燒著${C ? '死了（錯）' : '沒死'}；精英 20%${D ? '死了（錯）' : '沒死'}、8%${E ? '斬殺' : '沒死（錯）'}；旗艦 5%${F ? '死了（錯）' : '沒死'}` };
+    }],
     ['武器命中效果', '專注', '雷射・稜鏡・專注：碎光折回打同一隻；連續打中同一隻（碎光也算）每次 +10%，最多 +100%；打中別隻歸零', M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', 0, ['weapon', null, null, null]);
       const P = Game.player, [a, b] = M.targets([[150, 0], [0, 150]]), log = [];

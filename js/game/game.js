@@ -934,7 +934,7 @@ const Game = {
       p.stX = p.x; p.stY = p.y;
     } else p.staticK = 0;
     // 分散、擦彈：一段時間沒疊就開始掉層
-    for (const [U, K, T] of [[w.spreadUp, 'spreadK', 'spreadT'], [w.graze, 'grazeK', 'grazeT']]) {
+    for (const [U, K, T] of [[w.spreadUp, 'spreadK', 'spreadT'], [w.graze, 'grazeK', 'grazeT'], [w.parryUp, 'parryK', 'parryT']]) {
       if (!U) { p[K] = 0; continue; }
       if (p[K] > 0 && (p[T] -= dt) <= 0) { p[K]--; p[T] += U.decay; }
     }
@@ -949,6 +949,11 @@ const Game = {
   spreadHit(P) {
     const U = P && (P.L ? P.L.wp : this.wp).spreadUp; if (!U) return;
     P.spreadK = Math.min(U.max, (P.spreadK || 0) + 1); P.spreadT = U.idle;
+  },
+  // 格擋流（相位刃升級）：刃片砍掉敵彈 → 傷害疊一層
+  parryHit(P) {
+    const U = P && (P.L ? P.L.wp : this.wp).parryUp; if (!U) return;
+    P.parryK = Math.min(U.max, (P.parryK || 0) + 1); P.parryT = U.idle;
   },
   // 擦彈（雷射升級）：敵彈從身邊飛過沒打中 → 射速疊一層
   grazeHit(p) {
@@ -1075,6 +1080,7 @@ const Game = {
     p.revengeT = 0; p.streak = 0; p.crowdK = 0;  // 逆襲、無傷連殺、群戰
     p.focusId = null; p.focusK = 0; p.spreadK = 0; p.spreadT = 0; p.grazeK = 0; p.grazeT = 0;  // 專注、分散、擦彈
     p.staticK = 0; p.stD = 0; p.stX = null; p.stY = null;  // 靜電
+    p.parryK = 0; p.parryT = 0;  // 格擋流
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1304,6 +1310,9 @@ const Game = {
         if (b.spreadSh) this.spreadHit(b.ownerP);                  // 分散（雷射升級）：碎光打中 → 射速疊層
         if (b.frostbite && e.slowT > 0) dmg *= 1 + e.slowAmt * b.frostbite.per;  // 冰封（電漿升級）：被減速越多越痛
         if (b.res) this.joinLink(b.res, e);                        // 共鳴（電漿升級）：小電漿打中的加進連結
+        if (b.execute && e.burnT > 0 && !e.t.boss && e.hp - dmg < e.maxHp * (e.t.elite ? b.execute.elite : b.execute.hp)) {  // 灼燒處決（相位刃升級）
+          dmg = Math.max(dmg, e.hp + 1); floatText(e.x, e.y - e.r - 14, '斬殺', '#ff8fd8', true);
+        }
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
@@ -1587,6 +1596,7 @@ const Game = {
       eb.life = 0;
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
+      if (b.parry) this.parryHit(b.ownerP);  // 格擋流（相位刃升級）：砍掉敵彈疊傷害
       if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
       // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
       //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發

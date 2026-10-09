@@ -259,6 +259,7 @@ function drawHUD() {
   if (W.focus) { const k = p.focusK || 0; bar(`專注 傷害 +${Math.round(k * W.focus.per * 100)}%`, k / W.focus.max, k >= W.focus.max ? '#ffffff' : '#5ef2ff'); }
   if (W.spreadUp) { const k = p.spreadK || 0; bar(`分散 射速 +${Math.round(k * W.spreadUp.per * 100)}%`, k / W.spreadUp.max, k >= W.spreadUp.max ? '#ffffff' : '#5ef2ff'); }
   if (W.graze) { const k = p.grazeK || 0; bar(`擦彈 射速 +${Math.round(k * W.graze.per * 100)}%`, k / W.graze.max, k >= W.graze.max ? '#ffffff' : '#5ef2ff'); }
+  if (W.parryUp) { const k = p.parryK || 0; bar(`格擋流 傷害 +${Math.round(k * W.parryUp.per * 100)}%`, k / W.parryUp.max, k >= W.parryUp.max ? '#ffffff' : '#ff8fd8'); }
   if (W.static) { const k = p.staticK || 0; bar(`靜電 電弧 +${k}`, k / W.static.max, k >= W.static.max ? '#ffffff' : '#9fe8ff'); }
   if (W.rage) { const k = rageAdd(p, W.rage); bar(`狂怒 射速 +${Math.round(k * 100)}%`, k, '#ff4d6d'); }
   if (W.crowd) { const k = Math.min(W.crowd.max, p.crowdK || 0); bar(`群戰 射速 +${Math.round(k * W.crowd.per * 100)}%`, k / W.crowd.max, k >= W.crowd.max ? '#ffffff' : '#ffb347'); }
