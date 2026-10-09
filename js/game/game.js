@@ -921,6 +921,28 @@ const Game = {
       for (const e of enemiesNear(p.x, p.y, w.crowd.r)) if (!e.dead && !(e.spawnT > 0) && dist2(e.x, e.y, p.x, p.y) < R2 && ++n >= w.crowd.max) break;
       p.crowdK = n;
     } else p.crowdK = 0;
+    // 分散、擦彈：一段時間沒疊就開始掉層
+    for (const [U, K, T] of [[w.spreadUp, 'spreadK', 'spreadT'], [w.graze, 'grazeK', 'grazeT']]) {
+      if (!U) { p[K] = 0; continue; }
+      if (p[K] > 0 && (p[T] -= dt) <= 0) { p[K]--; p[T] += U.decay; }
+    }
+  },
+  // 專注（雷射升級）：打中的是上一隻 → 層數 +1，換一隻 → 歸零；回傳這一下的傷害倍率
+  focusMul(P, e, F) {
+    if (!P) return 1;
+    if (P.focusId === e.id) P.focusK = Math.min(F.max, (P.focusK || 0) + 1); else { P.focusId = e.id; P.focusK = 0; }
+    return 1 + F.per * P.focusK;
+  },
+  // 分散（雷射升級）：碎光打中敵人 → 射速疊一層
+  spreadHit(P) {
+    const U = P && (P.L ? P.L.wp : this.wp).spreadUp; if (!U) return;
+    P.spreadK = Math.min(U.max, (P.spreadK || 0) + 1); P.spreadT = U.idle;
+  },
+  // 擦彈（雷射升級）：敵彈從身邊飛過沒打中 → 射速疊一層
+  grazeHit(p) {
+    const U = this.wpOf(p).graze; if (!U) return;
+    p.grazeK = Math.min(U.max, (p.grazeK || 0) + 1); p.grazeT = U.idle;
+    floatText(p.x, p.y - 26, '擦', '#5ef2ff');
   },
   // 火毯（散彈升級）：彈丸消失的地方留一團火（場上太多時最舊的先熄）
   dropFlame(b) {
@@ -1011,6 +1033,7 @@ const Game = {
     p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
     p.portalCd = 0; p.pullV = null; p.icWs = [];
     p.revengeT = 0; p.streak = 0; p.crowdK = 0;  // 逆襲、無傷連殺、群戰
+    p.focusId = null; p.focusK = 0; p.spreadK = 0; p.spreadT = 0; p.grazeK = 0; p.grazeT = 0;  // 專注、分散、擦彈
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1235,6 +1258,9 @@ const Game = {
           for (const k of ks) att = attCredit(att, k, Math.pow(dmg / b.damage, 1 / ks.length));
         }
         if (b.kin) dmg *= kineticMul(b);  // 動能彈頭（雷射升級）：子彈越快越痛（算武器本身的傷害）
+        if (b.focus) dmg *= this.focusMul(b.ownerP, e, b.focus);  // 專注（雷射升級）：連續打中同一隻越打越痛
+        if (b.skewer) dmg *= 1 + b.skewer.per * b.skN++;           // 串燒（雷射升級）：前面每穿過一隻 +30%
+        if (b.spreadSh) this.spreadHit(b.ownerP);                  // 分散（雷射升級）：碎光打中 → 射速疊層
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
@@ -1277,7 +1303,13 @@ const Game = {
     }
     Q.length = 0;
     for (const s of SQ) {  // 碎片：從命中點往前方扇形散開
-      const { n, ratio, homing = 0, seek } = s.b.shards, list = [];
+      const { n, ratio, homing = 0, seek, focus, spread } = s.b.shards, list = [];
+      if (focus) {  // 專注（雷射升級）：碎光不散開，折回打同一隻（也算連續打中）
+        const e0 = this.enemies.find(o => o.id === s.ignore);
+        for (let k = 0; k < n && e0 && !e0.dead; k++) e0.hurt(s.b.damage * ratio * this.focusMul(s.b.ownerP, e0, s.b.focus || FOCUS), 0, 0, 'shard', s.b.att);
+        burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
+        continue;
+      }
       if (seek) {  // seek（雷射稜鏡）：命中點 350 內沒有別的敵人 → 碎光折回打原本那一隻（打王時碎光不會全部打空）
         const e0 = this.enemies.find(o => o.id === s.ignore);
         if (e0 && !e0.dead && !this.enemies.some(o => o !== e0 && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, s.x, s.y) < 350 * 350)) {
@@ -1288,7 +1320,7 @@ const Game = {
       }
       for (let k = 0; k < n; k++)
         list.push(shot({ angle: (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
-          life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr }));
+          life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread }));
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }
     let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）
@@ -1638,8 +1670,14 @@ const Game = {
       if (Objects.eBulletHit(b)) continue;
       if (I.length && this.interceptHit(b, I.length > 16 ? IGrid.query(b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r) : I)) continue;
       for (const p of ps) {
-        const rr = b.r + p.r;
-        if (dist2(b.x, b.y, p.x, p.y) < rr * rr && !p.invuln && !p.dead) { b.life = 0; if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
+        const rr = b.r + p.r, d2 = dist2(b.x, b.y, p.x, p.y);
+        if (d2 < rr * rr && !p.invuln && !p.dead) { b.life = 0; if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
+        const Gz = this.wpOf(p).graze;  // 擦彈（雷射升級）：進到身邊又離開、沒打中才算
+        if (Gz && !p.dead) {
+          const gz = b.gz || (b.gz = new Map()), st = gz.get(p);
+          if (d2 < (rr + Gz.r) ** 2) { if (!st) gz.set(p, 1); }
+          else if (st === 1) { gz.set(p, 2); this.grazeHit(p); }
+        }
       }
     }
     this.eBullets = this.eBullets.filter(b => b.life > 0);

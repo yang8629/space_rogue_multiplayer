@@ -254,8 +254,12 @@ function drawHUD() {
     const sk = Net.role === 'client' ? p.standK || 0 : standStacks(p, s.stand), mx = standMax(s.stand);
     bar(`架設 射速 +${sk * 10}%`, sk / mx, sk >= mx ? '#ffffff' : '#9dff6b');
   }
-  // 散彈升級、輕裝甲 4 層（隊友：房主同步過來）
+  // 武器升級（散彈、雷射）、輕裝甲 4 層（隊友：房主同步過來）
   const W = Game.wp;
+  if (W.focus) { const k = p.focusK || 0; bar(`專注 傷害 +${Math.round(k * W.focus.per * 100)}%`, k / W.focus.max, k >= W.focus.max ? '#ffffff' : '#5ef2ff'); }
+  if (W.spreadUp) { const k = p.spreadK || 0; bar(`分散 射速 +${Math.round(k * W.spreadUp.per * 100)}%`, k / W.spreadUp.max, k >= W.spreadUp.max ? '#ffffff' : '#5ef2ff'); }
+  if (W.graze) { const k = p.grazeK || 0; bar(`擦彈 射速 +${Math.round(k * W.graze.per * 100)}%`, k / W.graze.max, k >= W.graze.max ? '#ffffff' : '#5ef2ff'); }
+  if (W.rage) { const k = rageAdd(p, W.rage); bar(`狂怒 射速 +${Math.round(k * 100)}%`, k, '#ff4d6d'); }
   if (W.crowd) { const k = Math.min(W.crowd.max, p.crowdK || 0); bar(`群戰 射速 +${Math.round(k * W.crowd.per * 100)}%`, k / W.crowd.max, k >= W.crowd.max ? '#ffffff' : '#ffb347'); }
   if (W.revenge && p.revengeT > 0) bar(`逆襲 ${p.revengeT.toFixed(1)} 秒`, p.revengeT / W.revenge.t, '#ff4d6d');
   if (W.ascetic) { const n = emptySlots(); bar(`空格苦行 傷害 +${Math.round(n * W.ascetic.per * 100)}%`, n / 4, n ? '#ffd166' : '#8fa3d9'); }
