@@ -436,7 +436,7 @@ class Bullet {
         } else if (this.boom && this.mode === 'fly') { this.x = hit.x; this.y = hit.y; this.startReturn(); }  // 迴旋：撞牆折返
         else {
           if (this.endBoom) Game.explode(hit.x, hit.y, 90, this.damage, this.color, null, this.att);
-          this.dead = true;
+          this.dead = true; this.x = hit.x; this.y = hit.y;  // 停在牆面（不然停在這一幀的終點，薄牆會在牆後：火毯的火留到牆另一邊）
           // 撞牆算消失：回響從牆面反彈的方向射出（照原方向會馬上又撞牆）
           const vx = Math.cos(this.angle), vy = Math.sin(this.angle), dot = vx * hit.nx + vy * hit.ny;
           this.endTrig(hit.x + hit.nx * 2, hit.y + hit.ny * 2, dot < 0 ? Math.atan2(vy - 2 * dot * hit.ny, vx - 2 * dot * hit.nx) : this.angle);
