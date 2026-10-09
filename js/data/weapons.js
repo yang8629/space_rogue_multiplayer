@@ -12,7 +12,7 @@
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
 const REVENGE = { t: 3, mul: 2, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 3 秒傷害 ×2＋爆炸
 const ASCETIC = { per: 0.2 };                                   // 空格苦行：每個空格傷害 +20%
-const FIRELINE = { every: 0.1, r: 30, t: 3, dps: 12 };          // 火線：移動時每 0.1 秒留一團火
+const CARPET = { r: 25, t: 2, dps: 12, max: 60 };              // 火毯：彈丸消失的地方留一團火（場上最多 60 團）
 const WILDFIRE = { every: 0.5, r: 80, deathR: 120 };            // 野火：燃燒傳染
 const WALLHIT = { knock: 3, t: 0.4, mul: 2, stun: 0.5, cd: 0.5 }; // 撞牆：擊退 ×3；被打中 0.4 秒內撞到東西 → 彈丸傷害加總 ×2＋暈眩
 
@@ -49,7 +49,7 @@ const WEAPONS = {
           { name: '空格苦行', desc: `電路上每個沒裝晶片的空格，傷害 +${ASCETIC.per * 100}%（組件插座不算）：晶片越少越痛。`, apply: p => { p.ascetic = ASCETIC; } }] },
       C: { name: '龍息彈', desc: '命中附加燃燒（每秒 6，持續 3 秒）。', apply: p => { p.burn = { dps: 6, t: 3 }; },
         next: [
-          { name: '火線', desc: `移動時身後留下一路火（每團半徑 ${FIRELINE.r}、燒 ${FIRELINE.t} 秒），敵人碰到就燃燒（每秒 ${FIRELINE.dps}，持續 3 秒）：邊跑邊讓追你的敵人燒起來。`, apply: p => { p.fireline = FIRELINE; } },
+          { name: '火毯', desc: `每顆彈丸消失的地方（打中敵人或飛到射程盡頭）留一團火（半徑 ${CARPET.r}、燒 ${CARPET.t} 秒），敵人碰到就燃燒（每秒 ${CARPET.dps}，持續 3 秒）：朝敵人要走過來的地方噴，鋪一片火毯封路。`, apply: p => { p.carpet = CARPET; } },
           { name: '野火', desc: `燃燒中的敵人每 ${WILDFIRE.every} 秒把火傳給 ${WILDFIRE.r} 以內一隻還沒燒的敵人；燒著死掉時，火噴到 ${WILDFIRE.deathR} 以內所有敵人身上：敵人越擠燒越快。`, apply: p => { p.wildfire = WILDFIRE; } }] },
     } },
   plasma: { name: '電漿砲', short: '電漿', color: '#c77dff', desc: '慢速的大型電漿球，單發傷害高、可穿透。',
@@ -117,7 +117,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, fireline: null, wildfire: null, wallhit: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -131,7 +131,7 @@ function weaponEmit(p, pw) {
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
       explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null }));
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null }));
   }
   return out;
 }

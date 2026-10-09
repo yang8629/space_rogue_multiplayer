@@ -287,18 +287,20 @@ const MechCheck = {
       return { ok: near1(A / base, 1.6) && near1(B / base, 1.4) && near1(C / base, 1),
         got: `獨頭彈 ${base.toFixed(1)}；3 個空格 ${A.toFixed(1)}（×${(A / base).toFixed(2)}，要 ×1.6）；2 個 ${B.toFixed(1)}（×${(B / base).toFixed(2)}，要 ×1.4）；沒空格 ${C.toFixed(1)}（×${(C / base).toFixed(2)}，要 ×1）` };
     }],
-    ['武器命中效果', '火線', '散彈・龍息彈・火線：移動時每 0.1 秒在身後留一團火（燒 3 秒），碰到的敵人燃燒每秒 12；站著不動不留火', M => {
+    ['武器命中效果', '火毯', '散彈・龍息彈・火毯：每顆彈丸消失的地方（射程盡頭、打中敵人）留一團火（燒 2 秒），碰到的敵人燃燒每秒 12；場上最多 60 團', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'C', 0, ['weapon', null, null, null]);
-      const P = Game.player, e = M.targets([[0, 0]])[0];
-      P.moving = false; for (let f = 0; f < 60; f++) Game.tickWeaponFx(P, 1 / 60);
-      const still = Game.flames.length;
-      P.moving = true; for (let f = 0; f < 60; f++) Game.tickWeaponFx(P, 1 / 60);
-      const moved = Game.flames.length;
+      const P = Game.player; M.targets([]); P.aim = 0;
+      P.fire(); const n = Game.bullets.length;
+      for (let f = 0; f < 60 && Game.bullets.length; f++) Game.updateBullets(1 / 60);
+      const left = Game.flames.length, far = Game.flames.every(z => Math.hypot(z.x - P.x, z.y - P.y) > 200);
+      const z0 = Game.flames[0], e = M.targets([[z0.x - P.x, z0.y - P.y]])[0];
       for (let f = 0; f < 15; f++) Game.updateFlames(1 / 60);
       const burn = e.burnT > 0 ? e.burnDps : 0;
-      for (let f = 0; f < 200; f++) Game.updateFlames(1 / 60);
-      return { ok: still === 0 && moved >= 9 && moved <= 11 && burn === 12 && Game.flames.length === 0,
-        got: `不動 1 秒留 ${still} 團（要 0）；移動 1 秒留 ${moved} 團（要 10）；火上的敵人燃燒每秒 ${burn}（要 12）；3.3 秒後剩 ${Game.flames.length} 團（要 0）` };
+      for (let f = 0; f < 130; f++) Game.updateFlames(1 / 60);
+      const gone = Game.flames.length;
+      for (let i = 0; i < 20; i++) { P.fire(); for (let f = 0; f < 60 && Game.bullets.length; f++) Game.updateBullets(1 / 60); }
+      return { ok: n === 5 && left === 5 && far && burn === 12 && gone === 0 && Game.flames.length === 60,
+        got: `一槍 ${n} 顆，消失後留 ${left} 團（要 5）、${far ? '都在射程盡頭' : '位置不對（錯）'}；火上的敵人燃燒每秒 ${burn}（要 12）；2.4 秒後剩 ${gone} 團（要 0）；連射 20 槍場上 ${Game.flames.length} 團（上限 60）` };
     }],
     ['武器命中效果', '野火', '散彈・龍息彈・野火：燃燒中的敵人每 0.5 秒把火傳給 80 以內一隻沒燒的；燒著死掉時火噴到 120 以內所有敵人', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'C', 1, ['weapon', null, null, null]);
@@ -774,7 +776,7 @@ const MechCheck = {
       const d = Math.hypot(a.x - b.x, a.y - b.y), vn = (b.vx * (a.x - b.x) + b.vy * (a.y - b.y)) / d;
       return { ok: Math.abs(vn - 380) < 1 && a.vx === 0 && a.vy === 0, got: `旁邊那隻往中心的速度 ${vn.toFixed(0)}（要 380）；被打中的那隻速度 ${Math.round(Math.hypot(a.vx, a.vy))}（要 0）` };
     }],
-    ['電路晶片', '元素組件', '跟武器升級相加：新星＋爆裂 = 爆炸 130%（半徑 90）；磁暴線圈＋電擊 = 3 道電弧；黑潮＋冰凍 = 減速 70%（上限）；雷射＋燃燒實際打中：每秒燒 30% 命中傷害、3 秒；破甲 +25%，加弱點標記 +50%（上限）', M => {
+    ['電路晶片', '元素組件', '跟武器升級相加：新星＋爆裂 = 爆炸 130%（半徑 90）；磁暴線圈＋電擊 = 3 道電弧；黑潮＋冰凍 = 減速 70%（上限）；雷射＋燃燒實際打中：每秒燒 30% 命中傷害、3 秒；破甲 +25%，加弱點標記 +50%，沒有上限（破甲 37.5%＋標記 = +62.5%）', M => {
       const top = (w, path, fin, flat) => { M.setup('sandbox', 'vanguard', w, path, fin, flat); return runOps(Game.stats.ops, 0)[0]; };
       const ex = top('plasma', 'C', null, ['weapon', 'blast', null, null]).explode;
       const ar = top('railgun', 'C', null, ['weapon', 'shock', null, null]).arcs;
@@ -785,9 +787,9 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'shred', null, null]); const v = M.targets([[120, 0]])[0];
       Game.player.fire(); for (let f = 0; f < 20 && !(v.shredT > 0); f++) { Game.time += 1 / 60; Game.updateBullets(1 / 60); }
       const tk = () => { const h = v.hp; v.hurt(10, 0, 0, 'direct'); return h - v.hp; }, d1 = tk(); v.markT = 3; const d2 = tk(); v.shredAmt = 0.375; const d3 = tk();
-      const ok5 = v.shredT > 2.9 && near1(d1, 12.5) && near1(d2, 15) && near1(d3, 15);
+      const ok5 = v.shredT > 2.9 && near1(d1, 12.5) && near1(d2, 15) && near1(d3, 16.25);
       return { ok: !!ex && near1(ex.ratio, 1.3) && ex.r === 90 && !!ar && ar.n === 3 && near1(sl, 0.7) && ok4 && ok5,
-        got: `新星＋爆裂 ${ex ? Math.round(ex.ratio * 100) + '%、半徑 ' + ex.r : '沒有爆炸'}；磁暴＋電擊 ${ar ? ar.n : 0} 道；黑潮＋冰凍 ${Math.round((sl || 0) * 100)}%；雷射打中 ${hit.toFixed(1)}、燃燒每秒 ${e.burnDps.toFixed(1)}、${e.burnT.toFixed(1)} 秒；破甲 10 → ${d1.toFixed(1)}、加弱點標記 ${d2.toFixed(1)}、上限 ${d3.toFixed(1)}（應為 12.5／15／15）` };
+        got: `新星＋爆裂 ${ex ? Math.round(ex.ratio * 100) + '%、半徑 ' + ex.r : '沒有爆炸'}；磁暴＋電擊 ${ar ? ar.n : 0} 道；黑潮＋冰凍 ${Math.round((sl || 0) * 100)}%；雷射打中 ${hit.toFixed(1)}、燃燒每秒 ${e.burnDps.toFixed(1)}、${e.burnT.toFixed(1)} 秒；破甲 10 → ${d1.toFixed(1)}、加弱點標記 ${d2.toFixed(1)}、破甲 37.5%＋標記 ${d3.toFixed(1)}（沒有上限；應為 12.5／15／16.25）` };
     }],
     ['電路晶片', '鏡像迴路', '再來一次，插哪個插座都一樣：武器［鏡像］= 2 發、武器［分裂、鏡像］和［鏡像、分裂］都是 6 發；蓄力［倍增、鏡像］蓄滿 2 發、各 +100%；黏著［鏡像］有作用；吸引［鏡像］沒作用', M => {
       const cnt = flat => { M.setup('sandbox', 'vanguard', 'laser', null, null, flat); return Game.stats.count; };

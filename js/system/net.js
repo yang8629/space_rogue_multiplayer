@@ -842,7 +842,7 @@ const Net = {
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
       zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 王的落點轟炸（紅圈）
-      fl: G.flames.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 火線（散彈升級）留在地上的火
+      fl: G.flames.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 火毯（散彈升級）留在地上的火
       pp: [...PART_IDS.map(id => G.parts[id] || 0), G.module || ''],  // 房主的零件與模組（隊友那邊畫房主的船用）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),

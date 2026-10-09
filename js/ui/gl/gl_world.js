@@ -48,7 +48,7 @@ const GLWorld = {
       this.gObj.circle(z.x, z.y, z.r).stroke({ width: 3, color: 0xff2a2a, alpha: 0.5 + 0.4 * Math.sin(G.time * 20) ** 2 });
       this.gObj.circle(z.x, z.y, z.r * k).fill({ color: 0xff2a2a, alpha: 0.18 + 0.2 * k });
     }
-    for (const z of G.flames) {  // 火線（散彈升級）：地上的火，外圈橘、中心黃，快燒完時變淡（加法發光）
+    for (const z of G.flames) {  // 火毯（散彈升級）：地上的火，外圈橘、中心黃，快燒完時變淡（加法發光）
       const k = Math.min(1, Math.max(0, z.t) / z.max * 2), fl = 0.85 + 0.15 * Math.sin(G.time * 18 + z.x * 0.07);
       this.gAdd.circle(z.x, z.y, z.r * fl).fill({ color: 0xff6a1c, alpha: 0.22 * k });
       this.gAdd.circle(z.x, z.y, z.r * 0.5 * fl).fill({ color: 0xffd166, alpha: 0.28 * k });
