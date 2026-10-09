@@ -92,7 +92,7 @@ const WEAPONS = {
     paths: {
       A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
         next: [
-          { name: '穿牆', desc: '子彈穿過牆、小行星、行星（穿過的小行星照樣會受傷，單發夠痛才打得動），打得到躲在後面的敵人；閘門還是擋得住：躲在掩護後面射。', apply: p => { p.phase = true; } },
+          { name: '穿牆', desc: '子彈穿過牆、小行星、行星（穿過的小行星照樣會受傷，單發夠痛才打得動），打得到躲在後面的敵人；閘門還是擋得住：躲在掩護後面射。', apply: p => { p.wallPass = true; } },
           { name: '連殺裝填', desc: '每擊殺一隻敵人，下一發的射擊冷卻立刻歸零：連續擊殺時變成連射。', apply: p => { p.reload = true; } }] },
       B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，' + rateTxt(1.3) + '。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
         next: [
@@ -135,7 +135,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, phase: false, reload: false, crack: null, static: null, parryUp: null, execute: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, wallPass: false, reload: false, crack: null, static: null, parryUp: null, execute: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -149,7 +149,7 @@ function weaponEmit(p, pw) {
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
       explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, phase: p.phase, crack: p.crack || null, execute: p.execute || null }));
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, wallPass: p.wallPass, crack: p.crack || null, execute: p.execute || null }));
   }
   return out;
 }

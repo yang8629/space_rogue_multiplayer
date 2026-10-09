@@ -306,11 +306,12 @@ const MechCheck = {
         got: `炸到 ${A.n} 隻：×${A.d.toFixed(2)}（要 ×1）；炸到 ${B.n} 隻：×${B.d.toFixed(2)}（要 ×${wantB.toFixed(2)}）；140 外的${A.far || B.far ? '被炸到（錯，半徑太大）' : '沒炸到'}` };
     }],
     ['武器命中效果', '穿牆', '軌道・自動軌道・穿牆：子彈穿過小行星（小行星照樣受傷）和大地圖的牆，打得到後面的敵人；沒有穿牆的被擋住', M => {
-      const rock = phase => {
-        M.setup('sandbox', 'vanguard', 'railgun', 'A', phase ? 0 : null, ['weapon', null, null, null]);
+      const rock = (pass, orbAngle) => {
+        M.setup('sandbox', 'vanguard', 'railgun', 'A', pass ? 0 : null, ['weapon', null, null, null]);
         const P = Game.player, e = M.targets([[220, 0]])[0], o = { type: 'rock', x: P.x + 110, y: P.y, r: 30, hp: 5000, maxHp: 5000 };
         Game.objs = [o]; Objects.buildGrid();
-        const hp = e.hp; P.aim = 0; P.fire(); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
+        const hp = e.hp; P.aim = 0; P.fire(); if (orbAngle) for (const b of Game.bullets) b.phase = orbAngle;  // 環繞子彈用 phase 記繞圈角度
+        for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
         return { hit: e.hp < hp, rockHit: o.hp < 5000 };
       };
       // 大地圖：找「中間隔著一段厚 40 以上的牆、兩邊都是空地、沒有閘門」的兩點，飛船搬過去朝牆後的靶射；穿牆、沒穿牆打同一段牆
@@ -338,9 +339,9 @@ const MechCheck = {
         }
         return [{ found: false }, { found: false }];
       };
-      const A = rock(true), B = rock(false), [C, D] = wall();
-      return { ok: A.hit && !B.hit && C.found && C.hit && !D.hit,
-        got: `小行星後面的靶：穿牆${A.hit ? '打到' : '沒打到（錯）'}（小行星${A.rockHit ? '受傷' : '沒受傷：每發 18，小行星要單發 30'}）；沒穿牆${B.hit ? '打到（錯）' : '被擋住'}；大地圖牆後的靶：${C.found ? `穿牆${C.hit ? '打到' : '沒打到（錯）'}、沒穿牆${D.hit ? '打到（錯）' : '被擋住'}` : '找不到牆（錯）'}` };
+      const A = rock(true), B = rock(false), O = rock(false, 1.7), [C, D] = wall();
+      return { ok: A.hit && !B.hit && !O.hit && C.found && C.hit && !D.hit,
+        got: `小行星後面的靶：穿牆${A.hit ? '打到' : '沒打到（錯）'}（小行星${A.rockHit ? '受傷' : '沒受傷：每發 18，小行星要單發 30'}）；沒穿牆${B.hit ? '打到（錯）' : '被擋住'}、帶環繞角度的${O.hit ? '穿過去（錯：跟環繞的 phase 撞名）' : '被擋住'}；大地圖牆後的靶：${C.found ? `穿牆${C.hit ? '打到' : '沒打到（錯）'}、沒穿牆${D.hit ? '打到（錯）' : '被擋住'}` : '找不到牆（錯）'}` };
     }],
     ['武器命中效果', '連殺裝填', '軌道・自動軌道・連殺裝填：每擊殺一隻，下一發的射擊冷卻立刻歸零', M => {
       const one = fin => {
