@@ -1321,7 +1321,6 @@ const Game = {
         if (orbit || b.orbShot) this.tagGrow(e, own, 'orbit');
         if (b.stasis && b.dashed) this.tagGrow(e, own, 'stasis');
         if (b.accel && b.accelMul >= 2) this.tagGrow(e, own, 'accel');
-        if (b.quick && b.accelMul >= 2) this.tagGrow(e, own, 'quick');
         if (b.bounced) this.tagGrow(e, own, 'wallbounce');
         if (b.full) this.tagGrow(e, own, 'charge');
         if (b.rear) this.tagGrow(e, own, 'rear');
@@ -1332,8 +1331,8 @@ const Game = {
         if (b.pull && b.mode !== 'orbit') this.pullAt(b, e);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         let att = b.att;
-        if (dmg !== b.damage && b.damage > 0) {  // 傷害統計：速度倍率多出來的傷害平分給造成它的晶片（環繞放出、加速、疾射）
-          const ks = [b.orbShot && 'orbit', b.accel && 'accel', b.quick && 'quick'].filter(Boolean);
+        if (dmg !== b.damage && b.damage > 0) {  // 傷害統計：速度倍率多出來的傷害平分給造成它的晶片（環繞放出、加速）
+          const ks = [b.orbShot && 'orbit', b.accel && 'accel'].filter(Boolean);
           for (const k of ks) att = attCredit(att, k, Math.pow(dmg / b.damage, 1 / ks.length));
         }
         if (b.kin) dmg *= kineticMul(b);  // 動能彈頭（雷射升級）：子彈越快越痛（算武器本身的傷害）
@@ -1351,8 +1350,7 @@ const Game = {
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
         }
-        const knock = b.knock * (b.quick >= 3 && b.accelMul >= 2 ? 3 : 1);  // 衝擊（疾射 Lv3）：2 倍速以上打中強力擊退
-        const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
+        const knock = b.knock, kb = Math.min(220, dmg * 5) * (14 / e.r) * knock;
         if (b.wallhit && !e.t.boss) { if (!(e.whT > 0)) e.whDmg = 0; e.whDmg += dmg; e.whT = b.wallhit.t; e.whAtt = att; e.wh = b.wallhit; }  // 撞牆：記下這波彈丸的傷害
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）

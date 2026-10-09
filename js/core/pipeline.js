@@ -84,7 +84,7 @@ function runComps(list, comps, layer) {
   return list;
 }
 
-// 插在玩法晶片上的組件：產物在開火當下就出現的（反向、蓄力、衝刺射擊、攔截、疾射、吸引）直接套用；
+// 插在玩法晶片上的組件：產物在開火當下就出現的（反向、蓄力、衝刺射擊、攔截、吸引）直接套用；
 // 其他的記在子彈身上（hm[晶片]），等產物出現時由 hostFire 套用
 function attachHost(list, o, n0) {
   const comps = o.comps, base = o.key;
@@ -95,10 +95,6 @@ function attachHost(list, o, n0) {
     case 'dashfire': return Game.fireMode === 'dashfire' ? runComps(list, comps, 'h') : list;
     case 'stand': return Game.standFull ? runComps(list, comps, 'h') : list;
     case 'intercept': return Game.fireMode === 'intercept' ? runComps(list, comps, 'h') : list;
-    case 'quick': {  // 高速段：出手就套用，傷害加成記在 qhb，速度掉到 1.5 倍以下時拿掉（見 Bullet.setMul）
-      const hb0 = list.map(b => b.hb || 0), out = runComps(list.map((b, k) => ({ ...b, k })), comps, 'h');
-      return out.map(b => ({ ...b, qhb: (b.qhb || 0) + (b.hb || 0) - hb0[b.k] }));
-    }
     case 'pull': {
       const add = comps.filter(c => baseOf(c.id) === 'bigshot' && !(c.flaky && flakyOff())).reduce((a, c) => a + 0.5 * c.m, 0);
       return list.map(b => ({ ...b, pullMul: (b.pullMul || 1) + add }));
@@ -146,7 +142,7 @@ function runOps(ops, depth) {
 }
 
 // ---------- 武器插座的傷害加成只算直擊 ----------
-// 產物出現時，拿掉子彈身上「武器插座給的傷害加成」（wsb）；傷害統計也從那幾個組件扣回來。wsbOff 記著拿掉多少（疾射減速回來時加回去）
+// 產物出現時，拿掉子彈身上「武器插座給的傷害加成」（wsb）；傷害統計也從那幾個組件扣回來。wsbOff 記著拿掉多少（速度掉回 1.5 倍以下時加回去）
 function stripW(b) {
   const w = b.wsb || 0;
   if (!(w > 0)) return b;

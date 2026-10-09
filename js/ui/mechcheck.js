@@ -676,20 +676,6 @@ const MechCheck = {
       return { ok: m0 >= 0.5 && m0 < 0.6 && Math.abs(m1 - 1.75) < 0.08 && m2 > 2.9 && Math.abs(range - 1.5) < 0.08,
         got: `出手 ${m0.toFixed(2)} 倍，射程一半 ${m1.toFixed(2)} 倍（應為 1.75），盡頭 ${m2.toFixed(2)} 倍；射程 ×${range.toFixed(2)}` };
     }],
-    ['電路晶片', '疾射', '出手 3 倍，飛到射程盡頭 0.5 倍（射程不變）；跟加速一起裝時加在同一個倍率上', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'quick', null, null]); M.targets([]);
-      M.run(1); const b = Game.bullets[0], m0 = b.accelMul, R0 = b.speed0 * Game.wp.life;
-      for (let f = 0; f < 300 && b.dist < b.R / 2; f++) Game.updateBullets(1 / 60);
-      const m1 = b.accelMul;
-      for (let f = 0; f < 300 && !b.dead; f++) Game.updateBullets(1 / 60);
-      const range = b.dist / R0;
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'quick', 'accel', null]); M.targets([]);
-      M.run(1); const c = Game.bullets[0], c0 = c.accelMul;
-      for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60);
-      const c1 = c.accelMul;
-      return { ok: m0 > 2.8 && m0 <= 3 && Math.abs(m1 - 1.75) < 0.08 && Math.abs(range - 1) < 0.06 && Math.abs(c0 - 2.5) < 0.02 && Math.abs(c1 - 2.5) < 0.02,
-        got: `出手 ${m0.toFixed(2)} 倍，射程一半 ${m1.toFixed(2)} 倍（應為 1.75）；射程 ×${range.toFixed(2)}；疾射＋加速一直是 ${c0.toFixed(2)} → ${c1.toFixed(2)} 倍（應為 2.5）` };
-    }],
     ['電路晶片', '黏著', '子彈黏上敵人，2 秒後一起爆炸（Lv1 ×1.5＋0.1／發，最多 ×3）；會穿透的子彈每穿過一隻留一份；Lv3 爆炸時立刻引爆周圍敵人身上的子彈（沒有波及傷害）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'sticky', null, null]); const e = M.targets([[120, 0]])[0];
       M.run(20); const n = e.stuck ? e.stuck.length : 0, hp = e.hp; Game.bullets = [];
@@ -1065,7 +1051,7 @@ const MechCheck = {
     ['構築系統', '插座組合（雷射）', '武器、13 個玩法晶片、3 種觸發器 × 分裂／穿甲／倍增／巨彈／鏡像／五種元素：效果出現在那個晶片的產物上（環繞放出時、迴旋折返時、黏著爆炸…）；疾射減速後插在上面的倍增失效', M => SockCheck.summary(SockCheck.rows('laser'))],
     ['構築系統', '插座組合（散彈）', '同上，散彈（一次 5 顆）', M => SockCheck.summary(SockCheck.rows('scatter'))],
     ['構築系統', '插座組合（相位刃）', '同上，相位刃（刃片、無限穿透、射程很短）', M => SockCheck.summary(SockCheck.rows('blade'))],
-    ['構築系統', '武器、觸發器插座只算直擊', '插在武器上的倍增：迴旋回程、環繞放出、加速／疾射 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出都不吃；插在觸發器上的倍增：回響的迴旋回程不吃', M => SockCheck.summary(SockCheck.direct())],
+    ['構築系統', '武器、觸發器插座只算直擊', '插在武器上的倍增：迴旋回程、環繞放出、加速 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出都不吃；插在觸發器上的倍增：回響的迴旋回程不吃', M => SockCheck.summary(SockCheck.direct())],
     ['構築系統', '武器插座數', '遠征開局 0 個，每打完一隻王 +1，最多 3 個', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const seq = [Game.wSock];
@@ -1689,7 +1675,7 @@ const SockCheck = {
       if (host === 'dashfire') return { prod: this.shots('dashfire', 0), other: this.shots(null, 0) };
       if (host === 'stand') return { prod: this.shots(null, 0, 1), other: this.shots(null, 0) };  // 架設：滿層時射出的
       if (host === 'intercept') return { prod: this.shots('intercept', 0), other: this.shots(null, 0) };
-      return { prod: this.shots(null, 0), other: [] };  // 疾射：出手就是高速段
+      return { prod: this.shots(null, 0), other: [] };  // 其他：出手就是產物
     };
     const A = grab(['weapon', host]), B = grab(['weapon', host, c]);
     const avg = (L, k) => L.length ? L.reduce((a, b) => a + (b[k] || 0), 0) / L.length : 0;
@@ -1763,14 +1749,6 @@ const SockCheck = {
       } catch (e) { r = { ok: false, got: '執行錯誤：' + e.message }; }
       out.push({ h, c, ...r });
     }
-    // 疾射：掉到 1.5 倍速以下，插在疾射上的傷害加成拿掉
-    try {
-      this.setup(w, ['weapon', 'quick', 'amp']);
-      Game.player.fire();
-      const b = Game.bullets[0], hb0 = b.hb;
-      this.step(90);
-      out.push({ h: 'quick', c: 'amp', note: '減速後', ok: hb0 > 0.9 && b.hb < 0.1 && b.accelMul < 1.5, got: `出手加成 ${hb0.toFixed(1)}，速度掉到 ${b.accelMul.toFixed(2)} 倍後 ${b.hb.toFixed(1)}` });
-    } catch (e) { out.push({ h: 'quick', c: 'amp', note: '減速後', ok: false, got: '執行錯誤：' + e.message }); }
     return out;
   },
   // 武器（和觸發器）插座上的倍增：傷害加成只算直擊，產物不吃
@@ -1784,8 +1762,6 @@ const SockCheck = {
     after('環繞', ['weapon', 'amp', 'orbit'], () => { P().wantFire = true; this.step(20, true); P().wantFire = false; this.step(3); }, b => b.orbShot);
     after('加速', ['weapon', 'amp', 'accel'], () => { P().fire(); this.step(40); }, b => b.accelMul >= 1.5);
     after('牆反彈', ['weapon', 'amp', 'wallbounce'], () => { P().x = CFG.WORLD_W - 60; P().fire(); this.step(20); }, b => b.bounced);
-    check('疾射', () => { this.setup('laser', ['weapon', 'amp', 'quick']); P().fire(); const b = Game.bullets[0], b0 = b.bonus; this.step(45);
-      return { ok: Math.abs(b0) < 0.01 && b.bonus > 0.9, got: `出手（3 倍速）${b0.toFixed(2)} → 減速後 ${b.bonus.toFixed(2)}` }; });
     check('反向', () => { this.setup('laser', ['weapon', 'amp', 'rear']); const L = runOps(Game.stats.ops, 0), f = L.find(b => !b.rear), r = L.find(b => b.rear);
       return { ok: f.bonus > 0.9 && Math.abs(r.bonus) < 0.01, got: `往前 ${f.bonus.toFixed(2)}、往後 ${r.bonus.toFixed(2)}` }; });
     check('蓄力', () => { this.setup('laser', ['weapon', 'amp', 'charge']); const L = this.shots(null, 1);
