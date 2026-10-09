@@ -142,7 +142,7 @@ const CHIPS = {
     desc: '命中附加燃燒 3 秒，每秒是這一下傷害的 30%（跟著倍增、蓄力變強）。武器本身有燃燒（龍息彈…）時相加。插在玩法晶片上只作用在它的產物。',
     apply: (list, pw) => list.map(b => ({ ...b, burnR: (b.burnR || 0) + 0.3 * pw })) },
   frost: { name: '冰凍塗層', short: '冰凍', type: 'comp', comp: true, elem: true, cost: 1,
-    desc: '命中的敵人減速 40%，持續 2 秒。武器本身有減速（黑潮、感電）時相加，最多 70%。插在玩法晶片上只作用在它的產物。',
+    desc: '命中的敵人減速 40%，持續 2 秒。武器本身有減速（冰封、感電）時相加，最多 70%。插在玩法晶片上只作用在它的產物。',
     apply: (list, pw) => list.map(b => ({ ...b, slow: Math.min(0.7, (b.slow || 0) + 0.4 * pw), slowDur: 2 })) },
   shred: { name: '破甲彈頭', short: '破甲', type: 'comp', comp: true, elem: true, cost: 3,
     desc: '命中的敵人 3 秒內受到的所有傷害 +25%（身上出現紅色準星）。跟感測器 4 層的弱點標記相加，沒有上限。插在玩法晶片上只作用在它的產物。',

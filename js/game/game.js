@@ -14,7 +14,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [], flames: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [], flames: [], links: [], quakes: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -166,7 +166,7 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = []; this.flames = [];
+    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = []; this.flames = []; this.links = []; this.quakes = [];
     this.kills = 0; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -992,6 +992,34 @@ const Game = {
     floatText(e.x, e.y - e.r, Math.round(dmg), '#ffb347', true);
     burst(e.x, e.y, '#ffb347', 10, 180, 0.3, 2);
   },
+  // 共鳴（電漿升級）：連結
+  joinLink(L, e) {
+    if (L.t <= 0 || e.dead || L.es.includes(e)) return;
+    if (L.es.length) zapFx(L.es[0].x, L.es[0].y, e.x, e.y, '#c77dff');
+    L.es.push(e); e.link = L;
+  },
+  shareLink(e, dmg, att) {
+    const L = e.link;
+    if (L.t <= 0) return;
+    const zap = this.time >= (L.zapT || 0);
+    if (zap) L.zapT = this.time + 0.25;
+    for (const o of L.es) {
+      if (o === e || o.dead || o.link !== L) continue;
+      o.hurt(dmg * L.share, 0, 0, 'link', att);
+      if (zap) zapFx(e.x, e.y, o.x, o.y, '#c77dff');
+    }
+  },
+  // 共鳴的連結到時間就斷；餘震到時間就炸
+  updateLinksQuakes(dt) {
+    if (this.links.length) {
+      for (const L of this.links) if ((L.t -= dt) <= 0) for (const e of L.es) if (e.link === L) e.link = null;
+      this.links = this.links.filter(L => L.t > 0);
+    }
+    if (this.quakes.length) {
+      for (const q of this.quakes) if ((q.t -= dt) <= 0) this.explode(q.x, q.y, q.r, q.dmg, q.color, null, q.att);
+      this.quakes = this.quakes.filter(q => q.t > 0);
+    }
+  },
   igniteFrom(e, o) { o.burnDps = Math.max(o.burnT > 0 ? o.burnDps : 0, e.burnDps); o.burnT = Math.max(o.burnT, 3); o.burnAtt = e.burnAtt; o.wild = e.wild; o.wildT = 0; },
   // 被打到之後：反應裝甲（在打到的那個人的配裝下執行）
   onPlayerHurt(p, sx, sy) {
@@ -1122,7 +1150,7 @@ const Game = {
       this.updateWaves(dt);
       this.updateEnemies(dt);
       for (const p of this.players()) this.withLoadout(p.L, () => { this.tickModules(p, dt); this.tickWeaponFx(p, dt); });
-      this.updateFlames(dt); this.updateWildfire(dt);
+      this.updateFlames(dt); this.updateWildfire(dt); this.updateLinksQuakes(dt);
       Objects.update(dt);
       this.updatePortals(dt);
       this.updateBullets(dt);
@@ -1261,6 +1289,8 @@ const Game = {
         if (b.focus) dmg *= this.focusMul(b.ownerP, e, b.focus);  // 專注（雷射升級）：連續打中同一隻越打越痛
         if (b.skewer) dmg *= 1 + b.skewer.per * b.skN++;           // 串燒（雷射升級）：前面每穿過一隻 +30%
         if (b.spreadSh) this.spreadHit(b.ownerP);                  // 分散（雷射升級）：碎光打中 → 射速疊層
+        if (b.frostbite && e.slowT > 0) dmg *= 1 + e.slowAmt * b.frostbite.per;  // 冰封（電漿升級）：被減速越多越痛
+        if (b.res) this.joinLink(b.res, e);                        // 共鳴（電漿升級）：小電漿打中的加進連結
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
@@ -1303,7 +1333,12 @@ const Game = {
     }
     Q.length = 0;
     for (const s of SQ) {  // 碎片：從命中點往前方扇形散開
-      const { n, ratio, homing = 0, seek, focus, spread } = s.b.shards, list = [];
+      const { n, ratio, homing = 0, seek, focus, spread, breed, resonance } = s.b.shards, list = [];
+      let res = null;
+      if (resonance) {  // 共鳴（電漿升級）：被打中的那隻開一個連結，這一發的小電漿打中的都加進來
+        const e0 = this.enemies.find(o => o.id === s.ignore);
+        if (e0 && !e0.dead) { res = { es: [], t: resonance.t, share: resonance.share }; this.links.push(res); this.joinLink(res, e0); }
+      }
       if (focus) {  // 專注（雷射升級）：碎光不散開，折回打同一隻（也算連續打中）
         const e0 = this.enemies.find(o => o.id === s.ignore);
         for (let k = 0; k < n && e0 && !e0.dead; k++) e0.hurt(s.b.damage * ratio * this.focusMul(s.b.ownerP, e0, s.b.focus || FOCUS), 0, 0, 'shard', s.b.att);
@@ -1320,7 +1355,8 @@ const Game = {
       }
       for (let k = 0; k < n; k++)
         list.push(shot({ angle: (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
-          life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread }));
+          life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
+          shards: breed ? { n: breed.n, ratio: breed.ratio / ratio } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分）
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }
     let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）
@@ -1332,7 +1368,11 @@ const Game = {
     const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg;
     if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
     if (b.slow) { e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, b.slow); e.slowT = Math.max(e.slowT, b.slowDur || 1.5); }
-    if (b.explode) this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att);
+    if (b.explode) {
+      this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att, b.explode.compress || 0);
+      if (b.aftershock && this.quakes.length < 40)  // 餘震（電漿升級）：同一點過一下再炸一次
+        this.quakes.push({ x, y, r: b.explode.r, dmg: b.damage * b.explode.ratio, color: b.color, att: b.att, t: b.aftershock.t, max: b.aftershock.t });
+    }
     if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）
     if (b.arcs) this.arc(e, b);
   },
@@ -1620,7 +1660,13 @@ const Game = {
     if (this.runStats) for (const m of msgs) this.runStats.got.push(`${this.here()} ${m}（用量成長）`);
     if (this.isClient()) Net.sendLoadout();
   },
-  explode(x, y, r, dmg, color, skipId, att = null) {
+  // per：壓縮（電漿升級）——第 2 隻起每多炸到 1 隻，傷害 +per
+  explode(x, y, r, dmg, color, skipId, att = null, per = 0) {
+    if (per) {
+      let n = 0;
+      for (const e of this.enemies) if (!e.dead && e.id !== skipId && Math.hypot(e.x - x, e.y - y) <= r + e.r) n++;
+      dmg *= 1 + per * Math.max(0, n - 1);
+    }
     for (const e of this.enemies) {
       if (e.dead || e.id === skipId) continue;
       const d = Math.hypot(e.x - x, e.y - y);

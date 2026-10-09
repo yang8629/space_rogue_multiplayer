@@ -14,6 +14,12 @@ const SPREAD = { n: 3, ratio: 0.4, per: 0.05, max: 12, idle: 2, decay: 0.25 };  
 const GRAZE = { r: 40, per: 0.1, max: 8, idle: 3, decay: 1 };         // 擦彈：敵彈從身邊 40 內飛過，射速 +10% 疊層；3 秒沒擦彈每秒掉 1 層
 const RAGE = { per: 1 };                                              // 狂怒：每缺 1% HP 射速 +1%
 const SKEWER = { per: 0.3 };                                          // 串燒：每穿過一隻，之後打中的傷害 +30%
+// 電漿砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
+const BREED = { n: 2, ratio: 0.25 };             // 增殖：小電漿打中時再分裂 2 顆（各為大電漿傷害的 25%），第二代不再分裂
+const RESONANCE = { t: 2, share: 0.3 };          // 共鳴：同一發打中的敵人連結 2 秒，受到的傷害分 30% 給其他連結的
+const FROSTBITE = { slow: 0.4, dur: 2, per: 1 }; // 冰封：命中減速 40%（2 秒）；敵人每被減速 1%，受到你的傷害 +1%
+const AFTERSHOCK = { t: 0.6 };                   // 餘震：爆炸 0.6 秒後同一點再炸一次
+const COMPRESS = { r: 70, per: 0.2 };            // 壓縮：爆炸半徑 70，第 2 隻起每多炸到 1 隻 +20%
 // 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
 const REVENGE = { t: 3, mul: 2, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 3 秒傷害 ×2＋爆炸
@@ -62,17 +68,17 @@ const WEAPONS = {
     paths: {
       A: { name: '分裂電漿', desc: '命中時分裂出 3 顆小電漿（每顆 35% 傷害）。', apply: p => { p.shards = { n: 3, ratio: 0.35 }; },
         next: [
-          { name: '連鎖分裂', desc: '分裂增加到 5 顆。', apply: p => { p.shards = { n: 5, ratio: 0.35 }; } },
-          { name: '重核分裂', desc: '分裂的每顆提升到 60% 傷害。', apply: p => { p.shards = { n: 3, ratio: 0.6 }; } }] },
-      B: { name: '重力井', desc: '電漿更慢、更大、存在更久，穿透 +4。', apply: p => {
+          { name: '增殖', desc: `小電漿打中敵人時再分裂成 ${BREED.n} 顆（各為大電漿傷害的 ${BREED.ratio * 100}%），第二代不再分裂：敵人越分散越好用。`, apply: p => { p.shards = { n: 3, ratio: 0.35, breed: BREED }; } },
+          { name: '共鳴', desc: `被大電漿打中的那隻，和同一發小電漿打中的敵人互相連結 ${RESONANCE.t} 秒；連結中任何一隻受到傷害，其他連結的也受到 ${RESONANCE.share * 100}%（分出去的不會再分）：把一群連起來，集中打一隻。`, apply: p => { p.shards = { n: 3, ratio: 0.35, resonance: RESONANCE }; } }] },
+      B: { name: '重質電漿', desc: '電漿更慢、更大、存在更久，穿透 +4。', apply: p => {
           p.speed *= 0.6; p.radius *= 1.6; p.life *= 1.5; p.pierce += 4; },
         next: [
           { name: '重量砲', desc: '飛船的移動速度每比原本慢 1%，傷害 +2%（沒有上限）：越重越痛（重裝甲、護盾產生器、被凍住都算）。', apply: p => { p.weight = { per: 2 }; } },
-          { name: '黑潮', desc: '命中的敵人減速 50%。', apply: p => { p.slow = 0.5; } }] },
+          { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層可以疊到減速 70%，重力井模組的範圍內也算）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
       C: { name: '新星', desc: '命中時爆炸（半徑 90，80% 傷害）。', apply: p => { p.explode = { r: 90, ratio: 0.8 }; },
         next: [
-          { name: '超新星', desc: '爆炸半徑擴大到 140。', apply: p => { p.explode = { r: 140, ratio: 0.8 }; } },
-          { name: '雙星', desc: '一次發射 2 顆電漿球。', apply: p => { p.count = 2; p.spread = 0.25; } }] },
+          { name: '餘震', desc: `爆炸 ${AFTERSHOCK.t} 秒後在同一點再炸一次（同半徑、同傷害），地上先出現縮小的圈：朝敵人要走到的地方打。`, apply: p => { p.aftershock = AFTERSHOCK; } },
+          { name: '壓縮', desc: `爆炸半徑縮小到 ${COMPRESS.r}；從第 2 隻開始，每多炸到 1 隻，這次爆炸傷害 +${COMPRESS.per * 100}%：把怪聚在一起再炸。`, apply: p => { p.explode = { r: COMPRESS.r, ratio: 0.8, compress: COMPRESS.per }; } }] },
     } },
   railgun: { name: '軌道砲', short: '軌道', color: '#ffd166', desc: '超高速穿甲彈，射速慢但一發貫穿一排。',
     base: { interval: 0.6, count: 1, spread: 0, damage: 30, speed: 1500, radius: 4, pierce: 3, life: 0.7, shape: 'rail', knock: 2 },
@@ -122,7 +128,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -136,7 +142,7 @@ function weaponEmit(p, pw) {
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
       explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs: p.arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null }));
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null }));
   }
   return out;
 }
