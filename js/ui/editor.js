@@ -439,7 +439,7 @@ const Editor = {
       : P ? `<br><span style="color:#ffd166">◇ 插座 ${socketsOf(id)} 個　插在它上面的組件只作用在：${P}</span>` : '';
     const price = !Game.freePlay() ? `　回收價 ◆${sellPrice(id)}` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${d.name}</b>　` +
-      `<span style="color:#6a79ad">${m.label} · 能量負載 ⚡${d.cost}${d.cost ? `（裝上電路射速 -${Math.round(d.cost * CFG.HEAT_RATE * 100)}%）` : ''}${price}</span>` +
+      `<span style="color:#6a79ad">${m.label} · 能量 ⚡${d.cost}${price}</span>` +
       (CHIPS[baseOf(id)].grow && !Game.freePlay() ? '<br>' + growLine(id, Game.growth, Game.runStats ? Game.runStats.time / 60 : 0) : '') +  // 成長進度放在名稱下面（以前在最後一行，說明框要往下捲才看得到）
       // 各等級效果放在說明前面（說明框高度有限，放最後會被切掉）；Lv2 以上的 desc 本身尾巴就有等級列，改用基本說明避免重複
       (LV_INFO[baseOf(id)] ? '<br>' + lvLine(baseOf(id), levelOf(id)) + `<br>${CHIPS[baseOf(id)].desc}` : `<br>${d.desc}`) +
@@ -576,7 +576,7 @@ const Editor = {
       stat('單次總傷害', s.dmg.toFixed(0)) +
       stat('射速', s.rps.toFixed(1) + ' 次/秒') +
       stat('估算 DPS（含命中效果）', s.dpsEst.toFixed(0)) +
-      stat('總能量負載', `⚡ ${s.heat}<span style="display:block;font-size:11px;color:${s.heat ? '#ff9dbd' : '#8fa3d9'};margin-top:2px">射速 -${Math.round((1 - heatRateMul(s.heat)) * 100)}%</span>`);
+      stat('能量 / 容量', `⚡ ${s.heat} / ${s.cap}<span style="display:block;font-size:11px;color:${s.heat > s.cap ? '#ff9dbd' : '#8fa3d9'};margin-top:2px">${s.heat > s.cap ? `超載 ${s.heat - s.cap}：射速 -${Math.round((1 - heatRateMul(s.heat, s.cap)) * 100)}%` : '在容量內：射速不扣'}</span>`);
     this.layersEl.innerHTML = s.layers.map((l, i) =>
       `◎ 第 ${i + 1} 層（${TRIG[l.trig] || ''}）：每次觸發展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　');
     const sa = Game.chain.map((_, i) => A[i] && `第 ${i + 1} 格 ${SLOT_ATTRS[A[i]].name}`).filter(Boolean);

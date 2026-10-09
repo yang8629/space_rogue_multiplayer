@@ -233,10 +233,10 @@ const Codex = {
     }).join('');
 
     // 2. 射速 vs 能量負載（各武器基礎型）
-    const heats = Array.from({ length: 17 }, (_, i) => i);
+    const heats = Array.from({ length: 11 }, (_, i) => i);  // 超過容量幾點
     const rateSeries = Object.entries(WEAPONS).map(([id, W], i) => {
       const p = weaponParams({ id, path: null, final: null });
-      return { name: W.name, color: S[i], values: heats.map(h => 1 / Math.max(CFG.MIN_INTERVAL, p.interval / heatRateMul(h) * p.rate)) };
+      return { name: W.name, color: S[i], values: heats.map(h => 1 / Math.max(CFG.MIN_INTERVAL, p.interval / heatRateMul(h, 0) * p.rate)) };
     });
 
     // 3. 晶片等級帶來的傷害倍率
@@ -331,10 +331,10 @@ const Codex = {
         ${cards}
         ${this.table(['型態', '估算 DPS', '比基礎型'], rows1)}</div>
 
-      <div class="viz"><h4>射速與能量負載</h4>
-        <div class="cap">電路上每 1 點 ⚡，射速 -${CFG.HEAT_RATE * 100}%（每把武器都一樣），最多降到原本的 ${CFG.HEAT_RATE_FLOOR * 100}%。圖上是各武器基礎型在不同能量下的每秒開火次數。</div>
-        ${this.lineChart('rate', { xs: heats, series: rateSeries, yFmt: v => (+v.toFixed(1)) + '/秒', tipTitle: x => `能量負載 ${x}` })}
-        ${this.table(['能量負載', ...rateSeries.map(s => s.name)], heats.map((h, i) => [h, ...rateSeries.map(s => s.values[i].toFixed(2))]))}</div>
+      <div class="viz"><h4>射速與超載</h4>
+        <div class="cap">總能量在容量以內射速不扣；超過的每 1 點 ⚡ 射速 ×${CFG.OVERLOAD_RATE}（相乘，每把武器都一樣）。圖上是各武器基礎型超過容量 0～10 點時的每秒開火次數。</div>
+        ${this.lineChart('rate', { xs: heats, series: rateSeries, yFmt: v => (+v.toFixed(1)) + '/秒', tipTitle: x => `超過容量 ${x}` })}
+        ${this.table(['超過容量', ...rateSeries.map(s => s.name)], heats.map((h, i) => [h, ...rateSeries.map(s => s.values[i].toFixed(2))]))}</div>
 
       <div class="viz"><h4>晶片等級與傷害倍率</h4>
         <div class="cap">影響傷害的晶片在 Lv1 → Lv3 的傷害倍率（Lv2 強度 ×1.5、Lv3 強度 ×2）。協同處理器以電路中 4 個其他晶片、資料鏈結以倉庫 4 個晶片計算。</div>
@@ -386,9 +386,9 @@ const Codex = {
         <b>插在玩法晶片上</b>：只作用在那個晶片的「產物」（例：插在環繞上 = 放出的那一波；插在黏著上 = 爆炸）。每個晶片的產物見「插座與奇異點」分頁。<br>
         超頻模組只能插在武器上；鏡像 = 再來一次（武器多射一次、玩法晶片的產物多一份，插哪個插座都一樣）；巨彈不改子彈數量，插座的順序不影響結果；吸引只能插巨彈。`)}
       ${R('用量成長與進化', '改變玩法的晶片裝在電路上，照著它的玩法打（例如迴旋的回程命中、環繞命中、反彈次數）就會累積成長，到了自動升到 Lv2、Lv3；Lv3 是<b>進化</b>，改名、玩法再變一次。撿到重複的不會合成（獎勵、補給站也不再出現已經有的）。電路編輯器點晶片可以看目前的成長進度和本局每分鐘成長多少。打爆小行星時，電路上每個會成長的晶片 +8。雙人：各算各的。')}
-      ${R('能量負載與射速', `每個晶片右上角的 ⚡ 是能量負載。電路上所有晶片的 ⚡ 加起來，<b>每 1 點讓射速 -${CFG.HEAT_RATE * 100}%</b>，每把武器都一樣。<br>
-        例：⚡5 → 射速 -${5 * CFG.HEAT_RATE * 100}%；⚡10 → 射速 -${10 * CFG.HEAT_RATE * 100}%。最多降到原本的 ${CFG.HEAT_RATE_FLOOR * 100}%（⚡${Math.round((1 - CFG.HEAT_RATE_FLOOR) / CFG.HEAT_RATE)} 以上不會再更慢）。<br>
-        放在倉庫的晶片不算能量；插在插座上的組件照算。超頻模組讓射速 ×2，但連續射擊太久會過熱停火 1.5 秒；散熱片零件每層射速 +6%。`)}
+      ${R('能量與容量', `每個晶片右上角的 ⚡ 是能量。電路上所有晶片（含插座上的組件）的 ⚡ 加起來是總能量；機體有<b>能量容量</b>，總能量在容量以內射速不扣，<b>超過的每 1 點射速 ×${CFG.OVERLOAD_RATE}</b>（相乘，每把武器都一樣）。<br>
+        例：容量 5、總能量 8 → 超過 3 點，射速 ×${(CFG.OVERLOAD_RATE ** 3).toFixed(2)}。<br>
+        容量的來源：飛船開局（${Object.values(SHIPS).map(s => s.name + ' ' + s.cap).join('、')}）、補給站每間可以買 +1、散熱片零件每層 +1。放在倉庫的晶片不算能量。超頻模組讓射速 ×2，但連續射擊太久會過熱停火 1.5 秒。`)}
       ${R('擊退', `每把武器的擊退值不同：${Object.values(WEAPONS).map(W => `${W.name} ${W.base.knock}`).join('、')}（鋼珠、攻城砲 ×2）。巨彈每級擊退 +0.5。<br>
         一般敵人都會被推。旗艦有抗擊退，子彈的擊退值<b>超過</b>抗性才推得動，力道只看超過的部分：${CFG.BOSS_ORDER.map(id => `${ENEMY_TYPES[id].name} ${ENEMY_TYPES[id].knockResist}`).join('、')}。爆炸、震波、電弧不會推王。被擊退撞上行星的敵人多受 20 傷害。`)}
       ${R('傷害加成分兩種', '<b>武器加成</b>：插在武器（或觸發器）上的倍增、巨彈的 +30%，加上蓄力、速度倍率（加速、環繞放出）、衝刺射擊，全部<b>相加</b>：兩個倍增器是 +100% +100% = ×3，不是 ×4。<br><b>晶片加成</b>：插在玩法晶片上的倍增、巨彈，作用在同一下命中的全部相加。<br>最終傷害 ＝ 基礎 ×（1 ＋ 武器加成）×（1 ＋ 晶片加成）。分裂（每顆 ×0.4）、迴旋（×0.7）、武器升級照舊相乘。')}
@@ -502,7 +502,7 @@ const Codex = {
     const stat = (k, v) => `<div class="stat">${k}<b>${v}</b></div>`;
     return `<div class="stats">
         ${stat('每次開火子彈', s.count + ' 顆')}${stat('單次總傷害', s.dmg.toFixed(0))}${stat('射速', s.rps.toFixed(1) + ' 次/秒')}
-        ${stat('估算 DPS', s.dpsEst.toFixed(0))}${stat('能量負載', '⚡ ' + s.heat)}</div>
+        ${stat('估算 DPS', s.dpsEst.toFixed(0))}${stat('能量 / 容量', '⚡ ' + s.heat + ' / ' + s.cap)}</div>
       ${s.layers.length ? `<div class="layers">${s.layers.map((l, i) => `◎ 觸發第 ${i + 1} 層：每次觸發展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　')}</div>` : ''}
       <div class="codex-sec"><h3>電路逐格拆解（${Game.chain.length} 格）</h3><div class="rules">${rows}</div></div>
       <div class="codex-sec"><h3>機體（零件 ${partsUsed(Game.parts)} / ${Game.partSlots}）</h3>

@@ -140,6 +140,7 @@ const Screen = {
       case 'copyrun': Screen.copyRun(); break;
       case 'copyone': Screen.copyOne(+arg); break;
       case 'heal': Game.shopHeal(); break;
+      case 'cap': Game.buyCap(); break;
       case 'module': Game.takeModule(arg); break;
       case 'bossmod': Game.takeBossModule(); break;
       case 'wspick': Game.wsPick(arg); break;
@@ -430,6 +431,8 @@ const Screen = {
           : `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_REPAIR.price) && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${Game.shopHealHp()}（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆ ${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）</button>`}
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
           ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">⚡ 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
+        ${!Game.shop.capBought
+          ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_CAP) ? '' : 'disabled'} data-act="cap">⚡ 能量容量 +1（目前 ${Game.energyCap()}，◆ ${Game.shopPrice(CFG.SHOP_CAP)}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>
       <div class="toast" style="text-align:center">${toast}</div></div>`);
   },
@@ -556,7 +559,7 @@ const Screen = {
       // 展開看細節：第 2 版紀錄才有的欄位（舊紀錄沒有就不顯示）
       const S = r.stats;
       const detail = [
-        S ? `<div><b>最後的電路數值</b><br>插槽 ${S.slots}、能量 ⚡${S.heat}（射速 ${S.rateCut}）、每秒 ${S.rps} 發、每發 ${S.perFire} 顆共 ${S.fireDmg} 傷害、估算 DPS ${S.estDps}、擊退 ${S.knock}${S.passives.length ? `<br>倉庫被動：${S.passives.join('、')}` : ''}</div>` : '',
+        S ? `<div><b>最後的電路數值</b><br>插槽 ${S.slots}、能量 ⚡${S.heat}${S.cap != null ? ' / ' + S.cap : ''}（射速 ${S.rateCut}）、每秒 ${S.rps} 發、每發 ${S.perFire} 顆共 ${S.fireDmg} 傷害、估算 DPS ${S.estDps}、擊退 ${S.knock}${S.passives.length ? `<br>倉庫被動：${S.passives.join('、')}` : ''}</div>` : '',
         list2('各晶片傷害', (r.chipDmg || []).map(([n, v]) => `${n}　${fmt(v)}（${r.dmg ? Math.round(v / r.dmg * 100) : 0}%）`)),
         r.coop && r.coop.mateChipDmg ? (() => {
           const t = r.coop.mateChipDmg.reduce((a, [, v]) => a + v, 0);
@@ -652,7 +655,7 @@ function recordText(r) {
   L.push(`武器 ${r.weapon.replace('・', '+')}`);
   const S = r.stats;
   const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的組件
-  L.push(`電路 ${wsk ? '武器' + wsk[0] + '｜' : ''}${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（熱${S.heat} 射速${S.rateCut} ${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
+  L.push(`電路 ${wsk ? '武器' + wsk[0] + '｜' : ''}${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（能量${S.heat}${S.cap != null ? '/' + S.cap : ''} 射速${S.rateCut} ${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
   const M = r.mech;
   if (M) {
     L.push(`機體 ${Object.entries(M.parts).map(([k, v]) => k.slice(0, 2) + v).join(' ') || '無零件'}${M.module ? `｜${M.module}${M.traits.length ? `(${M.traits.join(' ')})` : ''}` : M.traits.length ? `(${M.traits.join(' ')})` : ''} HP${r.hp}/${r.maxHp} 晶${r.credits}`);

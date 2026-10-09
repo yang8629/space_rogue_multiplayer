@@ -327,7 +327,7 @@ function drawHUD() {
   ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
   if (T) ctx.fillText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒`, VW / 2, y + 56);
   else {
-    ctx.fillText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒 · ⚡${s.heat}　[Tab] 編輯電路`, VW / 2, VH - 16);
+    ctx.fillText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒 · ⚡${s.heat}/${s.cap}　[Tab] 編輯電路`, VW / 2, VH - 16);
     ctx.textAlign = 'left'; ctx.fillStyle = '#4a5886';
     ctx.fillText('WASD 移動 · 左鍵射擊 · Space 衝刺', 20, VH - 16);
   }
