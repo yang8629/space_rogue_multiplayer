@@ -357,7 +357,7 @@ const Objects = {
       }
       if (o.type !== 'planet' && o.type !== 'rock') continue;
       if (segDist2(b.px, b.py, b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
-      if (b.phase) {  // 穿牆（軌道升級）：穿過去，小行星照樣受傷（每顆只算一次）
+      if (b.wallPass) {  // 穿牆（軌道升級）：穿過去，小行星照樣受傷（每顆只算一次）
         if (o.type === 'rock' && !(b.phased || (b.phased = new Set())).has(o)) { b.phased.add(o); this.hitRock(o, hitDamage(b), b.owner, b.x, b.y); }
         continue;
       }
