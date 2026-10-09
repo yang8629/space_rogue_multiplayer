@@ -844,6 +844,7 @@ const Net = {
       zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 王的落點轟炸（紅圈）
       fl: G.flames.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 火毯（散彈升級）留在地上的火
       qk: G.quakes.map(q => [r(q.x), r(q.y), q.r, r2(q.t), q.max]),  // 餘震（電漿升級）的預告圈
+      tr: G.trails.map(L => [r(L.x1), r(L.y1), r(L.x2), r(L.y2), r2(L.t), L.max]),  // 殘留彈道（軌道升級）的電軌
       lk: G.links.map(L => [r2(L.t), ...L.es.filter(e => !e.dead && e.link === L).map(e => e.id)]),  // 共鳴（電漿升級）：剩幾秒、連結的敵人
       pp: [...PART_IDS.map(id => G.parts[id] || 0), G.module || ''],  // 房主的零件與模組（隊友那邊畫房主的船用）
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
@@ -975,6 +976,7 @@ const Net = {
     G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.flames = arr(s.fl).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 30), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.quakes = arr(s.qk).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 90), t: num(a[3]), max: num(a[4], 1) || 1 }));
+    G.trails = arr(s.tr).filter(Array.isArray).map(a => ({ x1: num(a[0]), y1: num(a[1]), x2: num(a[2]), y2: num(a[3]), t: num(a[4]), max: num(a[5], 1) || 1 }));
     G.links = arr(s.lk).filter(Array.isArray).map(a => ({ t: num(a[0]), ids: a.slice(1) }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
     if (m && Array.isArray(s.pp)) { m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(s.pp[i]), 0, 20)])); m.module = MODULES[s.pp[5]] ? s.pp[5] : null; }

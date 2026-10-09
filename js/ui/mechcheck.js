@@ -305,43 +305,19 @@ const MechCheck = {
       return { ok: A.n === 1 && near1(A.d, 1) && B.n >= 3 && near1(B.d, wantB) && !A.far && !B.far,
         got: `炸到 ${A.n} 隻：×${A.d.toFixed(2)}（要 ×1）；炸到 ${B.n} 隻：×${B.d.toFixed(2)}（要 ×${wantB.toFixed(2)}）；140 外的${A.far || B.far ? '被炸到（錯，半徑太大）' : '沒炸到'}` };
     }],
-    ['武器命中效果', '穿牆', '軌道・自動軌道・穿牆：子彈穿過小行星（小行星照樣受傷）和大地圖的牆，打得到後面的敵人；沒有穿牆的被擋住', M => {
-      const rock = (pass, orbAngle) => {
-        M.setup('sandbox', 'vanguard', 'railgun', 'A', pass ? 0 : null, ['weapon', null, null, null]);
-        const P = Game.player, e = M.targets([[220, 0]])[0], o = { type: 'rock', x: P.x + 110, y: P.y, r: 30, hp: 5000, maxHp: 5000 };
-        Game.objs = [o]; Objects.buildGrid();
-        const hp = e.hp; P.aim = 0; P.fire(); if (orbAngle) for (const b of Game.bullets) b.phase = orbAngle;  // 環繞子彈用 phase 記繞圈角度
-        for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
-        return { hit: e.hp < hp, rockHit: o.hp < 5000 };
-      };
-      // 大地圖：找「中間隔著一段厚 40 以上的牆、兩邊都是空地、沒有閘門」的兩點，飛船搬過去朝牆後的靶射；穿牆、沒穿牆打同一段牆
-      const wall = () => {
-        M.setup('run', 'vanguard', 'railgun', 'A', 0, ['weapon', null, null, null]);
-        Game.node = { type: 'combat', L: 5, id: 'mc' }; Game.startCombat({ level: 5, wavesTotal: 2, elites: 0 });
-        const P = Game.player; Game.enemies = []; Game.objs = []; Objects.buildGrid();
-        if (Arena.rect) return [{ found: false }, { found: false }];
-        for (let tries = 0; tries < 4000; tries++) {
-          const x = Math.random() * Arena.W, y = Math.random() * Arena.H, a = Math.random() * TAU;
-          if (Arena.f(x, y) < 40) continue;
-          let inWall = 0, out = 0;
-          for (let d = 20; d < 700; d += 4) {
-            const f = Arena.f(x + Math.cos(a) * d, y + Math.sin(a) * d);
-            if (f < 0) inWall = inWall || d; else if (inWall) { if (f > 40) { out = d + 30; break; } if (d - inWall < 40) { inWall = 0; break; } }
-          }
-          if (!inWall || !out || inWall < 60 || Arena.gateCross(x, y, x + Math.cos(a) * out, y + Math.sin(a) * out)) continue;
-          const shoot = fin => {
-            Game.weapon = { id: 'railgun', path: 'A', final: fin }; Game.refreshWeapon(); Game.bullets = [];
-            P.x = x; P.y = y; const e = M.targets([[Math.cos(a) * out, Math.sin(a) * out]])[0], hp = e.hp;
-            P.aim = a; P.fire(); for (let f = 0; f < 40; f++) Game.updateBullets(1 / 60);
-            return { found: true, hit: e.hp < hp };
-          };
-          return [shoot(0), shoot(null)];
-        }
-        return [{ found: false }, { found: false }];
-      };
-      const A = rock(true), B = rock(false), O = rock(false, 1.7), [C, D] = wall();
-      return { ok: A.hit && !B.hit && !O.hit && C.found && C.hit && !D.hit,
-        got: `小行星後面的靶：穿牆${A.hit ? '打到' : '沒打到（錯）'}（小行星${A.rockHit ? '受傷' : '沒受傷：每發 18，小行星要單發 30'}）；沒穿牆${B.hit ? '打到（錯）' : '被擋住'}、帶環繞角度的${O.hit ? '穿過去（錯：跟環繞的 phase 撞名）' : '被擋住'}；大地圖牆後的靶：${C.found ? `穿牆${C.hit ? '打到' : '沒打到（錯）'}、沒穿牆${D.hit ? '打到（錯）' : '被擋住'}` : '找不到牆（錯）'}` };
+    ['武器命中效果', '殘留彈道', '軌道・自動軌道・殘留彈道：子彈飛過的路徑留電軌 1.5 秒，碰到的敵人受到子彈傷害的 50%（每條每隻一次，子彈本身打中的不算）；場上最多 40 條', M => {
+      M.setup('sandbox', 'vanguard', 'railgun', 'A', 0, ['weapon', null, null, null]);
+      const P = Game.player, dmg = runOps(Game.stats.ops, 0)[0].damage, [a] = M.targets([[200, 0]]);
+      const fly = () => { for (let f = 0; f < 60 && Game.bullets.length; f++) Game.updateBullets(1 / 60); };
+      P.aim = 0; P.fire(); const ha = a.hp; fly();
+      const hit = a.hp < ha, n1 = Game.trails.length, L = Game.trails[0], len = L ? Math.hypot(L.x2 - L.x1, L.y2 - L.y1) : 0;
+      const h1 = a.hp; Game.updateTrails(1 / 60); const sameA = a.hp === h1;  // 子彈打中的那隻不再受傷
+      const [b] = M.targets([[500, 0]]), hb = b.hp; Game.updateTrails(1 / 60); const db = hb - b.hp;
+      const hb2 = b.hp; Game.updateTrails(1 / 60); const once = b.hp === hb2;
+      for (let f = 0; f < 90; f++) Game.updateTrails(1 / 60); const gone = Game.trails.length;
+      for (let i = 0; i < 50; i++) { P.fire(); fly(); }
+      return { ok: hit && n1 === 1 && len > 900 && sameA && near1(db, dmg * 0.5) && once && gone === 0 && Game.trails.length === 40,
+        got: `一發留 ${n1} 條（要 1）、長 ${Math.round(len)}（射程 1050）；子彈打中的那隻${sameA ? '不再受傷' : '又受傷（錯）'}；之後走上電軌的受到 ${db.toFixed(1)}（要 ${(dmg * 0.5).toFixed(1)}）、${once ? '只算一次' : '一直受傷（錯）'}；1.5 秒後剩 ${gone} 條（要 0）；連射 50 發場上 ${Game.trails.length} 條（上限 40）` };
     }],
     ['武器命中效果', '連殺裝填', '軌道・自動軌道・連殺裝填：每擊殺一隻，下一發的射擊冷卻立刻歸零', M => {
       const one = fin => {
@@ -498,15 +474,16 @@ const MechCheck = {
       return { ok: pel > 0 && near1(wh, pel) && near1(slam, pel * 2) && stun && b.hp === hb0 && !again,
         got: `彈丸打中 ${pel.toFixed(1)}（記下 ${wh.toFixed(1)}）；撞到別的敵人受到 ${slam.toFixed(1)}（要 ${(pel * 2).toFixed(1)}）、${stun ? '暈眩' : '沒暈眩（錯）'}；被撞的${b.hp === hb0 ? '沒受傷' : '受傷了（錯）'}；0.5 秒內再撞${again ? '又算了（錯）' : '不算'}` };
     }],
-    ['武器命中效果', '逆襲','散彈・獨頭彈・逆襲：受傷（護盾擋下也算）之後 5 秒內傷害 ×2.5、命中爆炸（半徑 80）；5 秒後恢復', M => {
+    ['武器命中效果', '逆襲','散彈・獨頭彈・逆襲：受傷（護盾擋下也算）之後 5 秒內傷害 ×2.5、命中爆炸（半徑 80）；5 秒後恢復；沒開時被打中那一下傷害減半，開著時照算', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'B', 0, ['weapon', null, null, null]); M.targets([]);
       const P = Game.player, shot0 = () => runOps(Game.stats.ops, 0)[0];
-      const a = shot0(); P.iframe = 0; Game.hurtPlayer(5, 'mc', P); const b = shot0(), t1 = P.revengeT;
+      P.hp = P.maxHp; const a = shot0(), h0 = P.hp; P.iframe = 0; Game.hurtPlayer(10, 'mc', P); const b = shot0(), t1 = P.revengeT, lost1 = h0 - P.hp;
+      const h1 = P.hp; P.iframe = 0; Game.hurtPlayer(10, 'mc', P); const lost2 = h1 - P.hp;
       for (let f = 0; f < 310; f++) Game.tickWeaponFx(P, 1 / 60);
       const c = shot0();
       P.shield = 1; P.iframe = 0; const hp0 = P.hp; Game.hurtPlayer(5, 'mc', P); const t2 = P.revengeT, kept = P.hp === hp0;
-      return { ok: !a.explode && near1(b.damage / a.damage, 2.5) && b.explode && b.explode.r === 80 && near1(t1, 5) && near1(c.damage, a.damage) && !c.explode && near1(t2, 5) && kept,
-        got: `平常 ${a.damage.toFixed(1)}${a.explode ? '（有爆炸，錯）' : ''}；受傷後 ${b.damage.toFixed(1)}（×${(b.damage / a.damage).toFixed(2)}）${b.explode ? `爆炸半徑 ${b.explode.r}` : '沒爆炸（錯）'}、倒數 ${t1.toFixed(1)} 秒；5.2 秒後 ${c.damage.toFixed(1)}${c.explode ? '（還在爆，錯）' : ''}；護盾擋下：倒數 ${t2.toFixed(1)} 秒、${kept ? '沒扣血' : '扣血了（錯）'}` };
+      return { ok: !a.explode && near1(b.damage / a.damage, 2.5) && b.explode && b.explode.r === 80 && near1(t1, 5) && near1(c.damage, a.damage) && !c.explode && near1(t2, 5) && kept && lost1 > 0 && near1(lost2 / lost1, 2),
+        got: `平常 ${a.damage.toFixed(1)}${a.explode ? '（有爆炸，錯）' : ''}；受傷後 ${b.damage.toFixed(1)}（×${(b.damage / a.damage).toFixed(2)}）${b.explode ? `爆炸半徑 ${b.explode.r}` : '沒爆炸（錯）'}、倒數 ${t1.toFixed(1)} 秒；被打中扣 ${lost1.toFixed(1)}、逆襲中再被打扣 ${lost2.toFixed(1)}（要 2 倍）；5.2 秒後 ${c.damage.toFixed(1)}${c.explode ? '（還在爆，錯）' : ''}；護盾擋下：倒數 ${t2.toFixed(1)} 秒、${kept ? '沒扣血' : '扣血了（錯）'}` };
     }],
     ['武器命中效果', '空格苦行', '散彈・獨頭彈・空格苦行：電路上每個沒裝晶片的空格傷害 +50%（組件插座不算）', M => {
       const one = chain => { M.setup('sandbox', 'vanguard', 'scatter', 'B', 1, chain); return runOps(Game.stats.ops, 0)[0].damage; };

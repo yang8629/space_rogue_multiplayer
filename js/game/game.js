@@ -14,7 +14,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [], flames: [], links: [], quakes: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [], flames: [], links: [], quakes: [], trails: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -166,7 +166,7 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = []; this.flames = []; this.links = []; this.quakes = [];
+    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
     this.kills = 0; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -829,6 +829,8 @@ const Game = {
       return;
     }
     dmg *= (1 - Math.min(0.6, this.passivesOf(p).armor)) * M.taken;
+    const RV = this.wpOf(p).revenge;
+    if (RV && !(p.revengeT > 0)) dmg *= RV.first;  // 逆襲（散彈升級）：沒開時被打中，那一下減半（挨一下換爆發）
     if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - CFG.CAMPAIGN_SECTORS);  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
     if (M.module === 'endshell' && !p.shellUsed && p.hp - dmg <= 0) {  // 終焉護殼：留 1 HP
@@ -967,6 +969,35 @@ const Game = {
     this.flames.push({ x: b.x, y: b.y, r: C.r, t: C.t, max: C.t, dps: C.dps, att: b.att });
     if (this.flames.length > C.max) this.flames.shift();
   },
+  // 殘留彈道（軌道升級）：子彈直直飛的一段算一條電軌；轉向（反彈、追蹤）、不在飛（環繞、迴旋回程、停住）、消失時收尾
+  trailStep(b) {
+    if (!b.ta && !b.taDone && b.mode === 'fly') b.ta = [b.sx, b.sy, b.angle];  // 第一段從發射點開始
+    const fly = b.mode === 'fly' && !b.dead;
+    if (b.ta && (!fly || Math.abs(angleDiff(b.ta[2], b.angle)) > 0.12)) {
+      const T = b.trail;
+      this.trails.push({ x1: b.ta[0], y1: b.ta[1], x2: b.x, y2: b.y, t: T.t, max: T.t, dmg: b.damage * T.ratio, att: b.att, hit: new Set(b.hitSet) });
+      if (this.trails.length > T.max) this.trails.shift();
+      b.ta = null; b.taDone = true;
+    }
+    if (fly && !b.ta && b.taDone) b.ta = [b.x, b.y, b.angle];
+  },
+  // 電軌：碰到的敵人受到那發子彈的 50%（每條每隻一次，子彈本身打中的不算）
+  updateTrails(dt) {
+    if (!this.trails.length) return;
+    for (const L of this.trails) {
+      L.t -= dt;
+      if (L.t <= 0) continue;
+      const x0 = Math.min(L.x1, L.x2), x1 = Math.max(L.x1, L.x2), y0 = Math.min(L.y1, L.y2), y1 = Math.max(L.y1, L.y2);
+      for (const e of this.enemies) {
+        if (e.dead || e.spawnT > 0 || L.hit.has(e.id)) continue;
+        const r = e.r + 4;
+        if (e.x < x0 - r || e.x > x1 + r || e.y < y0 - r || e.y > y1 + r || segDist2(L.x1, L.y1, L.x2, L.y2, e.x, e.y) >= r * r) continue;
+        this.trailHit(L, e);
+      }
+    }
+    this.trails = this.trails.filter(L => L.t > 0);
+  },
+  trailHit(L, e) { L.hit.add(e.id); e.hurt(L.dmg, 0, 0, 'shock', L.att); },
   // 火毯的火：每 0.2 秒讓碰到的敵人燃燒（每秒 dps，持續 3 秒）
   updateFlames(dt) {
     if (!this.flames.length) return;
@@ -1169,7 +1200,7 @@ const Game = {
       this.updateWaves(dt);
       this.updateEnemies(dt);
       for (const p of this.players()) this.withLoadout(p.L, () => { this.tickModules(p, dt); this.tickWeaponFx(p, dt); });
-      this.updateFlames(dt); this.updateWildfire(dt); this.updateLinksQuakes(dt);
+      this.updateFlames(dt); this.updateWildfire(dt); this.updateLinksQuakes(dt); this.updateTrails(dt);
       Objects.update(dt);
       this.updatePortals(dt);
       this.updateBullets(dt);
@@ -1254,6 +1285,7 @@ const Game = {
     for (const b of B) {
       if (b.dead) continue;
       b.update(dt);
+      if (b.trail) this.trailStep(b);  // 殘留彈道（軌道升級）：記錄飛過的路徑
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
       if (b.comet && this.cometShardHit(b)) continue;  // 彗星碎片：也會打到飛船
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }

@@ -53,6 +53,11 @@ const GLWorld = {
       this.gAdd.circle(z.x, z.y, z.r * fl).fill({ color: 0xff6a1c, alpha: 0.22 * k });
       this.gAdd.circle(z.x, z.y, z.r * 0.5 * fl).fill({ color: 0xffd166, alpha: 0.28 * k });
     }
+    for (const L of G.trails) {  // 殘留彈道（軌道升級）：電軌，外層黃光、中間白芯，快消失時變淡、一閃一閃
+      const k = Math.min(1, Math.max(0, L.t) / L.max * 2), fl = 0.75 + 0.25 * Math.sin(G.time * 40 + L.x1 * 0.05);
+      this.gAdd.moveTo(L.x1, L.y1).lineTo(L.x2, L.y2).stroke({ width: 6, color: 0xffd166, alpha: 0.35 * k * fl });
+      this.gAdd.moveTo(L.x1, L.y1).lineTo(L.x2, L.y2).stroke({ width: 2, color: 0xfff6d8, alpha: 0.8 * k * fl });
+    }
     if (G.links.length) {  // 共鳴（電漿升級）：連結中的敵人之間畫淡紫色的線，快斷時變淡（隊友那邊只有敵人 id）
       const byId = G.links.some(L => L.ids) ? new Map(G.enemies.map(e => [e.id, e])) : null;
       for (const L of G.links) {
