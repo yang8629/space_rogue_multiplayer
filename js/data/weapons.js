@@ -27,7 +27,6 @@ const STATIC = { dist: 100, max: 4 };         // 靜電：飛船每移動 100 �
 const CONDUCT = { jumps: 3, decay: 0.7 };     // 導電：電弧打中後再跳到附近另一隻，最多 3 次，每跳一次 ×0.7
 // 相位刃的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const PARRY_UP = { per: 0.05, max: 12, idle: 2, decay: 0.25 };  // 格擋流：每砍掉一顆敵彈傷害 +5%（最多 12 層）；2 秒沒砍到開始每 0.25 秒掉 1 層
-const EXECUTE = { hp: 0.35, elite: 0.15, r: 100 };              // 灼燒處決：燒著的敵人血量低於 35%（精英 15%）時直接斬殺、火噴到 100 以內的敵人；旗艦不會
 // 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
 const REVENGE = { t: 5, mul: 2.5, explode: { r: 80, ratio: 1 }, first: 0.5 }; // 逆襲：受傷後 5 秒傷害 ×2.5＋爆炸；沒開時被打中那一下傷害 ×0.5
@@ -82,7 +81,7 @@ const WEAPONS = {
           p.speed *= 0.6; p.radius *= 1.6; p.life *= 1.5; p.pierce += 4; },
         next: [
           { name: '重量砲', desc: '飛船的移動速度每比原本慢 1%，傷害 +2%（沒有上限）：越重越痛（重裝甲、護盾產生器、被凍住都算）。', apply: p => { p.weight = { per: 2 }; } },
-          { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層可以疊到減速 70%，重力井模組的範圍內也算）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
+          { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層、重力井模組、彗星的冰可以再疊：剩下的速度相乘）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
       C: { name: '新星', desc: '命中時爆炸（半徑 90，80% 傷害）。', apply: p => { p.explode = { r: 90, ratio: 0.8 }; },
         next: [
           { name: '餘震', desc: `爆炸 ${AFTERSHOCK.t} 秒後在同一點再炸一次（同半徑、同傷害），地上先出現縮小的圈：朝敵人要走到的地方打。`, apply: p => { p.aftershock = AFTERSHOCK; } },
@@ -119,7 +118,7 @@ const WEAPONS = {
           { name: '格擋流', desc: `刃片每砍掉一顆敵彈，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; } }] },
       C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 10，持續 2 秒）。', apply: p => { p.burn = { dps: 10, t: 2 }; },
         next: [
-          { name: '灼燒處決', desc: `燒著的敵人血量低於 ${EXECUTE.hp * 100}% 時，刃片打中直接斬殺（精英低於 ${EXECUTE.elite * 100}%，旗艦不會被斬殺），火噴到 ${EXECUTE.r} 以內的敵人身上：先讓火把一群燒殘，再掃過去一路收割。`, apply: p => { p.execute = EXECUTE; } },
+          { name: '業火', desc: '燃燒每次命中各自計時、疊加（一般燃燒同一隻只留最強的一個）：在怪群裡來回掃，讓每隻身上疊滿火；燃燒彈頭的燃燒也一起疊。', apply: p => { p.inferno = true; } },
           { name: '吸能刃', desc: '每次命中回復 0.25 HP（每秒最多 4 HP）。', apply: p => { p.lifesteal = 0.25; } }] },
     } },
 };
@@ -136,7 +135,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, trail: null, reload: false, crack: null, static: null, parryUp: null, execute: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, trail: null, reload: false, crack: null, static: null, parryUp: null, inferno: false }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -150,7 +149,7 @@ function weaponEmit(p, pw) {
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
       explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, trail: p.trail || null, crack: p.crack || null, execute: p.execute || null }));
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, trail: p.trail || null, crack: p.crack || null, inferno: !!p.inferno }));
   }
   return out;
 }

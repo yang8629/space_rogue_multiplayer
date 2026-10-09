@@ -1095,7 +1095,7 @@ const Game = {
       const F = p.gravField;
       for (const e of this.enemies) {
         if (e.dead || e.spawnT > 0 || dist2(e.x, e.y, p.x, p.y) > F.R * F.R) continue;
-        e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, F.slow); e.slowT = Math.max(e.slowT, 0.1);
+        e.slowBy('grav', F.slow, 0.1);
       }
     }
     if (mod === 'swarmcore' && (p.coreT -= dt) <= 0) {  // 每 6 秒朝四周 6 個方向各用電路開一槍（吃全部晶片效果；環繞不存彈，直接射出）
@@ -1342,11 +1342,6 @@ const Game = {
         if (b.spreadSh) this.spreadHit(b.ownerP);                  // 分散（雷射升級）：碎光打中 → 射速疊層
         if (b.frostbite && e.slowT > 0) dmg *= 1 + e.slowAmt * b.frostbite.per;  // 冰封（電漿升級）：被減速越多越痛
         if (b.res) this.joinLink(b.res, e);                        // 共鳴（電漿升級）：小電漿打中的加進連結
-        if (b.execute && e.burnT > 0 && !e.t.boss && e.hp - dmg < e.maxHp * (e.t.elite ? b.execute.elite : b.execute.hp)) {  // 灼燒處決（相位刃升級）
-          dmg = Math.max(dmg, e.hp + 1); floatText(e.x, e.y - e.r - 14, '斬殺', '#ff8fd8', true);
-          const r = b.execute.r;  // 斬殺時火噴到旁邊的敵人（接著燒、接著斬）
-          for (const o of enemiesNear(e.x, e.y, r)) if (o !== e && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, e.x, e.y) < r * r) this.igniteFrom(e, o);
-        }
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
@@ -1422,8 +1417,9 @@ const Game = {
   // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
   hitFx(e, b, dmg, x, y) {
     const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg;
-    if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
-    if (b.slow) { e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, b.slow); e.slowT = Math.max(e.slowT, b.slowDur || 1.5); }
+    if (bd > 0 && b.inferno) { (e.burnL || (e.burnL = [])).push({ dps: bd, t: Math.max(b.burn ? b.burn.t : 0, b.burnR ? 3 : 0) }); e.burnAtt = b.att; }  // 業火（相位刃升級）：每次命中疊一層
+    else if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
+    if (b.slow) e.slowBy(b.comet ? 'comet' : 'shot', b.slow, b.slowDur || 1.5);
     if (b.explode) {
       this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att, b.explode.compress || 0);
       if (b.aftershock && this.quakes.length < 40)  // 餘震（電漿升級）：同一點過一下再炸一次
@@ -1441,7 +1437,7 @@ const Game = {
     for (let k = 0; k < n; k++) {
       const t = near[k] || hit, d = near[k] ? dmg : dmg * 0.5;
       if (t.dead) continue;
-      if (b.slow) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, b.slow); t.slowT = Math.max(t.slowT, b.slowDur || 1.5); }
+      if (b.slow) t.slowBy('shot', b.slow, b.slowDur || 1.5);
       t.hurt(d, 0, 0, 'arc', b.att);
       floatText(t.x, t.y - t.r, Math.round(d), '#9fe8ff');
       zapFx(hit.x, hit.y, t.x, t.y, { jitter: 6 });

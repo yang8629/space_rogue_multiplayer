@@ -106,7 +106,7 @@ const GLActors = {
     if (cv > 0.05) {
       if (e.slowT > 0) g.circle(e.x, e.y, e.r + 5).stroke({ width: 1.5, color: 0x7fd4ff, alpha: 0.8 * cv });
       if (e.markT > 0 || e.shredT > 0) for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + t; glArc(g, e.x, e.y, e.r + 8, a, a + 0.5); g.stroke({ width: 1.5, color: 0xff5a5a, alpha: 0.8 * cv }); }
-      if (e.burnT > 0) g.circle(e.x, e.y, e.r + 2).stroke({ width: 2, color: 0xff9f1c, alpha: (0.4 + 0.4 * Math.sin(t * 20)) * cv });
+      if (e.burnT > 0 || e.burnL) g.circle(e.x, e.y, e.r + 2).stroke({ width: 2, color: 0xff9f1c, alpha: (0.4 + 0.4 * Math.sin(t * 20)) * cv });
       const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
       if (stuck) { const n = Math.min(stuck, 16); for (let i = 0; i < n; i++) { const a = i / n * TAU + t * 2; g.circle(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5).fill({ color: 0xf78cff, alpha: cv }); } }
     }

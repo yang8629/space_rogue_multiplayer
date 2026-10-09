@@ -97,7 +97,7 @@ const MechCheck = {
       const r = M.run(90, { fire: false });
       return { ok: r.burn && Game.enemies[0].hp < hp, got: `停火 1.5 秒內再扣 ${Math.round(hp - Game.enemies[0].hp)} HP` };
     }],
-    ['武器命中效果', '冰封', '電漿・重質電漿・冰封：命中減速 40%（2 秒）；敵人每被減速 1%，受到你的傷害 +1%（第一下還沒減速不算；冰凍塗層疊到 70%）', M => {
+    ['武器命中效果', '冰封', '電漿・重質電漿・冰封：命中減速 40%（2 秒）；敵人每被減速 1%，受到你的傷害 +1%（第一下還沒減速不算；加冰凍塗層 = 剩下的速度相乘 64%）', M => {
       const one = chain => {
         M.setup('sandbox', 'vanguard', 'plasma', 'B', 1, chain);
         const P = Game.player, e = M.targets([[150, 0]])[0], got = [], h = e.hurt.bind(e);
@@ -106,8 +106,8 @@ const MechCheck = {
         return { got, slow: e.slowAmt, dur: e.slowT };
       };
       const A = one(['weapon', null, null, null]), B = one(['weapon', 'frost', null, null]);
-      return { ok: A.got.length >= 2 && near1(A.slow, 0.4) && A.dur > 1.3 && near1(A.got[1] / A.got[0], 1.4) && near1(B.slow, 0.7) && near1(B.got[1] / B.got[0], 1.7),
-        got: `減速 ${Math.round(A.slow * 100)}%、剩 ${A.dur.toFixed(1)} 秒；第 2 發 ×${(A.got[1] / A.got[0]).toFixed(2)}（要 ×1.4）；加冰凍塗層：減速 ${Math.round(B.slow * 100)}%、第 2 發 ×${(B.got[1] / B.got[0]).toFixed(2)}（要 ×1.7）` };
+      return { ok: A.got.length >= 2 && near1(A.slow, 0.4) && A.dur > 1.3 && near1(A.got[1] / A.got[0], 1.4) && near1(B.slow, 0.64) && near1(B.got[1] / B.got[0], 1.64),
+        got: `減速 ${Math.round(A.slow * 100)}%、剩 ${A.dur.toFixed(1)} 秒；第 2 發 ×${(A.got[1] / A.got[0]).toFixed(2)}（要 ×1.4）；加冰凍塗層：減速 ${Math.round(B.slow * 100)}%、第 2 發 ×${(B.got[1] / B.got[0]).toFixed(2)}（要 ×1.64）` };
     }],
     ['武器命中效果', '碎片（雷射步槍・稜鏡）', '命中時折射出額外子彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', null, ['weapon', null, null, null]); M.targets(M.cone);
@@ -377,24 +377,30 @@ const MechCheck = {
       return { ok: k >= 3 && near1(d1 / d0, 1 + 0.05 * k) && near1(d12 / d0, 1.6) && kDecay >= 9 && kDecay <= 11,
         got: `砍掉 ${k} 顆（要至少 3），傷害 ×${(d1 / d0).toFixed(2)}（要 ×${(1 + 0.05 * k).toFixed(2)}）；12 層 ×${(d12 / d0).toFixed(2)}（要 ×1.6）；停 2.6 秒剩 ${kDecay} 層（要 9～11）` };
     }],
-    ['武器命中效果', '灼燒處決', '相位刃・相位灼燒・灼燒處決：燒著的敵人血量低於 35%（精英 15%）時刃片打中直接斬殺，火噴到 100 以內的敵人；沒燒著的那一下不會（這條路線命中會點火，下一刀就能斬）；旗艦不會', M => {
-      const one = (type, hpK, burn) => {
-        M.setup('sandbox', 'vanguard', 'blade', 'C', 0, ['weapon', null, null, null]);
-        const P = Game.player, e = M.targets([[60, 0]], type)[0];
-        e.hp = e.maxHp * hpK; if (burn) { e.burnT = 3; e.burnDps = 0.01; }
-        let first = null; const h = e.hurt.bind(e); e.hurt = (d, ...r) => { const v = h(d, ...r); if (first === null && r[2] === 'direct') first = e.dead; return v; };
-        P.aim = 0; P.fire(); for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60);
-        return burn ? e.dead : first;  // 沒燒著：看第一刀（第一刀會點火，第二刀就能斬）
+    ['武器命中效果', '業火', '相位刃・相位灼燒・業火：燃燒每次命中各自計時、相加（吸能刃那條一般燃燒只留最強的一個）；各層到時間各自熄掉', M => {
+      const burn = fin => {
+        M.setup('sandbox', 'vanguard', 'blade', 'C', fin, ['weapon', null, null, null]);
+        const e = M.targets([[400, 0]])[0], b = new Bullet(e.x, e.y, 0, runOps(Game.stats.ops, 0)[0], 0, null);
+        for (let i = 0; i < 3; i++) Game.hitFx(e, b, 1, e.x, e.y);
+        const h = e.hp; for (let f = 0; f < 60; f++) e.update(1 / 60, Game.player);
+        const d1 = h - e.hp; for (let f = 0; f < 90; f++) e.update(1 / 60, Game.player);
+        return { d1, n: e.burnL ? e.burnL.length : 0, on: e.burnT > 0 || !!e.burnL };
       };
-      const A = one('brute', 0.3, true), B = one('brute', 0.3, false), C = one('brute', 0.45, true), D = one('elite', 0.25, true), E = one('elite', 0.12, true), F = one('boss', 0.05, true);
-      // 噴火：斬殺那隻後面（飛船背後、刃片打不到）90 的敵人沒燒著 → 斬殺後燒著；150 的不會
-      M.setup('sandbox', 'vanguard', 'blade', 'C', 0, ['weapon', null, null, null]);
-      const P = Game.player, [k, n, f] = M.targets([[60, 0], [-30, 0], [-90, 0]], 'brute');
-      k.hp = k.maxHp * 0.2; k.burnT = 3; k.burnDps = 0.01;
-      P.aim = 0; P.fire(); for (let i = 0; i < 20; i++) Game.updateBullets(1 / 60);
-      const G = k.dead && n.burnT > 0, H = f.burnT > 0;
-      return { ok: A && !B && !C && !D && E && !F && G && !H,
-        got: `刺殼 30% 燒著${A ? '斬殺' : '沒死（錯）'}、沒燒著的第一刀${B ? '就斬殺（錯）' : '沒斬殺'}、45% 燒著${C ? '死了（錯）' : '沒死'}；精英 25%${D ? '死了（錯）' : '沒死'}、12%${E ? '斬殺' : '沒死（錯）'}；旗艦 5%${F ? '死了（錯）' : '沒死'}；斬殺後 90 外的${G ? '燒著' : k.dead ? '沒燒著（錯）' : '（沒斬殺，錯）'}、150 外的${H ? '也燒著（錯）' : '沒燒著'}` };
+      const A = burn(0), B = burn(1);
+      return { ok: Math.abs(A.d1 - 30) <= 1 && Math.abs(B.d1 - 10) <= 1 && A.n === 0 && !A.on,
+        got: `點火 3 次，1 秒燒掉 ${A.d1}（要 30 = 3 層 × 10）、2.5 秒後剩 ${A.n} 層${A.on ? '（還在燒，錯）' : '、熄了'}；吸能刃（一般燃燒）點 3 次 1 秒燒掉 ${B.d1}（要 10）` };
+    }],
+    ['武器命中效果', '減速相乘', '不同來源的減速（子彈、重力井模組、彗星的冰）剩下的速度相乘，各自計時；同一來源再打中只刷新時間', M => {
+      M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]);
+      const e = M.targets([[400, 0]])[0], P = Game.player;
+      e.slowBy('shot', 0.4, 2); const a = e.slowAmt;
+      e.slowBy('shot', 0.4, 2); const b = e.slowAmt;
+      e.slowBy('grav', 0.4, 0.5); const c = e.slowAmt;
+      for (let f = 0; f < 60; f++) e.update(1 / 60, P);
+      const d = e.slowAmt, spd = e.spdMul;
+      for (let f = 0; f < 75; f++) e.update(1 / 60, P);
+      return { ok: near1(a, 0.4) && near1(b, 0.4) && near1(c, 0.64) && near1(d, 0.4) && near1(spd, 0.6) && !(e.slowT > 0),
+        got: `子彈 ${Math.round(a * 100)}%、同一來源再打 ${Math.round(b * 100)}%（要 40）、加重力井 ${Math.round(c * 100)}%（要 64）；1 秒後重力井那份過期 ${Math.round(d * 100)}%（要 40）、速度 ×${spd.toFixed(2)}；2.25 秒後${e.slowT > 0 ? '還在減速（錯）' : '恢復'}` };
     }],
     ['武器命中效果', '專注', '雷射・稜鏡・專注：碎光折回打同一隻；連續打中同一隻（碎光也算）每次 +10%，最多 +100%；打中別隻歸零', M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', 0, ['weapon', null, null, null]);
@@ -1006,7 +1012,7 @@ const MechCheck = {
       const d = Math.hypot(a.x - b.x, a.y - b.y), vn = (b.vx * (a.x - b.x) + b.vy * (a.y - b.y)) / d;
       return { ok: Math.abs(vn - 380) < 1 && a.vx === 0 && a.vy === 0, got: `旁邊那隻往中心的速度 ${vn.toFixed(0)}（要 380）；被打中的那隻速度 ${Math.round(Math.hypot(a.vx, a.vy))}（要 0）` };
     }],
-    ['電路晶片', '元素組件', '跟武器升級相加：新星＋爆裂 = 爆炸 130%（半徑 90）；磁暴線圈＋電擊 = 3 道電弧；冰封＋冰凍 = 減速 70%（上限）；雷射＋燃燒實際打中：每秒燒 30% 命中傷害、3 秒；破甲 +25%，加弱點標記 +50%，沒有上限（破甲 37.5%＋標記 = +62.5%）', M => {
+    ['電路晶片', '元素組件', '跟武器升級相加：新星＋爆裂 = 爆炸 130%（半徑 90）；磁暴線圈＋電擊 = 3 道電弧；冰封＋冰凍 = 減速 64%（剩下的速度相乘）；雷射＋燃燒實際打中：每秒燒 30% 命中傷害、3 秒；破甲 +25%，加弱點標記 +50%，沒有上限（破甲 37.5%＋標記 = +62.5%）', M => {
       const top = (w, path, fin, flat) => { M.setup('sandbox', 'vanguard', w, path, fin, flat); return runOps(Game.stats.ops, 0)[0]; };
       const ex = top('plasma', 'C', null, ['weapon', 'blast', null, null]).explode;
       const ar = top('railgun', 'C', null, ['weapon', 'shock', null, null]).arcs;
@@ -1018,7 +1024,7 @@ const MechCheck = {
       Game.player.fire(); for (let f = 0; f < 20 && !(v.shredT > 0); f++) { Game.time += 1 / 60; Game.updateBullets(1 / 60); }
       const tk = () => { const h = v.hp; v.hurt(10, 0, 0, 'direct'); return h - v.hp; }, d1 = tk(); v.markT = 3; const d2 = tk(); v.shredAmt = 0.375; const d3 = tk();
       const ok5 = v.shredT > 2.9 && near1(d1, 12.5) && near1(d2, 15) && near1(d3, 16.25);
-      return { ok: !!ex && near1(ex.ratio, 1.3) && ex.r === 90 && !!ar && ar.n === 3 && near1(sl, 0.7) && ok4 && ok5,
+      return { ok: !!ex && near1(ex.ratio, 1.3) && ex.r === 90 && !!ar && ar.n === 3 && near1(sl, 0.64) && ok4 && ok5,
         got: `新星＋爆裂 ${ex ? Math.round(ex.ratio * 100) + '%、半徑 ' + ex.r : '沒有爆炸'}；磁暴＋電擊 ${ar ? ar.n : 0} 道；冰封＋冰凍 ${Math.round((sl || 0) * 100)}%；雷射打中 ${hit.toFixed(1)}、燃燒每秒 ${e.burnDps.toFixed(1)}、${e.burnT.toFixed(1)} 秒；破甲 10 → ${d1.toFixed(1)}、加弱點標記 ${d2.toFixed(1)}、破甲 37.5%＋標記 ${d3.toFixed(1)}（沒有上限；應為 12.5／15／16.25）` };
     }],
     ['電路晶片', '鏡像迴路', '再來一次，插哪個插座都一樣：武器［鏡像］= 2 發、武器［分裂、鏡像］和［鏡像、分裂］都是 6 發；蓄力［倍增、鏡像］蓄滿 2 發、各 +100%；黏著［鏡像］有作用；吸引［鏡像］沒作用', M => {

@@ -493,7 +493,7 @@ const Objects = {
   // 冰凍：敵人減速（跟冰凍塗層一樣），玩家移動變慢（Player.update 的 frostT）
   cometFrost(t) {
     const F = OBJ.COMET_FROST;
-    if (t instanceof Enemy) { t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, F.slow); t.slowT = Math.max(t.slowT, F.t); }
+    if (t instanceof Enemy) t.slowBy('comet', F.slow, F.t);
     else if (t && !t.dead && !t.invuln) t.frostT = Math.max(t.frostT || 0, F.t);
   },
   // 冰晶碎片：往四周 360° 噴（不吃任何人的電路效果，直接做成子彈；命中會冰凍）
