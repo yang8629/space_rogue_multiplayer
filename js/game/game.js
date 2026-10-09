@@ -14,7 +14,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [], flames: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -166,7 +166,7 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = [];
+    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = []; this.flames = [];
     this.kills = 0; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -787,7 +787,12 @@ const Game = {
     if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
     if (!this.isClient()) {
-      this.infectBurst(e); this.payGrowTags(e);
+      this.infectBurst(e); this.payGrowTags(e); this.onStreakKill(e);
+      if (e.wild && e.burnT > 0) {  // 野火：燒著死掉 → 火噴到附近所有敵人
+        const R = e.wild.deathR;
+        for (const o of enemiesNear(e.x, e.y, R)) if (o !== e && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, e.x, e.y) < R * R) this.igniteFrom(e, o);
+        ringFx(e.x, e.y, R, '#ff9f1c');
+      }
       if (e.type === 'splitter') for (let i = 0; i < 3; i++) {  // 分裂體：分成 3 隻碎裂體
         const a = i / 3 * TAU + rand(0, 1), k = new Enemy('splitling', ...Arena.clampIn(e.x + Math.cos(a) * 20, e.y + Math.sin(a) * 20, 20), e.hpScale);
         k.zone = e.zone; k.spawnT = 0.15; k.vx = Math.cos(a) * 200; k.vy = Math.sin(a) * 200; this.enemies.push(k);
@@ -819,6 +824,7 @@ const Game = {
     const M = this.mechOf(p), T = M.traits;
     if (p.shield > 0) {  // 護盾產生器：擋下一次
       p.shield--; p.shieldT = 0; p.iframe = 0.3;
+      this.onRevenge(p);  // 逆襲：護盾擋下也算受傷（無傷連殺不歸零）
       burst(p.x, p.y, '#4cc9f0', 14, 200, 0.35, 2); floatText(p.x, p.y - 26, '護盾', '#4cc9f0');
       return;
     }
@@ -831,6 +837,7 @@ const Game = {
     }
     if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
+    if (dmg > 0) { this.onRevenge(p); p.streak = 0; }  // 逆襲開始；無傷連殺歸零
     if (M.module === 'drone' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.DRONE_CAP, (p.drRec || 0) + dmg * CFG.DRONE_SHARE);  // 修復無人機：這次傷害的一半之後可以補回來
     this.withLoadout(p.L, () => this.onPlayerHurt(p, sx, sy));
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
@@ -890,15 +897,82 @@ const Game = {
   // ---------- 機體成長線（零件、背包模組）：房主執行，隊友的飛船用隊友的配裝 ----------
   maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
   mechOf(p) { return p.L ? p.L.mech : this.mech; },
-  // 被打到之後：反擊裝甲、反應裝甲（在打到的那個人的配裝下執行）
+  wpOf(p) { return p.L ? p.L.wp : this.wp; },
+  // 逆襲（散彈升級）：受傷或護盾擋下 → 一段時間內傷害 ×2＋爆炸
+  onRevenge(p) {
+    const R = this.wpOf(p).revenge;
+    if (!R) return;
+    if (!(p.revengeT > 0)) floatText(p.x, p.y - 30, '逆襲！', '#ff4d6d', true);
+    p.revengeT = R.t;
+  },
+  // 無傷連殺（輕裝甲 4 層）：打出最後一擊的人沒被打中時每殺一隻 +1 層
+  onStreakKill(e) {
+    const p = e.killer ? (this.mate && this.mate.L === e.killer ? this.mate : null) : this.player;
+    if (!p || p.dead || !this.mechOf(p).traits.streak) return;
+    p.streak = Math.min(STREAK.max, (p.streak || 0) + 1);
+  },
+  // 散彈升級的每幀效果（在那個人的配裝下執行，房主）：逆襲倒數、群戰數身邊的敵人、火線在身後留火
+  tickWeaponFx(p, dt) {
+    const w = this.wp;
+    if (p.revengeT > 0) p.revengeT -= dt;
+    if (w.crowd) {
+      let n = 0;
+      const R2 = w.crowd.r * w.crowd.r;
+      for (const e of enemiesNear(p.x, p.y, w.crowd.r)) if (!e.dead && !(e.spawnT > 0) && dist2(e.x, e.y, p.x, p.y) < R2 && ++n >= w.crowd.max) break;
+      p.crowdK = n;
+    } else p.crowdK = 0;
+    const F = w.fireline;
+    if (F && p.moving && (p.flameT = (p.flameT || 0) + dt) >= F.every) {
+      p.flameT -= F.every;  // 多出來的時間留到下一團（不然留火的速度會照幀率變）
+      this.flames.push({ x: p.x, y: p.y, r: F.r, t: F.t, max: F.t, dps: F.dps, att: { src: 'weapon', cr: null, owner: this.shooter || null } });
+    }
+  },
+  // 火線的火：每 0.2 秒讓碰到的敵人燃燒（每秒 dps，持續 3 秒）
+  updateFlames(dt) {
+    if (!this.flames.length) return;
+    this.flameTick = (this.flameTick || 0) + dt;
+    const hit = this.flameTick >= 0.2;
+    if (hit) this.flameTick = 0;
+    for (const z of this.flames) {
+      z.t -= dt;
+      if (!hit || z.t <= 0) continue;
+      for (const e of enemiesNear(z.x, z.y, z.r)) {
+        if (e.dead || e.spawnT > 0 || dist2(e.x, e.y, z.x, z.y) >= (z.r + e.r) ** 2) continue;
+        e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, z.dps); e.burnT = Math.max(e.burnT, 3); e.burnAtt = z.att;
+      }
+    }
+    this.flames = this.flames.filter(z => z.t > 0);
+  },
+  // 野火（散彈升級）：燃燒中的敵人每隔一段時間把火傳給附近一隻還沒燒的；燒著死掉時火噴到附近所有敵人（onEnemyKilled）
+  updateWildfire(dt) {
+    for (const e of this.enemies) {
+      if (e.dead || !(e.burnT > 0) || !e.wild) continue;
+      if ((e.wildT = (e.wildT || 0) + dt) < e.wild.every) continue;
+      e.wildT = 0;
+      let best = null, bd = e.wild.r * e.wild.r;
+      for (const o of enemiesNear(e.x, e.y, e.wild.r)) {
+        if (o === e || o.dead || o.spawnT > 0 || o.burnT > 0) continue;
+        const d = dist2(o.x, o.y, e.x, e.y);
+        if (d < bd) { bd = d; best = o; }
+      }
+      if (best) { this.igniteFrom(e, best); zapFx(e.x, e.y, best.x, best.y, '#ff9f1c'); }
+    }
+  },
+  // 撞牆（散彈升級）：被彈丸打飛的敵人撞到牆、小行星、行星或別的敵人 → 彈丸傷害加總 ×2＋暈眩（同一隻冷卻 0.5 秒）
+  wallSlam(e) {
+    const W = e.wh;
+    if (!W || e.dead || this.time < (e.whCd || 0)) return;
+    e.whCd = this.time + W.cd; e.whT = 0;
+    const dmg = e.whDmg * W.mul;
+    e.stunT = W.stun;
+    e.hurt(dmg, 0, 0, 'shock', e.whAtt || null);
+    floatText(e.x, e.y - e.r, Math.round(dmg), '#ffb347', true);
+    burst(e.x, e.y, '#ffb347', 10, 180, 0.3, 2);
+  },
+  igniteFrom(e, o) { o.burnDps = Math.max(o.burnT > 0 ? o.burnDps : 0, e.burnDps); o.burnT = Math.max(o.burnT, 3); o.burnAtt = e.burnAtt; o.wild = e.wild; o.wildT = 0; },
+  // 被打到之後：反應裝甲（在打到的那個人的配裝下執行）
   onPlayerHurt(p, sx, sy) {
     const M = this.mech;
-    if (M.traits.counter) {  // 朝打你的方向回射 8 發
-      const a = sx != null ? Math.atan2(sy - p.y, sx - p.x) : p.aim, w = this.wp;
-      const list = Array.from({ length: 8 }, (_, i) => shot({ angle: (i / 7 - 0.5) * 0.8, speed: w.speed, damage: w.damage, radius: w.radius,
-        life: Math.max(0.5, w.life), color: '#b8d4ff', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
-      spawnShots(list, p.x, p.y, a, 0, null);
-    }
     if (M.module === 'reactive') this.explode(p.x, p.y, M.heavy ? 180 : 120, 30, '#ff9f1c', null, { src: 'ship', cr: null, owner: this.shooter || null });
   },
   // 背包模組的持續效果（每幀，房主）：護盾回復、修復無人機、重力井、星噬核心
@@ -935,6 +1009,7 @@ const Game = {
   resetMechCombat(p) {
     p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
     p.portalCd = 0; p.pullV = null; p.icWs = [];
+    p.revengeT = 0; p.streak = 0; p.crowdK = 0; p.flameT = 0;  // 逆襲、無傷連殺、群戰、火線
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
   // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
@@ -1022,7 +1097,8 @@ const Game = {
       if (!this.player.dead) this.player.update(dt);
       this.updateWaves(dt);
       this.updateEnemies(dt);
-      for (const p of this.players()) this.withLoadout(p.L, () => this.tickModules(p, dt));
+      for (const p of this.players()) this.withLoadout(p.L, () => { this.tickModules(p, dt); this.tickWeaponFx(p, dt); });
+      this.updateFlames(dt); this.updateWildfire(dt);
       Objects.update(dt);
       this.updatePortals(dt);
       this.updateBullets(dt);
@@ -1075,6 +1151,7 @@ const Game = {
         if (d2 < rr * rr && d2 > 0.01) {
           const d = Math.sqrt(d2), o = (rr - d) / 2, nx = dx / d, ny = dy / d;
           a.x -= nx * o; a.y -= ny * o; b.x += nx * o; b.y += ny * o;
+          if (a.whT > 0) this.wallSlam(a); if (b.whT > 0) this.wallSlam(b);  // 撞牆（散彈升級）：被打飛的撞到別的敵人
         }
       }
     }
@@ -1168,6 +1245,7 @@ const Game = {
         }
         const knock = b.knock * (b.quick >= 3 && b.accelMul >= 2 ? 3 : 1);  // 衝擊（疾射 Lv3）：2 倍速以上打中強力擊退
         const kb = Math.min(220 * (knock > b.knock ? 2 : 1), dmg * 5) * (14 / e.r) * knock;
+        if (b.wallhit && !e.t.boss) { if (!(e.whT > 0)) e.whDmg = 0; e.whDmg += dmg; e.whT = b.wallhit.t; e.whAtt = att; e.wh = b.wallhit; }  // 撞牆：記下這波彈丸的傷害
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         const wid = (b.owner && this.mate && this.mate.L ? this.mate.L.weapon : this.weapon).id;
@@ -1219,7 +1297,7 @@ const Game = {
   // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
   hitFx(e, b, dmg, x, y) {
     const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg;
-    if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; }
+    if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
     if (b.slow) { e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, b.slow); e.slowT = Math.max(e.slowT, b.slowDur || 1.5); }
     if (b.explode) this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att);
     if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）

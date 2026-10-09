@@ -159,6 +159,7 @@ const Objects = {
           continue;
         }
         if (!this.pushOut(e, o, e.r)) continue;
+        if (e.whT > 0) G.wallSlam(e);  // 撞牆（散彈升級）
         if (Math.hypot(e.vx, e.vy) > 300 && G.time > (e.slamT || 0)) {
           e.slamT = G.time + 0.5;
           e.hurt(20, 0, 0, 'shock', e.lastAtt || null);
