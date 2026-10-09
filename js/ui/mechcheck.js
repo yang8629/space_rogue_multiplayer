@@ -1136,14 +1136,14 @@ const MechCheck = {
           got: '攔截回射 ' + ic + '、回響 ' + echo + '、攔截晶片 ' + icChip + '、攔截成長 +' + g + '；迴旋晶片 ' + bm };
       },
     ])],
-    ['構築系統', '能量容量', '總能量在容量以內射速不扣、超過的每 1 點射速 ×0.9（相乘）；容量 = 飛船開局（先鋒號 4）＋散熱片每層 +1＋補給站買的（每間 1 次）', M => {
+    ['構築系統', '能量容量', '總能量在容量以內射速不扣、超過的每 1 點射速 ×0.85（相乘）；容量 = 飛船開局（先鋒號 4）＋散熱片每層 +1＋補給站買的（每間 1 次）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'boomerang', 'rear']);
       const c0 = Game.cap, heat = Game.stats.heat, iv = cap => { Game.cap = cap; Game.recalc(); return Game.stats.interval; };
       const i0 = iv(20), i3 = iv(3);
       Game.parts.sink = 2; const i5 = iv(3), cap5 = Game.energyCap(); Game.parts.sink = 0; Game.recalc();
       Game.credits = 999; Game.shop = { items: [], slotBought: false, capBought: false, healed: false };
       const b0 = Game.cap; Game.buyCap(); const b1 = Game.cap; Game.buyCap(); const b2 = Game.cap;
-      const want3 = 1 / Math.pow(0.9, heat - 3), want5 = 1 / Math.pow(0.9, heat - 5);
+      const want3 = 1 / Math.pow(0.85, heat - 3), want5 = 1 / Math.pow(0.85, heat - 5);
       return { ok: c0 === 4 && heat === 6 && near1(i3 / i0, want3) && cap5 === 5 && near1(i5 / i0, want5) && b1 === b0 + 1 && b2 === b1,
         got: `開局容量 ${c0}（要 4）；能量 ${heat}（要 6）；容量 20 → 3：射擊間隔 ×${(i3 / i0).toFixed(3)}（要 ×${want3.toFixed(3)}）；加散熱片 2 層容量 ${cap5}（要 5）、間隔 ×${(i5 / i0).toFixed(3)}（要 ×${want5.toFixed(3)}）；補給站買 ${b0} → ${b1}、再買一次 ${b2}（每間限 1 次）` };
     }],

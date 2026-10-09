@@ -104,11 +104,11 @@ const WEAPONS = {
           { name: '靜電', desc: `飛船每移動 ${STATIC.dist} 的距離充一格電（最多 ${STATIC.max} 格），下一發每格多 1 道電弧，射出去就用掉：邊跑邊打。`, apply: p => { p.static = STATIC; } },
           { name: '導電', desc: `電弧打中後會再跳到附近另一隻（還沒被這道電弧打過的），最多跳 ${CONDUCT.jumps} 次，每跳一次傷害 ×${CONDUCT.decay}：敵人越密集跳越多。`, apply: p => { p.arcs = { ...p.arcs, chain: CONDUCT }; } }] },
     } },
-  // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段
+  // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段（2026-10-10 再降到 4 段：整局通關 59%）
   blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 2 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
     base: { interval: 0.3, count: 2, spread: 0.35, damage: 9, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
     paths: {
-      A: { name: '巨刃', desc: '刃片 5 段、範圍更大。', apply: p => { p.count = 5; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
+      A: { name: '巨刃', desc: '刃片 4 段、範圍更大。', apply: p => { p.count = 4; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
           { name: '旋風斬', desc: '改成 360 度環形斬擊（12 段）。', apply: p => { p.count = 12; p.spread = TAU * 11 / 12; } },
           { name: '玻璃砲', desc: '受到的傷害 +10%；受到的傷害每比正常多 1%，傷害 +3%（沒有上限）：越脆越痛（輕裝甲、散熱片、反應裝甲、終焉護殼都算）。', apply: p => { p.glass = { per: 3, self: 0.1 }; } }] },
