@@ -401,7 +401,7 @@ const MechCheck = {
       return { ok: k >= 3 && near1(d1 / d0, 1 + 0.05 * k) && near1(d12 / d0, 1.6) && kDecay >= 9 && kDecay <= 11,
         got: `砍掉 ${k} 顆（要至少 3），傷害 ×${(d1 / d0).toFixed(2)}（要 ×${(1 + 0.05 * k).toFixed(2)}）；12 層 ×${(d12 / d0).toFixed(2)}（要 ×1.6）；停 2.6 秒剩 ${kDecay} 層（要 9～11）` };
     }],
-    ['武器命中效果', '灼燒處決', '相位刃・相位灼燒・灼燒處決：燒著的敵人血量低於 25%（精英 10%）時刃片打中直接斬殺；沒燒著的那一下不會（這條路線命中會點火，下一刀就能斬）；旗艦不會', M => {
+    ['武器命中效果', '灼燒處決', '相位刃・相位灼燒・灼燒處決：燒著的敵人血量低於 35%（精英 15%）時刃片打中直接斬殺，火噴到 100 以內的敵人；沒燒著的那一下不會（這條路線命中會點火，下一刀就能斬）；旗艦不會', M => {
       const one = (type, hpK, burn) => {
         M.setup('sandbox', 'vanguard', 'blade', 'C', 0, ['weapon', null, null, null]);
         const P = Game.player, e = M.targets([[60, 0]], type)[0];
@@ -410,9 +410,15 @@ const MechCheck = {
         P.aim = 0; P.fire(); for (let f = 0; f < 20; f++) Game.updateBullets(1 / 60);
         return burn ? e.dead : first;  // 沒燒著：看第一刀（第一刀會點火，第二刀就能斬）
       };
-      const A = one('brute', 0.2, true), B = one('brute', 0.2, false), C = one('brute', 0.3, true), D = one('elite', 0.2, true), E = one('elite', 0.08, true), F = one('boss', 0.05, true);
-      return { ok: A && !B && !C && !D && E && !F,
-        got: `刺殼 20% 燒著${A ? '斬殺' : '沒死（錯）'}、沒燒著的第一刀${B ? '就斬殺（錯）' : '沒斬殺'}、30% 燒著${C ? '死了（錯）' : '沒死'}；精英 20%${D ? '死了（錯）' : '沒死'}、8%${E ? '斬殺' : '沒死（錯）'}；旗艦 5%${F ? '死了（錯）' : '沒死'}` };
+      const A = one('brute', 0.3, true), B = one('brute', 0.3, false), C = one('brute', 0.45, true), D = one('elite', 0.25, true), E = one('elite', 0.12, true), F = one('boss', 0.05, true);
+      // 噴火：斬殺那隻後面（飛船背後、刃片打不到）90 的敵人沒燒著 → 斬殺後燒著；150 的不會
+      M.setup('sandbox', 'vanguard', 'blade', 'C', 0, ['weapon', null, null, null]);
+      const P = Game.player, [k, n, f] = M.targets([[60, 0], [-30, 0], [-90, 0]], 'brute');
+      k.hp = k.maxHp * 0.2; k.burnT = 3; k.burnDps = 0.01;
+      P.aim = 0; P.fire(); for (let i = 0; i < 20; i++) Game.updateBullets(1 / 60);
+      const G = k.dead && n.burnT > 0, H = f.burnT > 0;
+      return { ok: A && !B && !C && !D && E && !F && G && !H,
+        got: `刺殼 30% 燒著${A ? '斬殺' : '沒死（錯）'}、沒燒著的第一刀${B ? '就斬殺（錯）' : '沒斬殺'}、45% 燒著${C ? '死了（錯）' : '沒死'}；精英 25%${D ? '死了（錯）' : '沒死'}、12%${E ? '斬殺' : '沒死（錯）'}；旗艦 5%${F ? '死了（錯）' : '沒死'}；斬殺後 90 外的${G ? '燒著' : k.dead ? '沒燒著（錯）' : '（沒斬殺，錯）'}、150 外的${H ? '也燒著（錯）' : '沒燒著'}` };
     }],
     ['武器命中效果', '專注', '雷射・稜鏡・專注：碎光折回打同一隻；連續打中同一隻（碎光也算）每次 +10%，最多 +100%；打中別隻歸零', M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', 0, ['weapon', null, null, null]);
@@ -492,23 +498,23 @@ const MechCheck = {
       return { ok: pel > 0 && near1(wh, pel) && near1(slam, pel * 2) && stun && b.hp === hb0 && !again,
         got: `彈丸打中 ${pel.toFixed(1)}（記下 ${wh.toFixed(1)}）；撞到別的敵人受到 ${slam.toFixed(1)}（要 ${(pel * 2).toFixed(1)}）、${stun ? '暈眩' : '沒暈眩（錯）'}；被撞的${b.hp === hb0 ? '沒受傷' : '受傷了（錯）'}；0.5 秒內再撞${again ? '又算了（錯）' : '不算'}` };
     }],
-    ['武器命中效果', '逆襲','散彈・獨頭彈・逆襲：受傷（護盾擋下也算）之後 3 秒內傷害 ×2、命中爆炸（半徑 80）；3 秒後恢復', M => {
+    ['武器命中效果', '逆襲','散彈・獨頭彈・逆襲：受傷（護盾擋下也算）之後 5 秒內傷害 ×2.5、命中爆炸（半徑 80）；5 秒後恢復', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'B', 0, ['weapon', null, null, null]); M.targets([]);
       const P = Game.player, shot0 = () => runOps(Game.stats.ops, 0)[0];
       const a = shot0(); P.iframe = 0; Game.hurtPlayer(5, 'mc', P); const b = shot0(), t1 = P.revengeT;
-      for (let f = 0; f < 190; f++) Game.tickWeaponFx(P, 1 / 60);
+      for (let f = 0; f < 310; f++) Game.tickWeaponFx(P, 1 / 60);
       const c = shot0();
       P.shield = 1; P.iframe = 0; const hp0 = P.hp; Game.hurtPlayer(5, 'mc', P); const t2 = P.revengeT, kept = P.hp === hp0;
-      return { ok: !a.explode && near1(b.damage / a.damage, 2) && b.explode && b.explode.r === 80 && near1(t1, 3) && near1(c.damage, a.damage) && !c.explode && near1(t2, 3) && kept,
-        got: `平常 ${a.damage.toFixed(1)}${a.explode ? '（有爆炸，錯）' : ''}；受傷後 ${b.damage.toFixed(1)}（×${(b.damage / a.damage).toFixed(2)}）${b.explode ? `爆炸半徑 ${b.explode.r}` : '沒爆炸（錯）'}、倒數 ${t1.toFixed(1)} 秒；3.2 秒後 ${c.damage.toFixed(1)}${c.explode ? '（還在爆，錯）' : ''}；護盾擋下：倒數 ${t2.toFixed(1)} 秒、${kept ? '沒扣血' : '扣血了（錯）'}` };
+      return { ok: !a.explode && near1(b.damage / a.damage, 2.5) && b.explode && b.explode.r === 80 && near1(t1, 5) && near1(c.damage, a.damage) && !c.explode && near1(t2, 5) && kept,
+        got: `平常 ${a.damage.toFixed(1)}${a.explode ? '（有爆炸，錯）' : ''}；受傷後 ${b.damage.toFixed(1)}（×${(b.damage / a.damage).toFixed(2)}）${b.explode ? `爆炸半徑 ${b.explode.r}` : '沒爆炸（錯）'}、倒數 ${t1.toFixed(1)} 秒；5.2 秒後 ${c.damage.toFixed(1)}${c.explode ? '（還在爆，錯）' : ''}；護盾擋下：倒數 ${t2.toFixed(1)} 秒、${kept ? '沒扣血' : '扣血了（錯）'}` };
     }],
-    ['武器命中效果', '空格苦行', '散彈・獨頭彈・空格苦行：電路上每個沒裝晶片的空格傷害 +20%（組件插座不算）', M => {
+    ['武器命中效果', '空格苦行', '散彈・獨頭彈・空格苦行：電路上每個沒裝晶片的空格傷害 +50%（組件插座不算）', M => {
       const one = chain => { M.setup('sandbox', 'vanguard', 'scatter', 'B', 1, chain); return runOps(Game.stats.ops, 0)[0].damage; };
       M.setup('sandbox', 'vanguard', 'scatter', 'B', null, ['weapon', null, null, null]);
       const base = runOps(Game.stats.ops, 0)[0].damage;
       const A = one(['weapon', null, null, null]), B = one(['weapon', 'rear', null, null]), C = one(['weapon', 'rear', 'stand', 'charge']);
-      return { ok: near1(A / base, 1.6) && near1(B / base, 1.4) && near1(C / base, 1),
-        got: `獨頭彈 ${base.toFixed(1)}；3 個空格 ${A.toFixed(1)}（×${(A / base).toFixed(2)}，要 ×1.6）；2 個 ${B.toFixed(1)}（×${(B / base).toFixed(2)}，要 ×1.4）；沒空格 ${C.toFixed(1)}（×${(C / base).toFixed(2)}，要 ×1）` };
+      return { ok: near1(A / base, 2.5) && near1(B / base, 2) && near1(C / base, 1),
+        got: `獨頭彈 ${base.toFixed(1)}；3 個空格 ${A.toFixed(1)}（×${(A / base).toFixed(2)}，要 ×2.5）；2 個 ${B.toFixed(1)}（×${(B / base).toFixed(2)}，要 ×2）；沒空格 ${C.toFixed(1)}（×${(C / base).toFixed(2)}，要 ×1）` };
     }],
     ['武器命中效果', '火毯', '散彈・龍息彈・火毯：每顆彈丸消失的地方（射程盡頭、打中敵人）留一團火（燒 2 秒），碰到的敵人燃燒每秒 12；場上最多 60 團', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'C', 0, ['weapon', null, null, null]);

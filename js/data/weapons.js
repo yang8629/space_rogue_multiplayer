@@ -26,11 +26,11 @@ const STATIC = { dist: 100, max: 4 };         // 靜電：飛船每移動 100 �
 const CONDUCT = { jumps: 3, decay: 0.7 };     // 導電：電弧打中後再跳到附近另一隻，最多 3 次，每跳一次 ×0.7
 // 相位刃的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const PARRY_UP = { per: 0.05, max: 12, idle: 2, decay: 0.25 };  // 格擋流：每砍掉一顆敵彈傷害 +5%（最多 12 層）；2 秒沒砍到開始每 0.25 秒掉 1 層
-const EXECUTE = { hp: 0.25, elite: 0.1 };                        // 灼燒處決：燒著的敵人血量低於 25%（精英 10%）時直接斬殺；旗艦不會
+const EXECUTE = { hp: 0.35, elite: 0.15, r: 100 };              // 灼燒處決：燒著的敵人血量低於 35%（精英 15%）時直接斬殺、火噴到 100 以內的敵人；旗艦不會
 // 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
-const REVENGE = { t: 3, mul: 2, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 3 秒傷害 ×2＋爆炸
-const ASCETIC = { per: 0.2 };                                   // 空格苦行：每個空格傷害 +20%
+const REVENGE = { t: 5, mul: 2.5, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 5 秒傷害 ×2.5＋爆炸
+const ASCETIC = { per: 0.5 };                                   // 空格苦行：每個空格傷害 +50%
 const CARPET = { r: 25, t: 2, dps: 12, max: 60 };              // 火毯：彈丸消失的地方留一團火（場上最多 60 團）
 const WILDFIRE = { every: 0.5, r: 80, deathR: 120 };            // 野火：燃燒傳染
 const WALLHIT = { knock: 3, t: 0.4, mul: 2, stun: 0.5, cd: 0.5 }; // 撞牆：擊退 ×3；被打中 0.4 秒內撞到東西 → 彈丸傷害加總 ×2＋暈眩
@@ -118,7 +118,7 @@ const WEAPONS = {
           { name: '格擋流', desc: `刃片每砍掉一顆敵彈，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; } }] },
       C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 10，持續 2 秒）。', apply: p => { p.burn = { dps: 10, t: 2 }; },
         next: [
-          { name: '灼燒處決', desc: `燒著的敵人血量低於 ${EXECUTE.hp * 100}% 時，刃片打中直接斬殺（精英低於 ${EXECUTE.elite * 100}%，旗艦不會被斬殺）：先讓火把一群燒殘，再掃過去收割。`, apply: p => { p.execute = EXECUTE; } },
+          { name: '灼燒處決', desc: `燒著的敵人血量低於 ${EXECUTE.hp * 100}% 時，刃片打中直接斬殺（精英低於 ${EXECUTE.elite * 100}%，旗艦不會被斬殺），火噴到 ${EXECUTE.r} 以內的敵人身上：先讓火把一群燒殘，再掃過去一路收割。`, apply: p => { p.execute = EXECUTE; } },
           { name: '吸能刃', desc: '每次命中回復 0.25 HP（每秒最多 4 HP）。', apply: p => { p.lifesteal = 0.25; } }] },
     } },
 };

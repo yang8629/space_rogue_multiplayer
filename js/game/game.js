@@ -898,7 +898,7 @@ const Game = {
   maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
   mechOf(p) { return p.L ? p.L.mech : this.mech; },
   wpOf(p) { return p.L ? p.L.wp : this.wp; },
-  // 逆襲（散彈升級）：受傷或護盾擋下 → 一段時間內傷害 ×2＋爆炸
+  // 逆襲（散彈升級）：受傷或護盾擋下 → 一段時間內傷害 ×2.5＋爆炸
   onRevenge(p) {
     const R = this.wpOf(p).revenge;
     if (!R) return;
@@ -1312,6 +1312,8 @@ const Game = {
         if (b.res) this.joinLink(b.res, e);                        // 共鳴（電漿升級）：小電漿打中的加進連結
         if (b.execute && e.burnT > 0 && !e.t.boss && e.hp - dmg < e.maxHp * (e.t.elite ? b.execute.elite : b.execute.hp)) {  // 灼燒處決（相位刃升級）
           dmg = Math.max(dmg, e.hp + 1); floatText(e.x, e.y - e.r - 14, '斬殺', '#ff8fd8', true);
+          const r = b.execute.r;  // 斬殺時火噴到旁邊的敵人（接著燒、接著斬）
+          for (const o of enemiesNear(e.x, e.y, r)) if (o !== e && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, e.x, e.y) < r * r) this.igniteFrom(e, o);
         }
         if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
           const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
