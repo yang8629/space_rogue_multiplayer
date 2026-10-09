@@ -21,6 +21,7 @@ const FROSTBITE = { slow: 0.4, dur: 2, per: 1 }; // 冰封：命中減速 40%（
 const AFTERSHOCK = { t: 0.6 };                   // 餘震：爆炸 0.6 秒後同一點再炸一次
 const COMPRESS = { r: 70, per: 0.2 };            // 壓縮：爆炸半徑 70，第 2 隻起每多炸到 1 隻 +20%
 // 軌道砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
+const TRAIL = { t: 1.5, ratio: 0.5, max: 40 };                   // 殘留彈道：路徑留電軌 1.5 秒，碰到的敵人受到 50%；場上最多 40 條
 const CRACK = { per: 0.1, t: 3 };             // 碎甲：每次命中那隻敵人受到傷害 +10%（疊加、沒有上限），3 秒沒被打中掉光；破甲彈頭打中改疊 +25%
 const STATIC = { dist: 100, max: 4 };         // 靜電：飛船每移動 100 充一格（最多 4 格），下一發每格多 1 道電弧
 const CONDUCT = { jumps: 3, decay: 0.7 };     // 導電：電弧打中後再跳到附近另一隻，最多 3 次，每跳一次 ×0.7
@@ -29,7 +30,7 @@ const PARRY_UP = { per: 0.05, max: 12, idle: 2, decay: 0.25 };  // 格擋流：�
 const EXECUTE = { hp: 0.35, elite: 0.15, r: 100 };              // 灼燒處決：燒著的敵人血量低於 35%（精英 15%）時直接斬殺、火噴到 100 以內的敵人；旗艦不會
 // 散彈砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const CROWD = { r: 250, per: 0.08, max: 8 };                   // 群戰：身邊每隻敵人射速 +8%
-const REVENGE = { t: 5, mul: 2.5, explode: { r: 80, ratio: 1 } }; // 逆襲：受傷後 5 秒傷害 ×2.5＋爆炸
+const REVENGE = { t: 5, mul: 2.5, explode: { r: 80, ratio: 1 }, first: 0.5 }; // 逆襲：受傷後 5 秒傷害 ×2.5＋爆炸；沒開時被打中那一下傷害 ×0.5
 const ASCETIC = { per: 0.5 };                                   // 空格苦行：每個空格傷害 +50%
 const CARPET = { r: 25, t: 2, dps: 12, max: 60 };              // 火毯：彈丸消失的地方留一團火（場上最多 60 團）
 const WILDFIRE = { every: 0.5, r: 80, deathR: 120 };            // 野火：燃燒傳染
@@ -63,7 +64,7 @@ const WEAPONS = {
       B: { name: '獨頭彈', desc: '改成單發大彈：傷害 ×4.5、穿透 2。', apply: p => {
           p.count = 1; p.spread = 0; p.jitter = 0; p.damage *= 4.5; p.radius = 7; p.pierce += 2; p.life = 0.7; p.shape = 'orb'; },
         next: [
-          { name: '逆襲', desc: `受傷（護盾擋下也算）之後 ${REVENGE.t} 秒內，獨頭彈傷害 ×${REVENGE.mul}、命中時爆炸（半徑 ${REVENGE.explode.r}，100% 傷害）：挨一下換一波爆發。`, apply: p => { p.revenge = REVENGE; } },
+          { name: '逆襲', desc: `受傷（護盾擋下也算）之後 ${REVENGE.t} 秒內，獨頭彈傷害 ×${REVENGE.mul}、命中時爆炸（半徑 ${REVENGE.explode.r}，100% 傷害）；逆襲沒開時被打中，那一下傷害 ×${REVENGE.first}：挨一下換一波爆發。`, apply: p => { p.revenge = REVENGE; } },
           { name: '空格苦行', desc: `電路上每個沒裝晶片的空格，傷害 +${ASCETIC.per * 100}%（組件插座不算）：晶片越少越痛。`, apply: p => { p.ascetic = ASCETIC; } }] },
       C: { name: '龍息彈', desc: '命中附加燃燒（每秒 6，持續 3 秒）。', apply: p => { p.burn = { dps: 6, t: 3 }; },
         next: [
@@ -92,7 +93,7 @@ const WEAPONS = {
     paths: {
       A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
         next: [
-          { name: '穿牆', desc: '子彈穿過牆、小行星、行星（穿過的小行星照樣會受傷，單發夠痛才打得動），打得到躲在後面的敵人；閘門還是擋得住：躲在掩護後面射。', apply: p => { p.wallPass = true; } },
+          { name: '殘留彈道', desc: `子彈飛過的路徑留下一條電軌（${TRAIL.t} 秒），敵人碰到受到那發子彈 ${TRAIL.ratio * 100}% 的傷害（每條電軌每隻一次，子彈本身打中的不算；場上最多 ${TRAIL.max} 條）：邊退邊掃，讓追過來的敵人穿過你畫的網。`, apply: p => { p.trail = TRAIL; } },
           { name: '連殺裝填', desc: '每擊殺一隻敵人，下一發的射擊冷卻立刻歸零：連續擊殺時變成連射。', apply: p => { p.reload = true; } }] },
       B: { name: '攻城砲', desc: '傷害 ×1.8、擊退 ×2，' + rateTxt(1.3) + '。', apply: p => { p.damage *= 1.8; p.knock *= 2; p.rate *= 1.3; },
         next: [
@@ -135,7 +136,7 @@ function weaponParams(state) {
   const W = WEAPONS[state.id];
   const p = Object.assign({ rate: 1, jitter: 0, speedVar: false, pierce: 0, bounce: 0, homing: 0,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, color: W.color,
-    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, wallPass: false, reload: false, crack: null, static: null, parryUp: null, execute: null }, W.base);
+    crowd: null, revenge: null, ascetic: null, carpet: null, wildfire: null, wallhit: null, focus: null, spreadUp: null, graze: null, rage: null, skewer: null, slowDur: 0, frostbite: null, aftershock: null, trail: null, reload: false, crack: null, static: null, parryUp: null, execute: null }, W.base);
   if (state.path) {
     W.paths[state.path].apply(p);
     if (state.final != null) W.paths[state.path].next[state.final].apply(p);
@@ -149,7 +150,7 @@ function weaponEmit(p, pw) {
     out.push(shot({ angle: a, speed: p.speed * (p.speedVar ? rand(0.92, 1.08) : 1), damage: p.damage * pw * sm * (rv ? p.revenge.mul : 1), kin: p.kinetic || null,
       radius: p.radius, pierce: p.pierce, bounce: p.bounce, homing: p.homing, life: p.life, color: rv ? '#ff4d6d' : p.color, shape: p.shape,
       explode: rv ? p.revenge.explode : p.explode, burn: p.burn, shards: p.shards, arcs, slow: p.slow, knock: p.knock, lifesteal: p.lifesteal, parry: p.parry,
-      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, wallPass: p.wallPass, crack: p.crack || null, execute: p.execute || null }));
+      wild: p.wildfire || null, wallhit: p.wallhit || null, carpet: p.carpet || null, focus: p.focus || null, skewer: p.skewer || null, slowDur: p.slowDur || 0, frostbite: p.frostbite || null, aftershock: p.aftershock || null, trail: p.trail || null, crack: p.crack || null, execute: p.execute || null }));
   }
   return out;
 }

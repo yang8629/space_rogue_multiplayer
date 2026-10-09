@@ -251,7 +251,7 @@ class Bullet {
     this.carpet = s.carpet || null;    // 火毯（散彈升級）：消失的地方留火
     this.focus = s.focus || null; this.skewer = s.skewer || null; this.skN = 0; this.spreadSh = s.spreadSh || false;  // 雷射升級：專注、串燒（穿過幾隻）、分散的碎光
     this.frostbite = s.frostbite || null; this.aftershock = s.aftershock || null; this.res = s.res || null;  // 電漿升級：冰封、餘震、共鳴（小電漿帶著連結）
-    this.wallPass = !!s.wallPass; this.crack = s.crack || null;  // 軌道升級：穿牆、碎甲（不叫 phase：環繞用 phase 記繞圈角度）
+    this.trail = s.trail || null; this.crack = s.crack || null;  // 軌道升級：殘留彈道、碎甲
     this.execute = s.execute || null;  // 相位刃升級：灼燒處決
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
@@ -424,7 +424,6 @@ class Bullet {
     if (this.accel || this.quick) this.setMul();  // 速度倍率（= 傷害加成）照射程進度變化（移動完馬上更新，碰撞用的是這一幀到達位置的倍率）
     if (!Arena.rect) {  // 大地圖：碰到牆或閘門（環繞中、迴旋回程、停住的地雷不算）
       const hit = this.mode === 'orbit' || this.mode === 'return' || this.mode === 'wait' ? null
-        : this.wallPass && !Arena.gateCross(this.px, this.py, this.x, this.y) ? null  // 穿牆（軌道升級）：只有閘門擋得住
         : Arena.bulletWall(this.px, this.py, this.x, this.y, this.r);
       if (hit) {
         if (this.bounce > 0) {  // 牆反彈：照牆面的法線反彈
