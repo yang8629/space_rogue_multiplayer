@@ -21,7 +21,7 @@ const Game = {
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mate: null, shooter: null,
   // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
-  parts: {}, module: null, partSlots: 6, mech: mechStats({}, null), objs: [], portals: [],
+  parts: {}, module: null, partSlots: 6, cap: 4, mech: mechStats({}, null), objs: [], portals: [],
   growth: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
@@ -70,7 +70,7 @@ const Game = {
     this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
     this.growth = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
-    this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots;  // 機體成長線：開局零件由飛船決定
+    this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
@@ -493,7 +493,7 @@ const Game = {
   openShop() {
     const items = this.withComp(pickN(this.chipOffers(), 4).map(id => newChip(id))).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
     if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: this.shopPrice(chipPrice(id)), sold: false }); }
-    this.shop = { items, slotBought: false, healed: false };
+    this.shop = { items, slotBought: false, capBought: false, healed: false };
     this.state = 'shop';
     this.view();
   },
@@ -527,7 +527,7 @@ const Game = {
   swapShip(id) {  // 靶場：換機體（保留位置、電路與倉庫）
     const old = this.player;
     this.shipId = id;
-    this.parts = { ...SHIPS[id].parts }; this.partSlots = SHIPS[id].partSlots;
+    this.parts = { ...SHIPS[id].parts }; this.partSlots = SHIPS[id].partSlots; this.cap = SHIPS[id].cap;
     this.player = new Player(SHIPS[id]);
     if (old) { this.player.x = old.x; this.player.y = old.y; }
     this.recalc();
@@ -553,6 +553,17 @@ const Game = {
       return;
     }
     this.addSlot(source);
+  },
+  // 能量容量：飛船開局＋補給站買的（cap）＋散熱片每層 +1（mech.cap）；雙人時 cap 跟著配裝（LOADOUT_KEYS）
+  energyCap() { return (this.cap || 0) + ((this.mech && this.mech.cap) || 0); },
+  buyCap() {  // 補給站：能量容量 +1（每間 1 次）
+    const price = this.shopPrice(CFG.SHOP_CAP);
+    if (this.credits < price || this.shop.capBought) return;
+    this.pay(price, () => {
+      this.shop.capBought = true; this.cap++; this.recalc(); Events.emit('upgrade');
+      if (this.runStats) this.runStats.got.push(`${this.here()} 能量容量 +1（補給站）`);
+      this.view(`能量容量 +1（目前 ${this.energyCap()}）`);
+    });
   },
   addSlot(source) {
     this.chain.push(null);
@@ -660,7 +671,7 @@ const Game = {
       dmgBySource: Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])),
       chipDmg: chips, chain: this.chain.map((id, i) => A[i] ? (withSock(id, i) || '空') + '｛' + SLOT_ATTRS[A[i]].name + '｝' : withSock(id, i)), inv: this.inventory.filter(Boolean).map(name),
       // 最後的電路數值：插槽數、能量、射速、每發子彈數與傷害、編輯器的估算 DPS、倉庫被動
-      stats: { slots: this.chain.length, heat: s.heat, rateCut: `-${Math.round((1 - heatRateMul(s.heat)) * 100)}%`, rps: +s.rps.toFixed(2),
+      stats: { slots: this.chain.length, heat: s.heat, cap: s.cap, rateCut: `-${Math.round((1 - heatRateMul(s.heat, s.cap)) * 100)}%`, rps: +s.rps.toFixed(2),
         perFire: s.count, fireDmg: Math.round(s.dmg), estDps: Math.round(s.dpsEst), triggerLayers: s.layers.length, knock: this.wp.knock,
         passives: Object.entries(P).filter(([, v]) => v > 0).map(([k, v]) => PASSIVE_LABEL[k](+v.toFixed(2))) },
       credits: this.credits, hp: Math.max(0, Math.ceil(this.player.hp)), maxHp: this.player.maxHp,

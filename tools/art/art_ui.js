@@ -1,4 +1,4 @@
-// 星環電路 美術程式（介面）：數值圖示（最大 HP、移動速度、衝刺冷卻、受到的傷害、射速、子彈速度、零件格）
+// 星環電路 美術程式（介面）：數值圖示（最大 HP、移動速度、衝刺冷卻、受到的傷害、射速、子彈速度、零件格、能量容量）
 // 跟 art_world.js 一起用（faceted、polyPts、mix、glow）；畫風照新畫面：切面上色、#03050c 描邊、光從左上來
 // 產生：node mp_tests/perf/builduiicons.mjs → multiplayer/assets/ui/stat_*.png
 'use strict';
@@ -53,6 +53,10 @@ const STAT_ART = {
     ctx.save(); ctx.translate(8, 0);
     faceted(ctx, [[20, 0], [8, -11], [-12, -11], [-12, 11], [8, 11]], '#9dff6b', { outline: 3.2 });
     ctx.restore();
+  },
+  // 閃電：能量容量
+  cap(ctx) {
+    faceted(ctx, [[12, -28], [-19, 5], [-3, 5], [-12, 28], [19, -6], [3, -6]], '#2ee6a6', { outline: 3.4 });
   },
   // 齒輪：零件格
   slots(ctx) {

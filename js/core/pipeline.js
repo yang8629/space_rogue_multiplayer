@@ -199,8 +199,8 @@ function hostFire(b, base) {
   put(b, res[0]);
 }
 
-// 能量負載 → 射速倍率（1 = 不變；5 點能量 = 0.75，也就是射速 -25%）
-const heatRateMul = heat => Math.max(CFG.HEAT_RATE_FLOOR, 1 - heat * CFG.HEAT_RATE);
+// 能量 → 射速倍率（2026-10-10 改容量制）：總能量在容量以內 = 1（不扣）；超過的每 1 點 ×0.9（相乘，不會到 0）
+const heatRateMul = (heat, cap) => Math.pow(CFG.OVERLOAD_RATE, Math.max(0, heat - (cap || 0)));
 // 一格的能量負載（奇異點：能量歸零 → 0、能量 +2）
 const slotHeat = (id, at) => !id ? 0 : at === 'free' ? 0 : CHIPS[id].cost + (at === 'heavy' ? 2 : 0);
 
@@ -224,7 +224,7 @@ function analyzeChain(chain) {
   const charge = lvOf('charge'), oc = ops.some(o => o.comps.some(c => c.id === 'overclock'));
   const chargeTime = charge ? (charge >= 2 ? 1.5 : 2) : 0;
   const heatLimit = oc ? CHIPS.overclock.heatLimit[0] : 0;
-  const interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat) * rate * wp.rate);
+  const cap = Game.energyCap(), interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat, cap) * rate * wp.rate);
   const cc = Game.chargeC; Game.chargeC = 0;  // 估算持續輸出：停火蓄力只影響第一發，不算進去
   const top = runOps(ops, 0);
   Game.chargeC = cc;
@@ -244,7 +244,7 @@ function analyzeChain(chain) {
     layers.push({ count: sub.length, dmg: sum(sub), trig: carrier.payload[0].trig });
     carrier = sub.find(s => s.payload);
   }
-  return { ops, info: ops.info, heat, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
+  return { ops, info: ops.info, heat, cap, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
     charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept'), stand: lvOf('stand') };
 }
 

@@ -537,7 +537,7 @@ const MechCheck = {
       return { ok: Game.mech.traits.streak && s5 === 5 && near1(d5 / d0, 1.15) && s20 === 15 && sSh === 15 && sHit === 0,
         got: `殺 5 隻 ${s5} 層，傷害 ×${(d5 / d0).toFixed(2)}（要 ×1.15）；再殺 20 隻 ${s20} 層（要 15）；護盾擋下 ${sSh} 層；被打中 ${sHit} 層（要 0）` };
     }],
-    ['機體', '射速加成相加','散熱片 2 層 +12%、疾風（移動中）+20%、急冷 +30% 相加 = +62%（不是相乘的 +75%）；重力井 −10% 再相乘', M => {
+    ['機體', '射速加成相加','疾風（移動中）+20%、急冷（散熱片 2 層）+30% 相加 = +50%（不是相乘的 +56%；散熱片本身不加射速，2026-10-10 改成能量容量）；重力井 −10% 再相乘', M => {
       const count = (gravity) => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
         Game.parts.sink = 2; Game.parts.booster = 2; Game.module = gravity ? 'gravity' : null; Game.recalc();
@@ -547,7 +547,7 @@ const MechCheck = {
         return n / (10 / iv);
       };
       const a = count(false), b = count(true);
-      return { ok: Math.abs(a - 1.62) < 0.03 && Math.abs(b - 1.62 * 0.9) < 0.03, got: `射速 ×${a.toFixed(2)}（要 ×1.62）；加上重力井 ×${b.toFixed(2)}（要 ×${(1.62 * 0.9).toFixed(2)}）` };
+      return { ok: Math.abs(a - 1.5) < 0.03 && Math.abs(b - 1.5 * 0.9) < 0.03, got: `射速 ×${a.toFixed(2)}（要 ×1.50）；加上重力井 ×${b.toFixed(2)}（要 ×${(1.5 * 0.9).toFixed(2)}）` };
     }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
@@ -1136,6 +1136,17 @@ const MechCheck = {
           got: '攔截回射 ' + ic + '、回響 ' + echo + '、攔截晶片 ' + icChip + '、攔截成長 +' + g + '；迴旋晶片 ' + bm };
       },
     ])],
+    ['構築系統', '能量容量', '總能量在容量以內射速不扣、超過的每 1 點射速 ×0.9（相乘）；容量 = 飛船開局（先鋒號 4）＋散熱片每層 +1＋補給站買的（每間 1 次）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'boomerang', 'rear']);
+      const c0 = Game.cap, heat = Game.stats.heat, iv = cap => { Game.cap = cap; Game.recalc(); return Game.stats.interval; };
+      const i0 = iv(20), i3 = iv(3);
+      Game.parts.sink = 2; const i5 = iv(3), cap5 = Game.energyCap(); Game.parts.sink = 0; Game.recalc();
+      Game.credits = 999; Game.shop = { items: [], slotBought: false, capBought: false, healed: false };
+      const b0 = Game.cap; Game.buyCap(); const b1 = Game.cap; Game.buyCap(); const b2 = Game.cap;
+      const want3 = 1 / Math.pow(0.9, heat - 3), want5 = 1 / Math.pow(0.9, heat - 5);
+      return { ok: c0 === 4 && heat === 6 && near1(i3 / i0, want3) && cap5 === 5 && near1(i5 / i0, want5) && b1 === b0 + 1 && b2 === b1,
+        got: `開局容量 ${c0}（要 4）；能量 ${heat}（要 6）；容量 20 → 3：射擊間隔 ×${(i3 / i0).toFixed(3)}（要 ×${want3.toFixed(3)}）；加散熱片 2 層容量 ${cap5}（要 5）、間隔 ×${(i5 / i0).toFixed(3)}（要 ×${want5.toFixed(3)}）；補給站買 ${b0} → ${b1}、再買一次 ${b2}（每間限 1 次）` };
+    }],
     ['構築系統', '奇異點：強化格子', '投入 1 個晶片 → 隨機一格得到屬性（晶片消失）；效果 ×1.5 放在觸發器那格：插在觸發器上的倍增 +150%（回響 5 → 12.5）；能量歸零；不會成長', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'amp', null], ['split']);
       Game.openBlackhole(); Game.bhToggle('inv:0'); Game.bhFuse();
