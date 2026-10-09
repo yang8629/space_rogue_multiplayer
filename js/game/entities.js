@@ -45,6 +45,7 @@ class Player {
       Game.standFull = !!S.stand && sk >= standMax(S.stand);
       Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
       try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
+      if (Game.wp.static) this.staticK = 0;  // 靜電（軌道升級）：充的電射出去就用掉
       // 這一幀多過的時間留到下一發（以前直接設成間隔，多過的被丟掉：射速會照幀率變慢，60Hz 和 144Hz 不一樣）；
       //   停火一陣子再按不會累積成連發（最多帶一幀）
       this.chargeC = 0; this.fireCd = Math.max(this.fireCd, -dt) + S.interval / rate;
@@ -250,6 +251,7 @@ class Bullet {
     this.carpet = s.carpet || null;    // 火毯（散彈升級）：消失的地方留火
     this.focus = s.focus || null; this.skewer = s.skewer || null; this.skN = 0; this.spreadSh = s.spreadSh || false;  // 雷射升級：專注、串燒（穿過幾隻）、分散的碎光
     this.frostbite = s.frostbite || null; this.aftershock = s.aftershock || null; this.res = s.res || null;  // 電漿升級：冰封、餘震、共鳴（小電漿帶著連結）
+    this.phase = !!s.phase; this.crack = s.crack || null;  // 軌道升級：穿牆、碎甲
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
@@ -420,7 +422,9 @@ class Bullet {
     this.life -= (this.accel || this.quick) && this.mode === 'fly' ? dt * this.accelMul / this.mul0 : dt;
     if (this.accel || this.quick) this.setMul();  // 速度倍率（= 傷害加成）照射程進度變化（移動完馬上更新，碰撞用的是這一幀到達位置的倍率）
     if (!Arena.rect) {  // 大地圖：碰到牆或閘門（環繞中、迴旋回程、停住的地雷不算）
-      const hit = this.mode === 'orbit' || this.mode === 'return' || this.mode === 'wait' ? null : Arena.bulletWall(this.px, this.py, this.x, this.y, this.r);
+      const hit = this.mode === 'orbit' || this.mode === 'return' || this.mode === 'wait' ? null
+        : this.phase && !Arena.gateCross(this.px, this.py, this.x, this.y) ? null  // 穿牆（軌道升級）：只有閘門擋得住
+        : Arena.bulletWall(this.px, this.py, this.x, this.y, this.r);
       if (hit) {
         if (this.bounce > 0) {  // 牆反彈：照牆面的法線反彈
           this.bounce--;
