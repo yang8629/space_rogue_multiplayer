@@ -35,14 +35,14 @@ function shot(o) {
     homing: 0, life: 1, color: '#fff', shape: 'dot', payload: null,
     explode: null, burn: null, shards: null, arcs: null, slow: 0, knock: 1, lifesteal: 0, shard: false, src: 'weapon', cr: null,
     // V2 改玩法的晶片（見 chips.js）：各自的等級，0 = 沒有
-    boom: 0, orbit: 0, stasis: 0, accel: 0, quick: 0, intercept: 0, parry: false, prism: false, rear: false, full: 0, endBoom: false, sticky: 0, infect: 0, pull: 0,
+    boom: 0, orbit: 0, stasis: 0, accel: 0, intercept: 0, parry: false, prism: false, rear: false, full: 0, endBoom: false, sticky: 0, infect: 0, pull: 0,
     dashShot: false, infGen: 0, kin: null }, o);
 }
 
 // ---------- 增幅相加：每顆子彈記住累積的加成 bonus，傷害 ＝ 基礎 ×（1 ＋ 所有加成的總和） ----------
 //   分裂、子彈上限換算、聚焦合併這些「數量」類的變化仍然是相乘，只有增幅類的百分比加成是相加
 // 命中傷害：加成池全部相加（倍增、巨彈、蓄力、速度倍率…），照武器原本的傷害算，不會互相相乘
-//   速度倍率（加速、疾射、環繞放出）打中時才知道，所以在這裡加進去：1 + 加成 + (速度倍率 − 1)
+//   速度倍率（加速、環繞放出）打中時才知道，所以在這裡加進去：1 + 加成 + (速度倍率 − 1)
 const hitDamage = b => b.damage / Math.max(0.1, 1 + (b.bonus || 0)) * Math.max(0.1, 1 + (b.bonus || 0) + (b.accelMul || 1) - 1);
 function addBonus(b, add) {
   const old = b.bonus || 0, nb = old + add;

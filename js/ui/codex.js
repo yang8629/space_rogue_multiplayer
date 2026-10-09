@@ -290,7 +290,7 @@ const Codex = {
     let pairHtml = cvHtml;
     if (V && Object.keys(V.single).length) {
       const panes = Object.keys(V.single).map(Number).sort((a, b) => a - b).map(L => {
-        const rows = V.single[L], ns = rows.map(r => r[4]);
+        const rows = V.single[L].filter(r => CHIPS[r[0]]), ns = rows.map(r => r[4]);  // 拿掉的晶片（疾射）不畫
         const pts = rows.map(([c, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
           tip: `<b>${cn(c)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('清場速度', x2(s))}${tipRow('掉血', x2(d))}${tipRow('場數', n)}` }));
         const chips = [...new Set(rows.map(r => r[0]))], cell = (c, w) => rows.find(r => r[0] === c && r[1] === w);
@@ -305,7 +305,7 @@ const Codex = {
     }
     if (V && Object.keys(V.pair).length) {
       const panes = Object.keys(V.pair).map(Number).sort((a, b) => a - b).map(L => {
-        const rows = V.pair[L];
+        const rows = V.pair[L].filter(r => CHIPS[r[0]] && CHIPS[r[1]]);
         const pts = rows.map(([a, b, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
           tip: `<b>${cn(a)} ＋ ${cn(b)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('速度加乘', x2(s))}${tipRow('掉血加乘', x2(d))}${tipRow('場數', n)}` }));
         // 先建索引（組合＋武器 → 那一列）、每個組合的總和只算一次：以前每格都從頭找一遍、排序時又一直重算，開這一頁要卡好幾秒
@@ -382,7 +382,7 @@ const Codex = {
         <span style="color:#ffd166">◇ 組件</span>：分裂、巨彈、穿甲、倍增、超頻模組、鏡像，還有元素組件（爆裂、燃燒、冰凍、電擊：命中效果，跟武器升級的爆炸、燃燒、減速、電弧相加；破甲：命中的敵人受傷 +25%，跟感測器的弱點標記相加）。插進武器、玩法晶片或觸發器的插座（不佔電路格），不會升級，拿到重複的就是多一個。<br>
         <span style="color:${TYPE_META.trigger.color}">◎ 觸發器</span>：命中、消失、定時三種，放在電路格。觸發時用武器再射一次回響（50%），右邊的晶片只作用在回響上，最多巢狀 ${CFG.MAX_TRIGGER_DEPTH} 層。也有插座：插在上面的組件作用在回響上。`)}
       ${R('插座', `武器插座開局 ${CFG.START_WSOCK} 個，每打完一隻王 +1，最多 ${CFG.WEAPON_SOCKETS} 個；其他晶片掉落時隨機 1～3 個（沙盒、靶場一律 ${CFG.MAX_SOCKETS} 個）。組件拖進晶片的插座（不佔電路格），超過插座數的組件沒有作用（變灰）；黑洞屬性只強化放在那一格的晶片（效果 ×1.5 = 它插座上的組件 ×1.5）。<br>
-        <b>插在武器上</b>：作用在射出的全部子彈，但倍增、巨彈的傷害加成只算直擊（迴旋回程、環繞放出、地雷衝出、加速／疾射 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出這些產物不吃，要插在那個晶片上）。觸發器的插座也一樣（作用在回響上，傷害加成只算回響的直擊），武器插座的組件<b>不會</b>作用在回響上。<br>
+        <b>插在武器上</b>：作用在射出的全部子彈，但倍增、巨彈的傷害加成只算直擊（迴旋回程、環繞放出、地雷衝出、加速 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出這些產物不吃，要插在那個晶片上）。觸發器的插座也一樣（作用在回響上，傷害加成只算回響的直擊），武器插座的組件<b>不會</b>作用在回響上。<br>
         <b>插在玩法晶片上</b>：只作用在那個晶片的「產物」（例：插在環繞上 = 放出的那一波；插在黏著上 = 爆炸）。每個晶片的產物見「插座與奇異點」分頁。<br>
         超頻模組只能插在武器上；鏡像 = 再來一次（武器多射一次、玩法晶片的產物多一份，插哪個插座都一樣）；巨彈不改子彈數量，插座的順序不影響結果；吸引只能插巨彈。`)}
       ${R('用量成長與進化', '改變玩法的晶片裝在電路上，照著它的玩法打（例如迴旋的回程命中、環繞命中、反彈次數）就會累積成長，到了自動升到 Lv2、Lv3；Lv3 是<b>進化</b>，改名、玩法再變一次。撿到重複的不會合成（獎勵、補給站也不再出現已經有的）。電路編輯器點晶片可以看目前的成長進度和本局每分鐘成長多少。打爆小行星時，電路上每個會成長的晶片 +8。雙人：各算各的。')}
@@ -391,7 +391,7 @@ const Codex = {
         放在倉庫的晶片不算能量；插在插座上的組件照算。超頻模組讓射速 ×2，但連續射擊太久會過熱停火 1.5 秒；散熱片零件每層射速 +6%。`)}
       ${R('擊退', `每把武器的擊退值不同：${Object.values(WEAPONS).map(W => `${W.name} ${W.base.knock}`).join('、')}（鋼珠、攻城砲 ×2）。巨彈每級擊退 +0.5。<br>
         一般敵人都會被推。旗艦有抗擊退，子彈的擊退值<b>超過</b>抗性才推得動，力道只看超過的部分：${CFG.BOSS_ORDER.map(id => `${ENEMY_TYPES[id].name} ${ENEMY_TYPES[id].knockResist}`).join('、')}。爆炸、震波、電弧不會推王。被擊退撞上行星的敵人多受 20 傷害。`)}
-      ${R('傷害加成分兩種', '<b>武器加成</b>：插在武器（或觸發器）上的倍增、巨彈的 +30%，加上蓄力、速度倍率（加速、疾射、環繞放出）、衝刺射擊，全部<b>相加</b>：兩個倍增器是 +100% +100% = ×3，不是 ×4。<br><b>晶片加成</b>：插在玩法晶片上的倍增、巨彈，作用在同一下命中的全部相加。<br>最終傷害 ＝ 基礎 ×（1 ＋ 武器加成）×（1 ＋ 晶片加成）。分裂（每顆 ×0.4）、迴旋（×0.7）、武器升級照舊相乘。')}
+      ${R('傷害加成分兩種', '<b>武器加成</b>：插在武器（或觸發器）上的倍增、巨彈的 +30%，加上蓄力、速度倍率（加速、環繞放出）、衝刺射擊，全部<b>相加</b>：兩個倍增器是 +100% +100% = ×3，不是 ×4。<br><b>晶片加成</b>：插在玩法晶片上的倍增、巨彈，作用在同一下命中的全部相加。<br>最終傷害 ＝ 基礎 ×（1 ＋ 武器加成）×（1 ＋ 晶片加成）。分裂（每顆 ×0.4）、迴旋（×0.7）、武器升級照舊相乘。')}
       ${R('子彈數量', `子彈數量<b>沒有上限</b>：分裂、觸發疊多少就射多少（手機可能會卡）。只有一個防止無限連鎖的上限：同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次觸發，超過的那幾次不會觸發。`)}
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格，放暫時不用的晶片。不要的晶片可以回收，拿回 40% 售價。`)}
       ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT} 起，隨星區上漲）、精英戰獎勵、武器升滿後的軍械台。`)}
@@ -456,7 +456,7 @@ const Codex = {
   },
 
   weapons() {
-    // 基礎型數值表：射程 = 子彈速度 × 存活時間（加速、疾射、佈雷都照射程比例算）
+    // 基礎型數值表：射程 = 子彈速度 × 存活時間（加速、佈雷都照射程比例算）
     const rows = Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
       return `<tr><td style="color:${W.color}">${W.short}</td><td>${p.damage}</td><td>${p.count}</td><td>${p.damage * p.count}</td>
@@ -464,7 +464,7 @@ const Codex = {
         <td>${Math.round(p.speed * p.life)}</td><td>${p.pierce >= 99 ? '無限' : p.pierce}</td></tr>`;
     }).join('');
     const table = `<div class="codex-sec viz"><h3>基礎數值</h3>
-      <div class="sub" style="margin:0">沒升級、沒晶片、能量 0。射程 = 子彈速度 × 存活時間；加速、疾射、佈雷的效果都照「飛了射程的幾成」算。</div>
+      <div class="sub" style="margin:0">沒升級、沒晶片、能量 0。射程 = 子彈速度 × 存活時間；加速、佈雷的效果都照「飛了射程的幾成」算。</div>
       <div class="tbl"><table><tr><th>武器</th><th>單發傷害</th><th>發數</th><th>每次開火</th><th>每秒開火</th><th>子彈速度</th><th>存活時間</th><th>射程</th><th>穿透</th></tr>${rows}</table></div></div>`;
     return table + Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
