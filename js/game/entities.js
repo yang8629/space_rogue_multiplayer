@@ -551,7 +551,7 @@ const ENEMY_TYPES = {
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 0, shape: 5 },   // 死掉時分成 3 隻碎裂體（本體不掉晶體，晶體和成長都在碎裂體身上）
   splitling:{ name: '碎裂體', hp: 30, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },  // 每隻掉 1 顆（一隻分裂體總共 3 顆，跟以前一樣）
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
-  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9 },      // 不會動，每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不給成長）
+  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true },      // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不給成長）
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
@@ -972,7 +972,7 @@ class Enemy {
     if (this.t.boss) {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
       if (over > 0 && l > 0 && this.mode !== 'charge') this.push(kx / l * over * CFG.BOSS_KNOCK, ky / l * over * CFG.BOSS_KNOCK);
-    } else if (this.mode !== 'charge') this.push(kx, ky);
+    } else if (this.mode !== 'charge' && !this.t.anchored) this.push(kx, ky);  // 母巢（anchored）不吃擊退
     if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; this.killAtt = att; Game.onEnemyKilled(this); }
   }
 }
@@ -1029,8 +1029,8 @@ const THEME_AI = {
     this.steerMove(dt, mx, my, this.t.speed);
     return true;
   },
-  hive(dt) {  // 不會動；每 4 秒生 2 隻蟲群（同時最多 8 隻）
-    this.vx *= 0.9; this.vy *= 0.9; this.move(dt);
+  hive(dt) {  // 不會動（擊退、吸引都推不動）；每 4 秒生 2 隻蟲群（同時最多 8 隻）
+    this.vx = 0; this.vy = 0;
     this.cd -= dt * endlessAtk();
     if (this.cd > 0) return true;
     this.cd = 4;
