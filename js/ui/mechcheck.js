@@ -1342,7 +1342,7 @@ const MechCheck = {
         return { ok: a.r === 60 && rb < 60 && rb > 30 && c.dead, got: `一般子彈後半徑 ${a.r}；旗艦 10 發後 ${Math.round(rb)}；60 發後${c.dead ? '崩解' : '還在（' + Math.round(c.r) + '）'}` };
       },
     ])],
-    ['地圖物件', '小行星帶', '10 傷害打不動；打爆掉晶體（耐久每 32 一顆），不給晶片成長；小行星後面的敵人看不到；感測器 4 層看得到；敵人不會穿過小行星，從帶子的縫鑽過來追到玩家', M => M.all([
+    ['地圖物件', '小行星帶', '10 傷害打不動；打爆掉晶體（耐久每 32 一顆），不給晶片成長；小行星後面的敵人看不到；感測器 4 層看得到；敵人不會穿過小行星，從帶子的縫鑽過來追到玩家；飛船（含衝刺）鑽不過比自己窄的縫', M => M.all([
       M => {  // 小行星：重武器才打得動
         M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
         const o = { type: 'rock', x: 0, y: 0, r: 20, hp: 80, maxHp: 80 };
@@ -1373,6 +1373,26 @@ const MechCheck = {
           closest = Math.min(closest, Math.hypot(e.x - p.x, e.y - p.y));
         }
         return { ok: !inside && closest < 40, got: `${inside ? '穿進小行星了' : '沒有穿過小行星'}，最接近玩家 ${Math.round(closest)}` };
+      },
+      M => {  // 飛船：兩顆小行星中間 11 寬的縫（飛船直徑 24）走路、衝刺都鑽不過去（以前衝刺會被兩邊輪流推、擠過去卡進凹洞）
+        const go = dash => {
+          M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); Game.enemies = [];
+          const p = Game.player, rx = p.x + 80, keys = new Set(Input.keys);
+          p.y += 3;  // 稍微偏一邊（剛好在正中間的話兩邊推力抵銷）
+          Game.objs = [-1, 1].map(k => ({ type: 'rock', x: rx, y: p.y - 3 + k * (26 + 5.5), r: 26, hp: 999, maxHp: 999 }));
+          let deep = 0;
+          Input.keys = new Set(['d']); Input.dash = false; Input.dashHeld = dash;
+          try {
+            for (let f = 0; f < 60 * 3; f++) {
+              p.update(1 / 60);
+              for (const o of Game.objs) deep = Math.max(deep, o.r + p.r - Math.hypot(p.x - o.x, p.y - o.y));
+            }
+          } finally { Input.keys = keys; Input.dashHeld = false; Input.dash = false; }
+          return { through: p.x > rx, deep };
+        };
+        const w = go(false), d = go(true);
+        return { ok: !w.through && !d.through && w.deep < 2 && d.deep < 2,
+          got: `走路${w.through ? '鑽過去了' : '過不去'}（最多陷進 ${w.deep.toFixed(1)}）；衝刺${d.through ? '鑽過去了' : '過不去'}（最多陷進 ${d.deep.toFixed(1)}）` };
       },
     ])],
     ['地圖物件', '黑洞', '把附近的敵人往中心拉（不能動的靶被拉過去），核心吞掉子彈；會走路的敵人繞開黑洞追過來', M => {

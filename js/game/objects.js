@@ -526,6 +526,12 @@ const Objects = {
   },
 
   // ---------- 飛船（自己的電腦）：黑洞拉扯與核心、行星和小行星擋住 ----------
+  // 飛船在 (x, y) 沒有陷進行星、小行星或牆裡（容許 1 的誤差）
+  shipFree(p, x, y) {
+    if (!Arena.rect && Arena.f(x, y) < p.r - 1) return false;
+    for (const o of Game.objs) if ((o.type === 'planet' || o.type === 'rock') && dist2(x, y, o.x, o.y) < (o.r + p.r - 1) ** 2) return false;
+    return true;
+  },
   moveShip(p, dt) {
     for (const o of Game.objs) {
       if (o.type === 'planet' || o.type === 'rock') this.pushOut(p, o, p.r);
