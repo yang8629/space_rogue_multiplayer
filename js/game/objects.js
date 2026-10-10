@@ -269,7 +269,9 @@ const Objects = {
       if (o.type !== 'hole') continue;
       const dx = e.x - o.x, dy = e.y - o.y, d = Math.hypot(dx, dy), zone = o.R + 30;
       // 範圍外 40 以內也照「沿著邊繞」走（只是不推開）：以前只在範圍內繞，一出範圍又照尋路方向往回走，敵人在邊界上來回、停在原地（2026-10-09）
-      if (d > zone + 40 || d < 1) { if (e.holeSide && d > zone + 40) e.holeSide = 0; continue; }
+      // 離開範圍後，等離核心超過 R+180、或想走的方向明顯往外（跟往外的方向差不到 60°）才重選繞向：繞圈的軌道剛好停在 zone+40 附近，
+      //   以前一出界就歸 0、重選，常選到另一邊 → 左右來回，12 秒繞不過去（2026-10-11 機制檢查「黑洞」偶發失敗；只看「還朝黑洞」不夠，蟲群左右擺動會誤判）
+      if (d > zone + 40 || d < 1) { if (e.holeSide && d > zone + 40 && (d > o.R + 180 || mx * dx + my * dy > 0.5 * Math.hypot(mx, my) * d)) e.holeSide = 0; continue; }
       const nx = dx / d, ny = dy / d, inward = -(mx * nx + my * ny);
       if (!e.holeSide) e.holeSide = -ny * mx + nx * my < 0 ? -1 : 1;  // 進入範圍時決定往哪邊繞，之後不換（蟲群左右擺動也不會卡住）
       const tx = -ny * e.holeSide, ty = nx * e.holeSide;
