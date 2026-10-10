@@ -33,7 +33,7 @@ const PARTS = {
   booster: { name: '加速器', color: '#4cc9f0', fx: [{ stat: 'speed', v: 6, pct: true }, { stat: 'hp', v: -10 }],
     t2: { id: 'gale', name: '疾風', desc: '移動中射速 +20%' },
     t4: { id: 'assault', name: '突擊', desc: '衝刺穿過的敵人受到「武器傷害 × 4」' } },
-  sink:    { name: '散熱片', color: '#ff9f1c', fx: [{ stat: 'cap', v: 1 }, { stat: 'taken', v: 4, pct: true }],
+  sink:    { name: '散熱片', color: '#ff9f1c', fx: [{ stat: 'cap', v: CFG.CAP_SINK }, { stat: 'taken', v: 4, pct: true }],
     t2: { id: 'quench', name: '急冷', desc: '衝刺後 2 秒內射速 +30%' },
     t4: { id: 'vent', name: '排熱爆發', desc: '衝刺時朝四周放出 12 發子彈' } },
   sensor:  { name: '感測器', color: '#9dff6b', fx: [{ stat: 'bspeed', v: 8, pct: true }, { stat: 'dashCd', v: 5, pct: true }],
@@ -77,7 +77,7 @@ function mechStats(parts, module, wp) {
   s.maxHp += 20 * k * n('armor'); s.speed *= Math.pow(0.96, n('armor'));
   s.dashCd *= Math.pow(1 - 0.08 * k, n('larmor')); s.taken += 0.03 * n('larmor');  // 輕裝甲：裝甲薄、身手快
   s.speed *= 1 + 0.06 * k * n('booster'); s.maxHp -= 10 * n('booster');
-  s.cap += n('sink'); s.taken += 0.04 * n('sink');  // 散熱片：能量容量 +1（2026-10-10，以前射速 +6%）；受到的傷害：增加的都相加
+  s.cap += CFG.CAP_SINK * n('sink'); s.taken += 0.04 * n('sink');  // 散熱片：能量容量 +2（2026-10-10，以前射速 +6%）；受到的傷害：增加的都相加
   s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashUp += 0.05 * n('sensor');
   switch (module) {
     case 'shield': s.speed *= 0.9; break;

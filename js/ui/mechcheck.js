@@ -18,6 +18,7 @@ const MechCheck = {
     while (r.chain.length < chain.length) { r.chain.push(null); r.socks.push([]); }
     Game.chain = r.chain; Game.socks = r.socks;
     Game.slotAttr = [];
+    Game.cap = 99;  // 供電（2026-10-10）：一般檢查不受容量限制；能量容量、供電順序兩項自己設
     Game.inventory = [...inv, null, null, null, null, null, null].slice(0, CFG.INV_SLOTS);
     Game.recalc();
     const p = Game.player;
@@ -1136,16 +1137,38 @@ const MechCheck = {
           got: '攔截回射 ' + ic + '、回響 ' + echo + '、攔截晶片 ' + icChip + '、攔截成長 +' + g + '；迴旋晶片 ' + bm };
       },
     ])],
-    ['構築系統', '能量容量', '總能量在容量以內射速不扣、超過的每 1 點射速 ×0.85（相乘）；容量 = 飛船開局（先鋒號 4）＋散熱片每層 +1＋補給站買的（每間 1 次）', M => {
-      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'boomerang', 'rear']);
-      const c0 = Game.cap, heat = Game.stats.heat, iv = cap => { Game.cap = cap; Game.recalc(); return Game.stats.interval; };
-      const i0 = iv(20), i3 = iv(3);
-      Game.parts.sink = 2; const i5 = iv(3), cap5 = Game.energyCap(); Game.parts.sink = 0; Game.recalc();
+    ['構築系統', '能量容量', '容量 = 飛船開局（先鋒號 7、星門號 8）＋散熱片每層 +2＋補給站買一次 +2（每間 1 次）＋擊沉旗艦 +3；能量不影響射速', M => {
+      Game.newRun('run', 'gate', 'laser');
+      const g0 = Game.energyCap();  // 直接開局（M.setup 會把容量設成 99）
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'boomerang', 'rear']);
+      Game.cap = SHIPS.vanguard.cap; Game.recalc();
+      const c0 = Game.energyCap(), iv = cap => { Game.cap = cap; Game.recalc(); return Game.stats.interval; };
+      const i0 = iv(99), i1 = iv(1);  // 容量 1：晶片全部沒電，射擊間隔照樣
+      Game.cap = SHIPS.vanguard.cap; Game.parts.sink = 2; Game.recalc(); const cs = Game.energyCap(); Game.parts.sink = 0; Game.recalc();
       Game.credits = 999; Game.shop = { items: [], slotBought: false, capBought: false, healed: false };
       const b0 = Game.cap; Game.buyCap(); const b1 = Game.cap; Game.buyCap(); const b2 = Game.cap;
-      const want3 = 1 / Math.pow(0.85, heat - 3), want5 = 1 / Math.pow(0.85, heat - 5);
-      return { ok: c0 === 4 && heat === 6 && near1(i3 / i0, want3) && cap5 === 5 && near1(i5 / i0, want5) && b1 === b0 + 1 && b2 === b1,
-        got: `開局容量 ${c0}（要 4）；能量 ${heat}（要 6）；容量 20 → 3：射擊間隔 ×${(i3 / i0).toFixed(3)}（要 ×${want3.toFixed(3)}）；加散熱片 2 層容量 ${cap5}（要 5）、間隔 ×${(i5 / i0).toFixed(3)}（要 ×${want5.toFixed(3)}）；補給站買 ${b0} → ${b1}、再買一次 ${b2}（每間限 1 次）` };
+      Game.node = { type: 'boss', L: 6, id: 'mcCap' }; Game.inArena = true; Game.state = 'play'; Game.combatWon(); const k1 = Game.cap;
+      return { ok: g0 === 8 && c0 === 7 && near1(i1, i0) && cs === 11 && b1 === b0 + 2 && b2 === b1 && k1 === b2 + 3,
+        got: `開局容量 星門號 ${g0}（要 8）、先鋒號 ${c0}（要 7）；容量 99 → 1：射擊間隔 ${i0.toFixed(3)} → ${i1.toFixed(3)}（要一樣）；散熱片 2 層 ${cs}（要 11）；補給站買 ${b0} → ${b1}、再買一次 ${b2}（每間限 1 次）；擊沉旗艦 ${b2} → ${k1}（要 +3）` };
+    }],
+    ['構築系統', '供電順序', '從左往右供電：武器插座的組件 → 晶片 → 它插座上的組件 → 下一格；第一個電不夠的和右邊全部沒電（不跳過便宜的）；沒電的不給效果、不成長；編輯器不擋沒電的擺法', M => {
+      // 武器［分裂 2］→ 迴旋 2［倍增 3］→ 反向 2 → 黏著 1（全部 10）
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'split', 'boomerang', 'amp', 'rear', 'sticky']);
+      const at = cap => {
+        Game.cap = cap; Game.recalc();
+        const I = Game.stats.info, P = i => I[i].nopow ? '✗' : '✓', Q = (i, k) => (I.socks[i][k] || {}).nopow ? '✗' : '✓';
+        return { used: Game.stats.used, off: Game.stats.off, count: Game.stats.count, map: `分裂${Q(0, 0)} 迴旋${P(1)} 倍增${Q(1, 0)} 反向${P(2)} 黏著${P(3)}` };
+      };
+      const a = at(99), b = at(8), c = at(6), d = at(3), e = at(1);
+      const idleOk = typeof Editor === 'undefined' || Editor.idleList().length === 0;  // 容量 1：全部沒電，但編輯器不算「擺了沒作用」
+      // 沒電的迴旋不給效果、不成長（遠征：容量 1，迴旋 ⚡2 沒電）
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      Game.cap = 1; Game.recalc(); Game.growth = {}; M.targets([[150, 0]]); M.run(60);
+      const bm = Math.round(Game.runStats.chips.boomerang || 0), g = Game.growth.boomerang || 0;
+      const ok = a.off === 0 && a.used === 10 && b.used === 7 && b.off === 2 && b.map === '分裂✓ 迴旋✓ 倍增✓ 反向✗ 黏著✗'
+        && c.used === 4 && c.off === 3 && c.map === '分裂✓ 迴旋✓ 倍增✗ 反向✗ 黏著✗' && d.used === 2 && d.off === 4 && d.map === '分裂✓ 迴旋✗ 倍增✗ 反向✗ 黏著✗'
+        && e.used === 0 && e.off === 5 && e.count < d.count && a.count > b.count && idleOk && bm === 0 && g === 0;
+      return { ok, got: `容量 99：用 ${a.used}、沒電 ${a.off}｜8：${b.map}（用 ${b.used}；黏著 ⚡1 放得下也不接）｜6：${c.map}｜3：${d.map}｜1：沒電 ${e.off}、每發 ${e.count} 顆（3：${d.count}；反向有電 99：${a.count}、沒電 8：${b.count}）｜編輯器擋${idleOk ? '：沒有' : '了'}｜沒電的迴旋傷害 ${bm}、成長 ${g}` };
     }],
     ['構築系統', '奇異點：強化格子', '投入 1 個晶片 → 隨機一格得到屬性（晶片消失）；效果 ×1.5 放在觸發器那格：插在觸發器上的倍增 +150%（回響 5 → 12.5）；能量歸零；不會成長', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'amp', null], ['split']);

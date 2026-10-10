@@ -335,6 +335,7 @@ const Game = {
       if (!slot) this.partSlots++;  // 電路已滿：沒得選，直接給零件格
       const ws = (this.wSock || CFG.START_WSOCK) < CFG.WEAPON_SOCKETS;
       if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
+      this.cap += CFG.CAP_BOSS;  // 能量容量 +3（2026-10-10 供電制）
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
@@ -554,15 +555,15 @@ const Game = {
     }
     this.addSlot(source);
   },
-  // 能量容量：飛船開局＋補給站買的（cap）＋散熱片每層 +1（mech.cap）；雙人時 cap 跟著配裝（LOADOUT_KEYS）
+  // 能量容量：飛船開局＋補給站買的＋擊沉旗艦（cap）＋散熱片每層 +2（mech.cap）；雙人時 cap 跟著配裝（LOADOUT_KEYS）
   energyCap() { return (this.cap || 0) + ((this.mech && this.mech.cap) || 0); },
-  buyCap() {  // 補給站：能量容量 +1（每間 1 次）
+  buyCap() {  // 補給站：能量容量 +2（每間 1 次）
     const price = this.shopPrice(CFG.SHOP_CAP);
     if (this.credits < price || this.shop.capBought) return;
     this.pay(price, () => {
-      this.shop.capBought = true; this.cap++; this.recalc(); Events.emit('upgrade');
-      if (this.runStats) this.runStats.got.push(`${this.here()} 能量容量 +1（補給站）`);
-      this.view(`能量容量 +1（目前 ${this.energyCap()}）`);
+      this.shop.capBought = true; this.cap += CFG.CAP_SHOP_ADD; this.recalc(); Events.emit('upgrade');
+      if (this.runStats) this.runStats.got.push(`${this.here()} 能量容量 +${CFG.CAP_SHOP_ADD}（補給站）`);
+      this.view(`能量容量 +${CFG.CAP_SHOP_ADD}（目前 ${this.energyCap()}）`);
     });
   },
   addSlot(source) {
@@ -671,7 +672,7 @@ const Game = {
       dmgBySource: Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])),
       chipDmg: chips, chain: this.chain.map((id, i) => A[i] ? (withSock(id, i) || '空') + '｛' + SLOT_ATTRS[A[i]].name + '｝' : withSock(id, i)), inv: this.inventory.filter(Boolean).map(name),
       // 最後的電路數值：插槽數、能量、射速、每發子彈數與傷害、編輯器的估算 DPS、倉庫被動
-      stats: { slots: this.chain.length, heat: s.heat, cap: s.cap, rateCut: `-${Math.round((1 - heatRateMul(s.heat, s.cap)) * 100)}%`, rps: +s.rps.toFixed(2),
+      stats: { slots: this.chain.length, heat: s.heat, cap: s.cap, off: s.off, rps: +s.rps.toFixed(2),
         perFire: s.count, fireDmg: Math.round(s.dmg), estDps: Math.round(s.dpsEst), triggerLayers: s.layers.length, knock: this.wp.knock,
         passives: Object.entries(P).filter(([, v]) => v > 0).map(([k, v]) => PASSIVE_LABEL[k](+v.toFixed(2))) },
       credits: this.credits, hp: Math.max(0, Math.ceil(this.player.hp)), maxHp: this.player.maxHp,
