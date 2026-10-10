@@ -18,13 +18,18 @@ const NO_ECHO = ['orbit', 'charge', 'dashfire', 'stand'];
 const STICKY_NOW = ['pierce', 'ov_pierce', 'ov_seek'];
 
 // chain：電路格（武器、玩法晶片、觸發器、空格）；socks[i]：插在第 i 格晶片上的組件（由左到右）；attrs[i]：第 i 格的黑洞屬性（只強化那一格的晶片）
-//   ops.info[i]：每一格的狀態（role 'host'、seg 在第幾層觸發、idle 沒有作用、why 原因）；ops.info.socks[i][k]：第 i 格第 k 個插座的狀態
-function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || []) {
+//   ops.info[i]：每一格的狀態（role 'host'、seg 在第幾層觸發、idle 沒有作用、why 原因、nopow 因為沒電）；ops.info.socks[i][k]：第 i 格第 k 個插座的狀態
+// 供電（2026-10-10，取代超載扣射速）：從武器往右一格一格輪，晶片 → 它插座上的組件 → 下一格晶片…；
+//   第一個電不夠的和它右邊全部沒有作用（不跳過）；本來就沒作用的（放錯、插座不夠…）不吃電
+//   ops.info.need = 全部有電要多少、used = 實際用掉、off = 沒電的晶片＋組件數、cap = 容量
+function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || [], cap = Game.energyCap()) {
   const info = chain.map(() => ({ role: null, idle: false, why: '', seg: 0, trig: false }));
   info.socks = chain.map(() => []);
   const ops = [];
   const idle = (I, why) => Object.assign(I, { idle: true, why });
-  let seg = 0, dead = false;
+  let seg = 0, dead = false, used = 0, need = 0, off = 0, cut = false;
+  const noPow = I => { off++; return Object.assign(I, { idle: true, nopow: true, why: `能量不夠：容量 ${cap}，供電到這裡要 ${need}（從左往右供電，斷在這裡之後全部沒電）` }); };
+  const power = e => { need += e; if (!cut && used + e <= cap) { used += e; return true; } cut = true; return false; };  // 有電回傳 true
   chain.forEach((id, i) => {
     const I = info[i], S = (id && socks[i]) || [];
     I.seg = seg;
@@ -37,33 +42,42 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
     if (dead) { sockIdle('它插的晶片沒有作用'); return idle(I, '前面的觸發器超過層數上限，這格不會執行'); }
     if (seg > 0 && NO_ECHO.includes(baseOf(id))) { sockIdle('它插的晶片沒有作用'); return idle(I, `${CHIPS[baseOf(id)].name}不能放在觸發器右邊（回響不會進圈、沒有蓄力、不是衝刺那一槍、不算架設）`); }
     if (def.type === 'trigger' && seg >= CFG.MAX_TRIGGER_DEPTH) { dead = true; sockIdle('它插的晶片沒有作用'); return idle(I, `已達觸發層數上限（${CFG.MAX_TRIGGER_DEPTH} 層）`); }
+    if (!power(slotHeat(id, at))) {  // 晶片沒電：它的組件也沒電（組件的能量照樣算進「要多少」）
+      noPow(I);
+      S.forEach((cid, k) => {
+        if (k >= socketsOf(id)) return idle(info.socks[i][k], `插座不夠：${def.name}只有 ${socketsOf(id)} 個插座`);
+        need += CHIPS[cid].cost; noPow(info.socks[i][k]);
+      });
+      return;
+    }
     const o = { id, pw: def.lvMul || 1, lv: levelOf(id), slot: i, key: baseOf(id), comps: [], am, flaky,
       wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層
     if (OVERLOADS.includes(at)) o.comps.push({ id: at, m: 1, slot: i, key: at, hidden: true });  // 奇異點的超載：這格的晶片多插一個（不佔插座）
     ops.push(o);
     if (def.type === 'trigger') { I.trig = true; seg++; }
-    const cap = socketsOf(id), base = baseOf(id);
+    const nSock = socketsOf(id), base = baseOf(id);
     S.forEach((cid, k) => {  // 插座上的組件（強化只看晶片那一格，組件本身不吃屬性）
       const J = info.socks[i][k], cb = baseOf(cid);
-      if (k >= cap) return idle(J, `插座不夠：${CHIPS[id].name}只有 ${cap} 個插座`);
+      if (k >= nSock) return idle(J, `插座不夠：${CHIPS[id].name}只有 ${nSock} 個插座`);
       if (cb === 'overclock' && id !== 'weapon') return idle(J, '超頻是整條電路的射速，只能插在武器上');
       if (cb === 'focus' && id !== 'weapon') return idle(J, '收束看武器每次射出幾發，只能插在武器上');
+      if (base === 'pull' && cb !== 'bigshot') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
+      if (!power(CHIPS[cid].cost)) return noPow(J);  // 供電：晶片之後輪到它的組件（由左到右）
       if (cb === 'mirror') {  // 鏡像 = 再來一次（插在哪個插座都一樣）
         if (o.wlike) {  // 武器（或觸發器）多射一次（回響也一樣；兩個鏡像 = 射 3 次）
           (o.extra = o.extra || []).push({ slot: i, key: 'mirror' });
           o.comps.push({ id: 'mirror', m: 1, slot: i, key: 'mirror', copySrc: true });  // 佔一個插座；runComps 會跳過
           return;
         }
-        if (base === 'pull') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
         const mm = o.comps.find(c => c.key === 'mirror');  // 玩法晶片：產物多一份；兩個鏡像合成一個（n = 2 → 3 份）
         if (mm) { mm.n++; return; }
         o.comps.push({ id: cid, m: am, slot: i, key: 'mirror', n: 1 });
         return;
       }
-      if (base === 'pull' && baseOf(cid) !== 'bigshot') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
       o.comps.push({ id: cid, m: am, slot: i, key: cb });  // 效果 ×1.5／×0.7：那一格晶片上的組件跟著放大
     });
   });
+  Object.assign(info, { need, used, off, cap });
   ops.info = info;
   return ops;
 }
@@ -199,17 +213,14 @@ function hostFire(b, base) {
   put(b, res[0]);
 }
 
-// 能量 → 射速倍率（2026-10-10 改容量制）：總能量在容量以內 = 1（不扣）；超過的每 1 點 ×0.9（相乘，不會到 0）
-const heatRateMul = (heat, cap) => Math.pow(CFG.OVERLOAD_RATE, Math.max(0, heat - (cap || 0)));
 // 一格的能量負載（奇異點：能量歸零 → 0、能量 +2）
 const slotHeat = (id, at) => !id ? 0 : at === 'free' ? 0 : CHIPS[id].cost + (at === 'heavy' ? 2 : 0);
 
 function analyzeChain(chain) {
   const attrs = Game.slotAttr || [];
-  let heat = 0, rate = 1;
-  chain.forEach((id, i) => { heat += slotHeat(id, attrs[i]); });
-  for (const S of Game.socks || []) for (const c of S || []) heat += CHIPS[c].cost;  // 組件照算能量（不吃奇異點屬性）
+  let rate = 1;
   const ops = compileChain(chain, attrs);
+  const { need: heat, used, off, cap } = ops.info;  // 能量：全部有電要多少／實際用掉／沒電幾個／容量（供電見 compileChain；能量不影響射速）
   // 射速類組件（超頻模組、超載・頻率）：整條電路的射速
   const rateCr = {};
   for (const o of ops) for (const c of o.comps) {
@@ -224,7 +235,7 @@ function analyzeChain(chain) {
   const charge = lvOf('charge'), oc = ops.some(o => o.comps.some(c => c.id === 'overclock'));
   const chargeTime = charge ? (charge >= 2 ? 1.5 : 2) : 0;
   const heatLimit = oc ? CHIPS.overclock.heatLimit[0] : 0;
-  const cap = Game.energyCap(), interval = Math.max(CFG.MIN_INTERVAL, wp.interval / heatRateMul(heat, cap) * rate * wp.rate);
+  const interval = Math.max(CFG.MIN_INTERVAL, wp.interval * rate * wp.rate);
   const cc = Game.chargeC; Game.chargeC = 0;  // 估算持續輸出：停火蓄力只影響第一發，不算進去
   const top = runOps(ops, 0);
   Game.chargeC = cc;
@@ -244,7 +255,7 @@ function analyzeChain(chain) {
     layers.push({ count: sub.length, dmg: sum(sub), trig: carrier.payload[0].trig });
     carrier = sub.find(s => s.payload);
   }
-  return { ops, info: ops.info, heat, cap, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
+  return { ops, info: ops.info, heat, used, off, cap, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
     charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept'), stand: lvOf('stand') };
 }
 

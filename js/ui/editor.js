@@ -358,10 +358,11 @@ const Editor = {
     this.changed();
   },
   // 會變成「沒有作用」的擺法不給放：先記下配裝和沒作用的項目，做完如果多了，就還原並說明原因（拿掉、拔掉這類移除動作不檢查）
+  //   沒電的（能量不夠，nopow）不算：可以先放著，容量變大就通電
   snap() { return { chain: Game.chain.slice(), socks: (Game.socks || []).map(x => (x || []).slice()), inv: Game.inventory.slice(), idle: this.idleList() }; },
   idleList() {
     const info = compileChain(Game.chain).info, out = [];
-    info.forEach((I, i) => { if (I.idle) out.push(I.why); for (const J of info.socks[i] || []) if (J.idle) out.push(J.why); });
+    info.forEach((I, i) => { if (I.idle && !I.nopow) out.push(I.why); for (const J of info.socks[i] || []) if (J.idle && !J.nopow) out.push(J.why); });
     return out;
   },
   commit(snap) {
@@ -455,7 +456,7 @@ const Editor = {
     const el = document.createElement('div'), C = Game.chain, S = Game.socks[h] || [], id = S[k] || null;
     if (id) {
       const m = TYPE_META[CHIPS[id].type], on = this.sel && this.sel.from === 'sock' && this.sel.h === h && this.sel.k === k;
-      el.className = 'sock' + (J && J.idle ? ' idle' : '') + (on ? ' sel' : '');
+      el.className = 'sock' + (J && J.idle ? ' idle' : '') + (J && J.nopow ? ' nopow' : '') + (on ? ' sel' : '');
       el.style.setProperty('--c', m.color);
       el.innerHTML = `<span>${CHIPS[id].short || CHIPS[id].name}</span>`;
       const fx = sockEffect(h, k);  // 插在這裡的實際效果
@@ -530,6 +531,10 @@ const Editor = {
     if (this.dry) return;
     this.targets = [];  // 拖曳時要標記的位置（makeSlot、sockEl 登記）
     const chain = Game.chain, info = this.slotInfo(chain);
+    {  // 斷電的地方（第一個沒電的晶片或組件）：畫一條斷電線
+      const at = info.findIndex((I, i) => I.nopow || (info.socks[i] || []).some(J => J.nopow));
+      if (at >= 0) { if (info[at].nopow) info[at].cut = true; else info.socks[at].find(J => J.nopow).cut = true; }
+    }
     this.creditsEl.textContent = !Game.freePlay() ? `◆ ${Game.credits}` : Game.mode === 'range' ? '🎯 靶場' : '沙盒模式';
     this.recycleEl.innerHTML = !Game.freePlay() ? '♻ 回收<br>拖曳到這裡<br>換成晶體' : '✕ 移除<br>拖曳到這裡刪除';
 
@@ -548,7 +553,7 @@ const Editor = {
         this.chainEl.appendChild(ar);
       }
       const col = document.createElement('div');
-      col.className = 'hgroup';
+      col.className = 'hgroup' + (I.nopow ? ' nopow' : '') + (I.cut ? ' cut' : '');
       const slot = this.makeSlot(chain, i, 'slot', `${i + 1}${I.seg ? ' · 第' + I.seg + '層' : ''}`,
         [(I.seg ? 'seg' + I.seg : ''), attrCls(i).trim()].filter(Boolean).join(' '), I.idle, I.why);
       slot.insertAdjacentHTML('beforeend', badge(i));
@@ -558,7 +563,11 @@ const Editor = {
       if (id) {
         lastHost = i;
         const S = Game.socks[i] || [], n = Math.max(socketsOf(id), S.length);
-        for (let k = 0; k < n; k++) socks.appendChild(this.sockEl(i, k, (info.socks[i] || [])[k]));
+        for (let k = 0; k < n; k++) {
+          const J = (info.socks[i] || [])[k];
+          if (J && J.cut) socks.insertAdjacentHTML('beforeend', '<span class="cutmark" title="斷電：從這裡開始能量不夠，右邊全部沒電"></span>');  // 斷在組件：插座之間畫斷電線
+          socks.appendChild(this.sockEl(i, k, J));
+        }
         if (!n) socks.innerHTML = '<span class="nosock">沒有插座</span>';
       }
       col.appendChild(socks);
@@ -576,7 +585,7 @@ const Editor = {
       stat('單次總傷害', s.dmg.toFixed(0)) +
       stat('射速', s.rps.toFixed(1) + ' 次/秒') +
       stat('估算 DPS（含命中效果）', s.dpsEst.toFixed(0)) +
-      stat('能量 / 容量', `⚡ ${s.heat} / ${s.cap}<span style="display:block;font-size:11px;color:${s.heat > s.cap ? '#ff9dbd' : '#8fa3d9'};margin-top:2px">${s.heat > s.cap ? `超載 ${s.heat - s.cap}：射速 -${Math.round((1 - heatRateMul(s.heat, s.cap)) * 100)}%` : '在容量內：射速不扣'}</span>`);
+      stat('能量 / 容量', `⚡ ${s.used} / ${s.cap}<span style="display:block;font-size:11px;color:${s.off ? '#ff9dbd' : '#8fa3d9'};margin-top:2px">${s.off ? `沒電 ${s.off} 個（全部要 ⚡${s.heat}）` : '全部有電'}</span>`);
     this.layersEl.innerHTML = s.layers.map((l, i) =>
       `◎ 第 ${i + 1} 層（${TRIG[l.trig] || ''}）：每次觸發展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　');
     const sa = Game.chain.map((_, i) => A[i] && `第 ${i + 1} 格 ${SLOT_ATTRS[A[i]].name}`).filter(Boolean);
