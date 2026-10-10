@@ -1225,13 +1225,22 @@ const Game = {
     if (!this.inArena) { this.cam.x += dt * 20; this.cam.y += dt * 8; }
     if (Net.role === 'host' && this.mode === 'coop') Net.hostSend(dt);
   },
-  // 盾衛的盾是實心的：飛船撞到盾（盾那一側 ±60°、盾外緣 r+13 以內）會被推到盾外、往外彈開（0.2 秒不吃操控），回傳 true（房主再算撞擊傷害）
+  // 盾衛的盾是實心的：飛船撞到盾（盾那一側 ±60°、盾外緣 r+13 以內）會被推到盾外、往外彈開（0.2 秒不吃操控），回傳 true（房主再算撞擊傷害）；靠牆推不出去時改推盾衛
   //   雙人：隊友自己的船由隊友那邊推（net.js clientUpdate），不然會被自己送來的位置蓋掉
   shieldBlock(e, p) {
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1, R = e.r + SHIELD_OUT + p.r;
     if (d >= R || Math.abs(angleDiff(Math.atan2(dy, dx), e.shieldA)) >= Math.PI / 3) return false;
     p.x = e.x + dx / d * R; p.y = e.y + dy / d * R;
-    if (!(p.dashT > 0)) { p.vx = dx / d * 520; p.vy = dy / d * 520; p.kbT = 0.2; }
+    // 推出去之後照樣不能進牆（2026-10-10：以前直接設位置，靠牆時飛船被推進牆裡、每幀又被彈一次（0.2 秒不吃操控），卡死 200 秒）
+    if (Arena.rect) { p.x = clamp(p.x, p.r, CFG.WORLD_W - p.r); p.y = clamp(p.y, p.r, CFG.WORLD_H - p.r); } else Arena.collide(p, p.r, Arena.shipPass(p));
+    const d2 = Math.hypot(p.x - e.x, p.y - e.y), pinned = d2 < R - 0.5;
+    if (pinned) {  // 夾在牆和盾中間：飛船推不出去，改把盾衛往後推並擊退（牠會一直追過來；飛船不進「被彈開」，保留操控）
+      const k = R - d2, ux = d2 > 0.01 ? (p.x - e.x) / d2 : dx / d, uy = d2 > 0.01 ? (p.y - e.y) / d2 : dy / d;
+      e.x -= ux * k; e.y -= uy * k;
+      if (Arena.rect) { e.x = clamp(e.x, e.r, CFG.WORLD_W - e.r); e.y = clamp(e.y, e.r, CFG.WORLD_H - e.r); } else Arena.collide(e, e.r, null);
+      e.push(-ux * 400, -uy * 400);
+    }
+    if (!(p.dashT > 0) && !pinned) { p.vx = dx / d * 520; p.vy = dy / d * 520; p.kbT = 0.2; }
     return true;
   },
   updateEnemies(dt) {
