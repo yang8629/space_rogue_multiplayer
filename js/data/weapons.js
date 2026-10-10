@@ -37,7 +37,7 @@ const WALLHIT = { knock: 3, t: 0.4, mul: 2, stun: 0.5, cd: 0.5 }; // 撞牆：�
 
 const WEAPONS = {
   laser: { name: '雷射步槍', short: '雷射', color: '#5ef2ff', desc: '高速單發雷射，射速快、彈速快，最容易上手。',
-    base: { interval: 0.16, count: 1, spread: 0, damage: 10, speed: 950, radius: 3, life: 0.85, shape: 'line', knock: 0.6 },
+    base: { interval: 0.16, count: 1, spread: 0, damage: 8, speed: 950, radius: 3, life: 0.85, shape: 'line', knock: 0.6 },
     paths: {
       A: { name: '稜鏡', desc: '命中時折射出 2 道碎光（每道 40% 傷害）。', apply: p => { p.shards = { n: 2, ratio: 0.4 }; },
         next: [
@@ -53,8 +53,8 @@ const WEAPONS = {
             apply: p => { p.kinetic = { per: 0.5, ref: WEAPONS.laser.base.speed }; } },
           { name: '串燒', desc: `光束每穿過一隻敵人，之後打中的傷害 +${SKEWER.per * 100}%（穿到第 4 隻時 ×${1 + SKEWER.per * 3}）：把敵人排成一排打。`, apply: p => { p.skewer = SKEWER; } }] },
     } },
-  scatter: { name: '散彈砲', short: '散彈', color: '#ffb347', desc: '扇形噴出 5 顆短程彈丸，近距離爆發高。',
-    base: { interval: 0.42, count: 5, spread: 0.5, jitter: 0.04, speedVar: true, damage: 7, speed: 650, radius: 3.5, life: 0.5, shape: 'dot', knock: 1 },
+  scatter: { name: '散彈砲', short: '散彈', color: '#ffb347', desc: '扇形噴出 4 顆短程彈丸，近距離爆發高。',
+    base: { interval: 0.42, count: 4, spread: 0.5, jitter: 0.04, speedVar: true, damage: 5, speed: 650, radius: 3.5, life: 0.5, shape: 'dot', knock: 1 },
     paths: {
       A: { name: '霰彈擴充', desc: '彈丸 +3。', apply: p => { p.count += 3; },
         next: [
@@ -126,7 +126,7 @@ const WEAPONS = {
 // 選武器卡片的一行精簡說明
 const WEAPON_BRIEF = {
   laser: '高速單發雷射，射速快、彈速快，最好上手。',
-  scatter: '一次噴出 5 顆短程彈丸，貼近敵人時爆發最高。',
+  scatter: '一次噴出 4 顆短程彈丸，貼近敵人時爆發最高。',
   plasma: '慢速的大型電漿球，單發傷害高、可以穿透。',
   railgun: '超高速穿甲彈，一發貫穿一排；射速慢，打得動小行星。',
   blade: '向前揮出 2 段能量刃，只打得到身邊；刃片會砍掉敵彈。' };

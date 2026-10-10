@@ -6,6 +6,8 @@
 // MECH CHECK — 機制觸發檢查：用真正的遊戲引擎在測試靶場跑一遍，確認每個機制有觸發
 //   跑之前把 Game 的狀態整份存起來，跑完還原，不影響正在進行的遊戲
 // =====================================================================
+// 檢查裡的期望值照武器資料算（2026-10-10 改過雷射傷害、散彈顆數，以前寫死 10 和 5）
+const LD = () => WEAPONS.laser.base.damage, SN = () => WEAPONS.scatter.base.count;
 const MechCheck = {
   results: null,
 
@@ -152,10 +154,10 @@ const MechCheck = {
       const r = M.run(60);
       return { ok: r.created === r.fired * 3, got: `開火 ${r.fired} 次，射出 ${r.created} 發` };
     }],
-    ['電路晶片', '巨彈', '散彈 5 發還是 5 發、每發變大，總傷害 +30%；跟分裂誰先插結果都一樣（15 發）', M => {
+    ['電路晶片', '巨彈', '散彈發數不變、每發變大，總傷害 +30%；跟分裂誰先插結果都一樣（發數 ×3）', M => {
       const run = flat => { M.setup('sandbox', 'vanguard', 'scatter', null, null, flat); const L = runOps(Game.stats.ops, 0); return { n: L.length, sum: L.reduce((a, b) => a + b.damage, 0), r: L[0].radius }; };
       const A = run(['weapon', null, null, null]), B = run(['weapon', 'bigshot', null, null]), C = run(['weapon', 'bigshot', 'split', null]), D = run(['weapon', 'split', 'bigshot', null]);
-      return { ok: B.n === 5 && near1(B.sum, A.sum * 1.3) && B.r > A.r * 1.5 && C.n === 15 && D.n === 15 && near1(C.sum, D.sum),
+      return { ok: B.n === A.n && near1(B.sum, A.sum * 1.3) && B.r > A.r * 1.5 && C.n === A.n * 3 && D.n === A.n * 3 && near1(C.sum, D.sum),
         got: `${B.n} 發，總傷害 ${A.sum.toFixed(1)} → ${B.sum.toFixed(1)}（應 ×1.3）；巨彈→分裂 ${C.n} 發 ${C.sum.toFixed(1)}、分裂→巨彈 ${D.n} 發 ${D.sum.toFixed(1)}` };
     }],
     ['電路晶片', '射速跟幀率無關', '一直按住 20 秒：30／60／144Hz 射出的發數一樣，都接近 20 ÷ 射擊間隔（多過的時間留到下一發）', M => {
@@ -183,14 +185,14 @@ const MechCheck = {
       const A = one(0), B = one(lim * 0.75), want = (1 + 0.4 * B.h) / (1 + 0.4 * A.h);
       return { ok: A.d > 0 && near1(B.d / A.d, want), got: `熱度 ${Math.round(A.h * 100)}% 傷害 ${A.d.toFixed(1)}；熱度 ${Math.round(B.h * 100)}% 傷害 ${B.d.toFixed(1)}（比值 ${(B.d / A.d).toFixed(2)}，要 ${want.toFixed(2)}）` };
     }],
-    ['電路晶片', '收束透鏡', '武器每次射出 1 發 +60%、每多 1 發少 15%、4 發以上沒有；只能插在武器上', M => {
+    ['電路晶片', '收束透鏡', '武器每次射出 1 發 +60%、每多 1 發少 15%、5 發以上沒有；只能插在武器上', M => {
       const run = (w, chain) => { M.setup('sandbox', 'vanguard', w, null, null, chain); const L = runOps(Game.stats.ops, 0); return { n: L.length, d: L[0] ? L[0].damage : 0 }; };
       const a0 = run('laser', ['weapon', null, null, null]), a1 = run('laser', ['weapon', 'focus', null, null]);
       const m0 = run('laser', ['weapon', 'mirror', null, null]), m1 = run('laser', ['weapon', 'mirror', 'focus', null]), m2 = run('laser', ['weapon', 'focus', 'mirror', null]);
       const s0 = run('scatter', ['weapon', null, null, null]), s1 = run('scatter', ['weapon', 'focus', null, null]);
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', 'focus', null]);
       const idle = Game.stats.info.socks[1][0].idle;
-      return { ok: near1(a1.d, a0.d * 1.6) && m1.n === 2 && near1(m1.d, m0.d * 1.45) && near1(m2.d, m1.d) && s1.n === 5 && near1(s1.d, s0.d) && idle,
+      return { ok: near1(a1.d, a0.d * 1.6) && m1.n === 2 && near1(m1.d, m0.d * 1.45) && near1(m2.d, m1.d) && s1.n === SN() && near1(s1.d, s0.d * (1 + Math.max(0, 0.6 - 0.15 * (s1.n - 1)))) && idle,
         got: `雷射 1 發 ${a0.d.toFixed(1)} → ${a1.d.toFixed(1)}；鏡像 ${m1.n} 發 ${m0.d.toFixed(1)} → ${m1.d.toFixed(1)}（插座順序對調 ${m2.d.toFixed(1)}）；散彈 ${s1.n} 發 ${s0.d.toFixed(1)} → ${s1.d.toFixed(1)}；插在迴旋上${idle ? '沒有作用' : '有作用（錯）'}` };
     }],
     ['電路晶片', '架設', '站著不動 2 秒疊滿（Lv1 6 層，每層射速 +10%）；滿層時射出的才是產物；移動 0.15 秒內不歸零，超過就歸零', M => {
@@ -512,8 +514,8 @@ const MechCheck = {
       for (let f = 0; f < 130; f++) Game.updateFlames(1 / 60);
       const gone = Game.flames.length;
       for (let i = 0; i < 20; i++) { P.fire(); for (let f = 0; f < 60 && Game.bullets.length; f++) Game.updateBullets(1 / 60); }
-      return { ok: n === 5 && left === 5 && far && burn === 12 && gone === 0 && Game.flames.length === 60,
-        got: `一槍 ${n} 顆，消失後留 ${left} 團（要 5）、${far ? '都在射程盡頭' : '位置不對（錯）'}；火上的敵人燃燒每秒 ${burn}（要 12）；2.4 秒後剩 ${gone} 團（要 0）；連射 20 槍場上 ${Game.flames.length} 團（上限 60）` };
+      return { ok: n === SN() && left === SN() && far && burn === 12 && gone === 0 && Game.flames.length === 60,
+        got: `一槍 ${n} 顆，消失後留 ${left} 團（要 ${SN()}）、${far ? '都在射程盡頭' : '位置不對（錯）'}；火上的敵人燃燒每秒 ${burn}（要 12）；2.4 秒後剩 ${gone} 團（要 0）；連射 20 槍場上 ${Game.flames.length} 團（上限 60）` };
     }],
     ['武器命中效果', '野火', '散彈・龍息彈・野火：燃燒中的敵人每 0.5 秒把火傳給 80 以內一隻沒燒的；燒著死掉時火噴到 120 以內所有敵人', M => {
       M.setup('sandbox', 'vanguard', 'scatter', 'C', 1, ['weapon', null, null, null]);
@@ -560,7 +562,7 @@ const MechCheck = {
     ['電路晶片', '威力倍增器', '實際命中傷害 ×2', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null]);
       const d = M.firstHit();
-      return { ok: near1(d, 20), got: `單發命中 ${d.toFixed(1)}（基礎 10）` };
+      return { ok: near1(d, LD() * 2), got: `單發命中 ${d.toFixed(1)}（基礎 ${LD()}）` };
     }],
     ['電路晶片', '迴旋', '沒打中也會在射程盡頭折返、飛回飛船；撞到場地邊緣折返；打中敵人時穿過去折返，回程再打牠一次，飛回飛船；相刃的刃片揮到盡頭（砍到或沒砍到）都飛回飛船；迴旋的子彈打中時留一份黏著，照常折返（不會黏住就消失）', M => M.all([
       M => {  // 迴旋
@@ -580,7 +582,7 @@ const MechCheck = {
         for (let f = 0; f < 300 && c && !c.dead; f++) Game.updateBullets(1 / 60);
         const dmg = e.maxHp - e.hp;
         const home = c.dead && Math.hypot(c.x - Game.player.x, c.y - Game.player.y) < 40;
-        return { ok: back && missHome && wallOk && near1(dmg, 14) && home, got: (back && missHome ? '沒打中：盡頭折返、回到飛船' : '沒打中：沒有折返回來（錯誤）') + `；撞牆${wallOk ? '折返' : '沒折返（錯誤）'}；單發打一隻：${Math.round(dmg)}（應為 7 + 7）${home ? '，回到飛船' : '，沒回到飛船'}` };
+        return { ok: back && missHome && wallOk && near1(dmg, LD() * 1.4) && home, got: (back && missHome ? '沒打中：盡頭折返、回到飛船' : '沒打中：沒有折返回來（錯誤）') + `；撞牆${wallOk ? '折返' : '沒折返（錯誤）'}；單發打一隻：${Math.round(dmg)}（應為 7 + 7）${home ? '，回到飛船' : '，沒回到飛船'}` };
       },
       M => {  // 相刃＋迴旋
         const go = tg => {
@@ -624,7 +626,7 @@ const MechCheck = {
           got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
       },
     ])],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 10 發，散彈一次的 5 顆算一發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒速度與傷害 ×1.5；搭加速時從 1.5 往上加（不相乘）', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 10 發，散彈一次的全部彈丸算一發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒速度與傷害 ×1.5；搭加速時從 1.5 往上加（不相乘）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -645,7 +647,7 @@ const MechCheck = {
       const am = a ? a.accelMul : 0;
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p3 = Game.player; p3.wantFire = true; M.run(400); const sc = Game.bullets.filter(b => b.mode === 'orbit').length;
-      return { ok: sc === 50 && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
+      return { ok: sc === SN() * 10 && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
         got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發（散彈存了 ${sc} 顆 = 10 發）；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
     }],
     ['電路晶片', '佈雷', '子彈飛到射程一半停住變成地雷（不擋敵彈，相刃也停得住）；敵人靠近就衝出去打中（×1.2）', M => {
@@ -684,7 +686,7 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', 'sticky', null, null]); const row = M.targets([[120, 0], [180, 0], [240, 0], [300, 0], [360, 0]]);
       M.run(1); for (let f = 0; f < 30; f++) Game.updateBullets(1 / 60);
       const each = row.map(r => r.stuck ? r.stuck.length : 0).join('');
-      const want = n * 10 * Math.min(3, 1.5 + 0.1 * n);
+      const want = n * LD() * Math.min(3, 1.5 + 0.1 * n);
       // 連鎖引爆（Lv3）：爆炸時把 90 內敵人身上的子彈立刻引爆，不再有波及傷害
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', chipId('sticky', 3), null, null]); const [c0, c1, c2, c3] = M.targets([[120, 0], [120, 70], [120, 300], [200, 40]]);
       M.run(20); Game.bullets = []; const st = c0.stuck || [];
@@ -706,7 +708,7 @@ const MechCheck = {
       for (let f = 0; f < 120; f++) p.tickFire(1 / 60, false);
       for (let f = 0; f < 30; f++) p.tickFire(1 / 60, true);
       const d = Game.bullets.map(b => b.damage);
-      return { ok: normal.length > 2 && normal.every(x => near1(x, 10)) && near1(d[0], 50) && d.length > 1 && d.slice(1).every(x => near1(x, 10)),
+      return { ok: normal.length > 2 && normal.every(x => near1(x, LD())) && near1(d[0], LD() * 5) && d.length > 1 && d.slice(1).every(x => near1(x, LD())),
         got: `按住連射 ${normal.length} 發（${normal[0]}）；停火 2 秒後：${d.map(x => Math.round(x)).join('、')}` };
     }],
     ['電路晶片', '命中觸發器', '命中時用武器再射一次（50%）；觸發射出的子彈不會進環繞的圈；連放 4 個觸發器，最多只展開 3 層', M => M.all([
@@ -716,8 +718,8 @@ const MechCheck = {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'orbit', null]); M.targets([[200, 0]]);
         Game.player.wantFire = true; const r2 = M.run(40);  // 回響可以打到被命中的那一隻，常常一出來就打中消失：數射出過幾發，不數場上剩的
         const trig = r2.created - r2.fired, inRing = Game.bullets.filter(b => b.depth > 0 && b.mode === 'orbit').length;
-        return { ok: r.created > r.fired && r.hits.some(h => near1(h, 5)) && trig > 0 && inRing === 0,
-          got: `開火 ${r.fired} 次，回響 ${r.created - r.fired} 發，回響傷害 5；接環繞時觸發 ${trig} 發、進圈 ${inRing} 發` };
+        return { ok: r.created > r.fired && r.hits.some(h => near1(h, LD() / 2)) && trig > 0 && inRing === 0,
+          got: `開火 ${r.fired} 次，回響 ${r.created - r.fired} 發，回響傷害 ${LD() / 2}；接環繞時觸發 ${trig} 發、進圈 ${inRing} 發` };
       },
       M => {  // 觸發巢狀上限
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'trigger', 'trigger', 'trigger', null]); M.targets(M.cone);
@@ -753,7 +755,7 @@ const MechCheck = {
       const tm = echoes(['weapon', 'stasis', 'trigtime'], [], 360).reduce((a, e) => a + e.n, 0);
       const aim = echoes(['weapon', 'trigger'], [[150, 0], [150, 200]], 30);
       const one = M.targets([[150, 0]])[0], h1 = one.hp; Game.player.fire(); SockCheck.step(30);  // 只有一隻：回響打得到被命中的那一隻
-      const hitSelf = (h1 - one.hp) > 10 * 1.4;  // 雷射 10 ＋ 回響 5
+      const hitSelf = (h1 - one.hp) > LD() * 1.4;  // 雷射 ＋ 回響（50%）
       const aimOk = aim.length > 0 && Math.abs(angleDiff(aim[0].ang, 0)) < 0.1 && hitSelf;
       return { ok: st.length > 0 && mine.length > 0 && back && tm === 2 && aimOk,
         got: `黏著引爆 ${st.length} 次、地雷時間到 ${mine.length} 次、迴旋飛回飛船${back ? '有' : '沒有'}觸發；定時（地雷）${tm} 發；回響方向 ${aim.length ? Math.round(aim[0].ang * 180 / Math.PI) + '°' : '沒有'}（應為 0°，沿子彈方向）、只有一隻時受傷 ${(h1 - one.hp).toFixed(1)}（雷射 10 ＋ 回響 5 應 > 14）` };
@@ -1026,10 +1028,10 @@ const MechCheck = {
       return { ok: a === 2 && b === 6 && c === 6 && ch.length === 2 && ch.every(x => near1(x.hb, 1)) && st && pl,
         got: `鏡像 ${a} 發；分裂＋鏡像 ${b}、鏡像＋分裂 ${c} 發；蓄滿 ${ch.length} 發（晶片加成 ${ch.map(x => '+' + Math.round(x.hb * 100) + '%').join('、')}）；黏著［鏡像］${st ? '有作用' : '沒作用（錯誤）'}；吸引［鏡像］${pl ? '沒作用' : '有作用（錯誤）'}` };
     }],
-    ['電路晶片', '沒有子彈上限', '散彈分裂兩次 = 45 發，全部射出', M => {
+    ['電路晶片', '沒有子彈上限', '散彈分裂兩次 = 36 發（4 顆 × 9），全部射出', M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'split', 'split', null]);
-      const a = Game.stats, want = WEAPONS.scatter.base.damage * 5 * 0.16 * 9;  // 5 顆 × 分裂兩次（×0.4 × 3，兩次）
-      return { ok: a.count === 45 && near1(a.dmg, want), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${want.toFixed(1)}）` };
+      const a = Game.stats, want = WEAPONS.scatter.base.damage * WEAPONS.scatter.base.count * 0.16 * 9;  // 4 顆 × 分裂兩次（×0.4 × 3，兩次）
+      return { ok: a.count === WEAPONS.scatter.base.count * 9 && near1(a.dmg, want), got: `${a.count} 發，總傷害 ${a.dmg.toFixed(1)}（應為 ${want.toFixed(1)}）` };
     }],
 
     ['構築系統', '插座：規則', '插座滿了多的組件沒作用；超頻插在玩法晶片上沒作用；武器插 3 個倍增 +300%（不打折）；武器上的倍增不作用在回響；遠征開局武器 0 個插座（插了沒作用）；兩層相乘：蓄力［倍增］蓄滿 = 10 ×（1 ＋ 4）×（1 ＋ 1）= 100', M => {
@@ -1046,11 +1048,11 @@ const MechCheck = {
       const ws0 = Game.wSock, w0 = ws0 === 0 && Game.stats.info.socks[0][0].idle;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'charge', 'amp']);
       Game.chargeC = 1; const ch = runOps(Game.stats.ops, 0)[0]; Game.chargeC = null;
-      return { ok: full && oc && near1(d3, 40) && near1(echo, 5) && w0 && near1(ch.damage, 100),
-        got: `1 個插座插 2 個倍增：第 2 個${full ? '沒作用' : '有作用（錯誤）'}；超頻插黏著${oc ? '沒作用' : '有作用（錯誤）'}；武器 3 個倍增 ${d3}；回響 ${echo}（應為 5）；遠征開局武器插座 ${ws0} 個${w0 ? '、倍增沒作用' : ''}；蓄力［倍增］蓄滿 ${ch.damage.toFixed(1)}` };
+      return { ok: full && oc && near1(d3, LD() * 4) && near1(echo, LD() / 2) && w0 && near1(ch.damage, LD() * 10),
+        got: `1 個插座插 2 個倍增：第 2 個${full ? '沒作用' : '有作用（錯誤）'}；超頻插黏著${oc ? '沒作用' : '有作用（錯誤）'}；武器 3 個倍增 ${d3}；回響 ${echo}（應為 ${LD() / 2}）；遠征開局武器插座 ${ws0} 個${w0 ? '、倍增沒作用' : ''}；蓄力［倍增］蓄滿 ${ch.damage.toFixed(1)}` };
     }],
     ['構築系統', '插座組合（雷射）', '武器、13 個玩法晶片、3 種觸發器 × 分裂／穿甲／倍增／巨彈／鏡像／五種元素：效果出現在那個晶片的產物上（環繞放出時、迴旋折返時、黏著爆炸…）；疾射減速後插在上面的倍增失效', M => SockCheck.summary(SockCheck.rows('laser'))],
-    ['構築系統', '插座組合（散彈）', '同上，散彈（一次 5 顆）', M => SockCheck.summary(SockCheck.rows('scatter'))],
+    ['構築系統', '插座組合（散彈）', '同上，散彈（一次好幾顆）', M => SockCheck.summary(SockCheck.rows('scatter'))],
     ['構築系統', '插座組合（相位刃）', '同上，相位刃（刃片、無限穿透、射程很短）', M => SockCheck.summary(SockCheck.rows('blade'))],
     ['構築系統', '武器、觸發器插座只算直擊', '插在武器上的倍增：迴旋回程、環繞放出、加速 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出都不吃；插在觸發器上的倍增：回響的迴旋回程不吃', M => SockCheck.summary(SockCheck.direct())],
     ['構築系統', '武器插座數', '遠征開局 0 個，每打完一隻王 +1，最多 3 個', M => {
@@ -1182,8 +1184,8 @@ const MechCheck = {
       Game.chain = ['weapon', 'boomerang', null, null]; Game.socks = []; Game.slotAttr = [null, 'nogrow']; Game.growth = {}; Game.recalc();
       Game.grow(null, 'boomerang', 50);
       const g = Game.growth.boomerang || 0;
-      return { ok: n === 1 && gone && where >= 0 && near1(d, 12.5) && heat === 3 && g === 0,
-        got: `強化 ${n} 格（第 ${where + 1} 格）、晶片${gone ? '消失' : '還在'}；效果 ×1.5 回響 ${d}（應為 12.5）；能量歸零 ⚡${heat}；不會成長 +${g}` };
+      return { ok: n === 1 && gone && where >= 0 && near1(d, LD() * 1.25) && heat === 3 && g === 0,
+        got: `強化 ${n} 格（第 ${where + 1} 格）、晶片${gone ? '消失' : '還在'}；效果 ×1.5 回響 ${d}（應為 ${LD() * 1.25}）；能量歸零 ⚡${heat}；不會成長 +${g}` };
     }],
     ['構築系統', '奇異點：每種屬性', '觸發器［倍增］放在強化格：效果 ×1.5／×0.7 → 回響 12.5／8.5；能量歸零／+2；超載・威力 +50%、貫穿 +1、導引、頻率（射速變快）；間歇失效（第 6～8 秒沒作用）；成長 ×2／不會成長；武器格效果 ×1.5（武器上的倍增 +150%）', M => {
       const at = (a, slot = 1, flat = ['weapon', 'trigger', 'amp', null]) => { M.setup('sandbox', 'vanguard', 'laser', null, null, flat); Game.slotAttr = []; Game.slotAttr[slot] = a; Game.recalc(); return Game.stats; };
@@ -1196,8 +1198,8 @@ const MechCheck = {
       const grow = a => { at(a, 1, ['weapon', 'boomerang', null, null]); Game.growth = {}; Game.grow(null, 'boomerang', 10); return Game.growth.boomerang || 0; };
       r.g2 = grow('grow2'); r.g0 = grow('nogrow');
       r.w = at('eff', 0, ['weapon', 'amp', null, null]).dmg;
-      const ok = near1(r.eff, 12.5) && near1(r.weak, 8.5) && r.free === 3 && r.heavy === 6 && near1(r.power, 12.5) && r.pierce === 1 && r.seek >= 3 && near1(r.rate, 0.8)
-        && r.off === 0 && near1(r.on, 10) && r.g2 === 20 && r.g0 === 0 && near1(r.w, 25);
+      const ok = near1(r.eff, LD() * 1.25) && near1(r.weak, LD() * 0.85) && r.free === 3 && r.heavy === 6 && near1(r.power, LD() * 1.25) && r.pierce === 1 && r.seek >= 3 && near1(r.rate, 0.8)
+        && r.off === 0 && near1(r.on, LD()) && r.g2 === 20 && r.g0 === 0 && near1(r.w, LD() * 2.5);
       return { ok, got: `回響：×1.5 ${r.eff}、×0.7 ${r.weak}、威力 ${r.power}；能量 ${r.free}／${r.heavy}；貫穿 ${r.pierce}、導引 ${r.seek}、射擊間隔 ×${r.rate.toFixed(2)}；間歇失效 ${r.on} → ${r.off}；成長 +${r.g2}／+${r.g0}；武器格 ×1.5 ${r.w}` };
     }],
     ['構築系統', '軍械台升級', '武器進入第一段、第二段', M => {
@@ -1747,7 +1749,7 @@ const SockCheck = {
   infect(w, c) {  // 感染：爆出來的子彈是產物
     const run = flat => {
       this.setup(w, flat);
-      MechCheck.targets([[Math.min(150, this.range() * 0.6), 0]], 'swarmer', true, 0.01);
+      MechCheck.targets([[Math.min(100, this.range() * 0.6), 0]], 'swarmer', true, 0.01);  // 100：散彈 4 顆正中間沒有彈丸，150 外蟲群會從中間漏掉
       return this.spawned('infect', () => { Game.player.fire(); this.step(40); });
     };
     const A = run(['weapon', 'infect']), B = run(['weapon', 'infect', c]);
@@ -1801,7 +1803,8 @@ const SockCheck = {
     const out = [], P = () => Game.player;
     const check = (name, fn) => { let r; try { r = fn(); } catch (e) { r = { ok: false, got: '執行錯誤：' + e.message }; } out.push({ h: name, ...r }); };
     check('迴旋', () => { this.setup('laser', ['weapon', 'amp', 'boomerang']); this.targets([[150, 0]]); const H = this.hurtLog(null, () => { P().fire(); this.step(60); }).map(x => Math.round(x.d));
-      return { ok: H.includes(14) && H.includes(7), got: `去程／回程 ${[...new Set(H)].join('、')}（應有 14 和 7）` }; });
+      const go = Math.round(LD() * 1.4), back = Math.round(LD() * 0.7);
+      return { ok: H.includes(go) && H.includes(back), got: `去程／回程 ${[...new Set(H)].join('、')}（應有 ${go} 和 ${back}）` }; });
     const after = (name, flat, run, pick) => check(name, () => { this.setup('laser', flat); run(); const b = Game.bullets.find(pick);
       return { ok: !!b && Math.abs(b.bonus) < 0.01, got: b ? `產物的武器加成 ${b.bonus.toFixed(2)}` : '找不到產物' }; });
     after('環繞', ['weapon', 'amp', 'orbit'], () => { P().wantFire = true; this.step(20, true); P().wantFire = false; this.step(3); }, b => b.orbShot);
@@ -1830,7 +1833,8 @@ const SockCheck = {
     evoSplit('稜鏡＋分裂', ['weapon', 'amp', chipId('wallbounce', 3, 1), 'split'], () => { P().x = CFG.WORLD_W - 60; P().fire(); }, b => b.bounced, 6);
     check('觸發器（回響的迴旋）', () => { this.setup('laser', ['weapon', 'trigger', 'amp', 'boomerang']); this.targets([[120, 0], [320, 0]]);
       const H = this.hurtLog('echo', () => { P().fire(); this.step(180); }).map(x => +x.d.toFixed(1));
-      return { ok: H.some(d => Math.abs(d - 7) < 0.05) && H.some(d => Math.abs(d - 3.5) < 0.05), got: `回響 ${[...new Set(H)].join('、')}（去程 7，回程不吃觸發器上的倍增 3.5）` }; });
+      const go = +(LD() * 0.7).toFixed(1), back = +(LD() * 0.35).toFixed(1);  // 回響 50% × 倍增 ×2 × 迴旋 0.7；回程不吃倍增
+      return { ok: H.some(d => Math.abs(d - go) < 0.05) && H.some(d => Math.abs(d - back) < 0.05), got: `回響 ${[...new Set(H)].join('、')}（去程 ${go}，回程不吃觸發器上的倍增 ${back}）` }; });
     return out;
   },
   // 機制檢查的一項：全部過才算過，沒過的列出來
