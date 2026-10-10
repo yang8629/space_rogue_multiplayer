@@ -1551,7 +1551,7 @@ const MechCheck = {
       const edge = Game.eBullets.length;
       return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0 && edge > 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發；擦到盾外緣：反彈 ' + edge + ' 發' };
     }],
-    ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外、往外彈開並受撞擊傷害；背面同樣距離沒事', M => {
+    ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外、往外彈開並受撞擊傷害；背面同樣距離沒事；靠牆時不會被推進牆裡（改推盾衛、飛船照樣能操控）', M => {
       const bump = ang => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
         const p = Game.player, e = M.targets([[150, 0]], 'shield', true, 1)[0]; e.shieldA = ang; e.t = { ...e.t, dmg: ENEMY_TYPES.shield.dmg };
@@ -1560,7 +1560,14 @@ const MechCheck = {
         return { dmg: hp - p.hp, d: Math.hypot(p.x - e.x, p.y - e.y), R: e.r + SHIELD_OUT + p.r, out: -p.vx };  // 盾朝左：往外 = 往左
       };
       const front = bump(Math.PI), back = bump(0);
-      return { ok: front.dmg > 0 && front.d >= front.R - 0.5 && front.out > 300 && back.dmg === 0 && back.d < back.R - 1, got: '盾那側：扣 ' + Math.round(front.dmg) + '、推到 ' + Math.round(front.d) + '（盾外緣 ' + front.R + '）、往外彈 ' + Math.round(front.out) + '；背面：扣 ' + Math.round(back.dmg) + '、距離 ' + Math.round(back.d) };
+      // 靠牆（2026-10-10）：飛船貼著左邊界、盾衛在右邊盾朝左 → 飛船不能被推出場地，改推盾衛；之後 60 幀飛船照樣能操控（kbT 不會一直被重設）
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const P = Game.player, S = M.targets([[150, 0]], 'shield', false, 1)[0]; S.shieldA = Math.PI; S.spawnT = 0; S.t = { ...S.t, dmg: 0 };
+      P.x = P.r; P.y = 800; S.x = P.x + S.r + P.r + 4; S.y = 800; P.iframe = 99; P.vx = P.vy = 0; const sx0 = S.x;
+      let kbFrames = 0, minX = P.x;
+      for (let f = 0; f < 60; f++) { Game.updateEnemies(1 / 60); if (P.kbT > 0) kbFrames++; minX = Math.min(minX, P.x); P.kbT = Math.max(0, (P.kbT || 0) - 1 / 60); }
+      const wall = { inside: minX >= P.r - 0.01, shoved: S.x - sx0, kbFrames, x: minX };
+      return { ok: front.dmg > 0 && front.d >= front.R - 0.5 && front.out > 300 && back.dmg === 0 && back.d < back.R - 1 && wall.inside && wall.shoved > 5 && wall.kbFrames === 0, got: '盾那側：扣 ' + Math.round(front.dmg) + '、推到 ' + Math.round(front.d) + '（盾外緣 ' + front.R + '）、往外彈 ' + Math.round(front.out) + '；背面：扣 ' + Math.round(back.dmg) + '、距離 ' + Math.round(back.d) + '；靠牆：飛船最左 ' + wall.x.toFixed(1) + '（不能小於 ' + Game.player.r + '）、盾衛被推開 ' + Math.round(wall.shoved) + '、不能操控的幀 ' + wall.kbFrames + '（要 0）' };
     }],
     ['敵人', '分裂體', '死掉時分成 3 隻碎裂體', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
