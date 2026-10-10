@@ -171,7 +171,7 @@ class Player {
       this.vx += (mx / l * spd - this.vx) * k;
       this.vy += (my / l * spd - this.vy) * k;
     }
-    const x0 = this.x, y0 = this.y;
+    const x0 = this.x, y0 = this.y, free0 = Objects.shipFree(this, x0, y0);
     if (Arena.rect) {
       this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
       this.y = clamp(this.y + this.vy * dt, this.r, CFG.WORLD_H - this.r);
@@ -182,6 +182,8 @@ class Player {
     }
     this.moduleMove(dt);
     Objects.moveShip(this, dt);  // 地圖物件：黑洞拉扯、行星與小行星擋住
+    // 被兩顆小行星（或小行星和牆）輪流推、還卡在裡面 = 想擠過比飛船窄的縫 → 退回這一幀開頭（以前衝刺會擠過去、卡進凹洞出不來）
+    if (free0 && !Objects.shipFree(this, this.x, this.y)) { this.x = x0; this.y = y0; }
     Game.portalShip(this, x0, y0);   // 星門：走進門從另一個門出來
 
     this.iframe -= dt;
