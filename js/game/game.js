@@ -335,7 +335,6 @@ const Game = {
       if (!slot) this.partSlots++;  // 電路已滿：沒得選，直接給零件格
       const ws = (this.wSock || CFG.START_WSOCK) < CFG.WEAPON_SOCKETS;
       if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
-      this.cap += CFG.CAP_BOSS;  // 能量容量 +3（2026-10-10 供電制）
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
@@ -555,7 +554,7 @@ const Game = {
     }
     this.addSlot(source);
   },
-  // 能量容量：飛船開局＋補給站買的＋擊沉旗艦（cap）＋散熱片每層 +2（mech.cap）；雙人時 cap 跟著配裝（LOADOUT_KEYS）
+  // 能量容量：飛船開局＋補給站買的（cap）＋散熱片每層 +2（mech.cap）；雙人時 cap 跟著配裝（LOADOUT_KEYS）
   energyCap() { return (this.cap || 0) + ((this.mech && this.mech.cap) || 0); },
   buyCap() {  // 補給站：能量容量 +2（每間 1 次）
     const price = this.shopPrice(CFG.SHOP_CAP);

@@ -1137,7 +1137,7 @@ const MechCheck = {
           got: '攔截回射 ' + ic + '、回響 ' + echo + '、攔截晶片 ' + icChip + '、攔截成長 +' + g + '；迴旋晶片 ' + bm };
       },
     ])],
-    ['構築系統', '能量容量', '容量 = 飛船開局（先鋒號 7、星門號 8）＋散熱片每層 +2＋補給站買一次 +2（每間 1 次）＋擊沉旗艦 +3；能量不影響射速', M => {
+    ['構築系統', '能量容量', '容量 = 飛船開局（先鋒號 7、星門號 8）＋散熱片每層 +2＋補給站買一次 +2（每間 1 次）；擊沉旗艦不給；能量不影響射速', M => {
       Game.newRun('run', 'gate', 'laser');
       const g0 = Game.energyCap();  // 直接開局（M.setup 會把容量設成 99）
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'orbit', 'boomerang', 'rear']);
@@ -1148,8 +1148,8 @@ const MechCheck = {
       Game.credits = 999; Game.shop = { items: [], slotBought: false, capBought: false, healed: false };
       const b0 = Game.cap; Game.buyCap(); const b1 = Game.cap; Game.buyCap(); const b2 = Game.cap;
       Game.node = { type: 'boss', L: 6, id: 'mcCap' }; Game.inArena = true; Game.state = 'play'; Game.combatWon(); const k1 = Game.cap;
-      return { ok: g0 === 8 && c0 === 7 && near1(i1, i0) && cs === 11 && b1 === b0 + 2 && b2 === b1 && k1 === b2 + 3,
-        got: `開局容量 星門號 ${g0}（要 8）、先鋒號 ${c0}（要 7）；容量 99 → 1：射擊間隔 ${i0.toFixed(3)} → ${i1.toFixed(3)}（要一樣）；散熱片 2 層 ${cs}（要 11）；補給站買 ${b0} → ${b1}、再買一次 ${b2}（每間限 1 次）；擊沉旗艦 ${b2} → ${k1}（要 +3）` };
+      return { ok: g0 === 8 && c0 === 7 && near1(i1, i0) && cs === 11 && b1 === b0 + 2 && b2 === b1 && k1 === b2,
+        got: `開局容量 星門號 ${g0}（要 8）、先鋒號 ${c0}（要 7）；容量 99 → 1：射擊間隔 ${i0.toFixed(3)} → ${i1.toFixed(3)}（要一樣）；散熱片 2 層 ${cs}（要 11）；補給站買 ${b0} → ${b1}、再買一次 ${b2}（每間限 1 次）；擊沉旗艦 ${b2} → ${k1}（要不變）` };
     }],
     ['構築系統', '供電順序', '從左往右供電：武器插座的組件 → 晶片 → 它插座上的組件 → 下一格；第一個電不夠的和右邊全部沒電（不跳過便宜的）；沒電的不給效果、不成長；編輯器不擋沒電的擺法', M => {
       // 武器［分裂 2］→ 迴旋 2［倍增 3］→ 反向 2 → 黏著 1（全部 10）
