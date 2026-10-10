@@ -1577,13 +1577,17 @@ const MechCheck = {
       for (let f = 0; f < 60 * 5; f++) { Game.time += 1 / 60; e.update(1 / 60, p); seen.add(e.mode); }
       return { ok: hidden && seen.has('windup') && seen.has('charge') && seen.has('shown'), got: (hidden ? '一開始隱形、自動瞄準找不到' : '一開始就看得到') + '；經過 ' + [...seen].join(' → ') };
     }],
-    ['敵人', '母巢', '每 4 秒生 2 隻蟲群，最多 8 隻；生出來的不給晶片成長', M => {
+    ['敵人', '母巢', '每 4 秒生 2 隻蟲群，最多 8 隻；生出來的不給晶片成長；不吃擊退、吸引拉不動（位置不變）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'rear', null, null]);
       const p = Game.player, h = M.targets([[300, 0]], 'hive', true, 1)[0]; h.cd = 0.05;
       for (let f = 0; f < 60 * 30; f++) { Game.time += 1 / 60; h.update(1 / 60, p); }
       const kids = Game.enemies.filter(q => q.type === 'swarmer' && !q.dead), k = kids[0];
+      const x0 = h.x, y0 = h.y;  // 重擊退的一下＋吸引那種直接加速度，之後走 30 幀
+      h.hurt(1, 600, 300, 'direct', null, 3); h.vx += 500;
+      for (let f = 0; f < 30; f++) h.update(1 / 60, p);
+      const moved = Math.hypot(h.x - x0, h.y - y0);
       Game.growth = {}; Game.tagGrow(k, null, 'rear'); k.hurt(9999, 0, 0, 'direct', null);
-      return { ok: kids.length === 8 && !(Game.growth.rear > 0), got: '生了 ' + kids.length + ' 隻；打死一隻成長 +' + (Game.growth.rear || 0) };
+      return { ok: kids.length === 8 && !(Game.growth.rear > 0) && moved < 0.01, got: '生了 ' + kids.length + ' 隻；打死一隻成長 +' + (Game.growth.rear || 0) + '；被擊退＋拉之後移動 ' + moved.toFixed(2) + '（要 0）' };
     }],
     ['敵人', '主題小兵隨進度增加', '第 1 星區前半 0～1 種、第 3 星區 2～3 種；母巢第 3 星區才出現', M => {
       const avg = (s, late) => { let n = 0, hive = 0; for (let i = 0; i < 200; i++) { const T = Game.pickThemes(s, late); n += T.list.length; if (T.list.includes('hive')) hive++; } return [n / 200, hive]; };
