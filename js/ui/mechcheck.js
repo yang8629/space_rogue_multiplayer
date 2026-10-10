@@ -1754,11 +1754,15 @@ const SockCheck = {
     const run = flat => {
       this.setup(w, flat);
       const d = Math.min(150, this.range() * 0.6);
-      this.targets([[d, 0], [d, 70]]);
+      // 巨彈看「爆炸範圍變大、波及到第二個靶」：靶放離中線 90（70 時散彈的彈丸偶爾直接擦到它、黏住爆炸，被當成波及；2026-10-11）
+      //   其他組件照舊 70（爆裂靠波及到第二個靶算多一下爆炸）
+      this.targets([[d, 0], [d, c === 'bigshot' ? 90 : 70]]);
       let spawned = [];
       const all = this.hurtLog(null, () => { spawned = this.spawned('sticky', () => { Game.player.fire(); this.step(150); }); });
       const e0 = Game.enemies[0];
-      return { log: all.filter(x => x.t === 'explode'), arcs: all.filter(x => x.t === 'arc').length, burn: !!(e0 && e0.burnT > 0), slow: !!(e0 && e0.slowT > 0), shred: !!(e0 && e0.shredT > 0), spawned, pierce: runOps(Game.stats.ops, 0)[0].pierce };
+      // 第二個靶自己被彈丸直接打中（散彈扇形邊緣偶爾擦到、黏在牠身上爆炸）：牠身上的爆炸不算（不是波及，2026-10-11 偶發失敗的原因）
+      const hit1 = all.some(x => x.i === 1 && x.t === 'direct');
+      return { log: all.filter(x => x.t === 'explode' && !(hit1 && x.i === 1)), arcs: all.filter(x => x.t === 'arc').length, burn: !!(e0 && e0.burnT > 0), slow: !!(e0 && e0.slowT > 0), shred: !!(e0 && e0.shredT > 0), spawned, pierce: runOps(Game.stats.ops, 0)[0].pierce };
     };
     const A = run(['weapon', 'sticky']), B = run(['weapon', 'sticky', c]);
     const ex = r => r.log.filter(x => x.i === 0).reduce((a, x) => a + x.d, 0), side = r => r.log.filter(x => x.i === 1).length;
