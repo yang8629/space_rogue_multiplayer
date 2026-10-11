@@ -1435,7 +1435,16 @@ const Game = {
   // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
   hitFx(e, b, dmg, x, y) {
     const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg;
-    if (bd > 0 && b.inferno) { (e.burnL || (e.burnL = [])).push({ dps: bd, t: Math.max(b.burn ? b.burn.t : 0, b.burnR ? 3 : 0) }); e.burnAtt = b.att; }  // 業火（相位刃升級）：每次命中疊一層
+    if (bd > 0 && b.inferno) {  // 業火（相位刃升級）：每次命中疊一層；疊滿就爆燃（剩下的火 ×1.5 往四周炸，含牠自己）
+      (e.burnL || (e.burnL = [])).push({ dps: bd, t: Math.max(b.burn ? b.burn.t : 0, b.burnR ? 3 : 0) }); e.burnAtt = b.att;
+      const I = b.inferno;
+      if (e.burnL.length >= I.n) {
+        const left = e.burnL.reduce((a, l) => a + l.dps * l.t, 0);
+        e.burnL = null;
+        burst(e.x, e.y, '#ff9f1c', 14, 220, 0.4, 3);
+        this.explode(e.x, e.y, I.r, left * I.mul, '#ff9f1c', null, b.att);
+      }
+    }
     else if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
     if (b.slow) e.slowBy(b.comet ? 'comet' : 'shot', b.slow, b.slowDur || 1.5);
     if (b.explode) {
