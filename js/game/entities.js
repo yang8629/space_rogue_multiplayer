@@ -253,7 +253,7 @@ class Bullet {
     this.focus = s.focus || null; this.skewer = s.skewer || null; this.skN = 0; this.spreadSh = s.spreadSh || false;  // 雷射升級：專注、串燒（穿過幾隻）、分散的碎光
     this.frostbite = s.frostbite || null; this.aftershock = s.aftershock || null; this.res = s.res || null;  // 電漿升級：冰封、餘震、共鳴（小電漿帶著連結）
     this.trail = s.trail || null; this.crack = s.crack || null;  // 軌道升級：殘留彈道、碎甲
-    this.inferno = !!s.inferno;  // 相位刃升級：業火（燃燒疊加）
+    this.inferno = s.inferno || null;  // 相位刃升級：業火（燃燒疊加、疊滿爆燃）
     this.att = { src: s.src || 'weapon', cr: s.cr, owner: Game.shooter || null };  // 傷害統計歸屬（owner：雙人時是誰打的）
     this.splits = s.splits || 0;  // 被分裂過幾次（畫面上顯示殘影用）
     this.hitSet = new Set();
