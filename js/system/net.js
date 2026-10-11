@@ -1010,7 +1010,7 @@ const Net = {
         case 't': floatText(num(f[1]), num(f[2]), String(f[3]), String(f[4]), !!f[5]); break;
         case 's': SFX.play(String(f[1]), f[2]); break;
         case 'f': flashFx(num(f[1]), num(f[2]), num(f[3], 60)); break;  // 彗星爆炸的閃光
-        case 'r': ringFx(num(f[1]), num(f[2]), num(f[3], 40), String(f[4])); break;
+        case 'r': ringFx(num(f[1]), num(f[2]), num(f[3], 40), String(f[4]), f[5] === 1); break;
         case 'z': zapFx(num(f[1]), num(f[2]), num(f[3]), num(f[4]), { c: typeof f[5] === 'string' ? f[5].slice(0, 9) : null }); break;
       }
     }

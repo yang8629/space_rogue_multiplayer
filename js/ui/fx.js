@@ -50,8 +50,8 @@ Events.on('floatText', d => {
 });
 Events.on('trail', d => FX.trail(d));
 Events.on('ring', d => {
-  if (Net.role === 'host') Net.fx(['r', Math.round(d.x), Math.round(d.y), Math.round(d.r), d.color]);
-  if (FX.rings.length < 40) FX.rings.push({ x: d.x, y: d.y, r: d.r, life: 0.3, max: 0.3, color: d.color });
+  if (Net.role === 'host') Net.fx(['r', Math.round(d.x), Math.round(d.y), Math.round(d.r), d.color, d.shrink ? 1 : 0]);
+  if (FX.rings.length < 40) FX.rings.push({ x: d.x, y: d.y, r: d.r, life: 0.3, max: 0.3, color: d.color, shrink: !!d.shrink });
 });
 Events.on('zap', d => {
   // 轉給隊友：share 是機率（電網一次幾百條時只傳一部分），每幀最多 60 條

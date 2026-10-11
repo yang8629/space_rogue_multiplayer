@@ -15,11 +15,13 @@ const GRAZE = { r: 40, per: 0.1, max: 8, idle: 3, decay: 1 };         // 擦彈�
 const RAGE = { per: 1 };                                              // 狂怒：每缺 1% HP 射速 +1%
 const SKEWER = { per: 0.3 };                                          // 串燒：每穿過一隻，之後打中的傷害 +30%
 // 電漿砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
-const BREED = { n: 2, ratio: 0.25 };             // 增殖：小電漿打中時再分裂 2 顆（各為大電漿傷害的 25%），第二代不再分裂
-const RESONANCE = { t: 2, share: 0.3 };          // 共鳴：同一發打中的敵人連結 2 秒，受到的傷害分 30% 給其他連結的
+const SHARD_HOMING = 4;                          // 分裂電漿：小電漿追蹤（2026-10-12：往前飛常打空，只打中 15%）
+const BREED = { n: 3, ratio: 0.35 };             // 增殖：小電漿打中時再分裂 3 顆（各為大電漿傷害的 35%），第二代不再分裂
+const RESONANCE = { t: 2, share: 0.6 };          // 共鳴：同一發打中的敵人連結 2 秒，受到的傷害分 60% 給其他連結的
+const WEIGHT = { per: 3, self: 0.15 };           // 重量砲：自帶移動速度 −15%；每比原本慢 1%，傷害 +3%
 const FROSTBITE = { slow: 0.4, dur: 2, per: 1 }; // 冰封：命中減速 40%（2 秒）；敵人每被減速 1%，受到你的傷害 +1%
 const AFTERSHOCK = { t: 0.6 };                   // 餘震：爆炸 0.6 秒後同一點再炸一次
-const COMPRESS = { r: 70, per: 0.2 };            // 壓縮：爆炸半徑 70，第 2 隻起每多炸到 1 隻 +20%
+const COMPRESS = { r: 70, pull: 150, per: 0.2 }; // 壓縮：先把 150 內的敵人吸到中心，再炸半徑 70；第 2 隻起（含被直擊的那隻）每多炸到 1 隻 +20%
 // 軌道砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const TRAIL = { t: 1.5, ratio: 0.5, max: 40 };                   // 殘留彈道：路徑留電軌 1.5 秒，碰到的敵人受到 50%；場上最多 40 條
 const CRACK = { per: 0.1, t: 3 };             // 碎甲：每次命中那隻敵人受到傷害 +10%（疊加、沒有上限），3 秒沒被打中掉光；破甲彈頭打中改疊 +25%
@@ -73,19 +75,19 @@ const WEAPONS = {
   plasma: { name: '電漿砲', short: '電漿', color: '#c77dff', desc: '慢速的大型電漿球，單發傷害高、可穿透。',
     base: { interval: 0.45, count: 1, spread: 0, damage: 22, speed: 450, radius: 9, pierce: 2, life: 1.33, shape: 'orb', knock: 1.2 },
     paths: {
-      A: { name: '分裂電漿', desc: '命中時分裂出 3 顆小電漿（每顆 35% 傷害）。', apply: p => { p.shards = { n: 3, ratio: 0.35 }; },
+      A: { name: '分裂電漿', desc: '命中時往前分裂出 3 顆會追蹤的小電漿（每顆 35% 傷害）。', apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING }; },
         next: [
-          { name: '增殖', desc: `小電漿打中敵人時再分裂成 ${BREED.n} 顆（各為大電漿傷害的 ${BREED.ratio * 100}%），第二代不再分裂：敵人越分散越好用。`, apply: p => { p.shards = { n: 3, ratio: 0.35, breed: BREED }; } },
-          { name: '共鳴', desc: `被大電漿打中的那隻，和同一發小電漿打中的敵人互相連結 ${RESONANCE.t} 秒；連結中任何一隻受到傷害，其他連結的也受到 ${RESONANCE.share * 100}%（分出去的不會再分）：把一群連起來，集中打一隻。`, apply: p => { p.shards = { n: 3, ratio: 0.35, resonance: RESONANCE }; } }] },
+          { name: '增殖', desc: `小電漿打中敵人時再分裂成 ${BREED.n} 顆（各為大電漿傷害的 ${BREED.ratio * 100}%，一樣會追蹤），第二代不再分裂：敵人越分散越好用。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, breed: BREED }; } },
+          { name: '共鳴', desc: `被大電漿打中的那隻，和同一發小電漿打中的敵人互相連結 ${RESONANCE.t} 秒；連結中任何一隻受到傷害，其他連結的也受到 ${RESONANCE.share * 100}%（分出去的不會再分）：把一群連起來，集中打一隻。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, resonance: RESONANCE }; } }] },
       B: { name: '重質電漿', desc: '電漿更慢、更大、存在更久，穿透 +4。', apply: p => {
           p.speed *= 0.6; p.radius *= 1.6; p.life *= 1.5; p.pierce += 4; },
         next: [
-          { name: '重量砲', desc: '飛船的移動速度每比原本慢 1%，傷害 +2%（沒有上限）：越重越痛（重裝甲、護盾產生器、被凍住都算）。', apply: p => { p.weight = { per: 2 }; } },
+          { name: '重量砲', desc: `飛船移動速度 −${WEIGHT.self * 100}%；移動速度每比原本慢 1%，傷害 +${WEIGHT.per}%（沒有上限，光這個升級就 +${WEIGHT.self * 100 * WEIGHT.per}%）：越重越痛（重裝甲、護盾產生器、被凍住都算；加速器會抵銷）。`, apply: p => { p.weight = WEIGHT; } },
           { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層、重力井模組、彗星的冰可以再疊：剩下的速度相乘）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
       C: { name: '新星', desc: '命中時爆炸（半徑 90，80% 傷害）。', apply: p => { p.explode = { r: 90, ratio: 0.8 }; },
         next: [
           { name: '餘震', desc: `爆炸 ${AFTERSHOCK.t} 秒後在同一點再炸一次（同半徑、同傷害），地上先出現縮小的圈：朝敵人要走到的地方打。`, apply: p => { p.aftershock = AFTERSHOCK; } },
-          { name: '壓縮', desc: `爆炸半徑縮小到 ${COMPRESS.r}；從第 2 隻開始，每多炸到 1 隻，這次爆炸傷害 +${COMPRESS.per * 100}%：把怪聚在一起再炸。`, apply: p => { p.explode = { r: COMPRESS.r, ratio: 0.8, compress: COMPRESS.per }; } }] },
+          { name: '壓縮', desc: `爆炸前先把 ${COMPRESS.pull} 以內的敵人吸到中心（旗艦、母巢不會被吸），再炸半徑 ${COMPRESS.r}；炸到的敵人（含被直擊的那隻）從第 2 隻開始，每多 1 隻這次爆炸傷害 +${COMPRESS.per * 100}%：自己把怪聚起來炸。`, apply: p => { p.explode = { r: COMPRESS.r, ratio: 0.8, compress: COMPRESS }; } }] },
     } },
   railgun: { name: '軌道砲', short: '軌道', color: '#ffd166', desc: '超高速穿甲彈，射速慢但一發貫穿一排。',
     base: { interval: 0.6, count: 1, spread: 0, damage: 30, speed: 1500, radius: 4, pierce: 3, life: 0.7, shape: 'rail', knock: 2 },

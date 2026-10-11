@@ -90,6 +90,7 @@ function mechStats(parts, module, wp) {
     case 'endshell': s.taken += 0.1; break;
   }
   if (wp && wp.glass) s.taken += wp.glass.self;  // 玻璃砲（相位刃升級）
+  if (wp && wp.weight) s.speed *= 1 - wp.weight.self;  // 重量砲（電漿升級）：自帶變慢
   s.dashCd *= 1 + s.dashUp;
   s.maxHp = Math.round(s.maxHp);
   return s;

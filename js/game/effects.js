@@ -14,8 +14,8 @@ function dmgTextStyle(dmg, base) {
   return m >= 4 ? ['#ff4d4d', true] : m >= 2 ? ['#ffe14d', false] : m >= 1 ? ['#ffffff', false] : ['#9aa3b8', false];
 }
 function floatText(x, y, text, color, big = false) { Events.emit('floatText', { x, y, text, color, big }); }
-// 爆炸光圈
-function ringFx(x, y, r, color) { Events.emit('ring', { x, y, r, color }); }
+// 爆炸光圈；shrink：往內收（壓縮的吸入）
+function ringFx(x, y, r, color, shrink = false) { Events.emit('ring', { x, y, r, color, shrink }); }
 // 電弧線：o.life 持續時間、o.c 顏色、o.cap 同時最多幾條、o.jitter 終點抖動、o.share 轉給隊友的機率（太多條時只傳一部分）
 function zapFx(x1, y1, x2, y2, o = {}) { Events.emit('zap', { x1, y1, x2, y2, life: o.life || 0.18, c: o.c || null, cap: o.cap || 60, jitter: o.jitter || 0, share: o.share }); }
 // 彗星爆炸的閃光

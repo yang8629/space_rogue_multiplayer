@@ -78,7 +78,7 @@ const GLFx = {
       for (let k = 1; k < 6; k++) { const j = rand(-10, 10); g.lineTo(z.x1 + dx * k / 6 + nx * j, z.y1 + dy * k / 6 + ny * j); }
       g.lineTo(z.x2, z.y2); g.stroke({ width: 2, color: glColor(z.c || '#9fe8ff'), alpha: z.life / z.max });
     }
-    for (const r of FX.rings) { const t = 1 - r.life / r.max; g.circle(r.x, r.y, r.r * (0.4 + 0.6 * t)).stroke({ width: 3, color: glColor(r.color), alpha: r.life / r.max }); }
+    for (const r of FX.rings) { const t = 1 - r.life / r.max; g.circle(r.x, r.y, r.r * (r.shrink ? 1 - 0.75 * t : 0.4 + 0.6 * t)).stroke({ width: 3, color: glColor(r.color), alpha: r.shrink ? 0.4 + 0.6 * t : r.life / r.max }); }  // shrink：往內收、越收越亮（壓縮的吸入）
     // 敵彈（不用加法混色：紅色實心＋深色外框，才不會被我方彈幕蓋掉）
     for (const b of G.eBullets) {
       const s = this.spr(this.pEB, b.col ? tx.ebRim : tx.eb, b.x, b.y); s.scaleX = s.scaleY = b.r / R.eb;

@@ -1425,7 +1425,7 @@ const Game = {
       for (let k = 0; k < n; k++)
         list.push(shot({ angle: (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
           life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
-          shards: breed ? { n: breed.n, ratio: breed.ratio / ratio } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分）
+          shards: breed ? { n: breed.n, ratio: breed.ratio / ratio, homing } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分；一樣追蹤）
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }
     let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）
@@ -1439,7 +1439,7 @@ const Game = {
     else if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
     if (b.slow) e.slowBy(b.comet ? 'comet' : 'shot', b.slow, b.slowDur || 1.5);
     if (b.explode) {
-      this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att, b.explode.compress || 0);
+      this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att, b.explode.compress || null);
       if (b.aftershock && this.quakes.length < 40)  // 餘震（電漿升級）：同一點過一下再炸一次
         this.quakes.push({ x, y, r: b.explode.r, dmg: b.damage * b.explode.ratio, color: b.color, att: b.att, t: b.aftershock.t, max: b.aftershock.t });
     }
@@ -1751,12 +1751,24 @@ const Game = {
     if (this.runStats) for (const m of msgs) this.runStats.got.push(`${this.here()} ${m}（用量成長）`);
     if (this.isClient()) Net.sendLoadout();
   },
-  // per：壓縮（電漿升級）——第 2 隻起每多炸到 1 隻，傷害 +per
-  explode(x, y, r, dmg, color, skipId, att = null, per = 0) {
-    if (per) {
+  // cmp：壓縮（電漿升級）——先把 cmp.pull 內看得到中心的敵人吸到中心附近（旗艦、母巢不吸），
+  //   再數炸到幾隻（含被直擊的 skipId 那隻；牠不再吃爆炸傷害），第 2 隻起每多 1 隻傷害 +cmp.per
+  explode(x, y, r, dmg, color, skipId, att = null, cmp = null) {
+    if (cmp) {
       let n = 0;
-      for (const e of this.enemies) if (!e.dead && e.id !== skipId && Math.hypot(e.x - x, e.y - y) <= r + e.r) n++;
-      dmg *= 1 + per * Math.max(0, n - 1);
+      for (const e of this.enemies) {
+        if (e.dead || e.spawnT > 0) continue;
+        const d = Math.hypot(e.x - x, e.y - y);
+        if (d > cmp.pull + e.r) continue;
+        if (d > r * 0.5 && !e.t.boss && !e.t.anchored && !Arena.losBlocked(e.x, e.y, x, y, 0)) {  // 牆、閘門另一邊的不吸
+          const k = (d - r * 0.5) / d, ox = e.x, oy = e.y;
+          e.x -= (e.x - x) * k; e.y -= (e.y - y) * k;
+          for (let i = 1; i <= 4; i++) trail(ox + (e.x - ox) * i / 5, oy + (e.y - oy) * i / 5, color, 0.25, 3);  // 被吸過去的軌跡
+        }
+        if (Math.hypot(e.x - x, e.y - y) <= r + e.r) n++;
+      }
+      dmg *= 1 + cmp.per * Math.max(0, n - 1);
+      ringFx(x, y, cmp.pull, color, true);
     }
     for (const e of this.enemies) {
       if (e.dead || e.id === skipId) continue;
