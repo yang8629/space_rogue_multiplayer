@@ -225,16 +225,16 @@ const MechCheck = {
       return { ok: near1(A.d, A.d0 * A.want) && near1(B.d, B.d0 * B.want) && near1(A.want, 1.15) && B.want > A.want,
         got: `沒感測器：子彈 ${A.d0.toFixed(1)} 打中 ${A.d.toFixed(1)}（×${A.want.toFixed(2)}）；感測器 3 層：${B.d0.toFixed(1)} → ${B.d.toFixed(1)}（×${B.want.toFixed(2)}）` };
     }],
-    ['武器命中效果', '重量砲', '電漿・重力井・重量砲：移動速度每慢 1% 傷害 +2%（沒有上限）；重裝甲、被凍住都算', M => {
-      const one = (armor, frost) => {
-        M.setup('sandbox', 'vanguard', 'plasma', 'B', 0, ['weapon', null, null, null]);
+    ['武器命中效果', '重量砲', '電漿・重質電漿・重量砲：自帶移動速度 −15%（真的變慢）；移動速度每慢 1% 傷害 +3%（沒有上限）；重裝甲、被凍住都算', M => {
+      const one = (fi, armor, frost) => {
+        M.setup('sandbox', 'vanguard', 'plasma', 'B', fi, ['weapon', null, null, null]);
         Game.parts.armor = armor; Game.recalc(); Game.player.frostT = frost ? 1 : 0;
         const L = runOps(Game.stats.ops, 0); return { d: L[0].damage, spd: shipSpeedNow() };
       };
-      const A = one(0), B = one(5), C = one(5, true);
-      const wantB = 1 + (1 - B.spd) * 2, wantC = 1 + (1 - C.spd) * 2;
-      return { ok: near1(A.spd, 1) && near1(B.d / A.d, wantB) && near1(C.d / A.d, wantC) && wantC > 1.8,
-        got: `沒重裝甲 ${A.d.toFixed(1)}；重裝甲 5 層（速度 ×${B.spd.toFixed(3)}）${B.d.toFixed(1)}（×${(B.d / A.d).toFixed(2)}，要 ×${wantB.toFixed(2)}）；再被凍住（×${C.spd.toFixed(3)}）${C.d.toFixed(1)}（×${(C.d / A.d).toFixed(2)}，要 ×${wantC.toFixed(2)}，超過舊上限 ×1.8）` };
+      const O = one(null, 0), A = one(0, 0), B = one(0, 5), C = one(0, 5, true);
+      const wantA = 1 + 0.15 * 3, wantB = 1 + (1 - B.spd) * 3, wantC = 1 + (1 - C.spd) * 3;  // 飛船移動直接乘 Game.mech.speed（Player 移動），所以速度 ×0.85 就是真的變慢
+      return { ok: near1(O.spd, 1) && near1(A.spd, 0.85) && near1(A.d / O.d, wantA) && near1(B.d / O.d, wantB) && near1(C.d / O.d, wantC) && wantC > 2,
+        got: `重質電漿 ${O.d.toFixed(1)}（速度 ×${O.spd.toFixed(2)}）；重量砲 ${A.d.toFixed(1)}（速度 ×${A.spd.toFixed(3)}，要 ×0.85；傷害 ×${(A.d / O.d).toFixed(2)}，要 ×${wantA.toFixed(2)}）；重裝甲 5 層（×${B.spd.toFixed(3)}）×${(B.d / O.d).toFixed(2)}（要 ×${wantB.toFixed(2)}）；再被凍住（×${C.spd.toFixed(3)}）×${(C.d / O.d).toFixed(2)}（要 ×${wantC.toFixed(2)}）` };
     }],
     ['武器命中效果', '玻璃砲', '相位刃・巨刃・玻璃砲：自帶受到的傷害 +10%（真的多扣血）；受到的傷害每多 1%，傷害 +3%（沒有上限、相加）；輕裝甲、散熱片都算', M => {
       const one = (larmor, sink) => {
@@ -263,17 +263,23 @@ const MechCheck = {
       return { ok: A.k === 0 && B.k === 5 && C.k === 8 && Math.abs(A.n - A.want) <= 1.5 && Math.abs(B.n - B.want) <= 1.5 && Math.abs(C.n - C.want) <= 1.5 && C.n > A.n * 1.5,
         got: `身邊 0 隻：算到 ${A.k}，4 秒 ${A.n} 發（要 ${A.want.toFixed(1)}）；5 隻：算到 ${B.k}，${B.n} 發（要 ${B.want.toFixed(1)}）；11 隻：算到 ${C.k}（要 8），${C.n} 發（要 ${C.want.toFixed(1)}）` };
     }],
-    ['武器命中效果', '增殖', '電漿・分裂電漿・增殖：小電漿打中敵人時再分裂成 2 顆（各為大電漿的 25%），第二代不再分裂', M => {
+    ['武器命中效果', '增殖', '電漿・分裂電漿・增殖：小電漿（會追蹤）打中敵人時再分裂成 3 顆（各為大電漿的 35%，一樣追蹤），第二代不再分裂', M => {
       M.setup('sandbox', 'vanguard', 'plasma', 'A', 0, ['weapon', null, null, null]);
       const P = Game.player, es = M.targets([[150, 0], [300, -40], [300, 0], [300, 40], [430, -60], [430, 0], [430, 60]]), log = [];
       for (const e of es) { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { log.push([d, r[2]]); return h(d, ...r); }; }
       P.aim = 0; P.fire(); const big = Game.bullets[0].damage;
-      for (let f = 0; f < 120; f++) Game.updateBullets(1 / 60);
-      const small = log.filter(x => x[1] === 'shard').map(x => x[0]), g1 = small.filter(d => near1(d, big * 0.35)).length, g2 = small.filter(d => near1(d, big * 0.25)).length;
-      return { ok: g1 >= 2 && g2 >= 2,
-        got: `大電漿 ${big.toFixed(1)}；小電漿打中 ${g1} 次（各 ${(big * 0.35).toFixed(1)}）；第二代打中 ${g2} 次（各 ${(big * 0.25).toFixed(1)}，要至少 2）` };
+      const seen = new Map();  // 小電漿 → 出生時 hitSet 的大小（之後變大 = 打中了）
+      for (let f = 0; f < 120; f++) {
+        Game.updateBullets(1 / 60);
+        for (const b of Game.bullets) if (b.shard && !seen.has(b)) seen.set(b, b.hitSet.size);
+      }
+      const g = [...seen.keys()], gen1 = g.filter(b => b.shards), gen2 = g.filter(b => !b.shards);
+      const hit2 = gen2.filter(b => b.hitSet.size > seen.get(b)).length, homing = g.every(b => b.homing === 4);
+      const small = log.filter(x => x[1] === 'shard').map(x => x[0]), allBig = small.every(d => near1(d, big * 0.35));
+      return { ok: gen1.length >= 3 && gen2.length >= 3 && gen2.length % 3 === 0 && hit2 >= 2 && homing && allBig && gen2.every(b => !b.shards),
+        got: `大電漿 ${big.toFixed(1)}；第一代 ${gen1.length} 顆、第二代 ${gen2.length} 顆（要 3 的倍數）、第二代打中 ${hit2} 次（要至少 2）；${homing ? '全部追蹤' : '有沒追蹤的（錯）'}；小電漿每下 ${allBig ? '都是' : '不全是（錯）'} ${(big * 0.35).toFixed(1)}` };
     }],
-    ['武器命中效果', '共鳴', '電漿・分裂電漿・共鳴：被大電漿打中的和小電漿打中的互相連結 2 秒；任何一隻受傷，其他連結的受到 30%（分出去的不再分）；2 秒後斷開', M => {
+    ['武器命中效果', '共鳴', '電漿・分裂電漿・共鳴：被大電漿打中的和小電漿打中的互相連結 2 秒；任何一隻受傷，其他連結的受到 60%（分出去的不再分）；2 秒後斷開', M => {
       M.setup('sandbox', 'vanguard', 'plasma', 'A', 1, ['weapon', null, null, null]);
       const P = Game.player, [a, b, c, far] = M.targets([[150, 0], [290, -85], [290, 85], [0, -500]]);  // 小電漿往 ±0.53 弧度散
       P.aim = 0; P.fire(); for (let f = 0; f < 60; f++) Game.updateBullets(1 / 60);
@@ -282,8 +288,8 @@ const MechCheck = {
       const shared = h0 - hb.hp, farHit = hf !== far.hp;
       for (let f = 0; f < 130; f++) Game.updateLinksQuakes(1 / 60);
       const h1 = hb.hp; a.hurt(100, 0, 0, 'mc'); const after = h1 - hb.hp;
-      return { ok: n >= 2 && inB && !farIn && near1(shared, 30) && !farHit && after === 0 && !a.link,
-        got: `連結 ${n} 隻（要至少 2，含被打中的那隻）、${farIn ? '連到很遠的那隻（錯）' : '遠的沒連到'}；打第 1 隻 100，連結的受到 ${shared.toFixed(1)}（要 30）；2.2 秒後再打 100，受到 ${after.toFixed(1)}（要 0）` };
+      return { ok: n >= 2 && inB && !farIn && near1(shared, 60) && !farHit && after === 0 && !a.link,
+        got: `連結 ${n} 隻（要至少 2，含被打中的那隻）、${farIn ? '連到很遠的那隻（錯）' : '遠的沒連到'}；打第 1 隻 100，連結的受到 ${shared.toFixed(1)}（要 60）；2.2 秒後再打 100，受到 ${after.toFixed(1)}（要 0）` };
     }],
     ['武器命中效果', '餘震', '電漿・新星・餘震：爆炸 0.6 秒後在同一點再炸一次（同半徑、同傷害）', M => {
       M.setup('sandbox', 'vanguard', 'plasma', 'C', 0, ['weapon', null, null, null]);
@@ -296,17 +302,27 @@ const MechCheck = {
       return { ok: q0 === 1 && ex.length === 2 && near1(ex[0][1], ex[1][1]) && Math.abs(ex[1][0] - t0 - 0.6) < 0.05 && !Game.quakes.length,
         got: `爆炸後排了 ${q0} 個餘震；旁邊那隻被炸 ${ex.length} 次（要 2）${ex.length === 2 ? `，${ex[0][1].toFixed(1)}／${ex[1][1].toFixed(1)}，相隔 ${(ex[1][0] - t0).toFixed(2)} 秒（要 0.6）` : ''}` };
     }],
-    ['武器命中效果', '壓縮', '電漿・新星・壓縮：爆炸半徑 70；第 2 隻起每多炸到 1 隻，這次爆炸傷害 +20%', M => {
-      const one = n => {
+    ['武器命中效果', '壓縮', '電漿・新星・壓縮：先把 150 內的敵人吸到中心（旗艦不吸）再炸半徑 70；炸到的（含被直擊那隻）第 2 隻起每多 1 隻傷害 +20%；150 外的不動', M => {
+      const one = (n, boss) => {
         M.setup('sandbox', 'vanguard', 'plasma', 'C', 1, ['weapon', null, null, null]);
-        const P = Game.player, es = M.targets([[150, 0], ...Array.from({ length: n }, (_, i) => [150 + Math.cos(i * 1.3) * 45, Math.sin(i * 1.3) * 45]), [150, 140]]), log = [];
-        for (const e of es) { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { if (r[2] === 'explode') log.push([e, d]); return h(d, ...r); }; }
-        P.aim = 0; P.fire(); const big = Game.bullets[0].damage; for (let f = 0; f < 30 && !log.length; f++) Game.updateBullets(1 / 60);
-        return { n: log.length, d: log.length ? log[0][1] / (big * 0.8) : 0, far: log.some(x => x[0] === es[es.length - 1]) };
+        const P = Game.player, es = M.targets([[150, 0], ...Array.from({ length: n }, (_, i) => [150 + Math.cos(i * 1.3) * 45, Math.sin(i * 1.3) * 45]), [150, 130], [150, 280]]), log = [];
+        const pulled = es[es.length - 2], far = es[es.length - 1], fx = far.x, fy = far.y;
+        if (boss) pulled.t = { ...pulled.t, boss: true };
+        let first = 0, skip = null;  // 只看第一次爆炸；skip = 那次被直擊的（大電漿可能先打中靠近飛船的那隻）
+        const ex = Game.explode;
+        Game.explode = function (...a) { first++; if (first === 1) skip = a[5]; return ex.apply(this, a); };
+        for (const e of es) { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { if (r[2] === 'explode' && first === 1) log.push([e, d]); return h(d, ...r); }; }
+        P.aim = 0; P.fire(); const big = Game.bullets[0].damage;
+        try { for (let f = 0; f < 30 && !first; f++) Game.updateBullets(1 / 60); } finally { Game.explode = ex; }
+        const hitE = es.find(e => e.id === skip) || es[0];
+        return { n: log.length, d: log.length ? log[0][1] / (big * 0.8) : 0, pullHit: log.some(x => x[0] === pulled), pd: Math.hypot(pulled.x - hitE.x, pulled.y - hitE.y),
+          farHit: log.some(x => x[0] === far), farMoved: far.x !== fx || far.y !== fy, direct: log.some(x => x[0].id === skip) };
       };
-      const A = one(1), B = one(4), wantB = 1 + 0.2 * (B.n - 1);
-      return { ok: A.n === 1 && near1(A.d, 1) && B.n >= 3 && near1(B.d, wantB) && !A.far && !B.far,
-        got: `炸到 ${A.n} 隻：×${A.d.toFixed(2)}（要 ×1）；炸到 ${B.n} 隻：×${B.d.toFixed(2)}（要 ×${wantB.toFixed(2)}）；140 外的${A.far || B.far ? '被炸到（錯，半徑太大）' : '沒炸到'}` };
+      const A = one(0), B = one(3), C = one(1, true);  // A：直擊＋被吸過來的 = 2 隻；B：直擊＋3 隻旁邊＋吸過來 = 5 隻；C：130 外那隻是旗艦（不吸）
+      return { ok: A.n === 1 && A.pullHit && A.pd < 80 && near1(A.d, 1.2) && B.n === 4 && near1(B.d, 1.8) && !C.pullHit && C.pd > 120 && near1(C.d, 1.2)
+          && ![A, B, C].some(r => r.farHit || r.farMoved || r.direct),
+        got: `130 外的一隻：吸到離直擊那隻 ${A.pd.toFixed(0)}（要 < 80）、${A.pullHit ? '有' : '沒有（錯）'}被炸，×${A.d.toFixed(2)}（要 ×1.2）；旁邊 3 隻＋吸過來 1 隻：炸到 ${B.n} 隻（要 4），×${B.d.toFixed(2)}（要 ×1.8）；`
+          + `旗艦${C.pullHit || C.pd <= 120 ? '被吸過來（錯）' : '沒被吸'}，×${C.d.toFixed(2)}（要 ×1.2）；280 外的${[A, B, C].some(r => r.farHit || r.farMoved) ? '被吸或被炸（錯）' : '沒動'}；直擊那隻${[A, B, C].some(r => r.direct) ? '又吃爆炸（錯）' : '不吃爆炸'}` };
     }],
     ['武器命中效果', '殘留彈道', '軌道・自動軌道・殘留彈道：子彈飛過的路徑留電軌 1.5 秒，碰到的敵人受到子彈傷害的 50%（每條每隻一次，子彈本身打中的不算）；場上最多 40 條', M => {
       M.setup('sandbox', 'vanguard', 'railgun', 'A', 0, ['weapon', null, null, null]);

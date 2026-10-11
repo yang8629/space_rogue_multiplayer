@@ -969,7 +969,7 @@ class Enemy {
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
     this.hp -= dmg; this.flash = 0.08;
-    if (this.link && source !== 'link') Game.shareLink(this, dmg, att);  // 共鳴（電漿升級）：分 30% 給其他連結的
+    if (this.link && source !== 'link') Game.shareLink(this, dmg, att);  // 共鳴（電漿升級）：分 60% 給其他連結的
     if ((this.t.dummy || this.immortal) && this.hp <= 0) this.hp += this.maxHp * Math.ceil(-this.hp / this.maxHp + 0.001);  // 標靶（和靶場手動生的「打不死」）打不死
     if (this.t.boss) {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
