@@ -1659,7 +1659,7 @@ const Game = {
       burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
       if (b.parry) this.parryHit(b.ownerP);  // 格擋流（相位刃升級）：砍掉敵彈疊傷害
-      if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 相位刃格擋：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
+      if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 格擋（相位刃・格擋流）：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
       // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
       //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
       const p = (b.owner ? this.mate : this.player) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
