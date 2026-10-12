@@ -1401,8 +1401,8 @@ const Game = {
       burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
     }
     Q.length = 0;
-    for (const s of SQ) {  // 碎片：從命中點往前方扇形散開
-      const { n, ratio, homing = 0, seek, focus, spread, breed, resonance } = s.b.shards, list = [];
+    for (const s of SQ) {  // 碎片：從命中點往前方扇形散開（稜鏡：射向附近的敵人）
+      const { n, ratio, homing = 0, refract, focus, spread, breed, resonance } = s.b.shards, list = [];
       let res = null;
       if (resonance) {  // 共鳴（電漿升級）：被打中的那隻開一個連結，這一發的小電漿打中的都加進來
         const e0 = this.enemies.find(o => o.id === s.ignore);
@@ -1414,17 +1414,22 @@ const Game = {
         burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
         continue;
       }
-      if (seek) {  // seek（雷射稜鏡）：命中點 350 內沒有別的敵人 → 碎光折回打原本那一隻（打王時碎光不會全部打空）
-        const e0 = this.enemies.find(o => o.id === s.ignore);
-        if (e0 && !e0.dead && !this.enemies.some(o => o !== e0 && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, s.x, s.y) < 350 * 350)) {
-          for (let k = 0; k < n && !e0.dead; k++) e0.hurt(s.b.damage * ratio, 0, 0, 'direct', s.b.att);
-          burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
-          continue;
+      let aim = null;
+      if (refract) {  // 折射（雷射稜鏡，2026-10-12）：碎光一道一隻、射向 refract 內最近的其他敵人；不夠的折回打原本那一隻（打王時不會打空）
+        const R2 = refract * refract; aim = [];
+        for (const o of enemiesNear(s.x, s.y, refract)) {
+          if (o.id === s.ignore || o.dead || o.spawnT > 0) continue;
+          const d = dist2(o.x, o.y, s.x, s.y); if (d >= R2) continue;
+          let i = aim.length; while (i > 0 && aim[i - 1].d > d) i--;
+          if (i < n) { aim.splice(i, 0, { a: Math.atan2(o.y - s.y, o.x - s.x) - s.angle, d }); if (aim.length > n) aim.pop(); }
         }
+        const e0 = aim.length < n && this.enemies.find(o => o.id === s.ignore);
+        for (let k = aim.length; k < n && e0 && !e0.dead; k++) e0.hurt(s.b.damage * ratio, 0, 0, 'shard', s.b.att);
+        if (aim.length < n) burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
       }
-      for (let k = 0; k < n; k++)
-        list.push(shot({ angle: (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
-          life: 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
+      for (let k = 0; k < (aim ? aim.length : n); k++)
+        list.push(shot({ angle: aim ? aim[k].a : (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
+          life: refract ? refract / 620 + 0.1 : 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
           shards: breed ? { n: breed.n, ratio: breed.ratio / ratio, homing } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分；一樣追蹤）
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }

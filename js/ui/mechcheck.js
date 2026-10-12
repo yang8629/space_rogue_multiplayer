@@ -431,6 +431,20 @@ const MechCheck = {
       return { ok: near1(a, 0.4) && near1(b, 0.4) && near1(c, 0.64) && near1(d, 0.4) && near1(spd, 0.6) && !(e.slowT > 0),
         got: `子彈 ${Math.round(a * 100)}%、同一來源再打 ${Math.round(b * 100)}%（要 40）、加重力井 ${Math.round(c * 100)}%（要 64）；1 秒後重力井那份過期 ${Math.round(d * 100)}%（要 40）、速度 ×${spd.toFixed(2)}；2.25 秒後${e.slowT > 0 ? '還在減速（錯）' : '恢復'}` };
     }],
+    ['武器命中效果', '稜鏡', `雷射・稜鏡：碎光射向 ${REFRACT} 內最近的其他敵人（一道一隻，不管在哪個方向）；不夠的折回打原本那隻`, M => {
+      const run = pos => {
+        M.setup('sandbox', 'vanguard', 'laser', 'A', null, ['weapon', null, null, null]);
+        const P = Game.player, es = M.targets(pos), log = [];
+        for (const e of es) { const h = e.hurt.bind(e); e.hurt = (d, ...r) => { log.push([es.indexOf(e), d, r[2]]); return h(d, ...r); }; }
+        P.aim = 0; P.fire(); for (let f = 0; f < 45 && log.length < 3; f++) Game.updateBullets(1 / 60);
+        const base = (log.find(x => x[2] !== 'shard') || [0, 0])[1], sh = log.filter(x => x[2] === 'shard');
+        return { n: es.map((_, i) => sh.filter(x => x[0] === i).length), ok: sh.length === 2 && sh.every(x => near1(x[1], base * 0.4)) };
+      };
+      // 0 號是打中的那隻；1 號在牠的側後方 206（原本往前扇形散開打不到）、2 號在 450 外（太遠）
+      const A = run([[150, 0], [100, 200], [150, 450]]), B = run([[150, 0], [150, 450]]);
+      return { ok: A.ok && B.ok && A.n.join() === '1,1,0' && B.n.join() === '2,0',
+        got: `旁邊有一隻：碎光打中 原本那隻 ${A.n[0]}、側後方那隻 ${A.n[1]}、450 外 ${A.n[2]}（要 1、1、0）；旁邊沒有：原本那隻 ${B.n[0]}、450 外 ${B.n[1]}（要 2、0）${A.ok && B.ok ? '' : '；碎光傷害不是 40%（錯）'}` };
+    }],
     ['武器命中效果', '專注', '雷射・稜鏡・專注：碎光折回打同一隻；連續打中同一隻（碎光也算）每次 +10%，最多 +100%；打中別隻歸零', M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', 0, ['weapon', null, null, null]);
       const P = Game.player, [a, b] = M.targets([[150, 0], [0, 150]]), log = [];
@@ -442,14 +456,14 @@ const MechCheck = {
       return { ok: s1.length === 3 && shard.length === 2 && shard.every(x => x[0] === a) && near1(shard[0][1], base * 0.4 * 1.1) && near1(s5[0][1], base * 2) && kA === 10 && near1(t1[0][1], base) && t1[0][0] === b,
         got: `第 1 槍打中 ${s1.length} 下（要 3：光束＋2 道碎光${shard.every(x => x[0] === a) ? '都打同一隻' : '，碎光打到別隻（錯）'}），碎光 ${shard.length ? shard[0][1].toFixed(1) : 0}（要 ${(base * 0.44).toFixed(1)}）；第 5 槍 ${s5[0][1].toFixed(1)}（要 ${(base * 2).toFixed(1)}，${kA} 層）；換一隻 ${t1[0][1].toFixed(1)}（要 ${base.toFixed(1)}）` };
     }],
-    ['武器命中效果', '分散', '雷射・稜鏡・分散：碎光 3 道；碎光每打中一隻射速 +5%（最多 12 層）；2 秒沒疊開始每 0.25 秒掉 1 層', M => {
+    ['武器命中效果', '分散', `雷射・稜鏡・分散：碎光 3 道；碎光每打中一隻射速 +${SPREAD.per * 100}%（最多 12 層）；2 秒沒疊開始每 0.25 秒掉 1 層`, M => {
       M.setup('sandbox', 'vanguard', 'laser', 'A', 1, ['weapon', null, null, null]);
       const P = Game.player; M.targets([[150, 0], [300, -70], [320, 0], [300, 70]]); P.aim = 0;
       let made = 0; for (let i = 0; i < 4; i++) { P.fire(); for (let f = 0; f < 40; f++) { Game.updateBullets(1 / 60); made = Math.max(made, Game.bullets.filter(q => q.spreadSh).length); } }
       const k = P.spreadK;
       P.spreadK = 12; P.spreadT = 99; let n = 0; const orig = P.fire, iv = Game.stats.interval; P.fireCd = 0; P.fire = () => { n++; };
       try { for (let f = 0; f < 240; f++) P.tickFire(1 / 60, true); } finally { P.fire = orig; }
-      const want = 4 / (iv / 1.6);
+      const want = 4 / (iv / (1 + SPREAD.per * SPREAD.max));
       P.spreadT = 2; for (let f = 0; f < 60 * 2.6; f++) Game.tickWeaponFx(P, 1 / 60); const kDecay = P.spreadK;
       return { ok: made === 3 && k >= 4 && Math.abs(n - want) <= 1.5 && kDecay > 0 && kDecay < 12 && kDecay >= 9,
         got: `一次 ${made} 道碎光（要 3）；4 槍疊到 ${k} 層；12 層時 4 秒 ${n} 發（要 ${want.toFixed(1)}）；停 2.6 秒剩 ${kDecay} 層（要 9～11）` };

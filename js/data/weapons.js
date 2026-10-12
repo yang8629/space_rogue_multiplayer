@@ -10,7 +10,8 @@
 // =====================================================================
 // 雷射步槍的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
 const FOCUS = { per: 0.1, max: 10 };                                  // 專注：連續打中同一隻每次 +10%
-const SPREAD = { n: 3, ratio: 0.4, per: 0.05, max: 12, idle: 2, decay: 0.25 };  // 分散：碎光打中別隻，射速 +5% 疊層；2 秒沒疊開始每 0.25 秒掉 1 層
+const REFRACT = 300;                                                 // 稜鏡：碎光射向 300 內最近的其他敵人
+const SPREAD = { n: 3, ratio: 0.4, per: 0.03, max: 12, idle: 2, decay: 0.25 };  // 分散：碎光打中別隻，射速 +3% 疊層；2 秒沒疊開始每 0.25 秒掉 1 層（2026-10-12 +5% → +3%：碎光改成瞄準後幾乎每發都疊）
 const GRAZE = { r: 40, per: 0.1, max: 8, idle: 3, decay: 1 };         // 擦彈：敵彈從身邊 40 內飛過，射速 +10% 疊層；3 秒沒擦彈每秒掉 1 層
 const RAGE = { per: 1 };                                              // 狂怒：每缺 1% HP 射速 +1%
 const SKEWER = { per: 0.3 };                                          // 串燒：每穿過一隻，之後打中的傷害 +30%
@@ -42,10 +43,11 @@ const WEAPONS = {
   laser: { name: '雷射步槍', short: '雷射', color: '#5ef2ff', desc: '高速單發雷射，射速快、彈速快，最容易上手。',
     base: { interval: 0.16, count: 1, spread: 0, damage: 8, speed: 950, radius: 3, life: 0.85, shape: 'line', knock: 0.6 },
     paths: {
-      A: { name: '稜鏡', desc: '命中時折射出 2 道碎光（每道 40% 傷害）。', apply: p => { p.shards = { n: 2, ratio: 0.4 }; },
+      // 2026-10-12 碎光改成射向附近的敵人（REFRACT 內），沒有別隻就折回打原本那隻：原本往前扇形散開只打中 21%，只升第一段跟沒升級比只快 9%
+      A: { name: '稜鏡', desc: `命中時折射出 2 道碎光（每道 40% 傷害），射向 ${REFRACT} 內最近的其他敵人；附近沒有別隻，碎光折回打原本那隻。`, apply: p => { p.shards = { n: 2, ratio: 0.4, refract: REFRACT }; },
         next: [
           { name: '專注', desc: `碎光不再散開，改成折回打同一隻；連續打中同一隻（碎光也算）每次傷害 +${FOCUS.per * 100}%，最多 +${FOCUS.per * FOCUS.max * 100}%，打中別隻就歸零：盯死精英和王。`, apply: p => { p.shards = { n: 2, ratio: 0.4, focus: true }; p.focus = FOCUS; } },
-          { name: '分散', desc: `碎光增加到 ${SPREAD.n} 道；碎光每打中一隻敵人，射速 +${SPREAD.per * 100}%（最多 ${SPREAD.max} 層 +${SPREAD.per * SPREAD.max * 100}%），${SPREAD.idle} 秒沒疊就開始掉層：專清雜兵。`, apply: p => { p.shards = { n: SPREAD.n, ratio: SPREAD.ratio, spread: true }; p.spreadUp = SPREAD; } }] },
+          { name: '分散', desc: `碎光增加到 ${SPREAD.n} 道；碎光每打中一隻敵人，射速 +${SPREAD.per * 100}%（最多 ${SPREAD.max} 層 +${SPREAD.per * SPREAD.max * 100}%），${SPREAD.idle} 秒沒疊就開始掉層：專清雜兵。`, apply: p => { p.shards = { n: SPREAD.n, ratio: SPREAD.ratio, spread: true, refract: REFRACT }; p.spreadUp = SPREAD; } }] },
       B: { name: '連發', desc: '一次射出 2 道雷射，每道傷害 ×0.75。', apply: p => { p.count = 2; p.spread = 0.08; p.damage *= 0.75; },
         next: [
           { name: '擦彈', desc: `敵彈從飛船身邊 ${GRAZE.r} 以內飛過（沒打中），射速 +${GRAZE.per * 100}%（最多 ${GRAZE.max} 層 +${GRAZE.per * GRAZE.max * 100}%）；${GRAZE.idle} 秒沒擦彈每秒掉 1 層：貼著子彈閃。`, apply: p => { p.graze = GRAZE; } },
