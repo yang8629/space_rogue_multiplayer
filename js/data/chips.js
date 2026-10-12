@@ -103,10 +103,11 @@ const CHIPS = {
   //   插在玩法晶片上：只作用在那個晶片的「產物」（HOST_PRODUCT），加進宿主層
   split: { name: '分裂模組', short: '分裂', type: 'comp', comp: true, cost: 2,
     desc: '每顆子彈分裂為 3 顆扇形彈，每顆傷害 ×0.4（3 顆合計 ×1.2）。插在玩法晶片上時，那個晶片的產物出現時才分裂（例：環繞放出時、迴旋折返時；黏著是爆炸時噴出 3 發碎片）。',
-    apply: (list, pw) => {
-      const n = Math.max(2, Math.round(3 + 2 * (pw - 1)));  // 強度 ×1.5（奇異點）→ 4 顆，×0.7 → 2 顆
+    copyCredit: true,  // 傷害統計：分出來的子彈算分裂的（當成它的基礎傷害），中間那顆還是原本的來源（2026-10-13；以前照總傷害倍率 ×1.2 分，分裂幾乎分不到）
+    apply: (list, pw, o) => {
+      const n = Math.max(2, Math.round(3 + 2 * (pw - 1))), mid = n % 2 ? (n - 1) / 2 : 0;  // 強度 ×1.5（奇異點）→ 4 顆，×0.7 → 2 顆；偶數顆時第一顆當原本那顆
       return list.flatMap(b => Array.from({ length: n }, (_, k) =>
-        ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.18, damage: b.damage * 0.4, splits: (b.splits || 0) + 1 })));
+        ({ ...b, angle: b.angle + (k - (n - 1) / 2) * 0.18, damage: b.damage * 0.4, splits: (b.splits || 0) + 1, src: k === mid ? b.src : (o && o.key) || 'split' })));
     } },
   bigshot: { name: '巨彈', short: '巨彈', type: 'comp', comp: true, cost: 1,
     desc: '每發子彈傷害 +30%、體積 ×1.8、擊退變強。插在玩法晶片上只作用在它的產物（黏著：爆炸波及周圍；吸引：範圍 ×1.5）。',
