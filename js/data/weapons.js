@@ -93,7 +93,8 @@ const WEAPONS = {
   railgun: { name: '軌道砲', short: '軌道', color: '#ffd166', desc: '超高速穿甲彈，射速慢但一發貫穿一排。',
     base: { interval: 0.6, count: 1, spread: 0, damage: 30, speed: 1500, radius: 4, pierce: 3, life: 0.7, shape: 'rail', knock: 2 },
     paths: {
-      A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.6。', apply: p => { p.rate *= 0.55; p.damage *= 0.6; },
+      // 2026-10-12 傷害 ×0.6 → ×0.8：射速換傷害幾乎打平，只升第一段跟沒升級一樣快（×1.01），兩條終極很少升滿
+      A: { name: '自動軌道', desc: rateTxt(0.55) + '，傷害 ×0.8。', apply: p => { p.rate *= 0.55; p.damage *= 0.8; },
         next: [
           { name: '殘留彈道', desc: `子彈飛過的路徑留下一條電軌（${TRAIL.t} 秒），敵人碰到受到那發子彈 ${TRAIL.ratio * 100}% 的傷害（每條電軌每隻一次，子彈本身打中的不算；場上最多 ${TRAIL.max} 條）：邊退邊掃，讓追過來的敵人穿過你畫的網。`, apply: p => { p.trail = TRAIL; } },
           { name: '連殺裝填', desc: '每擊殺一隻敵人，下一發的射擊冷卻立刻歸零：連續擊殺時變成連射。', apply: p => { p.reload = true; } }] },
