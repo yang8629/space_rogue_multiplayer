@@ -262,46 +262,37 @@ const Codex = {
         list.map(([n, hp]) => `<div>${n}<span class="v">${Math.round(hp * m)}</span></div>`).join('');
     };
 
-    // 5. 晶片價值落點圖（資料是 mp_tests 自動對戰模擬的結果：js/data/chipvalue.js）
-    const V = typeof CHIP_VALUE !== 'undefined' ? CHIP_VALUE : null, WK = Object.keys(WEAPONS), WS = WK.map(w => WEAPONS[w].short);
-    const cn = id => CHIPS[id] ? CHIPS[id].name : id, x2 = v => '×' + (+v.toFixed(2));
-    const tipRow = (n, v) => `<div>${n}<span class="v">${v}</span></div>`;
-    const tierCap = L => { const T = V.tiers[L]; return `難度 ${L}（${L <= 6 ? '第 1 星區' : L <= 13 ? '第 2 星區' : '第 3 星區'}）：電路 ${T.chips} 個晶片${T.chips > 1 ? `（其他 ${T.chips - 1} 個輪流換）` : ''}` +
-      `${T.lv2 ? `、其他晶片 Lv2 ${T.lv2 * 100}%` : ''}${T.lv3 ? `、進化 ${T.lv3 * 100}%` : ''}、武器升 ${T.stage} 段、零件 ${T.parts} 層`; };
-    let cvHtml = '<div class="cap">還沒有模擬資料（在 mp_tests 跑 node chipvalue.js --save 和 node chipvalue.js --pairs --save）。</div>';
-    let pairHtml = cvHtml;
-    if (V && Object.keys(V.single).length) {
-      const panes = Object.keys(V.single).map(Number).sort((a, b) => a - b).map(L => {
-        const rows = V.single[L].filter(r => CHIPS[r[0]]), ns = rows.map(r => r[4]);  // 拿掉的晶片（疾射）不畫
-        const pts = rows.map(([c, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
-          tip: `<b>${cn(c)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('清場速度', x2(s))}${tipRow('掉血', x2(d))}${tipRow('場數', n)}` }));
-        const chips = [...new Set(rows.map(r => r[0]))], cell = (c, w) => rows.find(r => r[0] === c && r[1] === w);
-        const avg = c => WK.reduce((a, w) => a + (cell(c, w) ? cell(c, w)[2] / Math.sqrt(Math.max(0.2, cell(c, w)[3])) : 0), 0);
-        chips.sort((a, b) => avg(b) - avg(a));
-        return { id: L, label: `難度 ${L}`, cap: `${tierCap(L)}。每個點 ${Math.min(...ns)}～${Math.max(...ns)} 場。`,
-          html: this.scatterChart(`cv${L}`, { pts, xName: '清場速度（裝了之後快幾倍）→', yName: '↑ 掉血（越上面越少）', xFmt: x2, yFmt: x2, xRef: 1, yRef: 1, invertY: true,
-            clampX: [0.4, 2.2], clampY: [0.2, 2.5], corner: '清得更快又少掉血 ↗' }) +
-            this.table(['晶片', ...WS.map(s => s + '（速度／掉血）')], chips.map(c => [cn(c), ...WK.map(w => { const r = cell(c, w); return r ? `${x2(r[2])}／${x2(r[3])}` : '—'; })])) };
-      });
-      cvHtml = this.scatterPanel('cv', panes, WS);
-    }
-    if (V && Object.keys(V.pair).length) {
-      const panes = Object.keys(V.pair).map(Number).sort((a, b) => a - b).map(L => {
-        const rows = V.pair[L].filter(r => CHIPS[r[0]] && CHIPS[r[1]]);
-        const pts = rows.map(([a, b, w, s, d, n]) => ({ x: s, y: d, k: WK.indexOf(w),
-          tip: `<b>${cn(a)} ＋ ${cn(b)}</b>${tipRow('武器', WEAPONS[w].short)}${tipRow('速度加乘', x2(s))}${tipRow('掉血加乘', x2(d))}${tipRow('場數', n)}` }));
-        // 先建索引（組合＋武器 → 那一列）、每個組合的總和只算一次：以前每格都從頭找一遍、排序時又一直重算，開這一頁要卡好幾秒
-        const idx = new Map(rows.map(r => [r[0] + '+' + r[1] + '|' + r[2], r]));
-        const keys = [...new Set(rows.map(r => r[0] + '+' + r[1]))], cell = (k, w) => idx.get(k + '|' + w);
-        const sumOf = new Map(keys.map(k => [k, WK.reduce((a, w) => a + (cell(k, w) ? cell(k, w)[3] : 0), 0)]));
-        keys.sort((a, b) => sumOf.get(b) - sumOf.get(a));
-        return { id: L, label: `難度 ${L}`, cap: `${tierCap(L).replace(/：.*/, '')}：只有武器＋這兩個晶片（都是 Lv1）、武器升 ${V.tiers[L].stage} 段、零件 ${V.tiers[L].parts} 層。每個點 ${rows[0][5]} 場，場數少，差 20% 以上才算數。`,
-          html: this.scatterChart(`cp${L}`, { pts, xName: '速度加乘（一起裝 ÷ 各自的倍數相乘）→', yName: '↑ 掉血加乘（越上面越少）', xFmt: x2, yFmt: x2, xRef: 1, yRef: 1, invertY: true,
-            clampX: [0.4, 2.2], clampY: [0.4, 2.5], corner: '一起裝更快又少掉血 ↗' }) +
-            this.table(['組合', ...WS.map(s => s + '（速度加乘）')], keys.map(k => [k.split('+').map(cn).join(' ＋ '), ...WK.map(w => { const r = cell(k, w); return r ? x2(r[3]) : '—'; })])) };
-      });
-      pairHtml = this.scatterPanel('cp', panes, WS);
-    }
+    // 5. 整局模擬在用的兩張表（資料是 mp_tests 的模擬結果：js/data/simvalue.js，exportvalue.js 產生）
+    const SV = typeof SIM_VALUE !== 'undefined' ? SIM_VALUE : null, WK = Object.keys(WEAPONS);
+    const x2 = v => '×' + (+v.toFixed(2));
+    const svTabs = (group, body) => `<div class="viz-tabs" data-group="${group}">${WK.map((w, i) => `<button type="button" data-pane="${group}-${w}"${i ? '' : ' class="on"'} style="color:${WEAPONS[w].color}">${WEAPONS[w].name}</button>`).join('')}</div>
+      ${WK.map((w, i) => `<div data-pane-body="${group}-${w}"${i ? ' hidden' : ''}>${body(w)}</div>`).join('')}`;
+    // 分數的格子：顏色照好壞（綠 = 比較好、紅 = 比沒有更差），滑鼠移上去看速度、掉血
+    const svCell = (v, lo, hi, tip) => { const c = v == null ? '' : v > hi ? 'rgba(255,140,60,.28)' : v >= lo + 0.25 ? 'rgba(46,230,166,.22)' : v >= lo ? 'rgba(46,230,166,.09)' : v < 1 ? 'rgba(255,77,109,.22)' : 'rgba(255,209,102,.16)';
+      return `<td style="background:${c};text-align:right" title="${tip || ''}">${v == null ? '—' : v.toFixed(2)}</td>`; };
+    const pathName = (w, k) => k === 'none' ? '沒升級' : k.length === 1 ? WEAPONS[w].paths[k].name : WEAPONS[w].paths[k[0]].next[+k[1]].name;
+    const itemName = id => { const m = /^part:(\w+):(\d)$/.exec(id), mo = /^mod:(\w+)$/.exec(id);
+      return m ? `${PARTS[m[1]] ? PARTS[m[1]].name : m[1]} +${m[2]} 層` : mo ? `模組 ${MODULES[mo[1]] ? MODULES[mo[1]].name : mo[1]}` : CHIPS[id] ? CHIPS[id].name : id; };
+    let upHtml = '<div class="cap">還沒有模擬資料（在 mp_tests 跑 node botsim.js --upval，再 node exportvalue.js）。</div>', rvHtml = upHtml;
+    if (SV && Object.keys(SV.upval).length) upHtml = svTabs('sv-up', w => {
+      const U = SV.upval[w]; if (!U) return '<div class="cap">這把武器還沒有資料。</div>';
+      const Ls = Object.keys(U).map(Number).sort((a, b) => a - b), P = WEAPONS[w].paths;
+      const rows = Object.keys(P).flatMap(p => [[p, true], [p + '0', false], [p + '1', false]]);
+      return `<div class="cap">武器升級價值表 ${SV.when[w][0] || ''} 量的。</div><div class="tbl"><table><tr><th>路線</th>${Ls.map(L => `<th>難度 ${L}</th>`).join('')}</tr>
+        ${rows.map(([k, first]) => `<tr><td>${first ? '' : '　→ '}${pathName(w, k)}${first ? '<span style="color:#6a79ad">（第一段）</span>' : ''}</td>${Ls.map(L => { const x = U[L] && U[L][k];
+          return svCell(x ? x[0] : null, first ? 1.15 : 1.2, first ? 9 : 2.0, x ? `清場速度 ${x2(x[1])}、掉血 ${x2(x[2])}` : ''); }).join('')}</tr>`).join('')}</table></div>`;
+    });
+    if (SV && Object.keys(SV.route).length) rvHtml = svTabs('sv-rv', w => {
+      const R = SV.route[w]; if (!R) return '<div class="cap">這把武器還沒有資料。</div>';
+      const P = WEAPONS[w].paths, cols = ['none', ...Object.keys(P), ...Object.keys(P).flatMap(p => [p + '0', p + '1'])].filter(k => R[k]);
+      // 列的順序固定（不照分數排）：晶片照晶片清單的順序（玩法晶片、組件、觸發器），再來零件（每種 +1／+2／+4 層），最後背包模組
+      const have = new Set(cols.flatMap(k => Object.keys(R[k].items)));
+      const order = [...Object.keys(CHIPS).filter(id => !id.includes('#') && !id.includes('~')), ...Object.keys(PARTS).flatMap(p => [1, 2, 4].map(n => 'part:' + p + ':' + n)), ...Object.keys(MODULES).map(m => 'mod:' + m)];
+      const items = [...order.filter(id => have.has(id)), ...[...have].filter(id => !order.includes(id))];
+      return `<div class="cap">路線價值表 ${SV.when[w][1] || ''} 量的。每一欄是一條路線（括號是量的難度），每一列是一樣東西（順序固定：晶片、零件、背包模組）。只有「沒升級」那一欄有數值晶片、組件、觸發器（其他路線沒量）。</div>
+        <div class="tbl"><table><tr><th>東西</th>${cols.map(k => `<th>${pathName(w, k)}<br><span style="color:#6a79ad;font-weight:normal">（${R[k].L}）</span></th>`).join('')}</tr>
+        ${items.map(id => `<tr><td>${itemName(id)}</td>${cols.map(k => { const x = R[k].items[id]; return svCell(x ? x[0] : null, 1, 9, x ? `${pathName(w, k)}：清場速度 ${x2(x[1])}、掉血 ${x2(x[2])}（${x[3]} 組）` : ''); }).join('')}</tr>`).join('')}</table></div>`;
+    });
 
     Game.wp = savedWp; Game.inventory = savedInv;
     const xsHp = pts.map(p => `${p.s}-${p.L + 1}`);
@@ -314,16 +305,16 @@ const Codex = {
         ${this.table(['型態', '估算 DPS', '比基礎型'], rows1)}</div>
 
 
-      <div class="viz"><h4>晶片價值：單晶片（每個點 = 一個晶片配一把武器）</h4>
-        <div class="cap">電腦照晶片的玩法打真正的戰鬥（一般戰＋精英戰，飛船不會死），同一組配裝比「那格空著」和「那格裝這個晶片」。
-          橫軸是清場快幾倍，縱軸是掉血是幾倍（反過來畫：越上面掉血越少），虛線是「跟空著一樣」；右上角 = 清得更快又少掉血。超出圖的點畫在邊上、畫成空心，滑鼠移上去看實際數字。
-          命中觸發器先不測。${V ? `模擬日期 ${V.date}。` : ''}</div>
-        ${cvHtml}</div>
+      <div class="viz"><h4>武器升級價值（自動對戰模擬）</h4>
+        <div class="cap">電腦（熟練玩家）用依難度隨機的配裝打一般戰＋精英戰（飛船不會死），同一組配裝比「沒升級」和「升了這條路線」。
+          分數 ＝ 清場快幾倍 ÷ √掉血是幾倍（越大越好）；滑鼠移到數字上看速度和掉血。第一段的標準是 1.15 以上，終極是 1.2～2.0（綠 = 合格、黃 = 偏弱、紅 = 比沒升級還差、橘 = 超過 2）。
+          ${SV ? `資料匯出 ${SV.date}。` : ''}</div>
+        ${upHtml}</div>
 
-      <div class="viz"><h4>晶片價值：兩個晶片的組合（每個點 = 一組組合配一把武器）</h4>
-        <div class="cap">只有武器＋兩個晶片，和只有其中一個、兩個都沒有比。速度加乘 ×1 = 兩個一起裝剛好是各自效果相乘，大於 1 = 互相加乘、小於 1 = 互相抵銷；
-          掉血加乘也一樣用相乘：一起裝的掉血倍數 ÷ 各自的掉血倍數相乘，×1 = 剛好相乘，小於 1 = 比預期少掉血（越上面越好）。超出圖的點畫在邊上、畫成空心，滑鼠移上去看實際數字。</div>
-        ${pairHtml}</div>
+      <div class="viz"><h4>路線價值：晶片、零件、模組（自動對戰模擬）</h4>
+        <div class="cap">整局模擬的電腦挑晶片、零件、背包模組時查的表：每條武器升級路線各自量，同一組配裝比「加這樣東西」和「不加」。
+          分數 ＝ 清場快幾倍 ÷ √掉血是幾倍（1 ＝ 跟不加一樣；綠 = 比較好、紅 = 加了反而更差）；滑鼠移到數字上看速度和掉血。</div>
+        ${rvHtml}</div>
 
       <div class="viz"><h4>敵人數量成長（一場一般戰）</h4>
         <div class="cap">x 軸為「星區-層」（第 7 層是旗艦戰，不畫）。一場的敵人總量用「預算」表示（1 預算 ≈ 1 隻蟲群；噴吐者 3、刺殼 6、主題小兵 3～8）：
