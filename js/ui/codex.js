@@ -232,17 +232,6 @@ const Codex = {
         <div class="wt-paths">${cols}</div></div>`;
     }).join('');
 
-    // 3. 晶片等級帶來的傷害倍率
-    const lv = [1, 2, 3], pw = l => lvMulOf(l);
-    const chipSeries = [
-      { name: '威力倍增器', f: l => 1 + pw(l) },
-      { name: '分裂（總傷害）', f: l => 0.4 * Math.round(3 + 2 * (pw(l) - 1)) },
-      { name: '協同（4 晶片）', f: l => 1 + 0.12 * pw(l) * 4 },
-      { name: '鏈結（倉庫 4）', f: l => 1 + 0.1 * pw(l) * 4 },
-      { name: '巨大化', f: l => 1 + 0.3 * pw(l) },
-      { name: '聚焦透鏡', f: l => 1 + 0.15 * pw(l) },
-    ].map((c, i) => ({ name: c.name, color: S[i], values: lv.map(c.f) }));
-
     // 4. 敵人數量、血量（每星區 7 層；單人／雙人）—— 公式跟 Game.startWave、spawnEnemy 一樣
     const pts = [];
     for (let s = 1; s <= 3; s++) for (let L = 0; L < 7; L++) pts.push({ s, L, level: L + (s - 1) * 7 });
@@ -324,10 +313,6 @@ const Codex = {
         ${cards}
         ${this.table(['型態', '估算 DPS', '比基礎型'], rows1)}</div>
 
-      <div class="viz"><h4>晶片等級與傷害倍率</h4>
-        <div class="cap">影響傷害的晶片在 Lv1 → Lv3 的傷害倍率（Lv2 強度 ×1.5、Lv3 強度 ×2）。協同處理器以電路中 4 個其他晶片、資料鏈結以倉庫 4 個晶片計算。</div>
-        ${this.lineChart('chiplv', { xs: lv.map(l => 'Lv' + l), series: chipSeries, yFmt: v => '×' + f2(v), height: 280 })}
-        ${this.table(['晶片', 'Lv1', 'Lv2', 'Lv3'], chipSeries.map(s => [s.name, ...s.values.map(v => '×' + f2(v))]))}</div>
 
       <div class="viz"><h4>晶片價值：單晶片（每個點 = 一個晶片配一把武器）</h4>
         <div class="cap">電腦照晶片的玩法打真正的戰鬥（一般戰＋精英戰，飛船不會死），同一組配裝比「那格空著」和「那格裝這個晶片」。
@@ -416,7 +401,7 @@ const Codex = {
     const mods = Object.keys(MODULES).map(id => moduleCard(id)).join('');
     const R = (t, d) => `<div><b>${t}</b><br>${d}</div>`;
     return `<div class="codex-sec"><h3>🚀 飛船（開局配置）</h3><div class="cards" style="justify-content:flex-start;margin:0">${ships}</div></div>
-      <div class="codex-sec"><h3>⚙ 零件</h3><div class="sub">零件格開局 6 格（先鋒號 7 格），擊沉旗艦 +1。每層小好處＋小代價，同種疊到 2 層、4 層開啟特性；
+      <div class="codex-sec"><h3>⚙ 零件</h3><div class="sub">零件格開局 6 格（先鋒號 8 格），擊沉旗艦時可以選零件格 +1（或電路插槽 +1）。每層小好處＋小代價，同種疊到 2 層、4 層開啟特性；
         <b>${BALANCE.name}</b>：${BALANCE.desc}。零件在「🔧 改裝廠」三選一取得，也可以付 ◆${PART_SWAP_PRICE}（隨星區上漲）把 1 層換成另一種。</div>
         <div class="cards" style="justify-content:flex-start;margin:0">${parts}</div></div>
       <div class="codex-sec"><h3>🎒 背包模組（只有 1 格）</h3><div class="sub">精英戰鬥勝利後三選一；擊沉旗艦時可以裝上那隻旗艦的專屬模組。換上新的，舊的就沒了。</div>

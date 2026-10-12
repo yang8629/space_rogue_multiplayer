@@ -8,7 +8,7 @@
 const Range = {
   layout: 'single', slow: false, live: false, log: [], total: 0, hits: 0, maxHit: 0, bySrc: {}, t0: 0,
   LAYOUTS: { single: '單一標靶', line: '一排（看穿透）', pack: '密集群（看爆炸、分裂）', wide: '散開（看彈射、追蹤、電弧）',
-    flood: '爆量重現（以前攔截爆量那組散彈配裝＋終焉核心環形波）' },
+    flood: '爆量（散彈＋攔截配裝、終焉核心環形波）' },
   KEYS: ['single', 'line', 'pack', 'wide', 'flood'],
   KEY_CH: '12346',  // 各排列的快捷鍵（5 是實戰）
   SLOW: 0.25,

@@ -387,7 +387,7 @@ const MechCheck = {
       return { ok: A.n === 2 && !A.far.length && B.n > 2 && B.far.length >= 1 && B.far.every(d => near1(d, B.arcD * 0.343)),
         got: `磁暴線圈：電弧打中 ${A.n} 次、最遠那隻${A.far.length ? '被打到（錯）' : '沒打到'}；導電：打中 ${B.n} 次、最遠那隻（隔 4 隻、跳 3 次）受到 ${B.far.map(d => d.toFixed(1)).join('、') || '0'}（要 ${(B.arcD * 0.343).toFixed(1)}）` };
     }],
-    ['武器命中效果', '相位刃格擋', '相位刃沒有內建格擋：沒裝攔截時刃片不會砍掉敵彈；裝了攔截才會砍掉（2026-10-12）', M => {
+    ['武器命中效果', '相位刃格擋', '沒裝攔截時刃片不會砍掉敵彈；裝了攔截才會砍掉（選了格擋流不用攔截）', M => {  // 2026-10-12 格擋改成要攔截
       const run = chain => {
         M.setup('sandbox', 'vanguard', 'blade', 'B', 0, chain); M.targets([]);
         const P = Game.player;
@@ -1041,7 +1041,7 @@ const MechCheck = {
       const d1 = Math.hypot(a.x - p.x, a.y - p.y);
       return { ok: d1 >= d0 - 1 && b.y < by - 10, got: `被打中的離飛船 ${d0.toFixed(0)} → ${d1.toFixed(0)}（不能變近）；旁邊那隻往牠移動 ${(by - b.y).toFixed(0)}（應 > 10）` };
     }],
-    ['電路晶片', '擊退不疊加', '同一幀被同方向打中 25 發，速度最多是單發的擊退（以前每發都加上去，散彈＋鏡像會把敵人推進牆裡）；單發照舊', M => {
+    ['電路晶片', '擊退不疊加', '同一幀被同方向打中 25 發，速度最多是單發的擊退；單發照常擊退', M => {  // 以前每發都加上去，散彈＋鏡像會把敵人推進牆裡
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const [a, b] = M.targets([[150, 0], [150, 120]], 'swarmer'); a.hp = b.hp = 1e9; a.vx = a.vy = b.vx = b.vy = 0;
       for (let i = 0; i < 25; i++) a.hurt(1, 300, 0);
@@ -1049,7 +1049,7 @@ const MechCheck = {
       const va = Math.hypot(a.vx, a.vy), vb = Math.hypot(b.vx, b.vy);
       return { ok: Math.abs(va - 300) < 1 && Math.abs(vb - 300) < 1, got: `25 發後速度 ${Math.round(va)}（要 300）；單發 ${Math.round(vb)}（要 300）` };
     }],
-    ['電路晶片', '吸引不疊加', '同一幀被吸引 25 次，往中心的速度還是 380（以前每次 +380，散彈＋鏡像會把敵人甩進牆裡）', M => {
+    ['電路晶片', '吸引不疊加', '同一幀被吸引 25 次，往中心的速度還是 380', M => {  // 以前每次 +380，散彈＋鏡像會把敵人甩進牆裡
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'pull', null, null]);
       const [a, b] = M.targets([[150, 0], [150, 70]]); b.vx = b.vy = 0;
       for (let i = 0; i < 25; i++) Game.pullAt({ pull: 1, x: a.x, y: a.y, owner: null }, a);
@@ -1471,7 +1471,7 @@ const MechCheck = {
       const around = !w.dead && Math.hypot(w.x - p.x, w.y - p.y) <= 120 && near > 34 + w.r + 20;
       return { ok: d1 < d0 - 20 && b.dead && around, got: `靶離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}；蟲群最靠近核心 ${Math.round(near)}，${around ? `${(t / 60).toFixed(1)} 秒繞到玩家身邊` : '沒繞過來'}` };
     }],
-    ['地圖物件', '敵人不生在行星裡', '敵人的出生點離行星、小行星表面至少 40（2026-10-13：以前沒檢查，蟲群生在行星裡、被推進兩顆小行星和行星中間的死角，刃片打不到，整局模擬卡死）', M => {
+    ['地圖物件', '敵人不生在行星裡', '敵人的出生點離行星、小行星表面至少 40（生在裡面會被推進物件中間的死角出不來）', M => {  // 2026-10-13 以前沒檢查：整局模擬相刃第 91 局蟲群生在行星裡、卡進死角，刃片打不到
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player;
       Game.objs = [{ type: 'planet', x: p.x + 650, y: p.y, r: 200 }, { type: 'rock', x: p.x - 600, y: p.y + 200, r: 60, hp: 999 }, { type: 'rock', x: p.x, y: p.y - 650, r: 60, hp: 999 }];
@@ -1479,7 +1479,7 @@ const MechCheck = {
       for (let k = 0; k < 200; k++) { Game.enemies = []; Game.spawnEnemy('swarmer'); const e = Game.enemies[0]; if (!e) continue; n++; if (Objects.onSolid(e, 39)) bad++; }
       return { ok: n === 200 && bad === 0, got: `生了 ${n} 隻，壓到或貼著行星／小行星的 ${bad} 隻（要 0）` };
     }],
-    ['地圖物件', '黑洞邊不卡住','敵人在黑洞範圍邊上，要走的方向偏向「決定好要繞的另一邊」：閃避後的方向不能是 0（以前兩股力量剛好抵銷，敵人在範圍邊上進進出出停在原地；2026-10-09 整局模擬卡住那一局的數值）', M => {
+    ['地圖物件', '黑洞邊不卡住','敵人在黑洞範圍邊上，要走的方向偏向「決定好要繞的另一邊」：閃避後的方向不能是 0（兩股力量剛好抵銷時，敵人會停在範圍邊上進進出出）', M => {  // 以前會抵銷；用 2026-10-09 整局模擬卡住那一局的數值
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, hx = p.x + 450, hy = p.y - 200;
       Game.objs = [{ type: 'hole', x: hx, y: hy, r: 34, R: 280, tick: 0 }];
@@ -1488,7 +1488,7 @@ const MechCheck = {
       const len = Math.hypot(sx, sy), side = (sx * -(e.y - hy) + sy * (e.x - hx)) / d;  // 繞的分量（照 holeSide 那一邊）
       return { ok: len > 0.5 && side > 0.5, got: `閃避後的方向長度 ${len.toFixed(2)}（要 > 0.5），往繞的那一邊 ${side.toFixed(2)}（要 > 0.5）` };
     }],
-    ['地圖物件', '尋路繞開黑洞範圍', '玩家和敵人中間有黑洞：敵人的路線繞在閃避範圍（R + 30）外面（以前路線直接穿過去，走到範圍邊上被推開卡住）', M => {
+    ['地圖物件', '尋路繞開黑洞範圍', '玩家和敵人中間有黑洞：敵人的路線繞在閃避範圍（R + 30）外面（不會走到範圍邊上被推開卡住）', M => {  // 以前路線直接穿過去
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, hx = p.x + 420, hy = p.y, R = 280 + 30;
       Game.objs = [{ type: 'hole', x: hx, y: hy, r: 34, R: 280, tick: 0 }];

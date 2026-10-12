@@ -46,7 +46,7 @@ const WEAPONS = {
       // 2026-10-12 碎光改成射向附近的敵人（REFRACT 內），沒有別隻就折回打原本那隻：原本往前扇形散開只打中 21%，只升第一段跟沒升級比只快 9%
       A: { name: '稜鏡', desc: `命中時折射出 2 道碎光（每道 40% 傷害），射向 ${REFRACT} 內最近的其他敵人；附近沒有別隻，碎光折回打原本那隻。`, apply: p => { p.shards = { n: 2, ratio: 0.4, refract: REFRACT }; },
         next: [
-          { name: '專注', desc: `碎光不再散開，改成折回打同一隻；連續打中同一隻（碎光也算）每次傷害 +${FOCUS.per * 100}%，最多 +${FOCUS.per * FOCUS.max * 100}%，打中別隻就歸零：盯死精英和王。`, apply: p => { p.shards = { n: 2, ratio: 0.4, focus: true }; p.focus = FOCUS; } },
+          { name: '專注', desc: `碎光全部折回打同一隻；連續打中同一隻（碎光也算）每次傷害 +${FOCUS.per * 100}%，最多 +${FOCUS.per * FOCUS.max * 100}%，打中別隻就歸零：盯死精英和王。`, apply: p => { p.shards = { n: 2, ratio: 0.4, focus: true }; p.focus = FOCUS; } },
           { name: '分散', desc: `碎光增加到 ${SPREAD.n} 道；碎光每打中一隻敵人，射速 +${SPREAD.per * 100}%（最多 ${SPREAD.max} 層 +${SPREAD.per * SPREAD.max * 100}%），${SPREAD.idle} 秒沒疊就開始掉層：專清雜兵。`, apply: p => { p.shards = { n: SPREAD.n, ratio: SPREAD.ratio, spread: true, refract: REFRACT }; p.spreadUp = SPREAD; } }] },
       B: { name: '連發', desc: '一次射出 2 道雷射，每道傷害 ×0.75。', apply: p => { p.count = 2; p.spread = 0.08; p.damage *= 0.75; },
         next: [
@@ -127,7 +127,7 @@ const WEAPONS = {
         next: [
           // 2026-10-13 追蹤力 4 → 2：幾乎每發都打中，武器升級價值表 2.51（削傷害 ×0.75 還是 2.42；追蹤力 2 → 2.13；1 → 1.96 但偏 30° 就追不到、比星環給的 1.5 還弱）
           { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 2; } },
-          { name: '格擋流', desc: `刃片會砍掉碰到的敵彈（格擋，不用攔截晶片）；每砍掉一顆，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; p.parry = true; } }] },
+          { name: '格擋流', desc: `刃片會砍掉碰到的敵彈（格擋，不用攔截晶片）；每砍掉一顆，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${Math.round(PARRY_UP.per * PARRY_UP.max * 100)}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; p.parry = true; } }] },
       // 2026-10-12 燃燒每秒 10 → 20：只升第一段跟沒升級比只快 14%、掉血還比較多，業火、吸能刃很少升滿
       C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 20，持續 2 秒）。', apply: p => { p.burn = { dps: 20, t: 2 }; },
         next: [
