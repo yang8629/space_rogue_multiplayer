@@ -403,7 +403,7 @@ const MechCheck = {
         for (let i = 0; i < 3; i++) Game.hitFx(e, b, 1, e.x, e.y);
         const h = e.hp; for (let f = 0; f < 60; f++) e.update(1 / 60, Game.player);
         const d1 = h - e.hp; for (let f = 0; f < 90; f++) e.update(1 / 60, Game.player);
-        return { d1, n: e.burnL ? e.burnL.length : 0, on: e.burnT > 0 || !!e.burnL };
+        return { d1, n: e.burnL ? e.burnL.length : 0, on: e.burnT > 0 || !!e.burnL, dps: Game.wp.burn.dps };  // 每秒幾點照武器升級（相位灼燒）
       };
       const A = burn(0), B = burn(1);
       // 爆燃：疊 4 層、燒 0.5 秒，第 5 下 → 剩下的火 ×1.5 往四周炸（半徑 90，含牠自己），層數歸零；200 外的不受影響
@@ -412,11 +412,11 @@ const MechCheck = {
       const b = new Bullet(e.x, e.y, 0, runOps(Game.stats.ops, 0)[0], 0, null);
       for (let i = 0; i < 4; i++) Game.hitFx(e, b, 1, e.x, e.y);
       for (let f = 0; f < 30; f++) e.update(1 / 60, Game.player);
-      const want = (e.burnL.reduce((a, l) => a + l.dps * l.t, 0) + 20) * 1.5, h = [e.hp, near.hp, far.hp];
+      const want = (e.burnL.reduce((a, l) => a + l.dps * l.t, 0) + Game.wp.burn.dps * Game.wp.burn.t) * 1.5, h = [e.hp, near.hp, far.hp];
       Game.hitFx(e, b, 1, e.x, e.y);
       const dE = h[0] - e.hp, dN = h[1] - near.hp, dF = h[2] - far.hp;
-      return { ok: Math.abs(A.d1 - 30) <= 1 && Math.abs(B.d1 - 10) <= 1 && A.n === 0 && !A.on && near1(dE, want) && near1(dN, want) && dF === 0 && !e.burnL,
-        got: `點火 3 次，1 秒燒掉 ${A.d1}（要 30 = 3 層 × 10）、2.5 秒後剩 ${A.n} 層${A.on ? '（還在燒，錯）' : '、熄了'}；吸能刃（一般燃燒）點 3 次 1 秒燒掉 ${B.d1}（要 10）；` +
+      return { ok: Math.abs(A.d1 - 3 * A.dps) <= 1 && Math.abs(B.d1 - B.dps) <= 1 && A.n === 0 && !A.on && near1(dE, want) && near1(dN, want) && dF === 0 && !e.burnL,
+        got: `點火 3 次，1 秒燒掉 ${A.d1}（要 ${3 * A.dps} = 3 層 × ${A.dps}）、2.5 秒後剩 ${A.n} 層${A.on ? '（還在燒，錯）' : '、熄了'}；吸能刃（一般燃燒）點 3 次 1 秒燒掉 ${B.d1}（要 ${B.dps}）；` +
           `第 5 層爆燃：牠自己 −${dE.toFixed(0)}、旁邊 70 那隻 −${dN.toFixed(0)}（都要 ${want.toFixed(0)} = 剩下的火 ×1.5）、200 外那隻 −${dF.toFixed(0)}（要 0）、爆完${e.burnL ? `還剩 ${e.burnL.length} 層（錯）` : '歸零'}` };
     }],
     ['武器命中效果', '減速相乘', '不同來源的減速（子彈、重力井模組、彗星的冰）剩下的速度相乘，各自計時；同一來源再打中只刷新時間', M => {
