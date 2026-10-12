@@ -1403,7 +1403,7 @@ const Game = {
     }
     Q.length = 0;
     for (const s of SQ) {  // 碎片：從命中點往前方扇形散開（稜鏡：射向附近的敵人）
-      const { n, ratio, homing = 0, refract, focus, spread, breed, resonance } = s.b.shards, list = [];
+      const { n, ratio, homing = 0, refract, focus, spread, breed, resonance, seek } = s.b.shards, list = [];
       let res = null;
       if (resonance) {  // 共鳴（電漿升級）：被打中的那隻開一個連結，這一發的小電漿打中的都加進來
         const e0 = this.enemies.find(o => o.id === s.ignore);
@@ -1429,9 +1429,9 @@ const Game = {
         if (aim.length < n) burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
       }
       for (let k = 0; k < (aim ? aim.length : n); k++)
-        list.push(shot({ angle: aim ? aim[k].a : (k - (n - 1) / 2) * (1.6 / n), speed: 620, damage: s.b.damage * ratio, radius: 3,
-          life: refract ? refract / 620 + 0.1 : 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
-          shards: breed ? { n: breed.n, ratio: breed.ratio / ratio, homing } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分；一樣追蹤）
+        list.push(shot({ angle: aim ? aim[k].a : (k - (n - 1) / 2) * (1.6 / n), speed: seek ? seek.speed : 620, damage: s.b.damage * ratio, radius: 3, seekAll: !!seek,
+          life: refract ? refract / 620 + 0.1 : seek ? seek.life : 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
+          shards: breed ? { n: breed.n, ratio: breed.ratio / ratio, homing, seek } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分；一樣追蹤）
       this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
     }
     let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）

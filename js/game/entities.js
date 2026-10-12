@@ -242,7 +242,7 @@ class Bullet {
     this.x = x; this.y = y; this.px = x; this.py = y; this.angle = angle;
     this.sx = x; this.sy = y;  // 發射點：畫尾巴時不超過已飛行的距離（不然剛射出時尾巴會從船屁股露出來）
     this.speed = s.speed; this.damage = s.damage; this.r = s.radius;
-    this.pierce = s.pierce; this.bounce = s.bounce; this.homing = s.homing;
+    this.pierce = s.pierce; this.bounce = s.bounce; this.homing = s.homing; this.seekAll = !!s.seekAll;  // seekAll：追蹤不限前方（分裂電漿的小電漿）
     this.life = s.life; this.color = s.color; this.shape = s.shape;
     this.payload = s.payload; this.depth = depth;
     this.explode = s.explode; this.burn = s.burn; this.shards = s.shards; this.shard = s.shard; this.arcs = s.arcs || null;
@@ -398,7 +398,7 @@ class Bullet {
       for (const e of enemiesNear(this.x, this.y, 450)) {
         if (e.dead || e.spawnT > 0 || this.hitSet.has(e.id) || e.cloak > 0.5) continue;  // 隱形的潛伏者不追
         const d2 = dist2(this.x, this.y, e.x, e.y);
-        if (d2 >= bd || Math.abs(angleDiff(this.angle, Math.atan2(e.y - this.y, e.x - this.x))) > 1.22) continue;
+        if (d2 >= bd || (!this.seekAll && Math.abs(angleDiff(this.angle, Math.atan2(e.y - this.y, e.x - this.x))) > 1.22)) continue;
         bd = d2; t = e;
       }
       if (t) {
