@@ -16,7 +16,8 @@ const GRAZE = { r: 40, per: 0.1, max: 8, idle: 3, decay: 1 };         // 擦彈�
 const RAGE = { per: 1 };                                              // 狂怒：每缺 1% HP 射速 +1%
 const SKEWER = { per: 0.3 };                                          // 串燒：每穿過一隻，之後打中的傷害 +30%
 // 電漿砲的終極升級（2026-10-09 改成「每個終極升級一套玩法」）
-const SHARD_HOMING = 4;                          // 分裂電漿：小電漿追蹤（2026-10-12：往前飛常打空，只打中 15%）
+const SHARD_HOMING = 4;
+const SEEK = { speed: 220, life: 2.5 };          // 分裂電漿：小電漿慢慢飄（每秒 220）、存在 2.5 秒、四面八方的敵人都追（2026-10-13：以前每秒 620、0.4 秒、只追前方，打中 29% → 56%）                          // 分裂電漿：小電漿追蹤（2026-10-12：往前飛常打空，只打中 15%）
 const BREED = { n: 3, ratio: 0.35 };             // 增殖：小電漿打中時再分裂 3 顆（各為大電漿傷害的 35%），第二代不再分裂
 const RESONANCE = { t: 2, share: 0.6 };          // 共鳴：同一發打中的敵人連結 2 秒，受到的傷害分 60% 給其他連結的
 const WEIGHT = { per: 3, self: 0.15 };           // 重量砲：自帶移動速度 −15%；每比原本慢 1%，傷害 +3%
@@ -80,16 +81,16 @@ const WEAPONS = {
   plasma: { name: '電漿砲', short: '電漿', color: '#c77dff', desc: '慢速的大型電漿球，單發傷害高、可穿透。',
     base: { interval: 0.45, count: 1, spread: 0, damage: 22, speed: 450, radius: 9, pierce: 2, life: 1.33, shape: 'orb', knock: 1.2 },
     paths: {
-      A: { name: '分裂電漿', desc: '命中時往前分裂出 3 顆會追蹤的小電漿（每顆 35% 傷害）。', apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING }; },
+      A: { name: '分裂電漿', desc: `命中時分裂出 3 顆小電漿（每顆 35% 傷害），慢慢飄向附近的敵人（四面八方都追，存在 ${SEEK.life} 秒）。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, seek: SEEK }; },
         next: [
-          { name: '增殖', desc: `小電漿打中敵人時再分裂成 ${BREED.n} 顆（各為大電漿傷害的 ${BREED.ratio * 100}%，一樣會追蹤），第二代不再分裂：敵人越分散越好用。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, breed: BREED }; } },
-          { name: '共鳴', desc: `被大電漿打中的那隻，和同一發小電漿打中的敵人互相連結 ${RESONANCE.t} 秒；連結中任何一隻受到傷害，其他連結的也受到 ${RESONANCE.share * 100}%（分出去的不會再分）：把一群連起來，集中打一隻。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, resonance: RESONANCE }; } }] },
+          { name: '增殖', desc: `小電漿打中敵人時再分裂成 ${BREED.n} 顆（各為大電漿傷害的 ${BREED.ratio * 100}%，一樣會追蹤），第二代不再分裂：敵人越分散越好用。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, seek: SEEK, breed: BREED }; } },
+          { name: '共鳴', desc: `被大電漿打中的那隻，和同一發小電漿打中的敵人互相連結 ${RESONANCE.t} 秒；連結中任何一隻受到傷害，其他連結的也受到 ${RESONANCE.share * 100}%（分出去的不會再分）：把一群連起來，集中打一隻。`, apply: p => { p.shards = { n: 3, ratio: 0.35, homing: SHARD_HOMING, seek: SEEK, resonance: RESONANCE }; } }] },
       B: { name: '重質電漿', desc: '電漿更慢、更大、存在更久，穿透 +4。', apply: p => {
-          p.speed *= 0.6; p.radius *= 1.6; p.life *= 1.5; p.pierce += 4; },
+          p.speed *= 0.75; p.radius *= 2.2; p.life *= 1.5; p.pierce += 4; },  // 2026-10-13 半徑 ×1.6 → ×2.2、速度 ×0.6 → ×0.75（以前跟沒升級幾乎一樣快：×1.03～1.07）
         next: [
           { name: '重量砲', desc: `飛船移動速度 −${WEIGHT.self * 100}%；移動速度每比原本慢 1%，傷害 +${WEIGHT.per}%（沒有上限，光這個升級就 +${WEIGHT.self * 100 * WEIGHT.per}%）：越重越痛（重裝甲、護盾產生器、被凍住都算；加速器會抵銷）。`, apply: p => { p.weight = WEIGHT; } },
           { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層、重力井模組、彗星的冰可以再疊：剩下的速度相乘）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
-      C: { name: '新星', desc: '命中時爆炸（半徑 90，80% 傷害）。', apply: p => { p.explode = { r: 90, ratio: 0.8 }; },
+      C: { name: '新星', desc: '命中時爆炸（半徑 120，80% 傷害）。', apply: p => { p.explode = { r: 120, ratio: 0.8 }; },  // 2026-10-13 半徑 90 → 120（以前 65% 的爆炸只炸到 1 隻）
         next: [
           { name: '餘震', desc: `爆炸 ${AFTERSHOCK.t} 秒後在同一點再炸一次（同半徑、同傷害），地上先出現縮小的圈：朝敵人要走到的地方打。`, apply: p => { p.aftershock = AFTERSHOCK; } },
           { name: '壓縮', desc: `爆炸前先把 ${COMPRESS.pull} 以內的敵人吸到中心（旗艦、母巢不會被吸），再炸半徑 ${COMPRESS.r}；炸到的敵人（含被直擊的那隻）從第 2 隻開始，每多 1 隻這次爆炸傷害 +${COMPRESS.per * 100}%：自己把怪聚起來炸。`, apply: p => { p.explode = { r: COMPRESS.r, ratio: 0.8, compress: COMPRESS }; } }] },
