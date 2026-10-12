@@ -121,7 +121,8 @@ const WEAPONS = {
         next: [
           { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 4; } },
           { name: '格擋流', desc: `刃片每砍掉一顆敵彈，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; } }] },
-      C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 10，持續 2 秒）。', apply: p => { p.burn = { dps: 10, t: 2 }; },
+      // 2026-10-12 燃燒每秒 10 → 20：只升第一段跟沒升級比只快 14%、掉血還比較多，業火、吸能刃很少升滿
+      C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 20，持續 2 秒）。', apply: p => { p.burn = { dps: 20, t: 2 }; },
         next: [
           { name: '業火', desc: `燃燒每次命中各自計時、疊加（一般燃燒同一隻只留最強的一個）；同一隻疊到 ${INFERNO.n} 層就爆燃：身上還沒燒完的火 ×${INFERNO.mul} 一次往四周炸開（半徑 ${INFERNO.r}，牠自己也吃），然後從 0 層重新疊。在怪群裡來回掃，一隻接一隻點爆；燃燒彈頭的燃燒也一起疊。`, apply: p => { p.inferno = INFERNO; } },
           { name: '吸能刃', desc: '每次命中回復 0.25 HP（每秒最多 4 HP）。', apply: p => { p.lifesteal = 0.25; } }] },
