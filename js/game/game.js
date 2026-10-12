@@ -240,7 +240,8 @@ const Game = {
       if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 500, 60);  // 大地圖：散在這一波的區域各處（離在這一區的玩家至少 500）
       // 不生在黑洞出不來的範圍：母巢不會動，整個引力範圍都不行；列隊蟲後面 5 節往外排到 110
       const R = type === 'hive' ? OBJ.HOLE_R : OBJ.HOLE_NOESC + (type === 'worm' ? 110 : 0);
-      if (!Objects.inHole({ x, y, r: ENEMY_TYPES[type].radius }, R)) break;
+      // 也不生在行星、小行星裡或貼著它們（離表面至少 40）：生在裡面會被推進物件中間的死角出不來
+      if (!Objects.inHole({ x, y, r: ENEMY_TYPES[type].radius }, R) && !Objects.onSolid({ x, y, r: ENEMY_TYPES[type].radius }, 40)) break;
     }
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
       (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量

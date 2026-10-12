@@ -292,6 +292,11 @@ const Objects = {
     for (const o of Game.objs) if (o.type === 'hole' && dist2(e.x, e.y, o.x, o.y) < ((R || o.R) + e.r) ** 2) return true;
     return false;
   },
+  // 敵人出生點會不會壓到行星、小行星（離表面不到 pad）（2026-10-13：以前沒檢查，蟲群生在行星裡、被推進兩顆小行星和行星中間的死角，刃片打不到，戰鬥卡死）
+  onSolid(e, pad) {
+    for (const o of Game.objs) if ((o.type === 'planet' || (o.type === 'rock' && !o.dead)) && dist2(e.x, e.y, o.x, o.y) < (o.r + e.r + pad) ** 2) return true;
+    return false;
+  },
   // 圓形物體 a 被推出圓 o 外面；回傳有沒有碰到
   pushOut(a, o, r) {
     const dx = a.x - o.x, dy = a.y - o.y, d = Math.hypot(dx, dy), min = o.r + r;

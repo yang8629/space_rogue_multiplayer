@@ -1471,7 +1471,15 @@ const MechCheck = {
       const around = !w.dead && Math.hypot(w.x - p.x, w.y - p.y) <= 120 && near > 34 + w.r + 20;
       return { ok: d1 < d0 - 20 && b.dead && around, got: `靶離中心 ${Math.round(d0)} → ${Math.round(d1)}，子彈${b.dead ? '被吞掉' : '還在'}；蟲群最靠近核心 ${Math.round(near)}，${around ? `${(t / 60).toFixed(1)} 秒繞到玩家身邊` : '沒繞過來'}` };
     }],
-    ['地圖物件', '黑洞邊不卡住', '敵人在黑洞範圍邊上，要走的方向偏向「決定好要繞的另一邊」：閃避後的方向不能是 0（以前兩股力量剛好抵銷，敵人在範圍邊上進進出出停在原地；2026-10-09 整局模擬卡住那一局的數值）', M => {
+    ['地圖物件', '敵人不生在行星裡', '敵人的出生點離行星、小行星表面至少 40（2026-10-13：以前沒檢查，蟲群生在行星裡、被推進兩顆小行星和行星中間的死角，刃片打不到，整局模擬卡死）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player;
+      Game.objs = [{ type: 'planet', x: p.x + 650, y: p.y, r: 200 }, { type: 'rock', x: p.x - 600, y: p.y + 200, r: 60, hp: 999 }, { type: 'rock', x: p.x, y: p.y - 650, r: 60, hp: 999 }];
+      let bad = 0, n = 0;
+      for (let k = 0; k < 200; k++) { Game.enemies = []; Game.spawnEnemy('swarmer'); const e = Game.enemies[0]; if (!e) continue; n++; if (Objects.onSolid(e, 39)) bad++; }
+      return { ok: n === 200 && bad === 0, got: `生了 ${n} 隻，壓到或貼著行星／小行星的 ${bad} 隻（要 0）` };
+    }],
+    ['地圖物件', '黑洞邊不卡住','敵人在黑洞範圍邊上，要走的方向偏向「決定好要繞的另一邊」：閃避後的方向不能是 0（以前兩股力量剛好抵銷，敵人在範圍邊上進進出出停在原地；2026-10-09 整局模擬卡住那一局的數值）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, hx = p.x + 450, hy = p.y - 200;
       Game.objs = [{ type: 'hole', x: hx, y: hy, r: 34, R: 280, tick: 0 }];
