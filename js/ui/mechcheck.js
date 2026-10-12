@@ -1180,6 +1180,15 @@ const MechCheck = {
         const fs = fwd && splitDamage(10, fwd.att, null), bs = back && splitDamage(10, back.att, null);
         return { ok: !!fs && !!bs && !fs.rear && near1(bs.rear || 0, 10), got: `往前：${JSON.stringify(fs)}；往後：${JSON.stringify(bs)}` };
       },
+      M => {  // 分裂：分出來的子彈算分裂，中間那顆算原本的來源（2026-10-13）
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'split', null, null]); M.targets([]);
+        const one = runOps(Game.stats.ops, 0).map(b => b.src);
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'split', 'split', null]); M.targets([]);
+        const L2 = runOps(Game.stats.ops, 0), two = L2.map(b => b.src), d = splitDamage(10, { src: L2[1].src, cr: L2[1].cr }, null);
+        const cnt = (a, k) => a.filter(x => x === k).length;
+        return { ok: one.length === 3 && cnt(one, 'weapon') === 1 && cnt(one, 'split') === 2 && two.length === 9 && cnt(two, 'weapon') === 1 && cnt(two, 'split') === 8 && near1(d.split || 0, 10),
+          got: `1 個分裂：${one.length} 顆，武器 ${cnt(one, 'weapon')}、分裂 ${cnt(one, 'split')}（要 1、2）；2 個分裂：${two.length} 顆，武器 ${cnt(two, 'weapon')}、分裂 ${cnt(two, 'split')}（要 1、8）；分出來的那顆打 10 → ${JSON.stringify(d)}` };
+      },
       M => {  // 傷害歸屬：攔截回射、迴旋回程
         M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'intercept', null, null]);
         const e = M.targets([[300, 0]], 'swarmer', true, 1)[0], gp = Game.player; e.hp = 3;  // 回射一下就打死
@@ -1772,9 +1781,9 @@ const SockCheck = {
     };
     try { fn(); } finally { window.hostFire = orig; }
   },
-  spawned(src, fn) {  // 跑 fn 的時候，記下某個來源射出的子彈
+  spawned(src, fn) {  // 跑 fn 的時候，記下某個來源射出的子彈（src 可以是陣列：產物上的分裂分出來的子彈來源是分裂）
     const got = [], orig = window.spawnShots;
-    window.spawnShots = (list, ...rest) => { for (const s of list) if (s.src === src) got.push(s); return orig(list, ...rest); };
+    window.spawnShots = (list, ...rest) => { for (const s of list) if ([].concat(src).includes(s.src)) got.push(s); return orig(list, ...rest); };
     try { fn(); } finally { window.spawnShots = orig; }
     return got;
   },
@@ -1821,7 +1830,7 @@ const SockCheck = {
       //   其他組件照舊 70（爆裂靠波及到第二個靶算多一下爆炸）
       this.targets([[d, 0], [d, c === 'bigshot' ? 90 : 70]]);
       let spawned = [];
-      const all = this.hurtLog(null, () => { spawned = this.spawned('sticky', () => { Game.player.fire(); this.step(150); }); });
+      const all = this.hurtLog(null, () => { spawned = this.spawned(['sticky', 'split'], () => { Game.player.fire(); this.step(150); }); });
       const e0 = Game.enemies[0];
       // 第二個靶自己被彈丸直接打中（散彈扇形邊緣偶爾擦到、黏在牠身上爆炸）：牠身上的爆炸不算（不是波及，2026-10-11 偶發失敗的原因）
       const hit1 = all.some(x => x.i === 1 && x.t === 'direct');
@@ -1837,7 +1846,7 @@ const SockCheck = {
     const run = flat => {
       this.setup(w, flat);
       MechCheck.targets([[Math.min(100, this.range() * 0.6), 0]], 'swarmer', true, 0.01);  // 100：散彈 4 顆正中間沒有彈丸，150 外蟲群會從中間漏掉
-      return this.spawned('infect', () => { Game.player.fire(); this.step(40); });
+      return this.spawned(['infect', 'split'], () => { Game.player.fire(); this.step(40); });
     };
     const A = run(['weapon', 'infect']), B = run(['weapon', 'infect', c]);
     const hb = L => L.length ? L.reduce((x, s) => x + (s.hb || 0), 0) / L.length : 0;

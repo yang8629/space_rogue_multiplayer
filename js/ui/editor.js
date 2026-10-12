@@ -264,7 +264,7 @@ const Editor = {
     const cell = (v, t, c) => `<td>${fmt(v || 0)}<span class="pct">${t ? Math.round((v || 0) / t * 100) : 0}%</span>
       <div class="bar"><div style="width:${t ? ((v || 0) / t * 100).toFixed(1) : 0}%;background:${c}"></div></div></td>`;
     const rows = keys.map(k => {
-      const where = k === 'weapon' || k === 'ship' ? '' : Game.chain.some(id => id && baseOf(id) === k) ? ''
+      const where = k === 'weapon' || k === 'ship' ? '' : Game.chain.some(id => id && baseOf(id) === k) || (Game.socks || []).some(S => (S || []).some(id => id && baseOf(id) === k)) ? ''  // 插在插座上的組件也算在電路上
         : '<span style="color:#6a79ad">（目前不在電路上）</span>';
       return `<tr><td><b style="color:${color(k)}">${dmgKeyName(k)}</b>${where}</td>${cell(S.chips[k], tS, color(k))}${cell(R.chips[k], tR, color(k))}</tr>`;
     }).join('');
@@ -281,8 +281,8 @@ const Editor = {
         <tbody>${rows || '<tr><td colspan="3" class="sub">還沒有造成傷害。</td></tr>'}</tbody>
         <tfoot><tr><td><b>合計</b></td><td>${fmt(tS)}</td><td>${fmt(tR)}</td></tr></tfoot></table>
       ${mateTable}
-      <p class="hint">怎麼算：每顆子彈的基礎傷害算給產生它的來源（武器；鏡像複製出的子彈算鏡像迴路；觸發器的回響算觸發器）。
-        加工過子彈的晶片（倍增、分裂、巨彈…）依它讓傷害變成幾倍，按比例分走多出來的傷害；超頻依射速提升分攤。
+      <p class="hint">怎麼算：每顆子彈的基礎傷害算給產生它的來源（武器；觸發器的回響算觸發器；鏡像、反向多射出來的、分裂分出來的子彈算那個晶片，分裂中間那顆還是原本的來源）。
+        加工過子彈的晶片（倍增、巨彈…）依它讓傷害變成幾倍，按比例分走多出來的傷害；超頻依射速提升分攤。
         爆炸、碎片、電弧、燃燒跟著原本那顆子彈算。${coop ? '雙人：傷害由房主計算，每秒同步一次。' : ''}</p>`;
   },
   changed() { if (this.dry) return; Game.recalc(); this.render(); },

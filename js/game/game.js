@@ -1604,7 +1604,7 @@ const Game = {
     if (H.shards) {  // 分裂插在黏著上：爆炸時噴出碎片
       const a0 = rand(0, TAU), q = S[0];
       const list = Array.from({ length: H.shards }, (_, k) => shot({ angle: a0 + k / H.shards * TAU, speed: 650, damage: total * 0.2 * H.shardM, radius: 4,
-        life: 0.5, color: q.color || '#f78cff', shard: true, src: 'sticky', cr: att.cr }));
+        life: 0.5, color: q.color || '#f78cff', shard: true, src: 'split', cr: att.cr }));  // 碎片全部是分裂多出來的
       this.withLoadout(q.owner, () => spawnShots(list, x, y, 0, 0, e.id));
     }
     const T = S.find(q => q.end);  // 消失觸發器：黏住的子彈引爆時才算消失（一次爆炸觸發一次）
