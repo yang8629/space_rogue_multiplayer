@@ -71,7 +71,8 @@ const WEAPONS = {
         next: [
           { name: '逆襲', desc: `受傷（護盾擋下也算）之後 ${REVENGE.t} 秒內，獨頭彈傷害 ×${REVENGE.mul}、命中時爆炸（半徑 ${REVENGE.explode.r}，100% 傷害）；逆襲沒開時被打中，那一下傷害 ×${REVENGE.first}：挨一下換一波爆發。`, apply: p => { p.revenge = REVENGE; } },
           { name: '空格苦行', desc: `電路上每個沒裝晶片的空格，傷害 +${ASCETIC.per * 100}%（組件插座不算）：晶片越少越痛。`, apply: p => { p.ascetic = ASCETIC; } }] },
-      C: { name: '龍息彈', desc: '命中附加燃燒（每秒 6，持續 3 秒）。', apply: p => { p.burn = { dps: 6, t: 3 }; },
+      // 2026-10-12 燃燒每秒 6×3 秒 → 18×2 秒：只升第一段跟沒升級比只快 7%、掉血一樣（燒太慢，敵人死時一半的火還沒燒完）
+      C: { name: '龍息彈', desc: '命中附加燃燒（每秒 18，持續 2 秒）。', apply: p => { p.burn = { dps: 18, t: 2 }; },
         next: [
           { name: '火毯', desc: `每顆彈丸消失的地方（打中敵人或飛到射程盡頭）留一團火（半徑 ${CARPET.r}、燒 ${CARPET.t} 秒），敵人碰到就燃燒（每秒 ${CARPET.dps}，持續 3 秒）：朝敵人要走過來的地方噴，鋪一片火毯封路。`, apply: p => { p.carpet = CARPET; } },
           { name: '野火', desc: `燃燒中的敵人每 ${WILDFIRE.every} 秒把火傳給 ${WILDFIRE.r} 以內一隻還沒燒的敵人；燒著死掉時，火噴到 ${WILDFIRE.deathR} 以內所有敵人身上：敵人越擠燒越快。`, apply: p => { p.wildfire = WILDFIRE; } }] },
