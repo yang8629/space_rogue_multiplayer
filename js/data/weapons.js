@@ -120,11 +120,13 @@ const WEAPONS = {
     paths: {
       A: { name: '巨刃', desc: '刃片 4 段、範圍更大。', apply: p => { p.count = 4; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
-          { name: '旋風斬', desc: '改成 360 度環形斬擊（12 段）。', apply: p => { p.count = 12; p.spread = TAU * 11 / 12; } },
+          // 2026-10-13 12 段 → 8 段：四面八方都砍到、很少被貼身，武器升級價值表 2.38（目標 2.0 以下；削傷害 ×0.7 還是 2.08，8 段 1.88）
+          { name: '旋風斬', desc: '改成 360 度環形斬擊（8 段）。', apply: p => { p.count = 8; p.spread = TAU * 7 / 8; } },
           { name: '玻璃砲', desc: '受到的傷害 +10%；受到的傷害每比正常多 1%，傷害 +3%（沒有上限）：越脆越痛（輕裝甲、散熱片、反應裝甲、終焉護殼都算）。', apply: p => { p.glass = { per: 3, self: 0.1 }; } }] },
       B: { name: '飛刃', desc: '刃片飛得更快更遠，變成中距離武器。', apply: p => { p.speed *= 1.8; p.life *= 2.2; },
         next: [
-          { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 4; } },
+          // 2026-10-13 追蹤力 4 → 2：幾乎每發都打中，武器升級價值表 2.51（削傷害 ×0.75 還是 2.42；追蹤力 2 → 2.13；1 → 1.96 但偏 30° 就追不到、比星環給的 1.5 還弱）
+          { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 2; } },
           { name: '格擋流', desc: `刃片會砍掉碰到的敵彈（格擋，不用攔截晶片）；每砍掉一顆，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; p.parry = true; } }] },
       // 2026-10-12 燃燒每秒 10 → 20：只升第一段跟沒升級比只快 14%、掉血還比較多，業火、吸能刃很少升滿
       C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 20，持續 2 秒）。', apply: p => { p.burn = { dps: 20, t: 2 }; },
