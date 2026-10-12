@@ -129,7 +129,10 @@ const MechCheck = {
       return { ok: n >= 4, got: `1 發打中 ${n} 隻（穿透 3）` };
     }],
     ['武器命中效果', '追蹤（相位刃・飛刃・追蹤飛刃）', '子彈轉向打中偏離準心的敵人；很快的子彈也追得到（不會繞圈）', M => {
-      M.setup('sandbox', 'vanguard', 'blade', 'B', 0, ['weapon', null, null, null]); M.targets([[220, 110]]);
+      // 靶放在 trackOne 射的那道刃片方向再偏 27°、距離 246（2026-10-13：相刃一次 2 道、各偏 ±10°，以前靶固定在 (220,110)，挑到的那道其實要轉 37°；追蹤力 4 → 2 後轉不過來）
+      M.setup('sandbox', 'vanguard', 'blade', 'B', 0, ['weapon', null, null, null]);
+      const a0 = runOps(Game.stats.ops, 0).reduce((a, c) => Math.abs(c.angle) < Math.abs(a.angle) ? c : a).angle + 0.47;
+      M.targets([[Math.cos(a0) * 246, Math.sin(a0) * 246]]);
       const n = M.trackOne();
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); const e = M.targets([[150, 150]])[0];
       spawnShots([shot({ angle: 0, speed: 2400, damage: 10, life: 1, homing: 4 })], Game.player.x, Game.player.y, 0, 0, null);
