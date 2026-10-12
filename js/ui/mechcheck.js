@@ -384,7 +384,19 @@ const MechCheck = {
       return { ok: A.n === 2 && !A.far.length && B.n > 2 && B.far.length >= 1 && B.far.every(d => near1(d, B.arcD * 0.343)),
         got: `磁暴線圈：電弧打中 ${A.n} 次、最遠那隻${A.far.length ? '被打到（錯）' : '沒打到'}；導電：打中 ${B.n} 次、最遠那隻（隔 4 隻、跳 3 次）受到 ${B.far.map(d => d.toFixed(1)).join('、') || '0'}（要 ${(B.arcD * 0.343).toFixed(1)}）` };
     }],
-    ['武器命中效果', '格擋流', '相位刃・飛刃・格擋流：刃片每砍掉一顆敵彈傷害 +5%（最多 12 層）；2 秒沒砍到開始每 0.25 秒掉 1 層', M => {
+    ['武器命中效果', '相位刃格擋', '相位刃沒有內建格擋：沒裝攔截時刃片不會砍掉敵彈；裝了攔截才會砍掉（2026-10-12）', M => {
+      const run = chain => {
+        M.setup('sandbox', 'vanguard', 'blade', 'B', 0, chain); M.targets([]);
+        const P = Game.player;
+        Game.eBullets = [[90, 0], [110, 12], [100, -12], [130, 0]].map(([dx, dy]) => ({ x: P.x + dx, y: P.y + dy, vx: -60, vy: 0, r: 5, life: 3, dmg: 0, from: 'mc' }));
+        P.aim = 0; P.fire();
+        for (let f = 0; f < 20; f++) { Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+        return Game.eBullets.filter(b => b.life > 0).length;
+      };
+      const a = run(['weapon', null, null, null]), b = run(['weapon', 'intercept', null, null]);
+      return { ok: a === 4 && b <= 1, got: `沒裝攔截：敵彈剩 ${a} 顆（要 4）；裝了攔截：剩 ${b} 顆（要 0～1）` };
+    }],
+    ['武器命中效果', '格擋流', '相位刃・飛刃・格擋流：不用攔截也會格擋；刃片每砍掉一顆敵彈傷害 +5%（最多 12 層）；2 秒沒砍到開始每 0.25 秒掉 1 層', M => {
       M.setup('sandbox', 'vanguard', 'blade', 'B', 1, ['weapon', null, null, null]); M.targets([]);
       const P = Game.player, d0 = runOps(Game.stats.ops, 0)[0].damage;
       Game.eBullets = [[90, 0], [110, 12], [100, -12], [130, 0]].map(([dx, dy]) => ({ x: P.x + dx, y: P.y + dy, vx: -60, vy: 0, r: 5, life: 3, dmg: 0, from: 'mc' }));

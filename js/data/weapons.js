@@ -114,8 +114,9 @@ const WEAPONS = {
     } },
   // 雙人版調整：開火從 5 段減為 3 段（每段 7 → 10，一次揮出 35 → 30）；巨刃 7 → 5 段（2026-10-10 再降到 4 段：整局通關 59%）
   // 2026-10-11 揮刀間隔 0.3 → 0.5 秒：強在格擋（關掉格擋 58% → 18%），刃片太多、穿透調低也擋得住；整局 0.5 秒 28%／20%（兩批）
-  blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 2 段弧形能量刃，無限穿透，只打得到身邊；刃片會砍掉碰到的敵彈（格擋）。',
-    base: { interval: 0.5, count: 2, spread: 0.35, damage: 9, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8, parry: true },
+  blade: { name: '相位刃', short: '相刃', color: '#ff8fd8', desc: '向前揮出 2 段弧形能量刃，無限穿透，只打得到身邊；裝了攔截晶片，刃片會砍掉碰到的敵彈（格擋）。',
+    // 2026-10-12 格擋改成要裝攔截才有（設計本來就是這樣，09-29 誤做成內建）；揮刀間隔 0.5 → 0.3（0.5 是 10-11 為了削內建格擋調的；整局模擬：要攔截＋0.5 通關 7%，＋0.3 18%）
+    base: { interval: 0.3, count: 2, spread: 0.35, damage: 9, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },
     paths: {
       A: { name: '巨刃', desc: '刃片 4 段、範圍更大。', apply: p => { p.count = 4; p.spread = 1.1; p.radius *= 1.4; p.life *= 1.3; },
         next: [
@@ -124,7 +125,7 @@ const WEAPONS = {
       B: { name: '飛刃', desc: '刃片飛得更快更遠，變成中距離武器。', apply: p => { p.speed *= 1.8; p.life *= 2.2; },
         next: [
           { name: '追蹤飛刃', desc: '刃片會追蹤敵人。', apply: p => { p.homing = 4; } },
-          { name: '格擋流', desc: `刃片每砍掉一顆敵彈，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; } }] },
+          { name: '格擋流', desc: `刃片會砍掉碰到的敵彈（格擋，不用攔截晶片）；每砍掉一顆，傷害 +${PARRY_UP.per * 100}%（最多 ${PARRY_UP.max} 層 +${PARRY_UP.per * PARRY_UP.max * 100}%），${PARRY_UP.idle} 秒沒砍到就開始掉層：主動去迎子彈砍。`, apply: p => { p.parryUp = PARRY_UP; p.parry = true; } }] },
       // 2026-10-12 燃燒每秒 10 → 20：只升第一段跟沒升級比只快 14%、掉血還比較多，業火、吸能刃很少升滿
       C: { name: '相位灼燒', desc: '命中附加燃燒（每秒 20，持續 2 秒）。', apply: p => { p.burn = { dps: 20, t: 2 }; },
         next: [
@@ -139,7 +140,7 @@ const WEAPON_BRIEF = {
   scatter: '一次噴出 4 顆短程彈丸，貼近敵人時爆發最高。',
   plasma: '慢速的大型電漿球，單發傷害高、可以穿透。',
   railgun: '超高速穿甲彈，一發貫穿一排；射速慢，打得動小行星。',
-  blade: '向前揮出 2 段能量刃，只打得到身邊；刃片會砍掉敵彈。' };
+  blade: '向前揮出 2 段能量刃，只打得到身邊；裝了攔截能砍掉敵彈。' };
 
 function weaponParams(state) {
   const W = WEAPONS[state.id];
