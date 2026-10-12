@@ -65,8 +65,9 @@ const WEAPONS = {
         next: [
           { name: '群戰', desc: `身邊 ${CROWD.r} 以內每有 1 隻敵人，射速 +${CROWD.per * 100}%（最多算 ${CROWD.max} 隻，+${CROWD.per * CROWD.max * 100}%）：衝進怪堆越打越快。`, apply: p => { p.crowd = CROWD; } },
           { name: '撞牆', desc: `擊退 ×${WALLHIT.knock}；被彈丸打飛的敵人 ${WALLHIT.t} 秒內撞到牆、小行星、行星或別的敵人，受到「打中牠的彈丸傷害加總 ×${WALLHIT.mul}」並暈眩 ${WALLHIT.stun} 秒（同一隻 ${WALLHIT.cd} 秒內只算一次；被撞到的敵人不受傷）：把怪推成一片、推到牆上。`, apply: p => { p.knock *= WALLHIT.knock; p.wallhit = WALLHIT; } }] },
-      B: { name: '獨頭彈', desc: '改成單發大彈：傷害 ×4.5、穿透 2。', apply: p => {
-          p.count = 1; p.spread = 0; p.jitter = 0; p.damage *= 4.5; p.radius = 7; p.pierce += 2; p.life = 0.7; p.shape = 'orb'; },
+      // 2026-10-12 傷害 ×4.5 → ×5.5、半徑 7 → 12：只升第一段跟沒升級比只快 6%（單發要瞄準、看子彈數觸發的晶片效果變少）
+      B: { name: '獨頭彈', desc: '改成單發大彈：傷害 ×5.5、穿透 2。', apply: p => {
+          p.count = 1; p.spread = 0; p.jitter = 0; p.damage *= 5.5; p.radius = 12; p.pierce += 2; p.life = 0.7; p.shape = 'orb'; },
         next: [
           { name: '逆襲', desc: `受傷（護盾擋下也算）之後 ${REVENGE.t} 秒內，獨頭彈傷害 ×${REVENGE.mul}、命中時爆炸（半徑 ${REVENGE.explode.r}，100% 傷害）；逆襲沒開時被打中，那一下傷害 ×${REVENGE.first}：挨一下換一波爆發。`, apply: p => { p.revenge = REVENGE; } },
           { name: '空格苦行', desc: `電路上每個沒裝晶片的空格，傷害 +${ASCETIC.per * 100}%（組件插座不算）：晶片越少越痛。`, apply: p => { p.ascetic = ASCETIC; } }] },
