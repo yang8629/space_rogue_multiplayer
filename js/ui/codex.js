@@ -208,29 +208,7 @@ const Codex = {
     const savedWp = Game.wp, savedInv = Game.inventory;
     const f2 = v => (+v.toFixed(2)).toString();
 
-    // 1. 武器 DPS：照升級樹排（每把武器一張卡，3 條路線，每格標 DPS 與比基礎型提升多少）
-    const trees = Object.keys(WEAPONS).map(id => ({ id, W: WEAPONS[id], t: weaponDpsTree(id) }));
-    const maxDps = Math.max(...trees.flatMap(({ t }) => [t.base, ...Object.values(t.paths).flatMap(p => [p.dps, ...p.next])]));
-    const rows1 = [];
-    const node = (name, desc, v, base) => `<div class="wt-node" title="${name}：${desc.replace(/<[^>]+>/g, '')}">
-        <div class="wt-top"><b class="wt-name">${name}</b><span class="wt-num">${Math.round(v)}<em>${pctUp(v, base)}</em></span></div>
-        <div class="wt-track"><div style="width:${(v / maxDps * 100).toFixed(1)}%"></div></div>
-        <div class="wt-desc">${desc}</div></div>`;
-    const cards = trees.map(({ id, W, t }) => {
-      rows1.push([`${W.name}・基礎型`, Math.round(t.base), '—']);
-      const cols = Object.entries(W.paths).map(([k, P]) => {
-        const d = t.paths[k];
-        rows1.push([`${W.name}・${P.name}`, Math.round(d.dps), pctUp(d.dps, t.base)]);
-        P.next.forEach((n, i) => rows1.push([`${W.name}・${P.name} → ${n.name}`, Math.round(d.next[i]), pctUp(d.next[i], t.base)]));
-        return `<div class="wt-path">
-          <div class="wt-stage">第一段</div>${node(P.name, P.desc, d.dps, t.base)}
-          <div class="wt-stage">第二段：二選一</div>
-          <div class="wt-finals">${P.next.map((n, i) => node(n.name, n.desc, d.next[i], t.base)).join('')}</div></div>`;
-      }).join('');
-      return `<div class="wt-card" style="--wc:${W.color}">
-        <div class="wt-head"><span><i></i>${W.name}</span><span>基礎型 DPS <b>${Math.round(t.base)}</b></span></div>
-        <div class="wt-paths">${cols}</div></div>`;
-    }).join('');
+    // 武器升級的估算 DPS 在「武器」分頁（2026-10-13 從這裡拿掉，重複）
 
     // 4. 敵人數量、血量（每星區 7 層；單人／雙人）—— 公式跟 Game.startWave、spawnEnemy 一樣
     const pts = [];
@@ -297,14 +275,6 @@ const Codex = {
     Game.wp = savedWp; Game.inventory = savedInv;
     const xsHp = pts.map(p => `${p.s}-${p.L + 1}`);
     return `
-      <div class="viz"><h4>武器升級 DPS</h4>
-        <div class="cap">每把武器照升級樹排：先選第一段（3 條路線之一），再從它下面的 2 個第二段選一個。
-          數字是電路沒有其他晶片時的估算 DPS，括號是比基礎型提升多少；「最高」標出這把武器 DPS 最高的最終型態。
-          含爆炸、燃燒、碎片的預估傷害，不含彈射。相位刃假設刃片全部打中，實際打單一敵人會低一些。</div>
-        ${cards}
-        ${this.table(['型態', '估算 DPS', '比基礎型'], rows1)}</div>
-
-
       <div class="viz"><h4>武器升級價值（自動對戰模擬）</h4>
         <div class="cap">電腦（熟練玩家）用依難度隨機的配裝打一般戰＋精英戰（飛船不會死），同一組配裝比「沒升級」和「升了這條路線」。
           分數 ＝ 清場快幾倍 ÷ √掉血是幾倍（越大越好）；滑鼠移到數字上看速度和掉血。第一段的標準是 1.15 以上，終極是 1.2～2.0（綠 = 合格、黃 = 偏弱、紅 = 比沒升級還差、橘 = 超過 2）。
