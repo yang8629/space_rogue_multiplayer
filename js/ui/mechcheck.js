@@ -1831,7 +1831,7 @@ const MechCheck = {
       return { ok: plain && given && picksOk, got: out.join('；') };
     }],
     // ---- 雙人（房主這邊，用本機的隊友，不連線）：改成多人架構時的安全網 ----
-    ['雙人', '隊友的子彈算隊友的', '隊友開火：子彈的擁有者是隊友的配裝、環繞類跟著隊友的船；傷害記在隊友身上，房主的傷害是 0', M => {
+    ['多人', '隊友的子彈算隊友的', '隊友開火：子彈的擁有者是隊友的配裝、環繞類跟著隊友的船；傷害記在隊友身上，房主的傷害是 0', M => {
       const m = M.coop(), dt = 1 / 60;
       M.targets([[250, 300]]);  // 隊友正前方 250
       let mine = 0, other = 0;
@@ -1844,7 +1844,7 @@ const MechCheck = {
       const sum = R => Object.values(R.dmg).reduce((a, b) => a + b, 0), md = sum(m.L.R), hd = sum(Game.runStats);
       return { ok: mine > 0 && other === 0 && md > 0 && hd === 0, got: `隊友的子彈 ${mine}、別人的 ${other}；隊友傷害 ${Math.round(md)}、房主傷害 ${Math.round(hd)}` };
     }],
-    ['雙人', '吸血補開火的人', '隊友的子彈吸血：補隊友的血，房主的血不變', M => {
+    ['多人', '吸血補開火的人', '隊友的子彈吸血：補隊友的血，房主的血不變', M => {
       const m = M.coop(), P = Game.player, dt = 1 / 60;
       M.targets([[250, 300]]);
       m.hp = 50; P.hp = 50;
@@ -1856,7 +1856,7 @@ const MechCheck = {
       }
       return { ok: m.hp > 50 && P.hp === 50, got: `隊友 HP 50 → ${Math.round(m.hp)}、房主 HP 50 → ${Math.round(P.hp)}` };
     }],
-    ['雙人', '擊殺效果給打最後一擊的人', '連殺裝填、無傷連殺：記在打出最後一擊的那個人身上（隊友殺的給隊友、房主殺的給房主）', M => {
+    ['多人', '擊殺效果給打最後一擊的人', '連殺裝填、無傷連殺：記在打出最後一擊的那個人身上（隊友殺的給隊友、房主殺的給房主）', M => {
       const m = M.coop(), P = Game.player;
       m.L.wp = { ...m.L.wp, reload: true }; Game.wp = { ...Game.wp, reload: true };
       const streakOn = mc => ({ ...mc, traits: { ...mc.traits, streak: true } });
@@ -1868,7 +1868,7 @@ const MechCheck = {
       const b = P.fireCd === 0 && P.streak === 1 && m.streak === 1;
       return { ok: a && b, got: `${a ? '隊友殺的給隊友' : '隊友殺的給錯人（錯誤）'}；${b ? '房主殺的給房主' : '房主殺的給錯人（錯誤）'}` };
     }],
-    ['雙人', '救援', '一人被擊墜（另一人還活著 → 不結束）；活著的人待在旁邊 2 秒救起來，分出自己一半的血；房主、隊友互救都可以', M => {
+    ['多人', '救援', '一人被擊墜（另一人還活著 → 不結束）；活著的人待在旁邊 2 秒救起來，分出自己一半的血；房主、隊友互救都可以', M => {
       const m = M.coop(), P = Game.player, dt = 1 / 60;
       const save = (down, helper) => {
         down.dead = false; helper.dead = false; down.reviveT = 0;
@@ -1881,7 +1881,7 @@ const MechCheck = {
       const a = save(m, P), b = save(P, m);
       return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
     }],
-    ['雙人', '在場的玩家', '兩人都在：在場 2 人、算雙人難度、敵人找最近的那個；隊友離線或倒下：只剩房主、恢復單人難度（離線）', M => {
+    ['多人', '在場的玩家', '兩人都在：在場 2 人、算多人難度、敵人找最近的那個；隊友離線或倒下：只剩房主、恢復單人難度（離線）', M => {
       const m = M.coop(), P = Game.player;
       const both = Game.players().length === 2 && Game.coopOn() && Game.nearestPlayer(m.x, m.y) === m && Game.nearestPlayer(P.x, P.y) === P;
       m.gone = true;

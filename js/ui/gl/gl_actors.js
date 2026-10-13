@@ -150,7 +150,11 @@ const GLActors = {
     const L = (lx, ly) => [p.x + lx * ca - ly * sa, p.y + lx * sa + ly * ca];  // 船的座標 → 世界座標
     const fade = p.iframe > 0 && Math.floor(t * 20) % 2 ? 0.35 : 1, col = glColor(S.color);
     const sprL = (tex, lx, ly, sc, rot = 0) => { const [x, y] = L(lx, ly), s = GLR.sprite(P, tex); s.position.set(x, y); s.scale.set(sc); s.rotation = a + rot; s.alpha = fade; return s; };
-    if (tag) { const q = GLR.take(this.pSt); if (q.text !== tag) q.text = tag; q.anchor.set(0.5, 1); q.position.set(p.x, p.y - p.r - 8); q.tint = col; q.alpha = 1; }
+    if (tag) {  // 雙人：號碼標籤＋船底光暈都用玩家色（每個人一個顏色，選同一艘船也分得出來）
+      const pc = glColor(G.colorOf(p)), q = GLR.take(this.pSt);
+      if (q.text !== tag) q.text = tag; q.anchor.set(0.5, 1); q.position.set(p.x, p.y - p.r - 8); q.tint = pc; q.alpha = 1;
+      this.glowAt(P, p.x, p.y, 30, pc, 0.4 * fade);
+    }
     // 背包模組（船後面那層）
     if (mod === 'gravity') sprL(GLR.T('m/gravity'), 0, 0, 1 / 3, t);
     if (mod === 'thruster') sprL(GLR.T('m/thruster'), 0, 0, 1 / 3);

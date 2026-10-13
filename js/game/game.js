@@ -43,6 +43,9 @@ const Game = {
   tagOf(p) { return `${p === this.player ? Net.mySlot() : p.slot || 2}P`; },
   // 雙人：s 號玩家的出生點離中間多遠（照號碼由左到右、以中間為準，每人隔 100；兩人時是 -50／+50）
   slotX(s) { return (s - (this.mates.length + 2) / 2) * 100; },
+  // 玩家顏色：雙人時照號碼（CFG.PLAYER_COLORS），單人就是飛船自己的顏色
+  colorOf(p) { return this.mates.length ? this.slotColor(p === this.player ? Net.mySlot() : p.slot || 2) : p.ship.color; },
+  slotColor(s) { return CFG.PLAYER_COLORS[(s - 1) % CFG.PLAYER_COLORS.length]; },
   nearestPlayer(x, y) {
     let best = null, bd = Infinity;
     for (const p of this.players()) { const d = dist2(x, y, p.x, p.y); if (d < bd) { bd = d; best = p; } }

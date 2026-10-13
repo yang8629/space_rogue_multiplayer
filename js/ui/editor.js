@@ -270,8 +270,8 @@ const Editor = {
     }).join('');
     const label = Game.freePlay() ? (Game.mode === 'range' ? '本次靶場' : '本次沙盒') : Game.isEndless() ? `本關（無盡 · 星區 ${Game.sector}）` : `本關（星區 ${Game.sector}）`;
     const coop = Game.mode === 'coop' && Game.mates.length, mates = coop ? Net.mateChipRows() : [];
-    const me = coop ? `<h3>${Net.mySlot()}P（你）</h3>` : '';
-    const mateTable = mates.map(mate => `<h3>${mate.tag} 隊友（整局）</h3>
+    const me = coop ? `<h3 style="color:${Game.slotColor(Net.mySlot())}">${Net.mySlot()}P（你）</h3>` : '';
+    const mateTable = mates.map(mate => `<h3 style="color:${Game.slotColor(parseInt(mate.tag, 10))}">${mate.tag} 隊友（整局）</h3>
       <table class="dmg-table"><thead><tr><th>來源</th><th>整局</th></tr></thead>
         <tbody>${mate.rows.map(([n, c, v]) => `<tr><td><b style="color:${c}">${n}</b></td>${cell(v, mate.total, c)}</tr>`).join('')
           || '<tr><td colspan="2" class="sub">還沒有造成傷害。</td></tr>'}</tbody>
@@ -283,7 +283,7 @@ const Editor = {
       ${mateTable}
       <p class="hint">怎麼算：每顆子彈的基礎傷害算給產生它的來源（武器；觸發器的回響算觸發器；鏡像、反向多射出來的、分裂分出來的子彈算那個晶片，分裂中間那顆還是原本的來源）。
         加工過子彈的晶片（倍增、巨彈…）依它讓傷害變成幾倍，按比例分走多出來的傷害；超頻依射速提升分攤。
-        爆炸、碎片、電弧、燃燒跟著原本那顆子彈算。${coop ? '雙人：傷害由房主計算，每秒同步一次。' : ''}</p>`;
+        爆炸、碎片、電弧、燃燒跟著原本那顆子彈算。${coop ? '多人：傷害由房主計算，每秒同步一次。' : ''}</p>`;
   },
   changed() { if (this.dry) return; Game.recalc(); this.render(); },
   // ---------- 拖曳或選取時，標出每個位置放不放得進去 ----------

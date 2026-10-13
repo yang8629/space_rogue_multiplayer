@@ -178,13 +178,14 @@ const Net = {
     const fmt = n => Math.round(n).toLocaleString('zh-TW');
     const body = rows.map(r => {
       const S = SHIPS[r.ship] || { name: '？', color: '#8fa3d9' }, pct = sum ? r.dmg / sum * 100 : 0;
-      return `<div class="sum-lab"><i style="background:${S.color}"></i>${r.tag} ${S.name}${r.me ? '（你）' : ''}</div>
-        <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${S.color}"></div></div>
+      const c = Game.slotColor(parseInt(r.tag, 10));  // 玩家色（照號碼）
+      return `<div class="sum-lab"><i style="background:${c}"></i><b style="color:${c}">${r.tag}</b> ${S.name}${r.me ? '（你）' : ''}</div>
+        <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${c}"></div></div>
         <div class="sum-val">${fmt(r.dmg)}<span>${pct.toFixed(0)}%</span></div>`;
     }).join('');
     const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
     return `<div class="summary">
-      <div class="sum-head"><span>雙人傷害結算</span><b>${fmt(sum)}</b></div>
+      <div class="sum-head"><span>多人傷害結算</span><b>${fmt(sum)}</b></div>
       <div class="sum-rows">${body}</div>
       <div class="sum-tiles">${rows.map(r => tile(`${r.tag} 擊殺`, fmt(r.kills)) + tile(`${r.tag} 最高單發`, fmt(r.maxHit))).join('')}</div></div>`;
   },
@@ -209,7 +210,7 @@ const Net = {
     Game.state = 'lobby'; Game.inArena = false; Game.mates = [];
     const ok = typeof Peer !== 'undefined';
     Screen.show(`<div class="scr title-wrap">
-      <h1 style="font-size:42px">👥 雙人連線</h1>
+      <h1 style="font-size:42px">👥 多人連線</h1>
       <div class="sub">先進同一個房間（最多 ${NET_MAX} 人），到齊後由房主按「開始」，再各自選飛船、武器與起始晶片。每局結束後會回到這個房間。</div>
       <div id="netBtns">${this.linked ? '' : ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
         <div class="row"><input id="netCode" maxlength="4" placeholder="房號" autocomplete="off" spellcheck="false"
@@ -218,7 +219,7 @@ const Net = {
       : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}</div>
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
       <div class="keys">一人按「開房間」拿到 4 碼房號，其他人輸入房號按「加入房間」。<br>
-        雙人遠征：航圖投票（選不同就照票數抽籤）、錢包各自獨立（怪物掉落的晶體每人都拿）、獎勵各自選、戰鬥中按 Tab 全員一起暫停。<br>
+        多人遠征：航圖投票（選不同就照票數抽籤）、錢包各自獨立（怪物掉落的晶體每人都拿）、獎勵各自選、戰鬥中按 Tab 全員一起暫停。<br>
         一人被擊墜時留在原地，隊友靠近 ${CFG.REVIVE.time} 秒就能救起來（救的人分出自己一半的血量）；沒被救起的在戰鬥結束後以 30% HP 歸隊；全員都被擊墜才結束。</div>
       <div class="row">${this.linked ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回標題 (Esc)</button>'}</div>
       <div class="ver">版本 ${CFG.VERSION}</div></div>`);
@@ -372,7 +373,7 @@ const Net = {
     const left = Math.max(0, Math.ceil((W.until - performance.now()) / 1000));
     this.overlay(`<h2 style="color:#ffd166;margin:0">⏸ 隊友斷線了</h2>
       <div class="sub">${W.msg}<br>遊戲暫停中，房間保留 <b id="rejoinLeft">${left}</b> 秒。<br>
-        請隊友按「重新連線」；如果他重新整理了頁面，選「雙人連線」後輸入房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b> 就能回到這一局。</div>
+        請隊友按「重新連線」；如果他重新整理了頁面，選「多人連線」後輸入房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b> 就能回到這一局。</div>
       <div class="row"><button class="big" data-act="netsolo">自己繼續玩（隊友之後還能回來）</button>
         <button data-act="netgiveup">結束這一局</button></div>`);
   },
@@ -751,7 +752,8 @@ const Net = {
       ? `<b style="color:${SHIPS[p.ship].color}">${SHIPS[p.ship].name}</b> ＋ ${WEAPONS[p.weapon].name} ＋ ${p.chip ? CHIPS[p.chip].name : '無起始晶片'}`
       : '<span style="color:#8fa3d9">選擇中…</span>';
     const others = this.role === 'host' ? this.peers.map(q => [q.slot, q.pick]) : [1, ...this.roster].filter(s => s !== this.slot).map(s => [s, this.picks[s]]);
-    const mates = others.map(([s, p]) => [others.length > 1 ? (s === 1 ? '1P 房主' : `${s}P`) : '隊友', p]);
+    const tagHtml = s => `<b style="color:${Game.slotColor(s)}">${s}P</b>`;  // 號碼用玩家色
+    const mates = others.map(([s, p]) => [others.length > 1 ? (s === 1 ? `${tagHtml(1)} 房主` : tagHtml(s)) : '隊友', p]);
     Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">等待隊友</h1>
       <div class="sub">你：${line(this.myPick)}<br>${mates.map(([who, p]) => `${who}：${line(p)}`).join('<br>')}<br><br>${this.role === 'host' ? '大家都選好就會開始。' : '大家都選好後，房主那邊會開始戰鬥。'}</div>
       <div class="row"><button data-act="title">離開房間</button></div></div>`);
@@ -806,7 +808,7 @@ const Net = {
     this.resetRun();
     Game.showMap(this.startMsg());
   },
-  startMsg() { return `${Game.chapter().name}：${Game.chapter().intro}<br>雙人遠征開始！點選下一個節點投票，大家都選好就出發。`; },
+  startMsg() { return `${Game.chapter().name}：${Game.chapter().intro}<br>多人遠征開始！點選下一個節點投票，大家都選好就出發。`; },
 
   // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
   resetRun() {
@@ -987,7 +989,7 @@ const Net = {
       : [[1, this.matePick], ...Object.keys(this.picks || {}).map(Number).filter(s => s > 1 && s !== this.slot).map(s => [s, this.picks[s]])].filter(([, p]) => p);
     return {
       ...base, mode: 'coop',
-      where: `雙人 · ${this.whereText()}（${host ? '房主 1P' : `隊友 ${this.slot}P`}）`,
+      where: `多人 · ${this.whereText()}（${host ? '房主 1P' : `隊友 ${this.slot}P`}）`,
       cause: G.player.dead ? G.lastHit : base.cause,
       coop: {
         role: host ? '房主' : '隊友',

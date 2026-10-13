@@ -188,7 +188,7 @@ const Screen = {
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
-        <div class="sub">${{ run: '開始遠征', coop: '雙人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件，或星門號的傳送門），之後的成長都靠零件和背包模組。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
+        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件，或星門號的傳送門），之後的成長都靠零件和背包模組。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
       <div class="cards left">${cards}</div></div>`);
   },
@@ -328,7 +328,7 @@ const Screen = {
       <div class="row">
         <button class="big" data-act="chapters">開始遠征</button>
         <button class="big" data-act="select" data-arg="range">🎯 靶場</button>
-        <button class="big" data-act="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 雙人連線（測試）</button>
+        <button class="big" data-act="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 多人連線（測試）</button>
       </div>
       <div class="row"><button data-act="codex">📖 電路總覽</button>
         <button data-act="records">📜 遊玩紀錄</button>
@@ -401,7 +401,7 @@ const Screen = {
         const me = Net.mySlot(), others = Net.otherSlots(), left = Net.voteLeft();
         const who = s => (others.length > 1 ? `${s}P ` : '隊友');  // 只有一個隊友時照舊寫「隊友」
         const mateTxt = others.map(s => Net.atOf(s) !== 'map' ? `<span style="color:#ffd166">${who(s)}還在處理上一個節點…</span>` : V[s] ? `<b style="color:#9dff6b">${who(s)}已投票</b>` : `${who(s)}選擇中…`).join('　·　');
-        return `<div class="sub" style="color:#ff9dbd">👥 投票（你是 ${me}P）：${V[me] ? '你已投票，可以改投' : '點選一個發光的節點'}　·　${mateTxt}
+        return `<div class="sub" style="color:#ff9dbd">👥 投票（你是 <b style="color:${Game.slotColor(me)}">${me}P</b>）：${V[me] ? '你已投票，可以改投' : '點選一個發光的節點'}　·　${mateTxt}
           　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　${others.length > 1 ? '選不同就照票數比例抽籤' : '兩人選不同就各 50% 抽籤'}；時間到沒投的不算</div>`;
       })() : ''}
       <div class="map"><svg>${lines}</svg>${nodes}</div>
@@ -494,7 +494,7 @@ const Screen = {
     const coop = Game.mode === 'coop';
     this.show(`<div class="scr title-wrap">
       <h1>${coop ? '選單' : '暫停'}</h1>
-      <div class="sub">${coop ? '雙人模式不會暫停，隊友那邊照常進行。<br>' : ''}${Game.freePlay() ? '離開 = 回到標題。' : '離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。'}</div>
+      <div class="sub">${coop ? '多人模式不會暫停，隊友那邊照常進行。<br>' : ''}${Game.freePlay() ? '離開 = 回到標題。' : '離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。'}</div>
       <div class="row"><button class="big" data-act="resume" data-back>繼續 (Esc)</button>
         <button class="big" data-act="quitrun">離開遊戲</button></div></div>`);
   },
@@ -596,7 +596,7 @@ const Screen = {
         ${r.ship} · ${r.weapon}　·　${Math.floor(r.time / 60)} 分 ${r.time % 60} 秒　·　擊殺 ${fmt(r.kills)}　·　總傷害 ${fmt(r.dmg)}
         ${r.cause ? `<br>擊毀原因：${r.cause}` : ''}${r.bosses && r.bosses.length ? `<br>擊沉旗艦：${r.bosses.join('、')}` : ''}
         ${top ? `<br>傷害前三：${top}` : ''}
-        ${r.coop ? `<br><b style="color:#ff9dbd">👥 雙人（${r.coop.role}）</b>　隊友：${r.coop.mate}${r.coop.mateDown ? '（已被擊墜）' : ''}
+        ${r.coop ? `<br><b style="color:#ff9dbd">👥 多人（${r.coop.role}）</b>　隊友：${r.coop.mate}${r.coop.mateDown ? '（已被擊墜）' : ''}
           <br>延遲：${typeof r.coop.ping === 'object' ? `平均 ${r.coop.ping.avg} ms、最低 ${r.coop.ping.min}、90% 在 ${r.coop.ping.p90} 以內、最高 ${r.coop.ping.max}（${r.coop.ping.samples} 次）` : r.coop.ping}
           　·　同步最長間隔 ${r.coop.sync.maxGapMs} ms
           ${r.coop.team ? `<br>傷害：${r.coop.team.map(t => `${t.who} ${t.ship} ${fmt(t.dmg)}（擊殺 ${t.kills}）`).join('　｜　')}` : ''}` : ''}<br><span style="color:#6a79ad">電路：${r.chain.map(c => c || '空').join(' → ')}</span>
@@ -673,7 +673,7 @@ function recordText(r) {
   const sec = t => { const m = /^(\d+)秒$/.exec(t); return m ? +m[1] : 0; };
   // 第 1 行：版本｜結果、打到哪｜飛船、操作｜時間、擊殺
   const where = r.where || '', bm = /，(\S+?)剩 (\d+)% 血/.exec(where);
-  L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '雙人 ' : ''}${C.result[r.result] || r.result} ${r.chapter > 1 ? `第${r.chapter}章 ` : ''}${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
+  L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '多人 ' : ''}${C.result[r.result] || r.result} ${r.chapter > 1 ? `第${r.chapter}章 ` : ''}${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
   L.push(`武器 ${r.weapon.replace('・', '+')}`);
   const S = r.stats;
   const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的組件
@@ -718,7 +718,7 @@ function recordText(r) {
   if (r.coop) {
     const c = r.coop, ping = typeof c.ping === 'object' ? `延遲${c.ping.avg}ms(最高${c.ping.max})` : '';
     // 同步最長的那次在哪（第幾層、第幾波、場上子彈數）、超過 150ms 的停頓幾次
-    L.push(`雙人 ${c.role}｜隊友 ${c.mate}${c.mateDown ? '(倒下)' : ''}｜${ping} 同步最長${c.sync.maxGapMs}ms${c.sync.maxGapAt ? `(${c.sync.maxGapAt})` : ''}${c.sync.gaps150 != null ? ` 停頓>150ms ${c.sync.gaps150}次` : ''}`);
+    L.push(`多人 ${c.role}｜隊友 ${c.mate}${c.mateDown ? '(倒下)' : ''}｜${ping} 同步最長${c.sync.maxGapMs}ms${c.sync.maxGapAt ? `(${c.sync.maxGapAt})` : ''}${c.sync.gaps150 != null ? ` 停頓>150ms ${c.sync.gaps150}次` : ''}`);
     if (c.team) L.push(`分工 ${c.team.map(t => `${t.who} ${t.ship} ${t.dmg}(殺${t.kills}${t.downs ? ` 倒${t.downs}` : ''}${t.revives ? ` 救${t.revives}` : ''})`).join('｜')}`);
     if (c.matePerf && c.matePerf.worst) L.push(`隊友效能 最慢一幀${c.matePerf.worst}ms(${c.matePerf.at}) 卡>100ms ${c.matePerf.slow}次`);
     if (c.mateChipDmg && c.mateChipDmg.length) L.push(`隊友晶片 ${c.mateChipDmg.map(([k, v]) => (/^武器・/.test(k) ? '武器' : chip(k)) + v).join(' ')}`);
