@@ -1,8 +1,10 @@
 {
   "name": "space-rogue-tests",
   "private": true,
-  "description": "星環電路多人版的測試與模擬（node release.js 等）；截圖腳本（perf/）才需要 npm install",
+  "description": "星環電路多人版的測試與模擬：第一次先 npm install（名字檢查要 acorn、截圖腳本要 puppeteer-core），之後 node release.js",
   "devDependencies": {
+    "acorn": "8.14.0",
+    "acorn-walk": "8.3.4",
     "puppeteer-core": "25.12.0"
   }
 }

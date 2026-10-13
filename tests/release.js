@@ -65,6 +65,13 @@ for (const t of TESTS) {
   ok(r.status === 0 && /^0\/\d+/.test(out.trim()), `機制檢查 ${out.trim().split('\n')[0]}`, out);
 }
 
+// ---- 2a. 用了不存在的名字（undefcheck.js：照 index.html 順序解析遊戲、模擬電腦，跑到那一行才會當掉的錯先抓出來）----
+{
+  const r = spawnSync(process.execPath, ['undefcheck.js'], { cwd: __dirname, encoding: 'utf8' });
+  const out = ((r.stdout || '') + (r.stderr || '')).trim();
+  ok(r.status === 0, `名字檢查（${out.split('\n')[0]}）`, out);
+}
+
 // ---- 2b. 升級健檢（只提醒，不算沒通過）：武器升級價值表過期、第一段太弱、終極偏離、很少升滿（upcheck.js） ----
 {
   const r = spawnSync(process.execPath, ['upcheck.js', '--brief'], { cwd: __dirname, encoding: 'utf8' });
