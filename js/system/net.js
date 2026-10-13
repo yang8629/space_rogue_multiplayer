@@ -19,7 +19,7 @@ const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
 const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; return a ? a.id : 0; };
 
-const NET_MAX = 2;  // 一個房間最多幾人（含房主）
+const NET_MAX = 4;  // 一個房間最多幾人（含房主）
 
 const Net = {
   role: null,          // null = 單人；'host' = 房主；'client' = 加入的隊友
@@ -29,6 +29,8 @@ const Net = {
   peers: [],
   pending: [],         // 房主：連上了但還沒打招呼（hello）的連線
   slot: 1,             // 隊友：房主分配給自己的號碼
+  picks: {}, roster: [],  // 隊友：每個人選的配裝（號碼 → pick，房主轉告）、這一局的隊友號碼（等待畫面用）
+  hold: null,          // 隊友：房主因為別的隊友斷線而暫停的原因
   // 下面幾個是「所有隊友」彙總出來的（房主由 refreshPeers 從 peers 算；隊友這邊就是房主的狀態）
   linked: false,       // 有隊友已經握手成功
   mateInRoom: false,   // 隊友都回到房間了
@@ -71,6 +73,7 @@ const Net = {
       const others = this.peers.filter(o => o !== q);
       this.sendTo(q, { t: 'edit', on: !!this.myEditing || others.some(o => o.editing) });
       this.sendTo(q, { t: 'away', on: !!this.myAway || others.some(o => o.away) });
+      this.sendTo(q, { t: 'hold', why: others.some(o => o.waiting) ? '有隊友斷線，等待重新連線…' : null });  // 三人以上：別的隊友斷線，房主在等
     }
   },
   waitMods(on) { for (const q of this.peers) { const m = this.mateOf(q); q.modWait = !!on && q.linked && !!m && !m.gone; } },  // 房主：等隊友處理旗艦模組
@@ -79,7 +82,7 @@ const Net = {
   close() {
     const peer = this.peer, conns = [this.conn, ...this.peers.map(q => q.conn), ...this.pending.map(q => q.conn)];
     this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
-    this.peers = []; this.pending = []; this.slot = 1; this.at = {}; this.myAway = false;
+    this.peers = []; this.pending = []; this.slot = 1; this.at = {}; this.myAway = false; this.hold = null; this.picks = {}; this.roster = [];
     this.linked = false; this.mateInRoom = false; this.mateEditing = false; this.mateAway = false; this.myPick = this.matePick = null; this.code = '';
     this.chapter = 1;
     for (const c of conns) try { c && c.close(); } catch (e) {}
@@ -207,16 +210,16 @@ const Net = {
     const ok = typeof Peer !== 'undefined';
     Screen.show(`<div class="scr title-wrap">
       <h1 style="font-size:42px">👥 雙人連線</h1>
-      <div class="sub">先進同一個房間，兩人到齊後由房主按「開始」，再各自選飛船、武器與起始晶片。每局結束後會回到這個房間。</div>
+      <div class="sub">先進同一個房間（最多 ${NET_MAX} 人），到齊後由房主按「開始」，再各自選飛船、武器與起始晶片。每局結束後會回到這個房間。</div>
       <div id="netBtns">${this.linked ? '' : ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
         <div class="row"><input id="netCode" maxlength="4" placeholder="房號" autocomplete="off" spellcheck="false"
           style="font-size:22px;width:5.5em;text-align:center;letter-spacing:.3em;text-transform:uppercase;background:#0a1030;color:#fff;border:1px solid #4cc9f0;border-radius:6px;padding:8px">
           <button class="big" data-act="netjoin">加入房間</button></div>`
       : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}</div>
       <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
-      <div class="keys">一人按「開房間」拿到 4 碼房號，另一人輸入房號按「加入房間」。<br>
-        雙人遠征：航圖投票（選不同就抽籤）、錢包各自獨立（怪物掉落的晶體兩人都拿）、獎勵各自選、戰鬥中按 Tab 兩人一起暫停。<br>
-        一人被擊墜時留在原地，隊友靠近 ${CFG.REVIVE.time} 秒就能救起來（救的人分出自己一半的血量）；沒被救起的在戰鬥結束後以 30% HP 歸隊；兩人都被擊墜才結束。</div>
+      <div class="keys">一人按「開房間」拿到 4 碼房號，其他人輸入房號按「加入房間」。<br>
+        雙人遠征：航圖投票（選不同就照票數抽籤）、錢包各自獨立（怪物掉落的晶體每人都拿）、獎勵各自選、戰鬥中按 Tab 全員一起暫停。<br>
+        一人被擊墜時留在原地，隊友靠近 ${CFG.REVIVE.time} 秒就能救起來（救的人分出自己一半的血量）；沒被救起的在戰鬥結束後以 30% HP 歸隊；全員都被擊墜才結束。</div>
       <div class="row">${this.linked ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回標題 (Esc)</button>'}</div>
       <div class="ver">版本 ${CFG.VERSION}</div></div>`);
     if (this.linked) this.lobbyStatus();
@@ -255,6 +258,9 @@ const Net = {
     this.lobbyStatus();
   },
   sendProgress() { this.send({ t: 'prog', cleared: chapterProgress() }); },  // 隊友：把自己的通關進度告訴房主
+  // 隊友：這個分頁在哪個房間是幾號（重新整理後重連時告訴房主，免得兩人同時斷線時坐錯位置）
+  rememberSeat() { try { sessionStorage.setItem('v2_seat', JSON.stringify({ code: this.code, slot: this.slot })); } catch (e) {} },
+  seatHint(code) { try { const s = JSON.parse(sessionStorage.getItem('v2_seat') || 'null'); return s && s.code === code ? s.slot : null; } catch (e) { return null; } },
 
   host() {
     this.close();
@@ -288,7 +294,7 @@ const Net = {
     peer.on('open', () => {
       const conn = this.conn = peer.connect(NET_PREFIX + code, { reliable: true, serialization: 'json' });
       this.bind(conn);
-      conn.on('open', () => { this.setMsg('已連上，確認版本中…'); this.send({ t: 'hello', v: CFG.VERSION, resume: resumeRunId }); });
+      conn.on('open', () => { this.setMsg('已連上，確認版本中…'); this.send({ t: 'hello', v: CFG.VERSION, resume: resumeRunId, slot: this.seatHint(code) }); });
     });
     peer.on('error', e => this.fail(e));
   },
@@ -374,7 +380,7 @@ const Net = {
   soloContinue() {
     if (!this.waiting) return;
     for (const q of this.peers) if (q.waiting) { q.waiting = null; q.gone = true; const m = this.mateOf(q); if (m) m.gone = true; }
-    this.solo = true; this.refreshPeers();
+    this.solo = true; this.refreshPeers(); this.pushPause();
     this.hideOverlay();
     if (Game.state === 'map') Screen.map(`隊友離線，你一個人繼續（房號 ${this.code}，隊友可以隨時回來）`);
   },
@@ -465,6 +471,9 @@ const Net = {
     this.linked = true; this.mateInRoom = true; this.rejoin = null; this.rejoining = false;
     this.slot = clamp(Math.floor(num(m.slot, 2)), 2, NET_MAX);
     this.matePick = this.cleanPick(m.hostPick || {});
+    this.picks = { 1: this.matePick };
+    for (const o of Array.isArray(m.others) ? m.others : []) { const s = clamp(Math.floor(num(o && o.slot)), 2, NET_MAX); this.picks[s] = this.cleanPick(o || {}); }
+    this.roster = Object.keys(this.picks).map(Number).filter(s => s > 1).concat(this.slot);
     const Y = m.you || {};
     if (!soft) {
       this.myPick = this.cleanPick(Y.pick || {});
@@ -494,6 +503,7 @@ const Net = {
     G.visited = (Array.isArray(m.visited) ? m.visited : []).filter(id => typeof id === 'string');
     G.node = typeof m.node === 'string' ? G.nodeById(m.node) || null : null;
     this.setMates(m.others);
+    this.rememberSeat();
     const P = G.player;
     P.hp = clamp(num(Y.hp, P.hp), 0, P.maxHp); P.dead = !!Y.dead || P.hp <= 0;
     this.hideOverlay();
@@ -516,6 +526,7 @@ const Net = {
     if (Game.mode !== 'coop') return null;
     if (this.waiting) return '隊友斷線，等待重新連線…';
     if (this.rejoin) return '連線中斷';
+    if (this.hold) return this.hold;  // 隊友這邊：別的隊友斷線，房主在等
     if (this.mateEditing) return '隊友正在編輯電路';
     if (this.mateAway) return this.role === 'host' ? '隊友切到其他視窗' : '房主切到其他視窗';
     return null;
@@ -560,7 +571,8 @@ const Net = {
           break;
         }
         this.pending = this.pending.filter(o => o !== q);
-        const back = this.inRun() ? this.peers.find(o => !o.linked) : null;
+        const away = this.inRun() ? this.peers.filter(o => !o.linked) : [];
+        const back = away.find(o => o.slot === m.slot) || away[0];  // 照他記得的號碼找回座位；記不得就給第一個空位
         if (back) { this.rejoinPeer(back, q.conn); break; }
         const slot = Array.from({ length: NET_MAX - 1 }, (_, i) => i + 2).find(s => !this.peers.some(o => o.slot === s));
         if (!slot || Game.state !== 'lobby') { this.sendTo(q, { t: 'full' }); setTimeout(() => { try { q.conn.close(); } catch (e) {} }, 500); break; }
@@ -579,13 +591,20 @@ const Net = {
         this.lobbyStatus();
         break;
       case 'chap': if (client) { this.chapter = this.cleanChapter(m.chapter); this.lobbyStatus(); } break;
+      case 'hold': if (client) this.hold = typeof m.why === 'string' ? m.why.slice(0, 40) : null; break;
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
       case 'room':
         if (host) { q.inRoom = true; this.refreshPeers(); } else this.mateInRoom = true;
         this.lobbyStatus();
         break;
       case 'full': this.lost(NET_MAX === 2 ? '這個房間已經有兩個人了' : `這個房間已經滿了（最多 ${NET_MAX} 人）`); break;
-      case 'pick': if (client && Game.state === 'lobby') { this.chapter = Game.chapterId = this.cleanChapter(m.chapter); this.enterPick(); } break;
+      case 'pick':
+        if (client && Game.state === 'lobby') {
+          this.chapter = Game.chapterId = this.cleanChapter(m.chapter);
+          this.roster = (Array.isArray(m.slots) ? m.slots : []).map(s => Math.floor(num(s))).filter(s => s >= 2 && s <= NET_MAX);  // 這一局的隊友號碼
+          this.enterPick();
+        }
+        break;
       case 'ready': this.onMateReady(m, q); break;
       case 'start': if (client) this.startClient(m); break;
       case 'i': if (host) this.applyInput(m, q); break;
@@ -692,11 +711,11 @@ const Net = {
     if (this.role !== 'host' || !this.linked || !this.mateInRoom) return;  // 隊友都回到房間才能開始
     if (!this.chapterOk(this.chapter)) this.chapter = 1;
     Game.chapterId = this.chapter;
-    this.send({ t: 'pick', chapter: this.chapter });
+    this.send({ t: 'pick', chapter: this.chapter, slots: this.peers.map(q => q.slot) });
     this.enterPick();
   },
   enterPick() {
-    this.myPick = this.matePick = null; this.mateInRoom = false;
+    this.myPick = this.matePick = null; this.mateInRoom = false; this.picks = {};
     for (const q of this.peers) { q.pick = null; q.inRoom = false; }
     Game.state = 'pick'; Game.inArena = false;
     Screen.select('coop');
@@ -709,13 +728,20 @@ const Net = {
   ready(ship, weapon, chip) {
     if (!this.linked) { this.lost(); return; }
     this.myPick = this.cleanPick({ ship, weapon, chip });
-    this.send({ t: 'ready', ...this.myPick });
+    this.send({ t: 'ready', ...this.myPick, slot: this.mySlot() });
     if (this.role === 'host' && this.allPicked()) this.startHost();
     else this.waitScreen();
   },
   onMateReady(m, q) {
     if (!['pick', 'wait'].includes(Game.state)) return;
-    if (this.role === 'host') q.pick = this.cleanPick(m); else this.matePick = this.cleanPick(m);
+    if (this.role === 'host') {
+      q.pick = this.cleanPick(m);
+      for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'ready', ...q.pick, slot: q.slot });  // 轉告其他隊友
+    } else {
+      const s = clamp(Math.floor(num(m.slot, 1)), 1, NET_MAX);
+      this.picks[s] = this.cleanPick(m);
+      if (s === 1) this.matePick = this.picks[1];
+    }
     if (this.role === 'host' && this.myPick && this.allPicked()) this.startHost();
     else if (Game.state === 'wait') this.waitScreen();
   },
@@ -724,9 +750,10 @@ const Net = {
     const line = p => p
       ? `<b style="color:${SHIPS[p.ship].color}">${SHIPS[p.ship].name}</b> ＋ ${WEAPONS[p.weapon].name} ＋ ${p.chip ? CHIPS[p.chip].name : '無起始晶片'}`
       : '<span style="color:#8fa3d9">選擇中…</span>';
-    const mates = this.role === 'host' ? this.peers.map(q => [this.peers.length > 1 ? `${q.slot}P` : '隊友', q.pick]) : [['隊友', this.matePick]];
+    const others = this.role === 'host' ? this.peers.map(q => [q.slot, q.pick]) : [1, ...this.roster].filter(s => s !== this.slot).map(s => [s, this.picks[s]]);
+    const mates = others.map(([s, p]) => [others.length > 1 ? (s === 1 ? '1P 房主' : `${s}P`) : '隊友', p]);
     Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">等待隊友</h1>
-      <div class="sub">你：${line(this.myPick)}<br>${mates.map(([who, p]) => `${who}：${line(p)}`).join('<br>')}<br><br>${this.role === 'host' ? '兩人都選好就會開始。' : '兩人都選好後，房主那邊會開始戰鬥。'}</div>
+      <div class="sub">你：${line(this.myPick)}<br>${mates.map(([who, p]) => `${who}：${line(p)}`).join('<br>')}<br><br>${this.role === 'host' ? '大家都選好就會開始。' : '大家都選好後，房主那邊會開始戰鬥。'}</div>
       <div class="row"><button data-act="title">離開房間</button></div></div>`);
   },
 
@@ -755,7 +782,6 @@ const Net = {
       mate.dashSeq = 0; mate.wantFire = false;
       return mate;
     });
-    this.matePick = this.peers[0].pick;  // 遊玩紀錄的「隊友」欄位（三人以上先只記第一個隊友）
     this.resetRun();
     this.runId = Math.random().toString(36).slice(2, 10);  // 這一局的編號：斷線重連時用來判斷是不是同一局
     for (const q of this.peers)
@@ -767,7 +793,8 @@ const Net = {
     if (!this.myPick) return;
     const map = this.unpackMap(m.map);
     if (!map || !ENEMY_TYPES[m.bossId]) { this.lost('收到的星圖有問題，請兩邊都重新整理'); return; }
-    this.matePick = this.cleanPick(m);
+    this.matePick = this.picks[1] = this.cleanPick(m);
+    for (const o of Array.isArray(m.others) ? m.others : []) { const s = clamp(Math.floor(num(o && o.slot)), 2, NET_MAX); this.picks[s] = this.cleanPick(o || {}); }
     this.resetStats();
     this.runId = typeof m.runId === 'string' ? m.runId.slice(0, 16) : null;
     const me = this.myPick;
@@ -775,10 +802,11 @@ const Net = {
     Game.newRun('coop', me.ship, me.weapon, me.chip);
     Game.map = map; Game.bossId = m.bossId;
     this.setMates(m.others);
+    this.rememberSeat();
     this.resetRun();
     Game.showMap(this.startMsg());
   },
-  startMsg() { return `${Game.chapter().name}：${Game.chapter().intro}<br>雙人遠征開始！點選下一個節點投票，兩人都選好就出發。`; },
+  startMsg() { return `${Game.chapter().name}：${Game.chapter().intro}<br>雙人遠征開始！點選下一個節點投票，大家都選好就出發。`; },
 
   // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
   resetRun() {
@@ -951,16 +979,19 @@ const Net = {
   buildRecord(result) {
     const G = Game, S = this.stats || { pings: [], snaps: 0, inputs: 0, maxGap: 0 };
     const name = id => (id && CHIPS[id] ? CHIPS[id].name : null);
-    const mp = this.matePick, ps = [...S.pings].sort((a, b) => a - b);
+    const ps = [...S.pings].sort((a, b) => a - b);
     const host = this.role === 'host' || (!this.role && G.mates.some(m => m.L));
     const base = G.buildRecord(result);
+    // 隊友的選擇 [號碼, pick]：房主看每個隊友；隊友看房主（matePick）和其他隊友轉告的
+    const mates = host ? this.peers.filter(q => q.pick).map(q => [q.slot, q.pick])
+      : [[1, this.matePick], ...Object.keys(this.picks || {}).map(Number).filter(s => s > 1 && s !== this.slot).map(s => [s, this.picks[s]])].filter(([, p]) => p);
     return {
       ...base, mode: 'coop',
       where: `雙人 · ${this.whereText()}（${host ? '房主 1P' : `隊友 ${this.slot}P`}）`,
       cause: G.player.dead ? G.lastHit : base.cause,
       coop: {
         role: host ? '房主' : '隊友',
-        mate: mp ? `${SHIPS[mp.ship].name} · ${WEAPONS[mp.weapon].name} · 起始晶片 ${name(mp.chip) || '無'}` : '（不明）',
+        mate: mates.length ? mates.map(([s, p]) => (mates.length > 1 ? `${s}P ` : '') + `${SHIPS[p.ship].name} · ${WEAPONS[p.weapon].name} · 起始晶片 ${name(p.chip) || '無'}`).join('／') : '（不明）',
         mateDown: G.mates.some(m => m.dead),
         ping: ps.length ? { avg: Math.round(ps.reduce((a, b) => a + b, 0) / ps.length), min: ps[0],
           p90: ps[Math.floor(ps.length * 0.9)], max: ps[ps.length - 1], samples: ps.length } : '沒有量到',
@@ -968,7 +999,7 @@ const Net = {
         matePerf: this.matePerf,  // 隊友那邊最慢的一幀（每秒的 ping 帶過來）
         team: this.teamRows().map(r => ({ who: `${r.tag}${r.me ? '（你）' : ''}`, ship: SHIPS[r.ship] ? SHIPS[r.ship].name : '？',
           dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit), downs: r.downs, revives: r.revives })),
-        mateChipDmg: (this.mateChipRows()[0] || { rows: [] }).rows.map(([n, , v]) => [n, Math.round(v)]),  // 隊友的晶片傷害（整局；三人以上先只記第一個隊友）
+        mateChipDmg: (T => T.flatMap(t => t.rows.map(([n, , v]) => [(T.length > 1 ? `${t.tag} ` : '') + n, Math.round(v)])))(this.mateChipRows()),  // 隊友的晶片傷害（整局；三人以上名稱前面標號碼）
       },
     };
   },
@@ -1151,7 +1182,7 @@ const Net = {
       if (Arena.rect || Arena.seed !== num(s.as[0]) || (Arena.sc || 1) !== num(s.as[3], 1)) {
         if (ENEMY_TYPES[s.as[2]] && ENEMY_TYPES[s.as[2]].boss) Arena.genBoss(num(s.as[0]), s.as[2]);  // 旗艦戰
         else Arena.gen(num(s.as[0]), clamp(Math.floor(num(s.as[1], 2)), 2, 5), clamp(num(s.as[3], 1), 0.5, 1));
-        G.player.resetPos(); G.player.x += 50;
+        G.player.resetPos(); G.player.x += G.slotX(this.slot);
         G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2;
       }
     } else if (s.as === 0 && !Arena.rect) Arena.reset();
@@ -1180,7 +1211,7 @@ const Net = {
     if (num(s.ar) !== (G.combat.areaN || 0)) {  // 換區了：倒下的人如果還在後面的區域，搬到新區域的入口（還活著的自己飛過去）
       G.combat.areaN = num(s.ar);
       if (!Arena.rect) { if (G.player.dead) G.toEntry(G.player, G.combat.areaN); }
-      else { G.player.resetPos(); G.player.x += 50; G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2; }
+      else { G.player.resetPos(); G.player.x += G.slotX(this.slot); G.cam.x = G.player.x - ZW / 2; G.cam.y = G.player.y - ZH / 2; }
     }
     FX.banner = Array.isArray(s.bn) ? { text: String(s.bn[0]), sub: String(s.bn[1] || ''), t: num(s.bn[2], 1) } : null;
     for (const f of arr(s.fx)) {  // 房主那邊發生的特效與音效

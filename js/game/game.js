@@ -41,6 +41,8 @@ const Game = {
   viewShip() { return this.player.dead && this.mates.find(m => !m.dead) || this.player; },
   // 幾號玩家（1P＝房主）：自己的號碼問 Net，隊友的號碼記在飛船上
   tagOf(p) { return `${p === this.player ? Net.mySlot() : p.slot || 2}P`; },
+  // 雙人：s 號玩家的出生點離中間多遠（照號碼由左到右、以中間為準，每人隔 100；兩人時是 -50／+50）
+  slotX(s) { return (s - (this.mates.length + 2) / 2) * 100; },
   nearestPlayer(x, y) {
     let best = null, bd = Infinity;
     for (const p of this.players()) { const d = dist2(x, y, p.x, p.y); if (d < bd) { bd = d; best = p; } }
@@ -209,10 +211,9 @@ const Game = {
     else Arena.reset();
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
-    // 雙人：照號碼由左到右排（1P 在最左；隊友的位置由隊友自己的電腦決定）
-    const slotX = s => (s - 1.5) * 100;
-    if (Net.role) this.player.x += slotX(Net.mySlot());
-    for (const m of this.mates) { m.resetPos(); m.x += slotX(m.slot || 2); m.dead = false; }
+    // 雙人：照號碼由左到右、以中間為準排開，每人隔 100（1P 在最左；隊友的位置由隊友自己的電腦決定）
+    if (Net.role) this.player.x += this.slotX(Net.mySlot());
+    for (const m of this.mates) { m.resetPos(); m.x += this.slotX(m.slot || 2); m.dead = false; }
     this.player.dead = false;
     for (const p of this.allShips()) this.resetMechCombat(p);
     this.objs = this.isClient() ? [] : Objects.gen(this.combat, this.node);

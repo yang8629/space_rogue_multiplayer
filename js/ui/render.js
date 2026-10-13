@@ -342,7 +342,7 @@ function drawHUD() {
   }
 
   const why = Net.pauseReason();
-  if (why && (Net.mateEditing || Net.mateAway) && !Net.waiting && !Net.rejoin) {  // 雙人：隊友在編輯電路／切到其他視窗 → 暫停中（斷線另有視窗）
+  if (why && (Net.mateEditing || Net.mateAway || Net.hold) && !Net.waiting && !Net.rejoin) {  // 雙人：隊友在編輯電路／切到其他視窗／別的隊友斷線 → 暫停中（自己的斷線另有視窗）
     ctx.fillStyle = 'rgba(5, 6, 15, 0.55)'; ctx.fillRect(0, 0, VW, VH);
     ctx.textAlign = 'center'; ctx.font = 'bold 26px Microsoft JhengHei'; ctx.fillStyle = '#ffd166';
     ctx.fillText(`⏸ ${why}`, VW / 2, VH * 0.45);
