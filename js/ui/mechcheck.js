@@ -1802,7 +1802,165 @@ const MechCheck = {
         return { ok: fresh && next && once && bad && noWrite, got: out.join('；') };
       } finally { put(saved); Game.chapterId = 1; }
     }],
-    ['章節', '通關判斷', '打掉這章最後一個星區的王（旗艦獎勵畫面）才算打完這章；無盡模式算打完；最後一個星區還在打、前面星區的旗艦獎勵都不算', M => {
+    ['精英詞綴', '詞綴數量與互斥', '第 1 星區 1 個、第 2 星區 2 個、第 3 星區以後 3 個；不重複；閃現＋隱形、召喚＋統帥不會一起出現；名字「A・B的虛空獵手」', M => {
+      const out = [];
+      for (const [s, want] of [[1, 1], [2, 2], [3, 3], [5, 3]]) {
+        let bad = 0;
+        for (let i = 0; i < 300; i++) {
+          const R = rollAffixes(affixCount(s));
+          if (R.length !== want || new Set(R).size !== R.length || AFFIX_BAN.some(([a, b]) => R.includes(a) && R.includes(b))) bad++;
+        }
+        out.push(`星區 ${s}：${want} 個${bad ? `（${bad} 次不對，錯誤）` : ''}`);
+      }
+      const nm = eliteName({ affixes: ['split', 'rage'], t: ENEMY_TYPES.elite });
+      out.push(nm);
+      return { ok: !out.some(t => t.includes('錯誤')) && nm === '分裂・狂暴的虛空獵手', got: out.join('；') };
+    }],
+    ['精英詞綴', '精英的場子', '精英戰最後一區：精英最先出場、護衛只有一般一波的 30% 左右、出場橫幅寫精英的名字；詞綴數照星區（第 2 星區 2 個）', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.sector = 2;
+      const cost = list => list.reduce((a, k) => a + (k === 'elite' ? 0 : k === 'swarmer' ? 1 : k === 'spitter' ? 3 : k === 'brute' ? 6 : THEMES[k] ? THEMES[k].cost : 0), 0);
+      let esc = 0, norm = 0, first = true, n = 0, banner = '';
+      for (let i = 0; i < 20; i++) {
+        Game.startCombat({ level: 3, wavesTotal: 2, elites: 1 }); Game.startWave(2);
+        first = first && Game.combat.pending[0] === 'elite'; esc += cost(Game.combat.pending);
+        n = Game.combat.eliteRolls[0].length;
+        if (!i) banner = FX.banner ? FX.banner.text : '';
+        Game.startCombat({ level: 3, wavesTotal: 2, elites: 0 }); Game.startWave(2);
+        norm += cost(Game.combat.pending);
+      }
+      Game.enemies = [];
+      const k = esc / norm;
+      return { ok: first && k > 0.2 && k < 0.42 && n === 2 && banner.startsWith('⚠') && banner.includes('虛空獵手'),
+        got: `精英${first ? '最先出場' : '不是最先（錯誤）'}；護衛 = 一般一波的 ${(k * 100).toFixed(0)}%；詞綴 ${n} 個；橫幅「${banner}」` };
+    }],
+    ['精英詞綴', '護盾', '盾一開始朝著玩家，正面打過去的子彈反彈；玩家繞到背後，盾每秒最多轉 60°', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['shield'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      const face = Math.abs(angleDiff(e.shieldA, Math.PI)) < 0.01;
+      const hp0 = e.hp; M.run(40);
+      const refl = Game.eBullets.filter(b => b.col).length, lost = hp0 - e.hp;
+      p.x = e.x + 300; p.y = e.y; const a0 = e.shieldA;
+      for (let i = 0; i < 30; i++) e.update(1 / 60, p);
+      const turned = Math.abs(angleDiff(e.shieldA, a0)) * 180 / Math.PI;
+      return { ok: face && refl > 0 && lost === 0 && Math.abs(turned - 30) < 2,
+        got: `盾${face ? '朝著玩家' : '沒朝著玩家（錯誤）'}；正面打 40 幀：反彈 ${refl} 發、精英掉血 ${Math.round(lost)}；繞到背後 0.5 秒盾轉了 ${turned.toFixed(1)}°` };
+    }],
+    ['精英詞綴', '分裂', '血量剩一半時分成兩隻：各 35% 血、體型 ×0.7、其他詞綴照抄（分裂除外）、晶體兩隻平分', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['split', 'rage'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      const mx0 = e.maxHp, r0 = e.r;
+      e.hurt(mx0 * 0.4, 0, 0); e.update(1 / 60, p);
+      const one = Game.enemies.filter(x => x.t.elite).length;
+      e.hurt(mx0 * 0.15, 0, 0); e.update(1 / 60, p);
+      const E2 = Game.enemies.filter(x => x.t.elite && !x.dead), k = E2.find(x => x !== e);
+      const ok = one === 1 && E2.length === 2 && k && E2.every(x => Math.abs(x.maxHp - mx0 * 0.35) < 1 && Math.abs(x.r - r0 * 0.7) < 0.01)
+        && !k.has('split') && k.has('rage') && e.credits + k.credits === ENEMY_TYPES.elite.credits;
+      return { ok, got: `60% 血：${one} 隻；45% 血：${E2.length} 隻，各 ${E2.map(x => `${Math.round(x.maxHp / mx0 * 100)}% 血、體型 ×${(x.r / r0).toFixed(2)}`).join('／')}；分出來的詞綴 ${k ? k.affixes.join(',') : '—'}；晶體 ${e.credits}＋${k ? k.credits : '?'}` };
+    }],
+    ['精英詞綴', '召喚', '每 5 秒叫出 3 隻蟲群，同時最多 6 隻；叫出來的不掉晶體、不給晶片成長', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['summon'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      const kids = () => Game.enemies.filter(x => x.type === 'swarmer' && !x.dead);
+      const at = sec => { for (let i = 0; i < sec * 60; i++) { for (const x of [...Game.enemies]) if (x === e) x.update(1 / 60, p); } return kids().length; };
+      const a = at(4.9), b = at(0.2), c = at(15);
+      const tag = kids().every(x => x.summoned && x.noGrow);
+      return { ok: a === 0 && b === 3 && c === 6 && tag, got: `4.9 秒 ${a} 隻、5.1 秒 ${b} 隻、20 秒 ${c} 隻（上限 6）；${tag ? '都不掉晶體、不給成長' : '有會掉晶體的（錯誤）'}` };
+    }],
+    ['精英詞綴', '狂暴', '血量低於一半：移動速度 ×1.4、出招間隔 ×0.6（血量高時不變）', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['rage'], p.x, p.y); p.iframe = 1e9;
+      e.hurt(e.maxHp * 0.45, 0, 0); e.skillCd = 10; e.update(1 / 60, p);
+      const before = !e.enraged && e.spdMul === 1, cd0 = e.skillCd;
+      e.hurt(e.maxHp * 0.1, 0, 0); e.update(1 / 60, p);
+      e.skillCd = 10; e.update(1 / 60, p);
+      const used = 10 - e.skillCd;
+      return { ok: before && e.enraged && Math.abs(e.spdMul - 1.4) < 1e-9 && Math.abs(used - 1 / 60 / 0.6) < 1e-6 && Math.abs(10 - cd0 - 1 / 60) < 1e-6,
+        got: `55% 血：${before ? '沒狂暴' : '已經狂暴（錯誤）'}；45% 血：${e.enraged ? '狂暴' : '沒狂暴（錯誤）'}、速度 ×${e.spdMul.toFixed(2)}、一幀出招倒數 ${(used * 60).toFixed(2)} 幀` };
+    }],
+    ['精英詞綴', '閃現', '每掉 20% 血：落點先閃 0.4 秒，時間到才瞬移，離原本的位置 300～400；剩 80% 以上不閃', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['blink'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      const x0 = e.x, y0 = e.y;
+      e.hurt(e.maxHp * 0.15, 0, 0); e.update(1 / 60, p);
+      const none = !(e.blinkT > 0);
+      e.hurt(e.maxHp * 0.1, 0, 0); e.update(1 / 60, p);
+      const warn = e.blinkT > 0 && e.x === x0;
+      for (let i = 0; i < 20; i++) e.update(1 / 60, p);
+      const mid = e.x === x0 && e.y === y0;
+      for (let i = 0; i < 10; i++) e.update(1 / 60, p);
+      const d = Math.hypot(e.x - x0, e.y - y0);
+      return { ok: none && warn && mid && d >= 299 && d <= 401, got: `掉 15%：${none ? '不閃' : '閃了（錯誤）'}；掉 25%：${warn ? '先閃紅圈' : '沒有預告（錯誤）'}、0.35 秒時${mid ? '還在原地' : '已經走了（錯誤）'}、0.5 秒後瞬移 ${Math.round(d)}` };
+    }],
+    ['精英詞綴', '統帥', '身邊 300 內的小兵移動 ×1.25、受到的傷害 ×0.8；300 外的不受影響', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, E = M.targets([[300, 0], [300, 150], [300, 500]], 'elite', true, 1);
+      const e = E[0], near = new Enemy('brute', E[1].x, E[1].y, 1), far = new Enemy('brute', E[2].x, E[2].y, 1);
+      near.spawnT = far.spawnT = 0; near.t = far.t = { ...ENEMY_TYPES.brute, speed: 0, dmg: 0 }; near.rollCd = far.rollCd = Infinity;
+      Game.enemies = [e, near, far];
+      e.setAffixes(['command'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      for (let i = 0; i < 3; i++) for (const x of Game.enemies) x.update(1 / 60, p);
+      const h1 = near.hp, h2 = far.hp; near.hurt(100, 0, 0); far.hurt(100, 0, 0);
+      const dn = h1 - near.hp, df = h2 - far.hp;
+      return { ok: Math.abs(near.spdMul - 1.25) < 1e-9 && far.spdMul === 1 && Math.abs(dn - 80) < 0.01 && Math.abs(df - 100) < 0.01,
+        got: `150 內：速度 ×${near.spdMul.toFixed(2)}、打 100 扣 ${dn.toFixed(0)}；500 外：速度 ×${far.spdMul.toFixed(2)}、打 100 扣 ${df.toFixed(0)}` };
+    }],
+    ['精英詞綴', '追蹤彈', '環形彈射出後 1.5 秒內轉向最近的玩家（每秒最多 40°），之後直線飛', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[300, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['homing'], p.x, p.y); e.skillCd = 0; e.nextSkill = 'ring'; p.iframe = 1e9;
+      e.update(1 / 60, p); e.skillCd = 1e9;
+      const B = Game.eBullets.filter(b => b.home > 0), b = B.find(x => Math.abs(angleDiff(Math.atan2(x.vy, x.vx), Math.PI / 2)) < 0.2);  // 往下飛（跟玩家垂直）的那一發
+      const a0 = b ? Math.atan2(b.vy, b.vx) : 0;
+      for (let i = 0; i < 30; i++) Game.updateEnemyBullets(1 / 60);
+      const turn = b ? Math.abs(angleDiff(Math.atan2(b.vy, b.vx), a0)) * 180 / Math.PI : 0;
+      const toward = b ? Math.abs(angleDiff(Math.atan2(b.vy, b.vx), Math.atan2(p.y - b.y, p.x - b.x))) < Math.abs(angleDiff(a0, Math.atan2(p.y - b.y, p.x - b.x))) : false;  // 轉向玩家（不是轉開）
+      for (let i = 0; i < 70; i++) Game.updateEnemyBullets(1 / 60);
+      const a1 = b ? Math.atan2(b.vy, b.vx) : 0;
+      for (let i = 0; i < 30; i++) Game.updateEnemyBullets(1 / 60);
+      const after = b ? Math.abs(angleDiff(Math.atan2(b.vy, b.vx), a1)) * 180 / Math.PI : 99;
+      return { ok: B.length === 20 && !!b && toward && Math.abs(turn - 20) < 1.5 && after < 0.01,
+        got: `${B.length} 發會追；往旁邊飛的那發 0.5 秒${toward ? '轉向玩家' : '轉開了（錯誤）'} ${turn.toFixed(1)}°；1.7 秒後再 0.5 秒轉了 ${after.toFixed(2)}°` };
+    }],
+    ['精英詞綴', '佈雷', '移動時每 1.2 秒留一顆地雷（不動不放）；碰到爆炸，60 內的玩家受 20 傷害', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[600, 0]], 'elite', false, 1)[0];
+      e.setAffixes(['mine'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      for (let i = 0; i < 180; i++) { Game.time += 1 / 60; e.update(1 / 60, p); }
+      const mines = Game.eBullets.filter(b => b.mine).length;
+      Game.eBullets = [{ x: p.x + 5, y: p.y, vx: 0, vy: 0, r: AFFIX.mine.size, dmg: AFFIX.mine.dmg, life: 8, mine: true, from: '測試（地雷）' }];
+      p.iframe = 0; p.dashT = 0; p.hp = p.maxHp = 500; Game.state = 'play';
+      Game.updateEnemyBullets(1 / 60);
+      const lost = 500 - p.hp, gone = !Game.eBullets.length;
+      return { ok: mines === 2 && lost > 0 && gone, got: `移動 3 秒放了 ${mines} 顆；碰到：${gone ? '爆炸' : '沒爆（錯誤）'}、扣 ${Math.round(lost)} 血` };
+    }],
+    ['精英詞綴', '磁場', '精英身邊 140 內的子彈速度 ×0.5（射程不變）；外面的照常', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[600, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['field'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      p.fire(); const b = Game.bullets[0];
+      if (!b) return { ok: false, got: '沒射出子彈' };
+      const step = (x) => { b.x = b.px = x; b.y = b.py = e.y; const x0 = b.x; Game.updateBullets(1 / 60); return b.x - x0; };
+      const out = step(e.x - 400), inn = step(e.x - 100);
+      return { ok: Math.abs(inn / out - 0.5) < 0.02, got: `一幀：場外 ${out.toFixed(1)}、場內 ${inn.toFixed(1)}（×${(inn / out).toFixed(2)}）` };
+    }],
+    ['精英詞綴', '隱形', '離玩家 200 外慢慢隱形（自動瞄準、追蹤鎖不到）；靠近 200 內或衝鋒時馬上現形', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, e = M.targets([[400, 0]], 'elite', true, 1)[0];
+      e.setAffixes(['cloak'], p.x, p.y); e.skillCd = 1e9; p.iframe = 1e9;
+      for (let i = 0; i < 30; i++) e.update(1 / 60, p);
+      const far = e.cloak;
+      const lock = !nearestEnemy(p.x, p.y, 2000, null, true);
+      p.x = e.x - 150; e.update(1 / 60, p);
+      const near = e.cloak;
+      return { ok: far > 0.99 && lock && near === 0, got: `400 遠：隱形 ${far.toFixed(2)}、${lock ? '自動瞄準鎖不到' : '鎖得到（錯誤）'}；150 內：隱形 ${near}` };
+    }],
+    ['章節', '通關判斷','打掉這章最後一個星區的王（旗艦獎勵畫面）才算打完這章；無盡模式算打完；最後一個星區還在打、前面星區的旗艦獎勵都不算', M => {
       const G = Game, out = [];
       G.newRun('run', 'vanguard', 'laser');
       const at = (sector, state) => { G.sector = sector; G.state = state; return G.chapterDone(); };

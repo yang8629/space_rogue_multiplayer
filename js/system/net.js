@@ -1053,7 +1053,8 @@ const Net = {
         e.slowT > 0 ? 1 : 0, e.burnT > 0 || e.burnL ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
         e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0),  // 盾衛的盾方向、潛伏者的隱形程度
         e.type === 'spitter' || e.type === 'hive' ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 開火倒數（噴吐者鼓起、母巢脈動）、弱點標記／破甲
-        e.type === 'worm' ? wormAhead(e) : null]),  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
+        e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
+        e.affixes ? e.affixes.join(',') : null, e.r !== e.t.radius ? r2(e.r) : null, e.ledT > 0 ? 1 : 0]),  // 精英詞綴、體型（分裂後變小）、被統帥加成
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r, G.exit.gate ? 1 : 0] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
       as: Arena.rect ? 0 : [Arena.seed, Arena.n, Arena.bossId || 0, Arena.sc || 1], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
@@ -1073,7 +1074,7 @@ const Net = {
         gr: m.L.growth,  // 這個隊友各晶片的累積用量（隊友那邊照這個升級）
         b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
           ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
-        eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r, b.col ? ci(b.col) : -1]),  // 最後一個：盾衛反彈的原本顏色
+        eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r, b.col ? ci(b.col) : -1, b.mine ? r2(b.life) : 0]),  // 盾衛反彈的原本顏色、地雷剩幾秒（0 = 不是地雷）
         pal,
       });
     }
@@ -1165,11 +1166,12 @@ const Net = {
     G.enemies = arr(s.e).map(a => {
       const t = ENEMY_TYPES[a[1]];
       if (!t) return null;
-      return { id: a[0], type: a[1], t, r: t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
+      return { id: a[0], type: a[1], t, r: typeof a[25] === 'number' ? clamp(a[25], 4, t.radius) : t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
         hp: num(a[6]), maxHp: num(a[7], 1), rot: num(a[8]), flash: a[9] ? 0.08 : 0, spawnT: num(a[10]), spawnMax: num(a[11], 1) || 1,
         mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
         shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false,
-        cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: a[1] === 'worm' ? num(a[23]) : undefined };
+        cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: a[1] === 'worm' ? num(a[23]) : undefined,
+        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0 };
     }).filter(Boolean);
     const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）
     for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;
@@ -1196,7 +1198,8 @@ const Net = {
     G.trails = arr(s.tr).filter(Array.isArray).map(a => ({ x1: num(a[0]), y1: num(a[1]), x2: num(a[2]), y2: num(a[3]), t: num(a[4]), max: num(a[5], 1) || 1 }));
     G.links = arr(s.lk).filter(Array.isArray).map(a => ({ t: num(a[0]), ids: a.slice(1) }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
-    G.eBullets = arr(s.eb).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2]), vy: num(a[3]), r: num(a[4], 5), col: typeof pal[a[5]] === 'string' ? pal[a[5]] : null }));
+    G.eBullets = arr(s.eb).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2]), vy: num(a[3]), r: num(a[4], 5), col: typeof pal[a[5]] === 'string' ? pal[a[5]] : null,
+      mine: num(a[6]) > 0, life: num(a[6]), max: AFFIX.mine.life }));
     // 晶體：隊友這邊自己模擬飛行（見 clientUpdate），房主的位置只拿來慢慢修正，不直接跳過去
     const had = new Map(G.pickups.map(c => [c.id, c]));
     G.pickups = arr(s.pk).map(a => {
