@@ -119,9 +119,10 @@ function oneRun(w, s) {
         break;
       }
     } else if (st === 'victory') {
+      const done = G.chapterDone();  // 這章打完了沒（遊戲判斷；在獎勵畫面處理完之前先問）
       handle();  // 旗艦二選一、裝上旗艦模組（bot/pick.js）
-      if (G.sector >= G.lastSector()) log.won = true;
-      if (G.sector >= (ENDLESS ? 12 : G.lastSector())) break;  // --endless：通關後繼續打無盡，最多到星區 12
+      if (done) log.won = true;
+      if (ENDLESS ? G.sector >= 12 : done) break;  // --endless：通關後繼續打無盡，最多到星區 12
       G.nextSector(); log.sector = G.sector; equip();  // 旗艦送的插槽馬上補上
     } else if (st === 'dead') {
       if (process.env.RS_WATCH) console.error(`死 ${G.sector}-${G.node ? G.node.L + 1 : 0} DPS估 ${Math.round(G.stats.dpsEst)} 電路 ${G.chain.map((id, i) => (id || '空') + (G.stats.info && G.stats.info[i].idle ? '(✗)' : '') + ((G.socks || [])[i] && G.socks[i].length ? '[' + G.socks[i].join('+') + ']' : '')).join(',')} 倉庫 ${G.inventory.filter(Boolean).join(',')} 武器 ${G.weapon.path || '-'}${G.weapon.final ?? ''} 受傷 ${JSON.stringify(Object.fromEntries(Object.entries(G.runStats.taken || {}).map(([k, v]) => [k, Math.round(v)])))}`);

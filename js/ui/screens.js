@@ -538,7 +538,7 @@ const Screen = {
 
   victory(askMod = false) {  // askMod：按了前往但還沒裝上旗艦模組 → 先確認
     const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
-    const cleared = Game.sector === Game.lastSector();  // 剛打完這章最後一個星區：章節完成
+    const cleared = Game.chapterDone() && !Game.isEndless();  // 剛打完這章最後一個星區：章節完成
     const reward = `獎勵：◆ +50${!V.slot && V.pick ? '　· <b style="color:#9fe8ff">零件格 +1</b>（電路插槽已達上限）' : ''}${V.ws ? `　· <b style="color:#ffd166">武器插座 +1（${Game.wSock} 個）</b>` : ''}`;
     const skipBtn = Game.isClient() ? '<button data-act="modskip">略過</button>' : '';  // 雙人的隊友：房主等你裝上或略過才能前往
     const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>' : V.skip ? '<button disabled>已略過</button>'
@@ -626,7 +626,7 @@ const Screen = {
   },
   // 結算畫面：複製這一局目前的紀錄（打完 Boss 還沒結束遠征時也能複製）
   copyRun() {
-    const result = Game.state === 'dead' ? 'dead' : Game.sector >= Game.lastSector() ? 'cleared' : 'in_progress';
+    const result = Game.state === 'dead' ? 'dead' : Game.chapterDone() ? 'cleared' : 'in_progress';
     const rec = Game.mode === 'coop' ? Net.buildRecord(result) : Game.buildRecord(result);
     this.copyText(recordText(rec));
   },
