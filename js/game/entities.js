@@ -591,7 +591,92 @@ class Enemy {
     this.cloak = type === 'lurker' ? 1 : 0;              // 潛伏者：1 = 隱形
     this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0; this.slows = null; this.burnL = null; this.shredT = 0; this.shredAmt = 0;
     this.mode = type === 'lurker' ? 'stalk' : 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
+    this.affixes = null;  // 精英詞綴（affixes.js）：出生時由 setAffixes 設定
     this.dead = false;
+  }
+  has(id) { return !!this.affixes && this.affixes.includes(id); }
+  // 精英詞綴：設定詞綴和各自的初始狀態（盾先朝向 (fx, fy)：通常是玩家）
+  setAffixes(list, fx = this.x + 1, fy = this.y) {
+    this.affixes = list.length ? [...list] : null;
+    if (this.has('shield')) this.shieldA = Math.atan2(fy - this.y, fx - this.x);
+    if (this.has('cloak')) this.cloak = 1;
+    this.blinkAt = 1 - AFFIX.blink.step;  // 閃現：血量比例掉到這裡就瞬移（每次再往下 20%）
+    this.sumCd = AFFIX.summon.cd; this.mineCd = AFFIX.mine.every; this.cmdT = 0;
+  }
+  // 精英詞綴每一幀（精英的行為一開始呼叫；p = 最近的玩家）
+  affixTick(dt, p, d) {
+    const A = AFFIX;
+    if (this.has('shield')) {  // 盾慢慢轉向玩家（每秒最多 60°）：繞得夠快就能打到背後
+      const want = Math.atan2(p.y - this.y, p.x - this.x), diff = angleDiff(this.shieldA, want), step = A.shield.turn * dt;
+      this.shieldA += clamp(diff, -step, step);
+    }
+    if (this.has('rage') && !this.enraged && this.hp <= this.maxHp * A.rage.at) {
+      this.enraged = true; ringFx(this.x, this.y, this.r * 2.5, '#ff4d6d'); floatText(this.x, this.y - this.r - 16, '狂暴！', '#ff4d6d', true);
+    }
+    if (this.has('cloak'))  // 隱形：靠近 200 內、蓄力或衝鋒時現形
+      this.cloak = d < A.cloak.near || this.mode === 'windup' || this.mode === 'charge' ? 0 : Math.min(1, this.cloak + dt * 2);
+    if (this.splitNow) { this.splitNow = false; this.doSplit(); }
+    if (this.has('blink')) {
+      if (this.blinkT > 0) { if ((this.blinkT -= dt) <= 0) this.doBlink(); }
+      else if (this.hp <= this.maxHp * this.blinkAt) this.startBlink();
+    }
+    if (this.has('summon') && (this.sumCd -= dt * endlessAtk()) <= 0) {  // 召喚：跟母巢一樣，叫出來的不掉晶體、不給晶片成長
+      this.sumCd = A.summon.cd;
+      this.kids = (this.kids || []).filter(k => !k.dead);
+      for (let i = 0; i < A.summon.n && this.kids.length < A.summon.max; i++) {
+        const a = rand(0, TAU), k = new Enemy('swarmer', ...Arena.clampIn(this.x + Math.cos(a) * (this.r + 25), this.y + Math.sin(a) * (this.r + 25), 20), this.hpScale);
+        k.summoned = true; k.noGrow = true; k.zone = this.zone; k.spawnT = 0.3; k.vx = Math.cos(a) * 160; k.vy = Math.sin(a) * 160;
+        this.kids.push(k); Game.enemies.push(k);
+      }
+      burst(this.x, this.y, this.t.color, 14, 160, 0.4, 2);
+    }
+    if (this.has('command') && (this.cmdT -= dt) <= 0) {  // 統帥：身邊的小兵（不含精英、旗艦）加速、減傷
+      this.cmdT = 0.2;
+      const R2 = A.command.r ** 2;
+      for (const o of Game.enemies) if (o !== this && !o.dead && !o.t.elite && !o.t.boss && dist2(o.x, o.y, this.x, this.y) < R2) o.ledT = 0.3;
+    }
+    if (this.has('mine') && Math.hypot(this.vx, this.vy) > 30 && (this.mineCd -= dt) <= 0) {  // 佈雷：移動中才放
+      this.mineCd = A.mine.every;
+      Game.eBullets.push({ x: this.x, y: this.y, vx: 0, vy: 0, r: A.mine.size, dmg: A.mine.dmg, life: A.mine.life, max: A.mine.life, mine: true, from: `${this.t.name}（地雷）` });
+    }
+  }
+  // 分裂：自己變成 35% 血、小一號，旁邊再生一隻一樣的（詞綴照抄，分裂除外）；晶體兩隻平分
+  doSplit() {
+    const A = AFFIX.split, mx = this.maxHp * A.hp, keep = this.affixes.filter(id => id !== 'split');
+    const a = rand(0, TAU), ux = Math.cos(a), uy = Math.sin(a);
+    this.maxHp = this.hp = mx; this.r *= A.size; this.credits = Math.ceil(this.t.credits / 2);
+    const [x, y] = Arena.clampIn(this.x - ux * this.r * 2, this.y - uy * this.r * 2, this.r);
+    const k = new Enemy(this.type, x, y, this.hpScale);
+    k.t = this.t; k.maxHp = k.hp = mx; k.r = this.r; k.credits = Math.floor(this.t.credits / 2); k.zone = this.zone; k.spawnT = 0;
+    k.setAffixes(keep, this.x, this.y);
+    if (this.shieldA != null && k.shieldA != null) k.shieldA = this.shieldA;
+    if (this.enraged) k.enraged = true;
+    this.affixes = keep.length ? keep : null; this.splitDone = true;
+    this.push(ux * 260, uy * 260); k.push(-ux * 260, -uy * 260);
+    Game.enemies.push(k);
+    burst(this.x, this.y, this.t.color, 30, 260, 0.5, 2.5); ringFx(this.x, this.y, this.r * 3, this.t.color);
+    floatText(this.x, this.y - this.r - 16, '分裂！', this.t.color, true);
+  }
+  // 閃現：先在落點閃紅圈（0.4 秒），時間到才瞬移；落點離現在 300～400、在同一區、不在牆裡和黑洞、行星旁邊
+  startBlink() {
+    const A = AFFIX.blink;
+    this.blinkAt -= A.step;
+    for (let i = 0; i < 24; i++) {
+      const a = rand(0, TAU), dd = rand(A.dist[0], A.dist[1]);
+      const x = clamp(this.x + Math.cos(a) * dd, this.r + 20, CFG.WORLD_W - this.r - 20), y = clamp(this.y + Math.sin(a) * dd, this.r + 20, CFG.WORLD_H - this.r - 20);
+      if (!Arena.rect && (Arena.f(x, y) < this.r + 20 || (this.zone != null && Arena.zoneOf(x, y) !== this.zone))) continue;
+      if (Objects.inHole({ x, y, r: this.r }, OBJ.HOLE_NOESC) || Objects.onSolid({ x, y, r: this.r }, 20)) continue;
+      this.blinkTo = [x, y]; this.blinkT = A.warn;
+      ringFx(x, y, this.r * 1.6, '#ff2a2a', true);
+      return;
+    }
+  }
+  doBlink() {
+    const [x, y] = this.blinkTo;
+    burst(this.x, this.y, this.t.color, 20, 220, 0.4, 2);
+    this.x = x; this.y = y; this.vx = this.vy = 0; this.blinkTo = null;
+    if (this.mode === 'windup' || this.mode === 'charge') this.mode = 'chase';  // 瞬移打斷衝鋒（不然從新位置照舊方向衝）
+    burst(x, y, this.t.color, 20, 220, 0.4, 2);
   }
   move(dt) {
     if (Arena.rect) {
@@ -646,6 +731,8 @@ class Enemy {
     if (this.markT > 0) this.markT -= dt;
     if (this.shredT > 0) this.shredT -= dt;
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
+    if (this.ledT > 0) { this.ledT -= dt; this.spdMul *= AFFIX.command.speed; }  // 精英「統帥」身邊的小兵
+    if (this.enraged && this.has('rage')) this.spdMul *= AFFIX.rage.speed;       // 精英「狂暴」
     if (this.spawnT > 0) { this.spawnT -= dt; return; }
     if (this.whT > 0) this.whT -= dt;
     if (this.stunT > 0) {  // 撞牆暈眩（散彈升級）：不動、不攻擊，被撞開的速度慢慢減
@@ -667,6 +754,7 @@ class Enemy {
     if (THEME_AI[this.type] && THEME_AI[this.type].call(this, dt, p, dx, dy, d)) return;
 
     if (t.elite) {  // 精英：蓄力衝鋒 / 環形彈幕 交替
+      if (this.affixes) { this.affixTick(dt, p, d); if (this.dead) return; }
       if (this.mode === 'windup') {
         this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
         if (this.modeT <= 0) {
@@ -685,10 +773,11 @@ class Enemy {
       // 環形彈：20 發，0.35 秒後錯開半格再放一圈（兩圈之間有縫可以鑽）
       const eliteRing = off => { for (let i = 0; i < 20; i++) {
         const a = (i + off) / 20 * TAU + this.rot;
-        Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6, dmg: 14, life: 4, from: t.name });
+        Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6, dmg: 14, life: 4, from: t.name,
+          home: this.has('homing') ? AFFIX.homing.t : 0 });  // 精英「追蹤彈」：射出後 1.5 秒內轉向最近的玩家
       } };
       if (this.ring2T > 0 && (this.ring2T -= dt) <= 0) eliteRing(0.5);
-      this.skillCd -= dt * endlessAtk();
+      this.skillCd -= dt * endlessAtk() / (this.enraged && this.has('rage') ? AFFIX.rage.cd : 1);  // 狂暴：出招間隔 ×0.6
       if (this.skillCd <= 0 && !Objects.inHole(this)) {
         this.skillCd = 2.2;
         if (this.nextSkill === 'charge') {
@@ -965,6 +1054,7 @@ class Enemy {
   hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
     const vul = (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，各自算、相加，沒有上限
     if (vul > 0) dmg *= 1 + vul;
+    if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
@@ -975,6 +1065,7 @@ class Enemy {
       const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
       if (over > 0 && l > 0 && this.mode !== 'charge') this.push(kx / l * over * CFG.BOSS_KNOCK, ky / l * over * CFG.BOSS_KNOCK);
     } else if (this.mode !== 'charge' && !this.t.anchored) this.push(kx, ky);  // 母巢（anchored）不吃擊退
+    if (this.has('split') && !this.splitDone && this.hp > 0 && this.hp <= this.maxHp * AFFIX.split.at) this.splitNow = true;  // 精英「分裂」：下一幀分成兩隻
     if (this.hp <= 0 && !this.dead) { this.dead = true; this.killer = att ? att.owner : Game.shooter; this.killAtt = att; Game.onEnemyKilled(this); }
   }
 }

@@ -241,6 +241,8 @@ const Game = {
       return;
     }
     let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopMul(CFG.COOP_COUNT, C.level) : 1);  // 雙人：敵人數量 ×2 → ×2.5（隨難度）
+    const eliteArea = !C.sandbox && C.elites > 0 && n === C.wavesTotal;  // 精英戰的最後一區是精英的場子：只帶少量護衛
+    if (eliteArea) budget *= CFG.ELITE_ESCORT;
     const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
     while (budget > 0) {
       if (TH.list.length && Math.random() < TH.share) {  // 主題小兵
@@ -252,15 +254,21 @@ const Game = {
       else if (lv >= 2 && r < 0.45 && budget >= 3) { list.push('spitter'); budget -= 3; }
       else { list.push('swarmer'); budget -= 1; }
     }
-    if (!C.sandbox && n === C.wavesTotal) for (let i = 0; i < C.elites; i++) list.push('elite');
+    if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift('elite');  // 精英最先出場
     // 沙盒：每 10 波輪流出現三隻旗艦
     const sbBoss = C.sandbox && n % 10 === 0 ? CFG.BOSS_ORDER[(n / 10 - 1) % CFG.BOSS_ORDER.length] : null;
     if (sbBoss) list.push(sbBoss);
-    else if (C.sandbox && n % 5 === 0) list.push('elite');
+    else if (C.sandbox && n % 5 === 0) list.unshift('elite');
     C.pending = list;
+    // 精英詞綴先抽好（出場橫幅要寫名字）：第 1 星區 1 個、第 2 星區 2 個、第 3 星區以後 3 個；沙盒照波次（第 5 波 1 個、第 15 波 3 個）
+    const nAff = affixCount(C.sandbox ? Math.floor(n / 5) : this.sector);
+    C.eliteRolls = list.filter(x => x === 'elite').map(() => rollAffixes(nAff));
     const bText = C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`;
     Events.emit('waveStart', { n, boss: !!sbBoss });
-    bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : list.includes('elite') ? '⚠ 精英反應接近中' : '', 2);
+    if (C.eliteRolls.length && !sbBoss) {  // 精英出場：名字＋詞綴說明
+      const R = C.eliteRolls[0];
+      bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, R.map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　'), 3);
+    } else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : '', 2);
   },
   // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
   pickThemes(sector, late) {
@@ -289,6 +297,7 @@ const Game = {
       (C.sandbox ? 1 : this.chapter().hp);  // 章節：敵人血量再 ×（第一章 1）
     const e = new Enemy(type, x, y, scale);
     if (!Arena.rect) e.zone = zone;
+    if (type === 'elite') e.setAffixes((C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
     this.enemies.push(e);
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
     if (type === 'worm') {  // 列隊蟲：再往外排 5 節，每節跟著前一節
@@ -863,7 +872,7 @@ const Game = {
       this.eBullets = [];
       bannerFx('旗艦擊沉！', '', 2);
     }
-    const base = e.summoned ? 0 : e.t.credits;  // 旗艦叫出來的小怪不掉晶體
+    const base = e.summoned ? 0 : e.credits != null ? e.credits : e.t.credits;  // 旗艦叫出來的小怪不掉晶體；分裂的精英兩隻平分（e.credits）
     let n = base;
     for (let i = 0; i < base; i++) if (Math.random() < this.passives.greed) n++;
     for (let i = 0; i < n; i++)
@@ -1346,9 +1355,11 @@ const Game = {
       const k = Math.floor(e.x / GS) * 100000 + Math.floor(e.y / GS), L = grid.get(k);
       if (L) L.push(i); else grid.set(k, [i]);
     }
+    // 精英「磁場」：身邊 140 內的子彈變慢（整顆子彈的時間變慢：速度 ×0.5，射程不變）
+    const fields = E.filter(e => !e.dead && !(e.spawnT > 0) && e.has && e.has('field')), FR2 = AFFIX.field.r ** 2;
     for (const b of B) {
       if (b.dead) continue;
-      b.update(dt);
+      b.update(fields.length && fields.some(e => dist2(b.x, b.y, e.x, e.y) < FR2) ? dt * AFFIX.field.slow : dt);
       if (b.trail) this.trailStep(b);  // 殘留彈道（軌道升級）：記錄飛過的路徑
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
       if (b.comet && this.cometShardHit(b)) continue;  // 彗星碎片：也會打到飛船
@@ -1858,6 +1869,13 @@ const Game = {
     }
     return false;
   },
+  // 精英「佈雷」的地雷爆炸：半徑 60 內的玩家受傷
+  mineBlast(b) {
+    const R = AFFIX.mine.r;
+    for (const p of this.players()) if (!p.dead && dist2(b.x, b.y, p.x, p.y) < (R + p.r) ** 2) this.hurtPlayer(b.dmg, b.from || '地雷', p, b.x, b.y);
+    burst(b.x, b.y, '#ffd400', 24, 260, 0.45, 2.5); ringFx(b.x, b.y, R, '#ffd400');
+    Events.emit('mineBlast', b);
+  },
   updateEnemyBullets(dt) {
     const ps = this.players();
     for (const p of ps) if (p.icWs && p.icWs.length) this.withLoadout(p.L, () => this.tickCounter(p, dt));  // 合併回射：集氣時間到就射
@@ -1869,6 +1887,15 @@ const Game = {
     if (I.length > 16) IGrid.build(I, q => { const p = q.r + 2; return [Math.min(q.px, q.x) - p, Math.min(q.py, q.y) - p, Math.max(q.px, q.x) + p, Math.max(q.py, q.y) + p]; });
     const fields = ps.filter(p => p.gravField);  // 重力井：場內的敵彈變慢
     for (const b of this.eBullets) {
+      if (b.home > 0) {  // 精英「追蹤彈」：射出後一段時間內轉向最近的玩家（每秒最多 40°）
+        b.home -= dt;
+        const q = this.nearestPlayer(b.x, b.y);
+        if (q) {
+          const a = Math.atan2(b.vy, b.vx), s = Math.hypot(b.vx, b.vy), st = AFFIX.homing.turn * dt;
+          const na = a + clamp(angleDiff(a, Math.atan2(q.y - b.y, q.x - b.x)), -st, st);
+          b.vx = Math.cos(na) * s; b.vy = Math.sin(na) * s;
+        }
+      }
       let k = 1;
       for (const p of fields) if (dist2(b.x, b.y, p.x, p.y) < p.gravField.R ** 2) k = Math.min(k, 1 - p.gravField.slow);
       b.x += b.vx * dt * k; b.y += b.vy * dt * k; b.life -= dt;
@@ -1878,7 +1905,12 @@ const Game = {
       if (I.length && this.interceptHit(b, I.length > 16 ? IGrid.query(b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r) : I)) continue;
       for (const p of ps) {
         const rr = b.r + p.r, d2 = dist2(b.x, b.y, p.x, p.y);
-        if (d2 < rr * rr && !p.invuln && !p.dead) { b.life = 0; if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy); break; }
+        if (d2 < rr * rr && !p.invuln && !p.dead) {
+          b.life = 0;
+          if (b.mine) { this.mineBlast(b); break; }  // 精英「佈雷」：碰到就爆炸（範圍內的玩家都受傷）
+          if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy);
+          break;
+        }
         const Gz = this.wpOf(p).graze;  // 擦彈（雷射升級）：進到身邊又離開、沒打中才算
         if (Gz && !p.dead) {
           const gz = b.gz || (b.gz = new Map()), st = gz.get(p);

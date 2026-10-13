@@ -110,11 +110,34 @@ const GLActors = {
       const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
       if (stuck) { const n = Math.min(stuck, 16); for (let i = 0; i < n; i++) { const a = i / n * TAU + t * 2; g.circle(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5).fill({ color: 0xf78cff, alpha: cv }); } }
     }
+    if (e.ledT > 0 && cv > 0.05) g.circle(e.x, e.y, e.r + 4).stroke({ width: 2, color: 0xffd400, alpha: 0.7 * cv });  // 被精英「統帥」加成的小兵
+    if (e.affixes && sp >= 1) this.affixFx(e, cv);
     if (e.spawnT > 0) g.circle(e.x, e.y, e.r * (2.2 - sp)).stroke({ width: 1, color: glColor(T.color), alpha: 0.8 });
     if (e.hp < e.maxHp && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !(e.cloak > 0.5)) {
       const w = ty === 'elite' ? e.r * 3 : e.r * 2;
       g.rect(e.x - w / 2, e.y - e.r - 12, w, 4).fill({ color: 0x330000 });
       g.rect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4).fill({ color: glColor(T.color) });
+    }
+  },
+
+  // 精英詞綴的樣子（cv：隱形時跟著淡掉）：護盾 = 正面 120° 的盾弧；統帥 = 300 的金色光環；磁場 = 140 的波紋；狂暴 = 紅光
+  affixFx(e, cv) {
+    const g = this.gE, t = Game.time;
+    if (e.affixes.includes('command')) {  // 隊友那邊的敵人是普通物件（沒有 has），一律看 affixes
+      g.circle(e.x, e.y, AFFIX.command.r).fill({ color: 0xffd400, alpha: 0.035 * cv });
+      g.circle(e.x, e.y, AFFIX.command.r).stroke({ width: 2, color: 0xffd400, alpha: 0.25 * cv });
+    }
+    if (e.affixes.includes('field')) {
+      const R = AFFIX.field.r;
+      g.circle(e.x, e.y, R).stroke({ width: 2, color: 0x9fe8ff, alpha: 0.3 * cv });
+      for (let i = 0; i < 2; i++) { const f = (t * 0.7 + i / 2) % 1; g.circle(e.x, e.y, R * (1 - f * 0.7)).stroke({ width: 2, color: 0x9fe8ff, alpha: 0.35 * f * cv }); }
+    }
+    if (e.enraged) this.glowAt(this.pE, e.x, e.y, e.r * 2.4, 0xff2a3a, (0.6 + 0.3 * Math.sin(t * 12)) * cv);
+    if (e.shieldA != null && e.affixes.includes('shield')) {  // 盾弧：深色描邊＋盾衛的藍色
+      const a0 = e.shieldA - Math.PI / 3, a1 = e.shieldA + Math.PI / 3, R = e.r + 9.5;
+      glArc(g, e.x, e.y, R, a0, a1); g.stroke({ width: 9, color: 0x03050c, alpha: 0.9 * cv });
+      glArc(g, e.x, e.y, R, a0, a1); g.stroke({ width: 6, color: 0x5ec8ff, alpha: 0.95 * cv });
+      glArc(g, e.x, e.y, R - 2, a0 + 0.1, a1 - 0.1); g.stroke({ width: 1.5, color: 0xdff6ff, alpha: 0.8 * cv });  // 左上受光的亮邊
     }
   },
 

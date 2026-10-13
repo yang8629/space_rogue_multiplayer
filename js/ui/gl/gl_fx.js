@@ -81,6 +81,13 @@ const GLFx = {
     for (const r of FX.rings) { const t = 1 - r.life / r.max; g.circle(r.x, r.y, r.r * (r.shrink ? 1 - 0.75 * t : 0.4 + 0.6 * t)).stroke({ width: 3, color: glColor(r.color), alpha: r.shrink ? 0.4 + 0.6 * t : r.life / r.max }); }  // shrink：往內收、越收越亮（壓縮的吸入）
     // 敵彈（不用加法混色：紅色實心＋深色外框，才不會被我方彈幕蓋掉）
     for (const b of G.eBullets) {
+      if (b.mine) {  // 精英「佈雷」的地雷：紅框＋黃芯，一閃一閃（最後 2 秒閃得快）；外面一圈淡淡的爆炸範圍
+        const s = this.spr(this.pEB, tx.ebRim, b.x, b.y); s.scaleX = s.scaleY = b.r / R.eb;
+        const f = this.spr(this.pEB, tx.ebFill, b.x, b.y); f.scaleX = f.scaleY = b.r / R.ebFill; f.tint = 0xffd400;
+        f.alpha = 0.55 + 0.45 * Math.sin(G.time * (b.life < 2 ? 30 : 8)) ** 2;
+        g.circle(b.x, b.y, AFFIX.mine.r).stroke({ width: 1.5, color: 0xffd400, alpha: 0.18 });
+        continue;
+      }
       const s = this.spr(this.pEB, b.col ? tx.ebRim : tx.eb, b.x, b.y); s.scaleX = s.scaleY = b.r / R.eb;
       if (b.col) { const f = this.spr(this.pEB, tx.ebFill, b.x, b.y); f.scaleX = f.scaleY = b.r / R.ebFill; f.tint = glColor(b.col); }  // 盾衛反彈：紅框＋原本子彈顏色的芯
     }

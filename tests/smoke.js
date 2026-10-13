@@ -80,6 +80,16 @@ assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.r
   T.Arena.rect = rect;
   assert(!err && e.x > x0, `client pinned by shield guard against wall: no crash, guard pushed back (${err || `${Math.round(x0)} → ${Math.round(e.x)}`})`);
 }
+// 精英詞綴同步：詞綴（不認得的丟掉）、分裂後的體型、統帥加成、狂暴、盾的方向；地雷（剩幾秒）
+{
+  const s2 = JSON.parse(JSON.stringify(snap));
+  s2.e = [[77777, 'elite', 1000, 800, 0, 0, 400, 800, 0, 0, 0, 1, 'chase', 0, 0, 0, 0, 1, 0, 1.5, 0, null, 0, null, 'shield,split,bogus', 18.2, 1]];
+  s2.eb = [[1000, 900, 0, 0, 9, -1, 6.5], [1000, 950, 100, 0, 6, -1, 0]];
+  Net.applySnap(s2);
+  const e = Game.enemies[0], [b, c] = Game.eBullets;
+  assert(e && e.affixes && e.affixes.join() === 'shield,split' && e.r === 18.2 && e.ledT === 1 && e.enraged && e.shieldA === 1.5 && b && b.mine && b.life === 6.5 && c && !c.mine,
+    `client receives elite affixes, size, aura, mines (${e && e.affixes}, r ${e && e.r}, mine ${b && b.mine}/${c && c.mine})`);
+}
 const rows = Net.teamRows(); assert(rows[1].me && rows[1].dmg > 0 && rows[0].dmg === 0, 'team rows: 2P is me with damage');
 assert(Net.teamSummaryHtml().includes('多人傷害結算'), 'team summary html');
 assert(sent.some(m => m.t === 'i'), 'client sends input');

@@ -15,6 +15,10 @@ module.exports = function installProbe(G) {
   wrap('wallSlam', (o, e) => { const cd = e.whCd; const r = o(e); if (e.whCd !== cd) inc('撞牆撞擊'); return r; });
   wrap('spreadHit', (o, P) => { if (P && (P.L ? P.L.wp : G.wp).spreadUp) inc('分散疊層'); return o(P); });
   wrap('grazeHit', (o, p) => { inc('擦彈'); return o(p); });
+  // 精英詞綴（2026-10-13）：出場幾隻、各詞綴出現幾次、擊殺、地雷爆炸
+  wrap('spawnEnemy', (o, type) => { const r = o(type); if (type === 'elite') { const e = G.enemies[G.enemies.length - 1]; inc('精英出場'); for (const id of e.affixes || []) inc('詞綴' + id); } return r; });
+  wrap('mineBlast', (o, b) => { inc('地雷爆炸'); return o(b); });
+  wrap('onEnemyKilled', (o, e) => { if (e.t.elite) inc('精英擊殺'); return o(e); });
   wrap('shareLink', (o, e, d, a) => { if (e.link && e.link.t > 0) inc('共鳴分傷'); return o(e, d, a); });
   wrap('onReloadKill', (o, e) => { const p = e.killer ? ((G.mates || []).find(m => m.L === e.killer) || null) : G.player; const cd = p ? p.fireCd : 0; const r = o(e); if (p && cd > 0 && p.fireCd <= 0) inc('連殺裝填'); return r; });
   wrap('arcChain', (o, ...a) => { inc('導電連鎖'); return o(...a); });

@@ -77,6 +77,10 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   threat = 0;
   if (!bait) for (const b of G.eBullets) {
     const rx = p.x - b.x, ry = p.y - b.y, d = Math.hypot(rx, ry), v = Math.hypot(b.vx, b.vy) || 1;
+    if (b.mine) {  // 精英「佈雷」的地雷（不會動）：靠近 110 內就往外繞（越近越急）
+      if (d < 110) { const w = 2.5 * (1 - d / 110); mx += rx / (d || 1) * w; my += ry / (d || 1) * w; threat += w; }
+      continue;
+    }
     if (d > 200 || (b.vx * rx + b.vy * ry) <= 0) continue;
     const miss = Math.abs(rx * b.vy - ry * b.vx) / v;  // 子彈照直線飛，會離飛船多近
     if (miss > p.r + b.r + 24) continue;
@@ -202,8 +206,19 @@ function goRevive(p) {
   I.joy = { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 };
 }
 function bot(p) {
-  if (!goExit(p)) { fightBot(p); standBot(p); }
+  if (!goExit(p)) { fightBot(p); standBot(p); flankShield(p); }
   goRevive(p);
+}
+// 精英「護盾」：盾對著自己（±70°）、在 500 內 → 往側邊繞（加在原本的走位上，繞到背後再打）；有子彈要閃時不管
+function flankShield(p) {
+  if (threat > 0 || Input.dash) return;
+  const e = G.enemies.find(o => !o.dead && !(o.spawnT > 0) && o.t.elite && o.shieldA != null && Math.hypot(o.x - p.x, o.y - p.y) < 500);
+  if (!e) return;
+  const a = Math.atan2(p.y - e.y, p.x - e.x), off = angleDiff(e.shieldA, a);
+  if (Math.abs(off) > 1.22) return;
+  const s = off >= 0 ? 1 : -1, tx = -Math.sin(a) * s, ty = Math.cos(a) * s, j = Input.joy || { x: 0, y: 0 };  // 往離盾中心遠的那一側繞
+  const mx = j.x / 60 + tx * 1.5, my = j.y / 60 + ty * 1.5, l = Math.hypot(mx, my) || 1;
+  Input.joy = { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 };
 }
 // 架設（站著不動射速越疊越高）：安全就停下來打，任何一項不成立就照原本的走位（層數歸零）
 //   安全 = 沒有要閃的子彈／衝撞（threat = 0）、350 內沒有朝自己飛來、會擦到 60 內的敵彈、

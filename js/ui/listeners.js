@@ -48,4 +48,5 @@
   Events.on('enemyKilled', d => SFX.play(d.e.t.boss ? 'bossdeath' : d.big ? 'bigkill' : 'kill'));
   Events.on('playerHurt', d => SFX.play(d.dead ? 'death' : 'hurt'));
   Events.on('objBreak', d => SFX.play(d.big ? 'bigkill' : 'explode'));  // 行星、小行星、彗星被打爆
+  Events.on('mineBlast', () => SFX.play('explode'));  // 精英「佈雷」的地雷爆炸
 }
