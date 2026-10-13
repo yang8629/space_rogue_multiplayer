@@ -1,0 +1,12 @@
+# 測試資料夾裡不上傳的東西
+node_modules/
+*.log
+*.err
+*.done
+*.bak*
+# 每台電腦自己的私人資訊字詞（release.js 掃描用）
+private_words.txt
+# 模擬的原始結果（--out 存的資料夾）
+runs*/
+sim1*/
+ic1*/
