@@ -404,8 +404,8 @@ const Screen = {
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
     }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：背包模組' : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
-        <div class="sub">${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}${R.kind === 'elite' ? '背包模組只有 1 格，換上新的舊的就沒了。重裝甲、加速器 ≥ 2 層時模組有額外加成。' : '獲得的晶片會放入倉庫，按 Tab 裝上電路。'}</div></div>${this.status()}</div>
+      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：背包模組' : R.kind === 'start' ? `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）` : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
+        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}${R.kind === 'elite' ? '背包模組只有 1 格，換上新的舊的就沒了。重裝甲、加速器 ≥ 2 層時模組有額外加成。' : '獲得的晶片會放入倉庫，按 Tab 裝上電路。'}</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
