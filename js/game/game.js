@@ -27,13 +27,20 @@ const Game = {
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
-  mate: null, shooter: null,
+  mates: [], shooter: null,  // mates：其他玩家的飛船（房主這邊每艘帶 L = 那個人的配裝；slot = 幾號玩家）
   // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
   parts: {}, module: null, partSlots: 6, cap: 4, mech: mechStats({}, null), objs: [], portals: [],
   growth: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
-  players() { return [this.player, this.mate].filter(p => p && !p.dead && !p.gone); },  // gone：隊友離線，房主一個人繼續
+  allShips() { return [this.player, ...this.mates]; },  // 所有飛船（含倒下、離線的）
+  players() { return this.allShips().filter(p => p && !p.dead && !p.gone); },  // gone：隊友離線，其他人繼續
+  // 配裝 L 是誰的飛船（L = null：房主自己）；子彈、傷害的 owner 都是配裝
+  shipOf(L) { return L ? this.mates.find(m => m.L === L) || null : this.player; },
+  // 畫面跟著誰：自己被擊墜時看還活著的隊友
+  viewShip() { return this.player.dead && this.mates.find(m => !m.dead) || this.player; },
+  // 幾號玩家（1P＝房主）：自己的號碼問 Net，隊友的號碼記在飛船上
+  tagOf(p) { return `${p === this.player ? Net.mySlot() : p.slot || 2}P`; },
   nearestPlayer(x, y) {
     let best = null, bd = Infinity;
     for (const p of this.players()) { const d = dist2(x, y, p.x, p.y); if (d < bd) { bd = d; best = p; } }
@@ -52,7 +59,7 @@ const Game = {
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
   isClient() { return Net.role === 'client' && this.mode === 'coop'; },
-  coopOn() { return this.mode === 'coop' && !!this.mate && !this.mate.gone; },  // 雙人而且隊友在線（離線時敵人數量、血量、成長需求都恢復單人）
+  coopOn() { return this.mode === 'coop' && this.mates.some(m => !m.gone); },  // 雙人而且有隊友在線（都離線時敵人數量、血量、成長需求都恢復單人）
   freePlay() { return this.mode === 'sandbox' || this.mode === 'range'; },  // 沙盒、靶場：晶片無限供應、可以隨意改武器
   // 錢：雙人時每人各自一個錢包。怪物掉落的晶體兩人都拿（見 Net 的 loot），其他收入、花費都是自己的
   pay(price, fn) {
@@ -98,7 +105,7 @@ const Game = {
     this.bonusPicks = ST ? ST.picks || 0 : 0;  // 開局先連續三選一幾次（到航圖之前，見 showMap）
     this.refreshWeapon();  // 內含 recalc()
     this.player.hp = this.player.maxHp;
-    if (mode !== 'coop') { this.mate = null; Net.close(); }
+    if (mode !== 'coop') { this.mates = []; Net.close(); }
     if (mode === 'sandbox') this.startCombat({ sandbox: true, level: 0 });
     else if (mode === 'range') { this.startCombat({ sandbox: true, range: true, level: 0 }); Range.reset('single'); }
     else if (mode === 'coop') return;  // 雙人：由 Net 建好隊友之後再開戰
@@ -202,12 +209,12 @@ const Game = {
     else Arena.reset();
     if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
     this.player.resetPos();
-    // 雙人：房主在左、隊友在右（隊友的位置由隊友自己的電腦決定）
-    if (Net.role === 'host') this.player.x -= 50;
-    if (Net.role === 'client') this.player.x += 50;
-    if (this.mate) { this.mate.resetPos(); this.mate.x += Net.role === 'host' ? 50 : -50; this.mate.dead = false; }
+    // 雙人：照號碼由左到右排（1P 在最左；隊友的位置由隊友自己的電腦決定）
+    const slotX = s => (s - 1.5) * 100;
+    if (Net.role) this.player.x += slotX(Net.mySlot());
+    for (const m of this.mates) { m.resetPos(); m.x += slotX(m.slot || 2); m.dead = false; }
     this.player.dead = false;
-    for (const p of [this.player, this.mate]) if (p) this.resetMechCombat(p);
+    for (const p of this.allShips()) this.resetMechCombat(p);
     this.objs = this.isClient() ? [] : Objects.gen(this.combat, this.node);
     if (!this.combat.boss && !this.combat.sandbox && !this.combat.range) this.combat.themes = this.pickThemes(this.sector, !!this.node && this.node.L >= 3);  // 地圖物件（雙人：房主產生，隨同步傳給隊友）
     this.cam.x = this.player.x - ZW / 2; this.cam.y = this.player.y - ZH / 2;
@@ -339,7 +346,7 @@ const Game = {
     if (this.mode === 'coop') Net.lootTotal += n;
     this.pickups = [];
     this.exit = null; C.exitUsed = C.wave; C.areaN = (C.areaN || 0) + 1; C.waveTimer = 1.2;
-    for (const p of [this.player, this.mate]) if (p && p.dead && !p.gone) this.toEntry(p, C.wave);
+    for (const p of this.allShips()) if (p.dead && !p.gone) this.toEntry(p, C.wave);
   },
   toEntry(p, k) {
     if (Arena.rect || (p.zone || 0) >= k) return;
@@ -368,7 +375,7 @@ const Game = {
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       if (this.sector === this.lastSector() && !MechCheck.running) markChapterCleared(this.chapterId);  // 打完這章最後一隻王：記下通關、開下一章（雙人兩邊各自記）
       this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
-      if (this.mode === 'coop' && Net.role === 'host') Net.mateModWait = this.coopOn();  // 雙人：等隊友選好二選一、裝上或略過旗艦模組才能前往
+      if (this.mode === 'coop' && Net.role === 'host') Net.waitMods(this.coopOn());  // 雙人：等隊友選好二選一、裝上或略過旗艦模組才能前往
       if (client && bossDone(this.victory)) Net.send({ t: 'moddone' });
       this.state = 'victory';
       this.view();
@@ -624,9 +631,9 @@ const Game = {
     if (this.isClient()) { this.bossId = Net.nextMap.bossId; this.map = Net.nextMap.map; }  // 隊友：用房主產生的星圖
     else {
       this.bossId = this.bossFor(this.sector); this.map = genMap();
-      // 武器都已經升滿（雙人：兩人都升滿）就不再出現軍械台，改成戰鬥
+      // 武器都已經升滿（雙人：每個人都升滿）就不再出現軍械台，改成戰鬥
       const maxed = W => W && W.final != null;
-      if (maxed(this.weapon) && (!this.mate || maxed(this.mate.L && this.mate.L.weapon)))
+      if (maxed(this.weapon) && this.mates.every(m => maxed(m.L && m.L.weapon)))
         for (const n of this.map.flat()) if (n.type === 'armory') n.type = 'combat';
     }
     this.node = null; this.visited = [];
@@ -951,12 +958,12 @@ const Game = {
   },
   // 連殺裝填（軌道升級）：打出最後一擊的人下一發冷卻歸零
   onReloadKill(e) {
-    const p = e.killer ? (this.mate && this.mate.L === e.killer ? this.mate : null) : this.player;
+    const p = this.shipOf(e.killer);
     if (p && !p.dead && this.wpOf(p).reload) p.fireCd = Math.min(p.fireCd, 0);
   },
   // 無傷連殺（輕裝甲 4 層）：打出最後一擊的人沒被打中時每殺一隻 +1 層
   onStreakKill(e) {
-    const p = e.killer ? (this.mate && this.mate.L === e.killer ? this.mate : null) : this.player;
+    const p = this.shipOf(e.killer);
     if (!p || p.dead || !this.mechOf(p).traits.streak) return;
     p.streak = Math.min(STREAK.max, (p.streak || 0) + 1);
   },
@@ -1198,28 +1205,28 @@ const Game = {
     const RS = this.statsOf(p); if (RS) RS.downs = (RS.downs || 0) + 1;  // 雙人紀錄：被擊墜幾次
     burst(p.x, p.y, p.ship.color, 80, 400, 1.2, 3);
     if (this.players().length) {
-      bannerFx(`${p === this.player ? '1P' : '2P'} 被擊墜！`, `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, 2.5);
+      bannerFx(`${this.tagOf(p)} 被擊墜！`, `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, 2.5);
       return;
     }
     this.state = 'dead'; Input.down = false;
     // 結束訊息帶上隊友的最終血量與擊毀原因（最後一次同步可能還沒送到）；先送最終傷害統計
     Net.sendDmg();
-    Net.send({ t: 'over', wave: this.combat.wave, cause: this.mate ? this.mate.lastHit || '' : '' });
+    Net.sendOver(this.combat.wave);
     this.saveRecord('dead');
     Events.emit('died');
   },
   // 雙人救援（房主判定）：倒下的人留在原地，活著的隊友待在範圍內累積秒數，離開就慢慢退回
   updateRevive(dt) {
-    const R = CFG.REVIVE;
-    for (const [p, q] of [[this.player, this.mate], [this.mate, this.player]]) {
-      if (!p || !q || !p.dead) continue;
-      const near = !q.dead && !q.gone && dist2(p.x, p.y, q.x, q.y) < R.range * R.range;
-      p.reviveT = near ? p.reviveT + dt : Math.max(0, p.reviveT - dt);
+    const R = CFG.REVIVE, all = this.allShips();
+    for (const p of all) {
+      if (!p.dead) continue;
+      const q = all.find(q => q !== p && !q.dead && !q.gone && dist2(p.x, p.y, q.x, q.y) < R.range * R.range);  // 救的人：旁邊還活著的任一個
+      p.reviveT = q ? p.reviveT + dt : Math.max(0, p.reviveT - dt);
       if (p.reviveT >= R.time) this.revivePlayer(p, q);
     }
   },
   revivePlayer(p, q) {  // 救的人分出自己當前一半的血量
-    const give = q.hp / 2, tag = x => (x === this.player ? '1P' : '2P');  // 只在房主執行：自己是 1P
+    const give = q.hp / 2, tag = x => this.tagOf(x);  // 只在房主執行：自己是 1P
     q.hp -= give;
     p.hp = give; p.dead = false; p.reviveT = 0; p.iframe = CFG.REVIVE.iframe;
     const RS = this.statsOf(q); if (RS) RS.revives = (RS.revives || 0) + 1;  // 雙人紀錄：救起隊友幾次
@@ -1234,7 +1241,7 @@ const Game = {
     if (this.pauseMenu && this.mode !== 'coop') return;  // 選單開著：單人暫停（雙人不暫停，隊友那邊照常進行）
     if (Net.role === 'client' && this.mode === 'coop') { Net.clientUpdate(dt); return; }
     const frozen = !!Net.pauseReason();  // 雙人：隊友在編輯電路、切到其他視窗、斷線重連中 → 全員暫停
-    if (this.state === 'play' && this.mate && !frozen) Net.hostUpdateMate(dt);
+    if (this.state === 'play' && !frozen) Net.hostUpdateMates(dt);
     if (this.state === 'play' && !frozen) {
       this.time += dt;
       if (this.runStats) this.runStats.time += dt;  // 只算實際戰鬥的時間
@@ -1249,7 +1256,7 @@ const Game = {
       this.updateEnemyBullets(dt);
       this.updateZones(dt);
       this.updatePickups(dt);
-      if (this.mate) this.updateRevive(dt);
+      if (this.mates.length) this.updateRevive(dt);
     }
     if (this.state === 'play' || this.state === 'dead') this.updateFx(dt);
     if (this.inArena && this.state !== 'editor') this.updateCamera(dt);
@@ -1405,12 +1412,12 @@ const Game = {
         if (b.wallhit && !e.t.boss) { if (!(e.whT > 0)) e.whDmg = 0; e.whDmg += dmg; e.whT = b.wallhit.t; e.whAtt = att; e.wh = b.wallhit; }  // 撞牆：記下這波彈丸的傷害
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
-        const wid = (b.owner && this.mate && this.mate.L ? this.mate.L.weapon : this.weapon).id;
+        const wid = (b.owner ? b.owner.weapon : this.weapon).id;
         floatText(e.x, e.y - e.r, Math.round(dmg), ...dmgTextStyle(dmg, WEAPONS[wid] && WEAPONS[wid].base.damage));
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
         Events.emit('hit', { e, b, dmg });
         this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素組件）：燃燒、減速、爆炸、電弧
-        if (b.lifesteal) this.healPlayer(b.lifesteal, b.owner ? this.mate : this.player);
+        if (b.lifesteal && this.shipOf(b.owner)) this.healPlayer(b.lifesteal, this.shipOf(b.owner));
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
         if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
           Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner, fi: b.fromIntercept });  // 回響可以打到被命中的這一隻
@@ -1693,7 +1700,7 @@ const Game = {
       if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 格擋（相位刃・格擋流）：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
       // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
       //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
-      const p = (b.owner ? this.mate : this.player) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
+      const p = this.shipOf(b.owner) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
       let W = null, wd = C.join * C.join;
       for (const w of Ws) { const d = dist2(w.x, w.y, eb.x, eb.y); if (d <= wd) { wd = d; W = w; } }
       if (!W) {
@@ -1904,7 +1911,7 @@ const Game = {
     Events.emit('fxTick', dt);  // 粒子、浮動數字、光圈、電弧、閃光、橫幅、震動（ui/fx.js）
   },
   updateCamera(dt) {
-    const p = this.player.dead && this.mate && !this.mate.dead ? this.mate : this.player, c = this.cam;  // 自己被擊墜時看隊友
+    const p = this.viewShip(), c = this.cam;  // 自己被擊墜時看隊友
     const tx = clamp(p.x - ZW / 2, -80, Arena.W - ZW + 80);
     const ty = clamp(p.y - ZH / 2, -80, Arena.H - ZH + 80);
     c.x += (tx - c.x) * Math.min(1, dt * 8);

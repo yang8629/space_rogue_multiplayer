@@ -38,7 +38,7 @@ const GLWorld = {
     for (let y = Math.max(0, Math.floor(c.y / gs) * gs); y <= Math.min(H, c.y + ZH); y += gs) g.moveTo(Math.max(0, c.x), y).lineTo(Math.min(W, c.x + ZW), y);
     g.stroke({ width: 1, color: 0x3c5ab4, alpha: 0.12 });
     this.gAdd.clear(); this.gObj.clear();
-    const viewer = G.player.dead && G.mate && !G.mate.dead ? G.mate : G.player;
+    const viewer = G.viewShip();
     if (Arena.rect) { this.wall.visible = false; g.rect(0, 0, W, H).stroke({ width: 3, color: 0x4cc9f0, alpha: 0.6 }); }
     else { this.buildWalls(); this.wall.visible = true; this.wallAnim(); this.gates(viewer); }
     this.objects(viewer);
@@ -303,7 +303,7 @@ const GLWorld = {
     const t = Game.time, pulse = 1 + 0.08 * Math.sin(t * 5);
     const label = (txt, x, y) => { const q = GLR.take(this.pTxt); if (q.text !== txt) q.text = txt; q.anchor.set(0.5, 1); q.position.set(x, y); q.alpha = 1; };
     if (X.gate) {
-      const me = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, G = Arena.gates[me.zone];
+      const me = Game.viewShip(), G = Arena.gates[me.zone];
       if (!G || !G.open) return;
       label('閘門', G.x - G.nx * 30, G.y - G.ny * 30 - 4);
     } else {
@@ -311,7 +311,7 @@ const GLWorld = {
       for (let i = 0; i < 3; i++) { const a = t * 2 + i * TAU / 3; glArc(g, X.x, X.y, X.r * 0.6, a, a + 1.2); g.stroke({ width: 2, color: 0x2ee6a6, alpha: 0.9 }); }
       label('出口', X.x, X.y - X.r - 4);
     }
-    const p = Game.player.dead && Game.mate && !Game.mate.dead ? Game.mate : Game.player, c = Game.cam;
+    const p = Game.viewShip(), c = Game.cam;
     if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;
     const dir = X.gate ? Arena.exitDir(p.x, p.y, p.zone, p.r) : null;
     const a0 = dir ? Math.atan2(dir[1], dir[0]) : Math.atan2(X.y - p.y, X.x - p.x), key = X.x + ',' + X.y;

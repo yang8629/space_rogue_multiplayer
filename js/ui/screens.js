@@ -84,7 +84,7 @@ const Screen = {
       case 'node': if (Game.mode === 'coop') Net.vote(arg); else Game.enterNode(Game.nodeById(arg)); break;
       case 'resume': Game.togglePauseMenu(false); break;
       case 'quitrun': Game.quitRun(); break;
-      case 'title': Net.leave(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
+      case 'title': Net.leave(); Game.mates = []; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
       case 'chapters': Screen.chapterSelect(); break;
       case 'chapter': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.select('run'); } break;
       case 'select': Screen.select(arg); break;
@@ -117,7 +117,7 @@ const Screen = {
       case 'next': {  // 還沒裝上旗艦模組：先提醒一次（可以勾「不再提醒」）
         const V = Game.victory;
         if (V && !V.pick) { this.victory(); break; }  // 二選一還沒選
-        if (Net.mateModWait && Game.coopOn()) { this.victory(); break; }  // 雙人：隊友還沒裝上或略過旗艦模組
+        if (Net.modWaiting() && Game.coopOn()) { this.victory(); break; }  // 雙人：隊友還沒裝上或略過旗艦模組
         let warn = true;
         try { warn = localStorage.getItem('noModWarn') !== '1'; } catch (e) {}
         if (V && V.module && !V.took && warn) this.victory(true); else Game.nextSector();
@@ -126,7 +126,7 @@ const Screen = {
       case 'nextok': {
         const cb = document.getElementById('noModWarn');
         if (cb && cb.checked) try { localStorage.setItem('noModWarn', '1'); } catch (e) {}
-        if (Net.mateModWait && Game.coopOn()) this.victory(); else Game.nextSector();
+        if (Net.modWaiting() && Game.coopOn()) this.victory(); else Game.nextSector();
         break;
       }
       case 'nextno': this.victory(); break;
@@ -375,7 +375,7 @@ const Screen = {
     const layers = Game.map, LN = layers.length, reach = Game.reachable();
     const pos = n => ({ x: 6 + n.L * 88 / (LN - 1), y: (n.k + 1) / (n.n + 1) * 100 });
     const coop = Game.mode === 'coop' && Net.linked, V = coop ? Net.votes : {};
-    const marks = n => coop ? (V.h === n.id ? '<i class="vote v1">1P</i>' : '') + (V.c === n.id ? '<i class="vote v2">2P</i>' : '') : '';
+    const marks = n => coop ? Object.keys(V).filter(s => V[s] === n.id).map(s => `<i class="vote v${s}">${s}P</i>`).join('') : '';
     let lines = '', nodes = '';
     for (const row of layers) for (const n of row) {
       const a = pos(n);
@@ -398,10 +398,11 @@ const Screen = {
       <div class="between"><div><h2>${Game.isEndless() ? `無盡模式 · 星區 ${Game.sector}` : `${Game.chapter().name} · 星區 ${Game.sector} / ${Game.lastSector()}`} · 航圖</h2>
         <div class="sub">選擇下一個發光的節點。最右側是守關旗艦：<b style="color:${ENEMY_TYPES[Game.bossId].color}">♛ ${ENEMY_TYPES[Game.bossId].name}</b></div></div>${this.status()}</div>
       ${coop ? (() => {
-        const me = Net.myVoteKey(), mate = me === 'h' ? 'c' : 'h', left = Net.voteLeft();
-        const mateTxt = Net.mateAt !== 'map' ? '<span style="color:#ffd166">隊友還在處理上一個節點…</span>' : V[mate] ? '<b style="color:#9dff6b">隊友已投票</b>' : '隊友選擇中…';
-        return `<div class="sub" style="color:#ff9dbd">👥 投票（你是 ${me === 'h' ? '1P' : '2P'}）：${V[me] ? '你已投票，可以改投' : '點選一個發光的節點'}　·　${mateTxt}
-          　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　兩人選不同就各 50% 抽籤；時間到沒投的不算</div>`;
+        const me = Net.mySlot(), others = Net.otherSlots(), left = Net.voteLeft();
+        const who = s => (others.length > 1 ? `${s}P ` : '隊友');  // 只有一個隊友時照舊寫「隊友」
+        const mateTxt = others.map(s => Net.atOf(s) !== 'map' ? `<span style="color:#ffd166">${who(s)}還在處理上一個節點…</span>` : V[s] ? `<b style="color:#9dff6b">${who(s)}已投票</b>` : `${who(s)}選擇中…`).join('　·　');
+        return `<div class="sub" style="color:#ff9dbd">👥 投票（你是 ${me}P）：${V[me] ? '你已投票，可以改投' : '點選一個發光的節點'}　·　${mateTxt}
+          　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　${others.length > 1 ? '選不同就照票數比例抽籤' : '兩人選不同就各 50% 抽籤'}；時間到沒投的不算</div>`;
       })() : ''}
       <div class="map"><svg>${lines}</svg>${nodes}</div>
       <div class="toast">${toast}</div>
@@ -542,7 +543,7 @@ const Screen = {
     const skipBtn = Game.isClient() ? '<button data-act="modskip">略過</button>' : '';  // 雙人的隊友：房主等你裝上或略過才能前往
     const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>' : V.skip ? '<button disabled>已略過</button>'
       : `<button data-act="bossmod">裝上${Game.module && Game.module !== V.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>${skipBtn}`)}</div>` : '';
-    const wait = !Game.isClient() && Net.mateModWait && Game.coopOn();  // 房主：隊友還沒選好二選一、裝上或略過旗艦模組
+    const wait = !Game.isClient() && Net.modWaiting() && Game.coopOn();  // 房主：隊友還沒選好二選一、裝上或略過旗艦模組
     // 二選一：電路插槽 +1（多一格放晶片）或零件格 +1（多疊一層零件）；電路已滿時直接給零件格
     const pk = (k, icon, name, note, col) => `<button class="big" data-act="bossslot" data-arg="${k}"${V.pick ? ' disabled' : ''} style="min-width:230px;line-height:1.5${V.pick === k ? `;opacity:1;border-color:${col};box-shadow:0 0 14px ${col}` : ''}"><b style="color:${col}">${icon} ${name}</b>${V.pick === k ? ' ✓' : ''}<br><small style="color:#8fa3d9">${note}</small></button>`;
     const pick = !V.slot || V.pick === 'lost' ? '' : `<div class="sub" style="margin-bottom:4px;color:${V.pick ? '#8fa3d9' : '#ffd166'}">${V.pick ? '已選好' : '二選一：'}</div><div class="row" style="margin-top:0">

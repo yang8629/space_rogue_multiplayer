@@ -63,7 +63,7 @@ function drawSticks() {
 const ENEMY_FACE = new Map();
 function nearestShip(e) {  // 離敵人最近、還活著的飛船（跟敵人瞄準的目標一樣；雙人時可能是隊友）
   let q = null, bd = Infinity;
-  for (const p of [Game.player, Game.mate]) if (p && !p.dead && !p.gone) { const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; q = p; } }
+  for (const p of Game.allShips()) if (p && !p.dead && !p.gone) { const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; q = p; } }
   return q;
 }
 function enemyFace(e) {
@@ -211,7 +211,7 @@ function drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left�
   const A = Arena.areas[cur];
   if (A) { ctx.fillStyle = 'rgba(255, 209, 102, 0.9)'; ctx.font = `bold ${Math.round(14 / s)}px Microsoft JhengHei`; ctx.textAlign = 'center'; }
   for (const e of Game.enemies) { if (e.dead) continue; ctx.fillStyle = '#ff4d6d'; ctx.fillRect(e.x - 1.5 / s, e.y - 1.5 / s, 3 / s, 3 / s); }
-  for (const p of [Game.player, Game.mate]) {
+  for (const p of Game.allShips()) {
     if (!p || p.gone) continue;
     ctx.fillStyle = p.dead ? '#888' : p === Game.player ? '#fff' : (p.ship && p.ship.color) || '#4cc9f0';
     ctx.beginPath(); ctx.arc(p.x, p.y, 3.5 / s, 0, TAU); ctx.fill();
@@ -276,15 +276,14 @@ function drawHUD() {
   ctx.fillText(`◆ ${Game.credits}`, 20, 72);
   ctx.fillStyle = p.ship.color; ctx.font = 'bold 12px Microsoft JhengHei';
   ctx.fillText(p.ship.name + (Game.module ? `　${MODULES[Game.module].icon} ${MODULES[Game.module].name}${p.shield ? ' ' + '⛨'.repeat(p.shield) : ''}` : ''), 72, 72);
-  const m = Game.mate;
-  if (m) {  // 雙人：隊友血條
-    const mw = Math.min(160, VW * 0.3), tag = Net.role === 'host' ? '2P' : '1P';
-    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 82, mw + 4, 12);
-    ctx.fillStyle = m.dead ? '#555' : m.ship.color; ctx.fillRect(22, 84, mw * Math.max(0, m.hp) / m.maxHp, 8);
+  Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
+    const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;
+    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, y, mw + 4, 12);
+    ctx.fillStyle = m.dead ? '#555' : m.ship.color; ctx.fillRect(22, y + 2, mw * Math.max(0, m.hp) / m.maxHp, 8);
     ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = m.dead ? '#ff4d6d' : '#cfe8ff';
     ctx.fillText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
-      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, 93);
-  }
+      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, y + 11);
+  });
 
   ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;
   ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '雙人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);

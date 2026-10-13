@@ -30,7 +30,7 @@ const GLFx = {
     const G = Game, tx = this.tx, R = this.res, P = this.pB;
     this.pB.begin(); this.pP.begin(); this.pEB.begin();
     // 我方子彈：飛船 50 內變淡（最淡 20%），相刃不變淡
-    const ships = [G.player, G.mate].filter(p => p && !p.dead && !p.gone), FADE = 50;
+    const ships = G.players(), FADE = 50;
     for (const b of G.bullets) {
       let fa = 1;
       if (b.shape !== 'blade') for (const p of ships) fa = Math.min(fa, 0.2 + 0.8 * Math.min(1, Math.hypot(b.x - p.x, b.y - p.y) / FADE));
