@@ -213,8 +213,10 @@ function drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left�
   for (const e of Game.enemies) { if (e.dead) continue; ctx.fillStyle = '#ff4d6d'; ctx.fillRect(e.x - 1.5 / s, e.y - 1.5 / s, 3 / s, 3 / s); }
   for (const p of Game.allShips()) {
     if (!p || p.gone) continue;
-    ctx.fillStyle = p.dead ? '#888' : p === Game.player ? '#fff' : (p.ship && p.ship.color) || '#4cc9f0';
+    const coop = Game.mates.length > 0;
+    ctx.fillStyle = p.dead ? '#888' : coop ? Game.colorOf(p) : p === Game.player ? '#fff' : (p.ship && p.ship.color) || '#4cc9f0';
     ctx.beginPath(); ctx.arc(p.x, p.y, 3.5 / s, 0, TAU); ctx.fill();
+    if (coop && p === Game.player) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2 / s; ctx.stroke(); }  // 雙人：自己多一圈白框
   }
   ctx.restore();
 }
@@ -279,14 +281,14 @@ function drawHUD() {
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
     const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;
     ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, y, mw + 4, 12);
-    ctx.fillStyle = m.dead ? '#555' : m.ship.color; ctx.fillRect(22, y + 2, mw * Math.max(0, m.hp) / m.maxHp, 8);
+    ctx.fillStyle = m.dead ? '#555' : Game.colorOf(m); ctx.fillRect(22, y + 2, mw * Math.max(0, m.hp) / m.maxHp, 8);
     ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = m.dead ? '#ff4d6d' : '#cfe8ff';
     ctx.fillText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
       : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, y + 11);
   });
 
   ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;
-  ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '雙人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
+  ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
   ctx.font = '12px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
   ctx.fillText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54);
   // FPS（右上角最上面）：綠 ≥ 55、黃 ≥ 40、紅
