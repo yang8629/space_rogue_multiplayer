@@ -569,7 +569,7 @@ const ENEMY_TYPES = {
 };
 
 // 無盡模式：每過一個星區，敵人攻擊頻率 ×1.1、移動速度 ×1.05（乘算；攻擊力另外在受傷時 ×1.25）
-const endlessK = () => Game.mode === 'run' || Game.mode === 'coop' ? Math.max(0, Game.sector - CFG.CAMPAIGN_SECTORS) : 0;
+const endlessK = () => Game.mode === 'run' || Game.mode === 'coop' ? Math.max(0, Game.sector - Game.lastSector()) : 0;
 const endlessAtk = () => Math.pow(CFG.ENDLESS_ATK, endlessK());
 const endlessSpd = () => Math.pow(CFG.ENDLESS_SPD, endlessK());
 

@@ -13,6 +13,7 @@ const MechCheck = {
 
   // ---------- 測試用工具 ----------
   setup(mode, ship, weapon, path, final, chain, inv = []) {
+    Game.chapterId = 1;  // 既有檢查都假設從第一章的星區 1 開始（玩家選了別章也一樣）
     Game.newRun(mode, ship, weapon);
     Game.weapon = { id: weapon, path, final };
     Game.refreshWeapon();
@@ -1714,6 +1715,81 @@ const MechCheck = {
       for (let i = 0; i < 60 * 12; i++) b.update(1 / 60, Game.player);
       const minions = Game.enemies.filter(e => e.type === 'swarmer').length;
       return { ok: b.enraged && minions > 0, got: `${b.enraged ? '已暴走' : '沒有暴走'}，召喚 ${minions} 隻蟲群` };
+    }],
+    ['章節', '章節設定', '第一章 = 星區 1～3、三隻王照順序、倍率 1（跟改之前一樣）；每章從自己的第一個星區開始、王照章節設定；打完最後一個星區之後才是無盡（無盡強度從那裡開始算）', M => {
+      const out = [];
+      let ok = true;
+      for (const ch of CHAPTERS) {
+        Game.chapterId = ch.id;
+        Game.newRun('run', 'vanguard', 'laser');
+        const [a, b] = ch.sectors, secs = Array.from({ length: b - a + 1 }, (_, i) => a + i);
+        const startOk = Game.sector === a && Game.bossId === ch.bosses[a];
+        const bossOk = secs.every(s => Game.bossFor(s) === ch.bosses[s]);
+        Game.sector = b; const lastOk = !Game.isEndless() && endlessK() === 0;
+        Game.sector = b + 1; const endOk = Game.isEndless() && endlessK() === 1 && CFG.BOSS_ORDER.includes(Game.bossFor(b + 1));
+        const good = startOk && bossOk && lastOk && endOk;
+        ok = ok && good;
+        out.push(`${ch.name}${good ? '' : ' ✗'}：星區 ${a}～${b}${startOk ? '' : '（開局星區或王不對）'}${bossOk ? '' : '（各星區的王不對）'}${lastOk && endOk ? '' : '（無盡分界不對）'}`);
+      }
+      const c1 = chapterById(1);
+      const same = c1.sectors[0] === 1 && c1.sectors[1] === 3 && c1.hp === 1 && c1.dmg === 1 && !c1.start &&
+        [1, 2, 3].every(s => c1.bosses[s] === CFG.BOSS_ORDER[s - 1]);
+      Game.chapterId = 1;
+      return { ok: ok && same, got: out.join('；') + (same ? '；第一章跟改之前一樣' : '；第一章跟改之前不一樣（錯誤）') };
+    }],
+    ['章節', '章節倍率', '敵人血量 × 章節的 hp、飛船受到的傷害 × 章節的 dmg（第一章都是 1）', M => {
+      const probe = id => {
+        Game.chapterId = id;
+        Game.newRun('run', 'vanguard', 'laser');
+        Game.bonusPicks = 0;  // 開局補償的三選一不影響這項
+        Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 });
+        Game.combat.wave = 1; Game.spawnEnemy('swarmer');
+        const e = Game.enemies[Game.enemies.length - 1], p = Game.player;
+        p.iframe = 0; p.dashT = 0; p.shield = 0;  // invuln 是 getter（iframe／dashT 算出來的）
+        const hp0 = p.hp; Game.hurtPlayer(10, 'mc');
+        return { ehp: e.maxHp, taken: hp0 - p.hp };
+      };
+      const base = probe(1), out = [];
+      let ok = true;
+      for (const ch of CHAPTERS.slice(1)) {
+        const r = probe(ch.id), hpK = r.ehp / base.ehp, dmgK = r.taken / base.taken;
+        const good = near1(hpK, ch.hp) && near1(dmgK, ch.dmg);
+        ok = ok && good;
+        out.push(`${ch.name}：血量 ×${hpK.toFixed(2)}（應為 ${ch.hp}）、受傷 ×${dmgK.toFixed(2)}（應為 ${ch.dmg}）${good ? '' : ' ✗'}`);
+      }
+      Game.chapterId = 1;
+      return { ok, got: out.join('；') };
+    }],
+    ['章節', '章節進度', '只開第一章；通關第 N 章開第 N+1 章；存檔壞掉（不是 JSON、cleared 不是陣列、有奇怪的值）當成只開第一章；機制檢查的模擬局不寫進度', M => {
+      let saved = null;
+      try { saved = localStorage.getItem(CHAPTER_KEY); } catch (e) {}
+      const put = v => { try { if (v == null) localStorage.removeItem(CHAPTER_KEY); else localStorage.setItem(CHAPTER_KEY, v); } catch (e) {} };
+      const out = [];
+      try {
+        put(null);
+        const fresh = chapterUnlocked(1) && !chapterUnlocked(2);
+        out.push(fresh ? '新存檔只開第一章' : '新存檔不對（錯誤）');
+        markChapterCleared(1);
+        const next = chapterUnlocked(2) && !chapterUnlocked(3) && chapterProgress().join() === '1';
+        markChapterCleared(1);
+        const once = chapterProgress().length === 1;
+        out.push(next && once ? '通關第一章開第二章（重複通關不重複記）' : '通關後解鎖不對（錯誤）');
+        const bad = ['{', '{"cleared":5}', '{"cleared":["x",null,2.5]}', 'null'].every(v => { put(v); return chapterProgress().length === 0 && chapterUnlocked(1) && !chapterUnlocked(2); });
+        out.push(bad ? '壞掉的存檔當成只開第一章' : '壞掉的存檔處理不對（錯誤）');
+        put(null);
+        Game.chapterId = 1; Game.newRun('run', 'vanguard', 'laser');
+        Game.sector = Game.lastSector(); Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = Game.bossFor(Game.sector);
+        Game.combatWon();
+        const noWrite = chapterProgress().length === 0;
+        out.push(noWrite ? '模擬局沒有寫進度' : '模擬局寫進了進度（錯誤）');
+        return { ok: fresh && next && once && bad && noWrite, got: out.join('；') };
+      } finally { put(saved); Game.chapterId = 1; }
+    }],
+    ['章節', '機制檢查固定第一章', '玩家選了別章再跑機制檢查：setup 一律從第一章的星區 1 開始', M => {
+      Game.chapterId = CHAPTERS[CHAPTERS.length - 1].id;
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const ok = Game.chapterId === 1 && Game.sector === 1;
+      return { ok, got: `setup 之後：第 ${Game.chapterId} 章、星區 ${Game.sector}` };
     }],
   ],
 

@@ -374,7 +374,7 @@ const Screen = {
     const legend = types.map(t => { const M = NODE_META[t];
       return `<div class="nleg"><span class="nleg-ic" style="color:${M.color};border-color:${M.color}">${M.icon}</span><div><b style="color:${M.color}">${M.label}</b>　${M.desc()}</div></div>`; }).join('');
     this.show(`<div class="scr">
-      <div class="between"><div><h2>${Game.isEndless() ? `無盡模式 · 星區 ${Game.sector}` : `星區 ${Game.sector} / ${CFG.CAMPAIGN_SECTORS}`} · 航圖</h2>
+      <div class="between"><div><h2>${Game.isEndless() ? `無盡模式 · 星區 ${Game.sector}` : `${Game.chapter().name} · 星區 ${Game.sector} / ${Game.lastSector()}`} · 航圖</h2>
         <div class="sub">選擇下一個發光的節點。最右側是守關旗艦：<b style="color:${ENEMY_TYPES[Game.bossId].color}">♛ ${ENEMY_TYPES[Game.bossId].name}</b></div></div>${this.status()}</div>
       ${coop ? (() => {
         const me = Net.myVoteKey(), mate = me === 'h' ? 'c' : 'h', left = Net.voteLeft();
@@ -516,7 +516,7 @@ const Screen = {
 
   victory(askMod = false) {  // askMod：按了前往但還沒裝上旗艦模組 → 先確認
     const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
-    const cleared = Game.sector === CFG.CAMPAIGN_SECTORS;  // 剛打完第三關：遠征完成
+    const cleared = Game.sector === Game.lastSector();  // 剛打完這章最後一個星區：章節完成
     const reward = `獎勵：◆ +50${!V.slot && V.pick ? '　· <b style="color:#9fe8ff">零件格 +1</b>（電路插槽已達上限）' : ''}${V.ws ? `　· <b style="color:#ffd166">武器插座 +1（${Game.wSock} 個）</b>` : ''}`;
     const skipBtn = Game.isClient() ? '<button data-act="modskip">略過</button>' : '';  // 雙人的隊友：房主等你裝上或略過才能前往
     const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>' : V.skip ? '<button disabled>已略過</button>'
@@ -528,8 +528,8 @@ const Screen = {
       ${pk('chain', '⊞', '電路插槽 +1', `多一格放晶片（${V.pick === 'chain' ? '現在' : '目前'} ${Game.chain.length} 格）`, '#4cc9f0')}
       ${pk('part', '⚙', '零件格 +1', `多疊一層零件（${V.pick === 'part' ? '現在' : '目前'} ${Game.partSlots} 格，已用 ${partsUsed(Game.parts)}）`, '#9fe8ff')}</div>`;
     const head = cleared
-      ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">遠征完成！</h1>
-        <div class="sub">${boss.name}已被擊沉，${CFG.CAMPAIGN_SECTORS} 個星區全部突破。<br>${reward}<br>
+      ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">${Game.chapter().name}　完成！</h1>
+        <div class="sub">${boss.name}已被擊沉。<br><i style="color:#c8d4ff">${Game.chapter().outro}</i><br>${reward}<br>
           可以帶著目前的電路繼續挑戰<b style="color:#ff9dbd">無盡模式</b>：敵人持續變強，旗艦隨機出現。選「結束遠征」會存下通關紀錄。</div>`
       : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
     this.show(`<div class="scr title-wrap">${head}
@@ -604,7 +604,7 @@ const Screen = {
   },
   // 結算畫面：複製這一局目前的紀錄（打完 Boss 還沒結束遠征時也能複製）
   copyRun() {
-    const result = Game.state === 'dead' ? 'dead' : Game.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'in_progress';
+    const result = Game.state === 'dead' ? 'dead' : Game.sector >= Game.lastSector() ? 'cleared' : 'in_progress';
     const rec = Game.mode === 'coop' ? Net.buildRecord(result) : Game.buildRecord(result);
     this.copyText(recordText(rec));
   },
