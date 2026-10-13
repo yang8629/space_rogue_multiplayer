@@ -1163,7 +1163,8 @@ const MechCheck = {
       M => {  // 用量成長：擊殺標記
         const kill = (weapon, type, wait) => {
           M.setup('sandbox', 'vanguard', weapon, null, null, ['weapon', 'rear', null, null]);
-          const e = M.targets([[-120, 0]], type, true, 0.01)[0]; e.hp = e.maxHp = 1e6;  // 在飛船後面，先打不死
+          // 在飛船後面，先打不死。距離 80：散彈反向那 4 顆扇形中間有空隙（每顆偏 6～7°），擺在 120 遠時蟲群偶爾 4 顆都擦過（約 4%）
+          const e = M.targets([[-80, 0]], type, true, 0.01)[0]; e.hp = e.maxHp = 1e6;
           Game.growth = {};
           M.run(20);
           for (let f = 0; f < wait * 60; f++) Game.time += 1 / 60;
