@@ -60,7 +60,7 @@ const Screen = {
   status() {
     const p = Game.player;
     return `<div class="row"><span class="pill">${statIcon('hp')}${Math.ceil(p.hp)} / ${p.maxHp}</span>
-      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體兩人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
+      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體每人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
       <span class="pill" title="零件已用／零件格">${statIcon('slots')}零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>${Game.module ? `<span class="pill">${MODULES[Game.module].icon} ${MODULES[Game.module].name}</span>` : ''}
       <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
@@ -515,7 +515,7 @@ const Screen = {
     const run = Game.mode === 'run';
     if (Game.mode === 'coop') {
       this.show(`<div class="scr title-wrap">
-        <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">雙機全毀</h1>
+        <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">${Game.mates.length > 1 ? '全機覆滅' : '雙機全毀'}</h1>
         <div class="sub">倒在 ${Net.whereText()} · 剩餘晶體 ${Game.credits}${Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}<br>
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
         ${Net.teamSummaryHtml()}
