@@ -1,0 +1,8 @@
+{
+  "name": "space-rogue-tests",
+  "private": true,
+  "description": "星環電路多人版的測試與模擬（node release.js 等）；截圖腳本（perf/）才需要 npm install",
+  "devDependencies": {
+    "puppeteer-core": "25.12.0"
+  }
+}
