@@ -57,7 +57,8 @@ GitHub Pages 發佈。`v1/` 是 V1（mp-0.6.4）的凍結副本（標籤 `v1-fin
 
 ## 改完之後
 
-1. 測試：在 `tests/` 跑 `node release.js`（所有測試＋機制檢查＋私人資訊掃描＋版號／README，只印摘要；完整結果在 `tests/release_last.log`）。個別：`smoke.js`、`range.js`、`e2e.js`（兩份遊戲互連）。
+1. 測試：在 `tests/` 跑 `node release.js`（所有測試＋機制檢查＋名字檢查＋私人資訊掃描＋版號／README，只印摘要；完整結果在 `tests/release_last.log`）。第一次要先在 `tests/` 跑 `npm install`。
+   - 名字檢查：`node undefcheck.js`（用了不存在的函式、變數；`--selftest` 測掃描本身）。個別：`smoke.js`、`range.js`、`e2e.js`（兩份遊戲互連）。
    - 看某幾項機制檢查：`node mc.js 迴旋 黏著`（不給關鍵字 = 只印沒過的）；偶發失敗：`node mcloop.js 名稱 --n=200`。
    - 晶片模擬表：`node chipmatrix.js --diff`（只印跟基準差 10% 以上的格子）；使用者接受新數值後 `--save`。
    - 自動對戰模擬：`node botsim.js --build --n=20`（依難度隨機配裝；判斷強弱一律用這個）。
