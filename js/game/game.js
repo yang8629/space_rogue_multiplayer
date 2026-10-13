@@ -180,7 +180,7 @@ const Game = {
   //   note：上一次三選一的結果（第一次是章節開場文字），顯示在標題下面，不然會被下一個三選一蓋掉
   openStartPick(note = '') {
     this.inArena = false;
-    this.reward = { kind: 'start', options: this.rewardOptions(), bonus: 0, reroll: this.shopPrice(15), slot: false, note };
+    this.reward = { kind: 'start', options: this.rewardOptions(), reroll: this.shopPrice(15), slot: false, note };
     this.state = 'reward';
     if (this.mode === 'coop') Net.sendLoadout();  // 雙人的隊友：每次都把配裝和剩下的次數傳給房主（重新整理重連時還原用）
     this.view();
@@ -408,9 +408,8 @@ const Game = {
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: this.rewardOptions(), bonus: kind === 'elite' ? 15 : 0, reroll: this.shopPrice(15),
+    this.reward = { kind, options: this.rewardOptions(), reroll: this.shopPrice(15),
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
-    this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
     this.view();
   },
@@ -438,7 +437,7 @@ const Game = {
   // 花晶體刷新三選一（第一次 ◆15，之後每次多 ◆10）
   rerollReward() {
     const R = this.reward;
-    if (!R || R.kind === 'elite' || this.credits < R.reroll) return;
+    if (!R || this.credits < R.reroll) return;
     this.pay(R.reroll, () => { R.reroll += this.shopPrice(10); R.options = this.rewardOptions(); this.view(); });
   },
   // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
