@@ -103,6 +103,7 @@ const Screen = {
       case 'nethost': Net.host(); break;
       case 'netjoin': Net.join(document.getElementById('netCode').value); break;
       case 'netstart': Net.beginPick(); break;
+      case 'netchapter': Net.setChapter(+arg); break;
       case 'netroom': Net.backToRoom(); break;
       case 'netrejoin': Net.tryRejoin(); break;
       case 'netgiveup': Net.giveUp(); break;

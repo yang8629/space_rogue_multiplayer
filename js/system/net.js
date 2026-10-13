@@ -24,6 +24,8 @@ const Net = {
   peer: null, conn: null, ping: null, code: '',
   linked: false,       // 兩邊已經握手成功
   myPick: null, matePick: null,  // 各自選好的 { ship, weapon, chip }
+  chapter: 1,          // 這個房間選的章節：房主在大廳選，隊友照房主的
+  mateCleared: [],     // 房主：隊友通關過的章號（兩人都解鎖的章節才能選）
   stats: null,         // 這一局的連線數據（寫進遊玩紀錄）
   fxBuf: [], sendAcc: 0, inAcc: 0, pingT: 0,
   active() { return !!this.role; },
@@ -34,6 +36,7 @@ const Net = {
     const peer = this.peer, conn = this.conn;
     this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
     this.linked = false; this.mateInRoom = false; this.myPick = this.matePick = null; this.code = '';
+    this.chapter = 1; this.mateCleared = [];
     try { conn && conn.close(); } catch (e) {}
     try { peer && peer.destroy(); } catch (e) {}
   },
@@ -153,6 +156,7 @@ const Net = {
     if (!this.linked) { this.lobby('<span style="color:#ff4d6d">連線已經中斷，請重新開房或加入</span>'); return; }
     this.myPick = this.matePick = null;
     this.send({ t: 'room' });
+    if (this.role === 'client') this.sendProgress();  // 這一局可能剛通關：房主照新的進度開放章節
     this.renderLobby();
   },
   renderLobby(msg = '') {
@@ -185,9 +189,28 @@ const Net = {
     const mate = this.mateInRoom ? '<b style="color:#9dff6b">隊友在房間裡</b>' : '<span style="color:#ffd166">等隊友回到房間…</span>';
     this.setMsg(this.role === 'host'
       ? `房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${mate}　·　${ping}
+         <div class="row">${this.chapterButtons()}</div>
          <div class="row"><button class="big" data-act="netstart" ${this.mateInRoom ? '' : 'disabled'}>開始（選擇配裝）</button></div>`
-      : `房間 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${ping}<br>等待房主按「開始」…`);
+      : `房間 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b>　·　${ping}<br>章節：<b style="color:#ffd166">${chapterById(this.chapter).name}</b>（房主選）<br>等待房主按「開始」…`);
   },
+  // ---------- 章節：房主在大廳選，兩人都解鎖的章節才能選 ----------
+  cleanChapter(n) { return CHAPTERS.some(c => c.id === n) ? n : 1; },  // 對方傳來的章號：不認得的當第一章
+  mateUnlocked(id) { return id === CHAPTERS[0].id || this.mateCleared.includes(id - 1); },
+  chapterOk(id) { return chapterUnlocked(id) && this.mateUnlocked(id); },
+  chapterButtons() {
+    return CHAPTERS.map(c => {
+      if (this.chapterOk(c.id)) return `<button data-act="netchapter" data-arg="${c.id}" style="${this.chapter === c.id ? 'border-color:#ffd166;color:#ffd166' : ''}">${c.name}</button>`;
+      const who = !chapterUnlocked(c.id) && !this.mateUnlocked(c.id) ? '兩人都' : !chapterUnlocked(c.id) ? '你' : '隊友';
+      return `<button disabled title="${who}還沒通關「${chapterById(c.id - 1).name}」">${c.name}（${who}未解鎖）</button>`;
+    }).join('');
+  },
+  setChapter(id) {  // 房主按章節按鈕
+    if (this.role !== 'host' || !this.chapterOk(id)) return;
+    this.chapter = id;
+    this.send({ t: 'chap', chapter: id });
+    this.lobbyStatus();
+  },
+  sendProgress() { this.send({ t: 'prog', cleared: chapterProgress() }); },  // 隊友：把自己的通關進度告訴房主
 
   host() {
     this.close();
@@ -341,8 +364,8 @@ const Net = {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state,
       you: { pick: this.matePick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
-        parts: L.parts, module: L.module, ps: L.partSlots, cap: L.cap, ws: L.wSock, growth: L.growth },
-      map: this.packMap(G.map), sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
+        parts: L.parts, module: L.module, ps: L.partSlots, cap: L.cap, ws: L.wSock, growth: L.growth, bp: L.bonusPicks || 0 },
+      map: this.packMap(G.map), chapter: G.chapterId, sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
       lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
     };
@@ -359,7 +382,9 @@ const Net = {
     if (!soft) {
       this.myPick = this.cleanPick(Y.pick || {});
       this.resetStats();
+      this.chapter = G.chapterId = this.cleanChapter(m.chapter);
       G.newRun('coop', this.myPick.ship, this.myPick.weapon, null);
+      G.bonusPicks = clamp(Math.floor(num(Y.bp)), 0, 9);  // 開局三選一剩下的次數以房主記住的為準（newRun 會重設，所以放在它後面）
       const lo = this.sanitizeLoadout(Y);
       if (lo.weapon && lo.weapon.id === G.weapon.id) G.weapon = lo.weapon;
       G.chain = lo.chain; G.socks = lo.socks; G.inventory = lo.inventory; G.slotAttr = lo.slotAttr;
@@ -395,7 +420,8 @@ const Net = {
       if (!(soft && G.victory)) G.victory = { slot: false, boss: G.bossId, pick: 'lost' };  // pick 'lost'：重新整理過，二選一的結果已經在配裝裡  // 同一個頁面：保留原本的勝利畫面（模組還能裝）
       Screen.victory();
       if (bossDone(G.victory)) this.send({ t: 'moddone' });  // 房主可能在等隊友選模組
-    } else G.showMap('已重新連線，回到這一局。');
+    } else if (soft && G.state === 'reward' && G.reward && G.reward.kind === 'start') G.view();  // 同一個頁面、正在開局三選一：留在原本的畫面（showMap 會跳到下一次，少選一次）
+    else G.showMap('已重新連線，回到這一局。');
     this.send({ t: 'back' });
   },
   // 暫停的原因（沒有就是 null）：隊友在編輯電路、切到其他視窗、斷線重連中
@@ -457,11 +483,19 @@ const Net = {
         this.send({ t: 'welcome', v: CFG.VERSION, code: this.code });
         this.lobbyStatus();
         break;
-      case 'welcome': if (this.role === 'client') { this.linked = true; this.lobbyStatus(); } break;
+      case 'welcome': if (this.role === 'client') { this.linked = true; this.sendProgress(); this.lobbyStatus(); } break;
+      case 'prog':  // 房主：隊友的通關進度；目前選的章隊友沒解鎖就退回第一章
+        if (this.role !== 'host') break;
+        this.mateCleared = (Array.isArray(m.cleared) ? m.cleared : []).filter(n => CHAPTERS.some(c => c.id === n)).slice(0, CHAPTERS.length);
+        if (!this.chapterOk(this.chapter)) this.chapter = 1;
+        this.send({ t: 'chap', chapter: this.chapter });
+        this.lobbyStatus();
+        break;
+      case 'chap': if (this.role === 'client') { this.chapter = this.cleanChapter(m.chapter); this.lobbyStatus(); } break;
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
       case 'room': this.mateInRoom = true; this.lobbyStatus(); break;
       case 'full': this.lost('這個房間已經有兩個人了'); break;
-      case 'pick': if (this.role === 'client' && Game.state === 'lobby') this.enterPick(); break;
+      case 'pick': if (this.role === 'client' && Game.state === 'lobby') { this.chapter = Game.chapterId = this.cleanChapter(m.chapter); this.enterPick(); } break;
       case 'ready': this.onMateReady(m); break;
       case 'start': if (this.role === 'client') this.startClient(m); break;
       case 'i': if (this.role === 'host') this.applyInput(m); break;
@@ -550,7 +584,9 @@ const Net = {
   // ---------- 選配裝：房主按開始 → 兩人各自選飛船、武器、起始晶片 → 都選好就開戰 ----------
   beginPick() {
     if (this.role !== 'host' || !this.linked || !this.mateInRoom) return;  // 隊友回到房間才能開始
-    this.send({ t: 'pick' });
+    if (!this.chapterOk(this.chapter)) this.chapter = 1;
+    Game.chapterId = this.chapter;
+    this.send({ t: 'pick', chapter: this.chapter });
     this.enterPick();
   },
   enterPick() {
@@ -591,6 +627,9 @@ const Net = {
       chain: startChain(p.chip), socks: [], inventory: startInv(p.chip), slotAttr: [], growth: {}, pullHits: 0,
       parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots, cap: SHIPS[p.ship].cap, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
+    const ST = Game.chapter().start;  // 章節的開局補償：電路格、插座先加；晶體和剩下的三選一次數先記著，之後隊友的配裝同步會蓋過去
+    applyChapterStart(L, ST);
+    L.credits = ST ? ST.credits || 0 : 0; L.bonusPicks = ST ? ST.picks || 0 : 0;
     L.wp = weaponParams(L.weapon);
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
     return L;
@@ -605,8 +644,8 @@ const Net = {
     mate.dashSeq = 0; mate.wantFire = false;
     this.resetRun();
     this.runId = Math.random().toString(36).slice(2, 10);  // 這一局的編號：斷線重連時用來判斷是不是同一局
-    this.send({ t: 'start', ...me, map: this.packMap(Game.map), bossId: Game.bossId, runId: this.runId });
-    Game.showMap('雙人遠征開始！點選下一個節點投票，兩人都選好就出發。');
+    this.send({ t: 'start', ...me, map: this.packMap(Game.map), bossId: Game.bossId, runId: this.runId, chapter: Game.chapterId });
+    Game.showMap(this.startMsg());
   },
   startClient(m) {
     if (!this.myPick) return;
@@ -616,12 +655,14 @@ const Net = {
     this.resetStats();
     this.runId = typeof m.runId === 'string' ? m.runId.slice(0, 16) : null;
     const me = this.myPick;
+    this.chapter = Game.chapterId = this.cleanChapter(m.chapter);  // 以房主為準（pick 時已經設過，這裡再保險一次）
     Game.newRun('coop', me.ship, me.weapon, me.chip);
     Game.map = map; Game.bossId = m.bossId;
     Game.mate = new Player(SHIPS[this.matePick.ship]);
     this.resetRun();
-    Game.showMap('雙人遠征開始！點選下一個節點投票，兩人都選好就出發。');
+    Game.showMap(this.startMsg());
   },
+  startMsg() { return `${Game.chapter().name}：${Game.chapter().intro}<br>雙人遠征開始！點選下一個節點投票，兩人都選好就出發。`; },
 
   // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
   resetRun() {
@@ -712,7 +753,7 @@ const Net = {
     if (this.role !== 'client' || !this.linked) return;
     const G = Game;
     this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
-      parts: G.parts, module: G.module, ps: G.partSlots, cap: G.cap, ws: G.wSock });
+      parts: G.parts, module: G.module, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft() });
   },
   // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶等級 #2、插座數 ~2，見 parseChipId）
   sanitizeLoadout(m) {
@@ -744,6 +785,7 @@ const Net = {
     L.cap = clamp(Math.floor(num(m.cap, L.cap || 4)), 0, 40);
     L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
     L.module = typeof m.module === 'string' && MODULES[m.module] ? m.module : null;
+    L.bonusPicks = clamp(Math.floor(num(m.bp, L.bonusPicks || 0)), 0, 9);  // 開局三選一還剩幾次（隊友重新整理時還原）
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
     if (!Game.inArena) mate.hp = clamp(num(m.hp, mate.hp), 1, mate.maxHp);  // 戰鬥中的血量以房主為準
