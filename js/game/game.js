@@ -82,7 +82,7 @@ const Game = {
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
-    if (mode !== 'run') this.chapterId = 1;  // 雙人選章還沒做（見計劃的「雙人待處理」）：先固定第一章；靶場、沙盒用不到章節
+    if (this.freePlay()) this.chapterId = 1;  // 靶場、沙盒用不到章節（雙人的章號由 Net 在開局前設好）
     this.node = null; this.visited = []; this.sector = this.chapter().sectors[0]; this.bossId = this.bossFor(this.sector);
     this.runStats = { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0, time: 0,
       bosses: [], started: Date.now(), recorded: false,
@@ -157,8 +157,11 @@ const Game = {
     this.inArena = false;
     this.reward = { kind: 'start', options: this.rewardOptions(), bonus: 0, reroll: this.shopPrice(15), slot: false, note };
     this.state = 'reward';
+    if (this.mode === 'coop') Net.sendLoadout();  // 雙人的隊友：每次都把配裝和剩下的次數傳給房主（重新整理重連時還原用）
     this.view();
   },
+  // 開局三選一還剩幾次（正在選的這一次也算）
+  startPicksLeft() { return (this.bonusPicks || 0) + (this.state === 'reward' && this.reward && this.reward.kind === 'start' ? 1 : 0); },
   // 畫面：照目前的 state 顯示對應的畫面（怎麼畫由 ui/listeners.js 決定）；msg：畫面上的提示文字
   view(msg = '') { Events.emit('view', { state: this.state, msg }); },
   enterNode(node) {
