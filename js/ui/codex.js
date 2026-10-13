@@ -302,10 +302,12 @@ const Codex = {
 
   rules() {
     const R = (t, d) => `<div><b>${t}</b><br>${d}</div>`;
-    const bosses = CFG.BOSS_ORDER.map((id, i) => `第 ${i + 1} 關 <b style="color:${ENEMY_TYPES[id].color}">${ENEMY_TYPES[id].name}</b>：${ENEMY_TYPES[id].desc}`).join('<br>');
+    const bosses = CFG.BOSS_ORDER.map(id => `<b style="color:${ENEMY_TYPES[id].color}">${ENEMY_TYPES[id].name}</b>：${ENEMY_TYPES[id].desc}`).join('<br>');
     return `<div class="rules codex-sec">
-      ${R('遠征流程', `遠征共 ${CFG.CAMPAIGN_SECTORS} 關（星區），每關 7 層，最後一層是守關旗艦，每關的旗艦都不同：<br>${bosses}<br>
-        打完第 ${CFG.CAMPAIGN_SECTORS} 關算遠征完成，可以選擇結束（存下通關紀錄），或帶著目前的電路繼續<b>無盡模式</b>：星區一直往下，敵人持續變強，旗艦從三隻裡隨機出現。<br>
+      ${R('遠征流程', `遠征分成章節，每章打一段星區（每個星區 7 層，最後一層是守關旗艦）。通關一章開下一章；後面的章節會換王、敵人更強，有的從比較後面的星區開始（開局先補晶體、插座和幾次三選一）：<br>
+        ${CHAPTERS.map(c => `<b>${c.name}</b>：星區 ${c.sectors[0]}～${c.sectors[1]}，${Object.entries(c.bosses).map(([s, id]) => `星區 ${s} ${ENEMY_TYPES[id].name}`).join('、')}${c.hp !== 1 ? `，敵人血量 ×${c.hp}、受到的傷害 ×${c.dmg}` : ''}`).join('<br>')}<br>
+        旗艦：<br>${bosses}<br>
+        打完一章可以選擇結束（存下通關紀錄），或帶著目前的電路繼續<b>無盡模式</b>：星區一直往下，敵人持續變強，旗艦從三隻裡隨機出現。<br>
         每張航圖只有 1 個軍械台；精英戰之後至少有一條路通往維修站；維修站、補給站都不會連著出現。`)}
       ${R('執行順序', '電路由左至右執行。第 1 格固定是你的武器，負責產生子彈；右邊的玩法晶片依序改變「目前已經存在」的子彈。玩法晶片（迴旋、黏著⋯⋯）是貼在子彈上的特性，分裂複製子彈時會一起複製。<b>觸發器</b>右邊的晶片只作用在觸發後射出的回響上。')}
       ${R('晶片種類', `<b>改變玩法的晶片</b>（照著它的玩法打就會成長）：

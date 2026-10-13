@@ -10,6 +10,7 @@ const PULL_V = 380;
 
 const Game = {
   state: 'title', returnState: null, mode: null,
+  chapterId: 1,  // 這一局的章節（見 chapters.js）：單人在選章畫面設
   chain: [], socks: [], inventory: [], slotAttr: [], credits: 0,  // socks[i]：插在第 i 格晶片上的組件
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
@@ -74,7 +75,8 @@ const Game = {
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
-    this.node = null; this.visited = []; this.sector = 1; this.bossId = this.bossFor(1);
+    if (mode !== 'run') this.chapterId = 1;  // 雙人選章還沒做（見計劃的「雙人待處理」）：先固定第一章；靶場、沙盒用不到章節
+    this.node = null; this.visited = []; this.sector = this.chapter().sectors[0]; this.bossId = this.bossFor(this.sector);
     this.runStats = { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0, time: 0,
       bosses: [], started: Date.now(), recorded: false,
       // 遊玩紀錄用的判斷資料：受到的傷害來源、被打中次數、衝刺次數、走過的節點、取得的晶片、武器升級、各關摘要
@@ -123,9 +125,11 @@ const Game = {
     if (s) this.runStats.path.push(s);
     this.nodeLog = null;
   },
-  // 前三關依序打三隻不同的旗艦；無盡模式（第 4 關起）隨機抽
-  bossFor(sector) { return sector <= CFG.CAMPAIGN_SECTORS ? CFG.BOSS_ORDER[sector - 1] : pick(CFG.BOSS_ORDER); },
-  isEndless() { return this.sector > CFG.CAMPAIGN_SECTORS; },
+  // 章節：這一局從哪個星區打到哪個星區、每個星區的王（見 chapters.js）；打完最後一個星區之後是無盡模式，王隨機抽
+  chapter() { return chapterById(this.chapterId); },
+  lastSector() { return this.chapter().sectors[1]; },
+  bossFor(sector) { return this.chapter().bosses[sector] || pick(CFG.BOSS_ORDER); },
+  isEndless() { return this.sector > this.lastSector(); },
   nodeById(id) { return this.map.flat().find(n => n.id === id); },
   reachable() {
     return this.node ? this.node.next.map(id => this.nodeById(id)) : this.map[0];
@@ -245,7 +249,8 @@ const Game = {
     }
     const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
       (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
-      (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - CFG.CAMPAIGN_SECTORS) : 1);  // 無盡：每個星區血量再 ×1.2（乘算）
+      (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - this.lastSector()) : 1) *  // 無盡：每個星區血量再 ×1.2（乘算）
+      (C.sandbox ? 1 : this.chapter().hp);  // 章節：敵人血量再 ×（第一章 1）
     const e = new Enemy(type, x, y, scale);
     if (!Arena.rect) e.zone = zone;
     this.enemies.push(e);
@@ -338,6 +343,7 @@ const Game = {
       if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
+      if (this.sector === this.lastSector() && !MechCheck.running) markChapterCleared(this.chapterId);  // 打完這章最後一隻王：記下通關、開下一章（雙人兩邊各自記）
       this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
       if (this.mode === 'coop' && Net.role === 'host') Net.mateModWait = this.coopOn();  // 雙人：等隊友選好二選一、裝上或略過旗艦模組才能前往
       if (client && bossDone(this.victory)) Net.send({ t: 'moddone' });
@@ -604,7 +610,7 @@ const Game = {
     if (this.mode === 'coop' && Net.role === 'host') Net.sendSector();
     const p = this.player;
     p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.3));
-    this.showMap(this.sector === CFG.CAMPAIGN_SECTORS + 1
+    this.showMap(this.sector === this.lastSector() + 1
       ? `進入無盡模式：星區 ${this.sector}，船體修復 30%。旗艦改為隨機出現`
       : `進入星區 ${this.sector}：船體修復 30%，敵人更強了`);
   },
@@ -624,7 +630,7 @@ const Game = {
   },
   // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到標題
   finishRun() {
-    this.saveRecord(this.sector >= CFG.CAMPAIGN_SECTORS ? 'cleared' : 'retired');
+    this.saveRecord(this.sector >= this.lastSector() ? 'cleared' : 'retired');
     if (this.mode === 'coop') {  // 雙人：房主決定結束，兩人一起回到房間
       if (Net.role === 'host') Net.send({ t: 'finish' });
       Net.backToRoom();
@@ -843,7 +849,8 @@ const Game = {
     dmg *= (1 - Math.min(0.6, this.passivesOf(p).armor)) * M.taken;
     const RV = this.wpOf(p).revenge;
     if (RV && !(p.revengeT > 0)) dmg *= RV.first;  // 逆襲（散彈升級）：沒開時被打中，那一下減半（挨一下換爆發）
-    if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - CFG.CAMPAIGN_SECTORS);  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
+    if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - this.lastSector());  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
+    if (!this.freePlay()) dmg *= this.chapter().dmg;  // 章節：受到的傷害再 ×（第一章 1）
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
     if (M.module === 'endshell' && !p.shellUsed && p.hp - dmg <= 0) {  // 終焉護殼：留 1 HP
       p.shellUsed = true; dmg = Math.max(0, p.hp - 1); p.iframe = 2;
