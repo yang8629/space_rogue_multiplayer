@@ -85,6 +85,8 @@ const Screen = {
       case 'resume': Game.togglePauseMenu(false); break;
       case 'quitrun': Game.quitRun(); break;
       case 'title': Net.leave(); Game.mate = null; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
+      case 'chapters': Screen.chapterSelect(); break;
+      case 'chapter': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.select('run'); } break;
       case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
       case 'weapon': {
@@ -150,6 +152,24 @@ const Screen = {
     }
   },
 
+  // 開始遠征 → 先選章節（沒解鎖的灰掉、寫解鎖條件；通關過的打勾）
+  chapterSelect() {
+    const done = chapterProgress();
+    const cards = CHAPTERS.map(c => {
+      const open = chapterUnlocked(c.id), cleared = done.includes(c.id);
+      const bosses = Object.entries(c.bosses).map(([s, id]) => `<span style="color:${ENEMY_TYPES[id].color};white-space:nowrap">♛ ${ENEMY_TYPES[id].name}</span>`).join('　');
+      return `<div class="card" style="border-color:${open ? '#4cc9f0' : '#2a3460'};${open ? '' : 'opacity:.5'}">
+        <div class="ttl">${c.name}${cleared ? ' <span style="color:#9dff6b">✓ 已通關</span>' : ''}</div>
+        <div class="ty">星區 ${c.sectors[0]}～${c.sectors[1]}${c.hp !== 1 ? `　·　敵人血量 ×${c.hp}、受到的傷害 ×${c.dmg}` : ''}</div>
+        <div class="ds">${open ? c.intro : `通關「${chapterById(c.id - 1).name}」後解鎖`}<br>${bosses}${c.start ? `<br><span style="color:#ffd166">開局補償：◆${c.start.credits}、武器插座 +${c.start.wSock}、電路 +${c.start.slots}、三選一 ×${c.start.picks}</span>` : ''}</div>
+        <button data-act="chapter" data-arg="${c.id}" ${open ? '' : 'disabled'}>${open ? '選這章' : '未解鎖'}</button></div>`;
+    }).join('');
+    this.show(`<div class="scr pick">
+      <div class="between"><div><h2>選擇章節</h2>
+        <div class="sub">每章打一段星區，最後一個星區的旗艦擊沉就算通關，開啟下一章。打完可以繼續無盡模式。</div></div>
+        <button data-act="title" data-back>返回 (Esc)</button></div>
+      <div class="cards left">${cards}</div></div>`);
+  },
   select(mode) {
     const free = mode === 'sandbox' || mode === 'range';
     const bar =(label, v, max, col) => `<div class="ty">${label}
@@ -305,7 +325,7 @@ const Screen = {
       <h1>星環電路</h1><div class="en">CIRCUIT ROGUE</div>
       <div class="sub">組裝電路，疊出屬於你的彈幕</div>
       <div class="row">
-        <button class="big" data-act="select" data-arg="run">開始遠征</button>
+        <button class="big" data-act="chapters">開始遠征</button>
         <button class="big" data-act="select" data-arg="range">🎯 靶場</button>
         <button class="big" data-act="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 雙人連線（測試）</button>
       </div>
@@ -569,7 +589,7 @@ const Screen = {
         r.mech ? `<div><b>機體</b><br>零件：${Object.entries(r.mech.parts).map(([k, v]) => `${k} ${v}`).join('、') || '無'}（${r.mech.slots} 格）${r.mech.module ? `　·　模組：${r.mech.module}` : ''}${r.mech.traits.length ? `<br>特性：${r.mech.traits.join('、')}` : ''}${Object.keys(r.mech.growth).length ? `<br>晶片成長：${Object.entries(r.mech.growth).map(([k, v]) => `${k} ${v}`).join('、')}` : ''}</div>` : '',
         list2('各關摘要', r.sectors), list2('走過的節點', r.path), list2('武器升級', r.upgrades), list2('取得的晶片', r.got),
       ].join('');
-      return `<div class="rec"><div class="between"><span><b style="color:${color}">${label}</b>　${r.where || `${r.endless ? '無盡 · ' : ''}星區 ${r.sector} 第 ${r.layer} 層`}　·　${when}</span>
+      return `<div class="rec"><div class="between"><span><b style="color:${color}">${label}</b>　${r.where || `${r.chapter > 1 ? `第 ${r.chapter} 章 · ` : ''}${r.endless ? '無盡 · ' : ''}星區 ${r.sector} 第 ${r.layer} 層`}　·　${when}</span>
           <button data-act="copyone" data-arg="${i}">📋 複製這筆</button></div>
         ${r.ship} · ${r.weapon}　·　${Math.floor(r.time / 60)} 分 ${r.time % 60} 秒　·　擊殺 ${fmt(r.kills)}　·　總傷害 ${fmt(r.dmg)}
         ${r.cause ? `<br>擊毀原因：${r.cause}` : ''}${r.bosses && r.bosses.length ? `<br>擊沉旗艦：${r.bosses.join('、')}` : ''}
@@ -651,7 +671,7 @@ function recordText(r) {
   const sec = t => { const m = /^(\d+)秒$/.exec(t); return m ? +m[1] : 0; };
   // 第 1 行：版本｜結果、打到哪｜飛船、操作｜時間、擊殺
   const where = r.where || '', bm = /，(\S+?)剩 (\d+)% 血/.exec(where);
-  L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '雙人 ' : ''}${C.result[r.result] || r.result} ${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
+  L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '雙人 ' : ''}${C.result[r.result] || r.result} ${r.chapter > 1 ? `第${r.chapter}章 ` : ''}${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
   L.push(`武器 ${r.weapon.replace('・', '+')}`);
   const S = r.stats;
   const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的組件
