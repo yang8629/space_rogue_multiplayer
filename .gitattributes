@@ -1,0 +1,12 @@
+# 換行一律 LF：不管電腦的 git 設定，存出來、取出來都一樣（腳本找字串替換時不用處理兩種換行）
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.ogg binary
+*.wav binary
