@@ -180,8 +180,7 @@ const Game = {
   //   note：上一次三選一的結果（第一次是章節開場文字），顯示在標題下面，不然會被下一個三選一蓋掉
   openStartPick(note = '') {
     this.inArena = false;
-    this.reward = { kind: 'start', options: this.rewardOptions(), reroll: this.shopPrice(15), slot: false, note };
-    this.state = 'reward';
+    this.openReward('start', { note });
     if (this.mode === 'coop') Net.sendLoadout();  // 雙人的隊友：每次都把配裝和剩下的次數傳給房主（重新整理重連時還原用）
     this.view();
   },
@@ -407,10 +406,7 @@ const Game = {
       this.view();
       return;
     }
-    const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: this.rewardOptions(), reroll: this.shopPrice(15),
-      slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
-    this.state = 'reward';
+    this.openReward(type === 'elite' ? 'elite' : 'combat');
     this.view();
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
@@ -434,11 +430,17 @@ const Game = {
     if (pool.length) ids[Math.floor(Math.random() * ids.length)] = pick(pool);
     return ids;
   },
-  // 花晶體刷新三選一（第一次 ◆15，之後每次多 ◆10）
+  // 打開三選一：每種三選一（出發前、戰鬥、精英）的差別都在 CFG.REWARDS（刷新價格、有沒有電路擴充卡）
+  openReward(kind, extra = {}) {
+    const K = CFG.REWARDS[kind];
+    this.reward = { kind, options: this.rewardOptions(), reroll: this.shopPrice(K.reroll), slot: K.slotCard && this.chain.length < CFG.MAX_SLOTS, ...extra };
+    this.state = 'reward';
+  },
+  // 花晶體刷新三選一（價格見 CFG.REWARDS：每刷一次就更貴）
   rerollReward() {
     const R = this.reward;
     if (!R || this.credits < R.reroll) return;
-    this.pay(R.reroll, () => { R.reroll += this.shopPrice(10); R.options = this.rewardOptions(); this.view(); });
+    this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(); this.view(); });
   },
   // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
   chipOffers() {

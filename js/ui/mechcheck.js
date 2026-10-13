@@ -451,7 +451,7 @@ const MechCheck = {
         got: `點火 3 次，1 秒燒掉 ${A.d1}（要 ${3 * A.dps} = 3 層 × ${A.dps}）、2.5 秒後剩 ${A.n} 層${A.on ? '（還在燒，錯）' : '、熄了'}；吸能刃（一般燃燒）點 3 次 1 秒燒掉 ${B.d1}（要 ${B.dps}）；` +
           `第 5 層爆燃：牠自己 −${dE.toFixed(0)}、旁邊 70 那隻 −${dN.toFixed(0)}（都要 ${want.toFixed(0)} = 剩下的火 ×1.5）、200 外那隻 −${dF.toFixed(0)}（要 0）、爆完${e.burnL ? `還剩 ${e.burnL.length} 層（錯）` : '歸零'}` };
     }],
-    ['武器命中效果', '減速相乘', '不同來源的減速（子彈、重力井模組、彗星的冰）剩下的速度相乘，各自計時；同一來源再打中只刷新時間', M => {
+    ['武器命中效果', '減速相乘', '不同來源的減速（子彈、彗星的冰）剩下的速度相乘，各自計時；同一來源再打中只刷新時間', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]);
       const e = M.targets([[400, 0]])[0], P = Game.player;
       e.slowBy('shot', 0.4, 2); const a = e.slowAmt;
@@ -1970,6 +1970,19 @@ const MechCheck = {
       p.x = e.x - 150; e.update(1 / 60, p);
       const near = e.cloak;
       return { ok: far > 0.99 && lock && near === 0, got: `400 遠：隱形 ${far.toFixed(2)}、${lock ? '自動瞄準鎖不到' : '鎖得到（錯誤）'}；150 內：隱形 ${near}` };
+    }],
+    ['獎勵', '三選一的種類', '出發前、戰鬥、精英都是同一個三選一，差別照 CFG.REWARDS：刷新價格（第一次、之後每次多多少）、精英多一張電路擴充', M => {
+      const out = [];
+      for (const kind of ['start', 'combat', 'elite']) {
+        M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        Game.sector = 1; Game.credits = 999;
+        Game.openReward(kind);
+        const K = CFG.REWARDS[kind], R = Game.reward, first = R.reroll;
+        Game.rerollReward(); const second = R.reroll, paid = 999 - Game.credits;
+        const ok = R.options.length === 3 && first === K.reroll && paid === K.reroll && second === K.reroll + K.rerollUp && !!R.slot === K.slotCard;
+        out.push(`${kind}：刷新 ◆${first} → ◆${second}、電路擴充${R.slot ? '有' : '沒有'}${ok ? '' : '（錯誤）'}`);
+      }
+      return { ok: !out.some(t => t.includes('錯誤')) && CFG.REWARDS.elite.reroll > CFG.REWARDS.combat.reroll, got: out.join('；') };
     }],
     ['章節', '通關判斷','打掉這章最後一個星區的王（旗艦獎勵畫面）才算打完這章；無盡模式算打完；最後一個星區還在打、前面星區的旗艦獎勵都不算', M => {
       const G = Game, out = [];
