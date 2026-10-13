@@ -78,7 +78,7 @@ function oneRun(s) {
         const R = G.reward;
         if (R.kind === 'elite' && R.slot && Math.random() < 0.3) G.expandSlot('reward');  // 精英：多一張電路擴充
         else {
-          if (R.kind !== 'elite' && Math.random() < 0.15 && G.credits >= R.reroll) G.rerollReward();
+          if (Math.random() < 0.15 && G.credits >= R.reroll) G.rerollReward();
           const ok = R.options.filter(id => G.canAcquire(id));
           G.takeReward(Math.random() < 0.1 || !ok.length ? null : pickR(ok));
         }

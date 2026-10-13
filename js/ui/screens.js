@@ -406,11 +406,11 @@ const Screen = {
     }).join('') + (R.slot ? slotCard() : '');  // 精英獎勵多一張「電路擴充」
     this.show(`<div class="scr">
       <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：三選一（或電路擴充）' : R.kind === 'start' ? `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）` : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
-        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
+        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
-        ${R.kind === 'elite' ? '' : `<button data-act="reroll" ${Game.credits < R.reroll ? 'disabled' : ''}>刷新（◆ ${R.reroll}）</button>`}
+        <button data-act="reroll" ${Game.credits < R.reroll ? 'disabled' : ''}>刷新（◆ ${R.reroll}）</button>
         <button data-act="reward" data-arg="">跳過（◆ +10）</button></div></div>`);
   },
 

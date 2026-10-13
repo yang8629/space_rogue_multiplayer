@@ -177,7 +177,7 @@ function rewardGain(id) {
   return cur.length ? chipScore(id) / Math.max(1e-9, Math.min(...cur)) : chipScore(id);
 }
 function maybeReroll(R) {
-  if (globalThis.__REPLAY || R.kind === 'elite') return;
+  if (globalThis.__REPLAY) return;
   for (let n = 0; n < 2; n++) {
     const ok = R.options.filter(id => G.canAcquire(id));
     if (G.mergeTarget && ok.some(id => G.mergeTarget(id))) return;
@@ -266,6 +266,7 @@ function handle() {
     const R = G.reward;
     if (R.kind === 'elite') {
       // 精英獎勵：跟一般戰鬥同一個三選一，另外多一張電路擴充：電路格的分數（slotValues）比最好的選項高就拿電路擴充
+      maybeReroll(R);
       const id = pickReward(R);
       if (R.slot && (!id || slotValues().chain > rewardGain(id))) G.expandSlot('reward');
       else { G.takeReward(id); closeEditor(); }
