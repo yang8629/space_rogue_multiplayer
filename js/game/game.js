@@ -102,7 +102,7 @@ const Game = {
     if (mode === 'sandbox') this.startCombat({ sandbox: true, level: 0 });
     else if (mode === 'range') { this.startCombat({ sandbox: true, range: true, level: 0 }); Range.reset('single'); }
     else if (mode === 'coop') return;  // 雙人：由 Net 建好隊友之後再開戰
-    else this.showMap();
+    else this.showMap(`${this.chapter().name}：${this.chapter().intro}`);
   },
   // ---------- 遊玩紀錄：走過的節點 ----------
   here() { return `${this.sector}-${this.node ? this.node.L + 1 : 0}`; },
@@ -691,7 +691,7 @@ const Game = {
       v: 2, build: CFG.VERSION, at: new Date().toISOString(), result, where,
       input: Input.touch ? `觸控（自動攻擊${Input.autoFire ? '開' : '關'}）` : '滑鼠鍵盤',
       ship: SHIPS[this.shipId].name, weapon: weaponTitle(this.weapon),
-      sector: this.sector, layer: this.node ? this.node.L + 1 : 0, endless: this.isEndless(),
+      chapter: this.chapterId, sector: this.sector, layer: this.node ? this.node.L + 1 : 0, endless: this.isEndless(),
       bosses: R.bosses.slice(), cause: result === 'dead' ? this.lastHit : '',
       time: Math.round(R.time), kills: R.kills, dmg: Math.round(total), maxHit: Math.round(R.maxHit),
       dps: R.time > 0 ? Math.round(total / R.time) : 0,
