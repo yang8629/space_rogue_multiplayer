@@ -17,7 +17,7 @@ await shot('精英獎勵', () => { Game.node = { type: 'elite', id: 'e', L: 3 };
 await shot('精英獎勵_詳細', () => {}, true);
 await shot('機體分頁', () => {
   Game.node = null; Game.showMap();
-  Game.parts.armor = 2; Game.parts.sink = 1; Game.setModule('shield'); Game.recalc();
+  Game.parts.armor = 2; Game.parts.sink = 1; Game.recalc();
   Game.toggleEditor(); Editor.setTab('ship');
 });
 await b.close();

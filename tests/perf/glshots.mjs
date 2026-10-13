@@ -1,5 +1,5 @@
 // 新畫面（WebGL）檢查截圖：擺出好幾個場景各截一張，存到 art_lab/screenshots/新畫面_*.png
-//   用法：node perf/glshots.mjs [場景名…]   場景：enemies、bosses、objects、walls、bullets、modules、gate
+//   用法：node perf/glshots.mjs [場景名…]   場景：enemies、bosses、objects、walls、bullets、gate
 //   （新畫面要開著：腳本會把 localStorage 的 renderer 設成 gl）
 import { GAME, SHOTS } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -44,23 +44,9 @@ const SCENES = {
     floatText(p.x - 100, p.y - 60, 1234, '#ffd166', true); floatText(p.x - 60, p.y - 40, 56, '#ffffff'); floatText(p.x - 140, p.y - 30, '獲得 迴旋', '#ff9f1c', true);`,
   walls: '',
   gate: '',
-  modules: `const p = sandbox(); Game.mates = [];
-    const mods = ['shield','blink','gravity','drone','reactive','swarmcore','thruster','endshell']; let k = 0;
-    Game.setModule(mods[0]); Game.parts = { armor: 3, sink: 2, sensor: 2, booster: 2, larmor: 1 };
-    p.moving = true; Game.recalc && Game.recalc(); window.__mods = mods;`,
 };
 for (const [name, code] of Object.entries(SCENES)) {
   if (want.length && !want.includes(name)) continue;
-  if (name === 'modules') {
-    for (const m of ['shield', 'blink', 'gravity', 'drone', 'reactive', 'swarmcore', 'thruster', 'endshell']) {
-      await p.evaluate(`(() => { ${SETUP} ${code} Game.setModule('${m}'); Input.joy = { bx: 0, by: 0, x: -60, y: 0 }; window.__hold = setInterval(() => { Game.player.x = Arena.start.x; Game.player.y = Arena.start.y; }, 5); })()`);
-      await wait(700);
-      const pos = await p.evaluate(() => { const q = Game.player; return { x: (q.x - Game.cam.x) * ZOOM, y: (q.y - Game.cam.y) * ZOOM }; });
-      await p.screenshot({ path: `${OUT}新畫面_模組_${m}.png`, clip: { x: pos.x - 90, y: pos.y - 90, width: 180, height: 180 } });
-      await p.evaluate(() => { clearInterval(window.__hold); Input.joy = null; });
-    }
-    continue;
-  }
   if (name === 'gate') {  // 星門號船尾的傳送環：隔 0.4 秒截兩張，看有沒有在轉
     await p.evaluate(`(() => { ${SETUP} Game.newRun('sandbox', 'gate', 'laser'); Game.player.hp = Game.player.maxHp = 1e9; Game.enemies = []; Game.objs = []; Game.mates = []; Game.player.moving = true; })()`);
     for (const k of [1, 2]) {

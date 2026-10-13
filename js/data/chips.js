@@ -138,7 +138,7 @@ const CHIPS = {
     desc: '命中附加燃燒 3 秒，每秒是這一下傷害的 30%（跟著倍增、蓄力變強）。武器本身有燃燒（龍息彈…）時相加。插在玩法晶片上只作用在它的產物。',
     apply: (list, pw) => list.map(b => ({ ...b, burnR: (b.burnR || 0) + 0.3 * pw })) },
   frost: { name: '冰凍塗層', short: '冰凍', type: 'comp', comp: true, elem: true, cost: 1,
-    desc: '命中的敵人減速 40%，持續 2 秒。武器本身有減速（冰封）、重力井模組、彗星的冰時相乘（剩下的速度相乘：兩個 40% = 64%）。插在玩法晶片上只作用在它的產物。',
+    desc: '命中的敵人減速 40%，持續 2 秒。武器本身有減速（冰封）、彗星的冰時相乘（剩下的速度相乘：兩個 40% = 64%）。插在玩法晶片上只作用在它的產物。',
     apply: (list, pw) => list.map(b => ({ ...b, slow: 1 - (1 - (b.slow || 0)) * Math.max(0.1, 1 - 0.4 * pw), slowDur: 2 })) },
   shred: { name: '破甲彈頭', short: '破甲', type: 'comp', comp: true, elem: true, cost: 3,
     desc: '命中的敵人 3 秒內受到的所有傷害 +25%（身上出現紅色準星）。跟感測器 4 層的弱點標記相加，沒有上限。插在玩法晶片上只作用在它的產物。',
@@ -210,7 +210,7 @@ const chipBrief = id => CHIP_BRIEF[baseOf(id)] || String(CHIPS[id].desc).split(/
 // 子彈體積加成（巨彈、蓄力）：加成彼此相加，照原本大小算（順序不影響），最大半徑 60
 const sizeUp = (b, add) => { const r0 = b.r0 || b.radius, sb = (b.sizeB || 0) + add; return { r0, sizeB: sb, radius: Math.min(60, r0 * (1 + sb)) }; };
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => CHIPS[id].type !== 'composite' && !CHIPS[id].hidden);
-const COMPOSITE_IDS = [];  // V2 拿掉了軍規複合晶片（精英改給背包模組）
+const COMPOSITE_IDS = [];  // V2 拿掉了軍規複合晶片
 const OVERLOADS = ['ov_power', 'ov_rate', 'ov_pierce', 'ov_seek'];
 const chipPrice = id => (30 + CHIPS[id].cost * 8) * levelOf(id) + 6 * socketsOf(id);
 

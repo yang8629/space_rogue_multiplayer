@@ -41,7 +41,7 @@ function randomEquip() {
 
 const issues = [];
 function report(s, kind, msg) {
-  const st = `星區 ${G.sector} 第 ${G.node ? G.node.L + 1 : 0} 層｜${WEAPONS[G.weapon.id].name}${G.weapon.path ? ' ' + G.weapon.path + (G.weapon.final ?? '') : ''}｜電路 ${G.chain.map((id, i) => (id || '空') + ((G.socks || [])[i] && G.socks[i].length ? '[' + G.socks[i].join('+') + ']' : '')).join(',')}｜模組 ${G.module || '-'}`;
+  const st = `星區 ${G.sector} 第 ${G.node ? G.node.L + 1 : 0} 層｜${WEAPONS[G.weapon.id].name}${G.weapon.path ? ' ' + G.weapon.path + (G.weapon.final ?? '') : ''}｜電路 ${G.chain.map((id, i) => (id || '空') + ((G.socks || [])[i] && G.socks[i].length ? '[' + G.socks[i].join('+') + ']' : '')).join(',')}`;
   issues.push({ s, kind, msg, st });
   console.log(`✖ 第 ${s} 局 ${kind}：${msg}\n    ${st}`);
 }
@@ -76,9 +76,9 @@ function oneRun(s) {
         if (G.state === 'play') { report(s, '卡住', `戰鬥超過 300 秒、最近 60 秒沒打掉血（最多 900 秒）：波次 ${G.combat.wave}/${G.combat.wavesTotal}，敵人 ${G.enemies.filter(e => !e.dead).map(e => `${e.t.name}@${Math.round(e.x)},${Math.round(e.y)}`).join(' ') || '無'}，飛船 ${Math.round(p.x)},${Math.round(p.y)} 區${p.zone}`); return; }
       } else if (st === 'reward') {
         const R = G.reward;
-        if (R.kind === 'elite') { if (R.slot && Math.random() < 0.3) G.expandSlot('reward'); else G.takeModule(pickR(R.options)); }
+        if (R.kind === 'elite' && R.slot && Math.random() < 0.3) G.expandSlot('reward');  // 精英：多一張電路擴充
         else {
-          if (Math.random() < 0.15 && G.credits >= R.reroll) G.rerollReward();
+          if (R.kind !== 'elite' && Math.random() < 0.15 && G.credits >= R.reroll) G.rerollReward();
           const ok = R.options.filter(id => G.canAcquire(id));
           G.takeReward(Math.random() < 0.1 || !ok.length ? null : pickR(ok));
         }
@@ -106,7 +106,6 @@ function oneRun(s) {
       } else if (st === 'repair') G.showMap();
       else if (st === 'victory') {
         if (G.victory && !G.victory.pick) G.pickBossSlot(Math.random() < 0.5 ? 'chain' : 'part');
-        if (Math.random() < 0.6) G.takeBossModule();
         if (G.chapterDone()) return 'won';
         G.nextSector(); randomEquip();
       } else if (st === 'dead') return 'dead';

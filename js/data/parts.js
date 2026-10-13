@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · parts.js：機體成長線：零件 PARTS、背包模組 MODULES、機體數值 mechStats
+// 星環電路 雙人版 · parts.js：機體成長線：零件 PARTS、機體數值 mechStats
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -44,51 +44,23 @@ for (const P of Object.values(PARTS)) { P.up = statFxText(P.fx[0]); P.dn = statF
 const BALANCE = { id: 'balance', name: '均衡', desc: '5 種零件都至少 1 層：每層的好處 +30%' };
 const PART_SWAP_PRICE = 30;  // 改裝廠：把 1 層零件換成另一種
 
-// =====================================================================
-// 背包模組：只有 1 格，換上新的舊的就沒了。每個都有代價
-//   重裝甲 ≥ 2 層開啟「裝甲加成」、加速器 ≥ 2 層開啟「加速加成」（旗艦模組沒有加成）
-// =====================================================================
-const MODULES = {
-  shield:   { name: '護盾產生器', icon: '⛨', eff: '擋下一次傷害，8 秒回復', cost: '移動速度 −10%', costFx: [{ stat: 'speed', v: -10, pct: true }], heavy: '2 層護盾', light: '4 秒回復' },
-  blink:    { name: '相位跳躍', icon: '⤳', eff: '衝刺變成瞬移（距離 150）', cost: '衝刺冷卻 +50%', costFx: [{ stat: 'dashCd', v: 50, pct: true }], heavy: '瞬移落地放出震波', light: '沒有冷卻代價' },
-  gravity:  { name: '重力井', icon: '◎', eff: '身邊 150 內的敵人和敵彈速度 −40%', cost: '射速 −10%', costFx: [{ stat: 'rate', v: -10, pct: true }], heavy: '減速 −60%', light: '範圍 220' },
-  drone:    { name: '修復無人機', icon: '✚', eff: '每次受傷的 65% 之後可以補回（最多最大 HP 的 35%）：5 秒沒受傷後每秒補 8，戰鬥結束時沒補完的直接補回', cost: '最大 HP −20%', costFx: [{ stat: 'hp', v: -20, pct: true }], heavy: '回血 ×2', light: '3 秒就開始回血' },
-  reactive: { name: '反應裝甲', icon: '✹', eff: '受傷時爆炸，擊退並傷害周圍敵人', cost: '受到的傷害 +5%', costFx: [{ stat: 'taken', v: 5, pct: true }], heavy: '爆炸範圍 ×1.5', light: '沒有傷害代價' },
-  // 旗艦專屬（擊沉旗艦時可以裝上）
-  swarmcore: { name: '星噬核心', icon: '✺', boss: 'boss', eff: '每 6 秒朝四周 6 個方向各開一槍（用你的電路射，吃全部晶片效果；有環繞時直接射出不存彈）', cost: '最大 HP −10', costFx: [{ stat: 'hp', v: -10 }] },
-  thruster:  { name: '裂界推進器', icon: '➹', boss: 'boss2', eff: '衝刺距離 ×2、衝刺冷卻 −30%', cost: '衝刺後 0.5 秒不能射擊' },
-  endshell:  { name: '終焉護殼', icon: '⬡', boss: 'boss3', eff: '受到致命傷害時留 1 HP 並無敵 2 秒（每場戰鬥 1 次）', cost: '受到的傷害 +10%', costFx: [{ stat: 'taken', v: 10, pct: true }] },
-};
-const NORMAL_MODULES = Object.keys(MODULES).filter(id => !MODULES[id].boss);
-const bossModuleOf = bossId => Object.keys(MODULES).find(id => MODULES[id].boss === bossId) || null;
-
-// 機體數值：零件層數＋背包模組 → 倍率、特性
+// 機體數值：零件層數 → 倍率、特性
 // wp：目前的武器參數（玻璃砲自帶受到的傷害 +10%）
 // 疊法：同一項屬性「增加」的百分比全部相加，「減少」的各自相乘（疊再多也不會變成 0 或負的），最後 =（1 ＋ 增加的總和）× 減少的乘積
 //   rate＝1 ＋ 射速增加（開火時再加上疾風、急冷、裝甲供能、架設），rateMul＝射速減少；dashUp＝衝刺冷卻增加（最後乘進 dashCd）
-function mechStats(parts, module, wp) {
+function mechStats(parts, wp) {
   const n = id => (parts && parts[id]) || 0;
   const T = {};
   for (const id of PART_IDS) { T[PARTS[id].t2.id] = n(id) >= 2; T[PARTS[id].t4.id] = n(id) >= 4; }
   T.balance = PART_IDS.every(id => n(id) >= 1);
   const k = T.balance ? 1.3 : 1;
-  const s = { maxHp: 0, hpMul: 1, speed: 1, taken: 1, rate: 1, rateMul: 1, bspeed: 1, dashCd: 1, dashUp: 0, dashDist: 1, cap: 0, traits: T,
-    heavy: n('armor') >= 2, light: n('booster') >= 2, module: module || null, armor: n('armor') };
+  const s = { maxHp: 0, hpMul: 1, speed: 1, taken: 1, rate: 1, rateMul: 1, bspeed: 1, dashCd: 1, dashUp: 0, cap: 0, traits: T,
+    armor: n('armor') };
   s.maxHp += 20 * k * n('armor'); s.speed *= Math.pow(0.96, n('armor'));
   s.dashCd *= Math.pow(1 - 0.08 * k, n('larmor')); s.taken += 0.03 * n('larmor');  // 輕裝甲：裝甲薄、身手快
   s.speed *= 1 + 0.06 * k * n('booster'); s.maxHp -= 10 * n('booster');
   s.cap += CFG.CAP_SINK * n('sink'); s.taken += 0.04 * n('sink');  // 散熱片：能量容量 +2（2026-10-10，以前射速 +6%）；受到的傷害：增加的都相加
   s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashUp += 0.05 * n('sensor');
-  switch (module) {
-    case 'shield': s.speed *= 0.9; break;
-    case 'blink': if (!s.light) s.dashUp += 0.5; break;
-    case 'drone': s.hpMul = 0.8; break;
-    case 'reactive': if (!s.light) s.taken += 0.05; break;
-    case 'swarmcore': s.maxHp -= 10; break;
-    case 'gravity': s.rateMul *= 0.9; break;
-    case 'thruster': s.dashCd *= 0.7; s.dashDist = 2; break;
-    case 'endshell': s.taken += 0.1; break;
-  }
   if (wp && wp.glass) s.taken += wp.glass.self;  // 玻璃砲（相位刃升級）
   if (wp && wp.weight) s.speed *= 1 - wp.weight.self;  // 重量砲（電漿升級）：自帶變慢
   s.dashCd *= 1 + s.dashUp;
@@ -99,10 +71,3 @@ const partsUsed = parts => PART_IDS.reduce((a, id) => a + ((parts && parts[id]) 
 // 零件的一句話說明（卡片、編輯器用）
 // 每層的效果（圖示＋數值）；n：疊 n 層的總效果
 const partLine = (id, n = 1) => PARTS[id].fx.map(f => statFx(fxTimes(f, n))).join('');
-const moduleLine = (id, full = true) => {
-  const M = MODULES[id];
-  if (!M) return '';
-  // 紅色就是代價（不用再寫「代價：」）；數值類的代價用圖示
-  return `${M.eff}<div class="fxl">${M.costFx ? M.costFx.map(statFx).join('') : `<span class="sv bad">${M.cost}</span>`}</div>` +
-    (full && !M.boss ? `<div class="trl"><b style="color:#ffd166">重裝甲 2+</b>${M.heavy}</div><div class="trl"><b style="color:#4cc9f0">加速器 2+</b>${M.light}</div>` : '');
-};

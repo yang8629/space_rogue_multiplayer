@@ -3,10 +3,8 @@
 //   分數 = 每秒傷害 × √(有效 HP) × √(移動速度) × 衝刺 × 特性 × 模組
 //     每秒傷害：遊戲的估算 DPS（stats.dpsEst，已含玻璃砲、重量砲）× 機體射速（散熱片、疾風、裝甲供能、架設；重力井）× 動能彈頭（打中時的彈速）
 //     有效 HP：最大 HP ÷ 受到的傷害；衝刺：冷卻越短越好（^0.15）；特性：零件 2／4 層的特性每個 ×1.04（效果多半不在數值裡）
-//     模組：數值以外的效果（修復無人機、護盾…）照自動對戰模擬的保命排名給係數
 //   改玩法晶片的效果（環繞、蓄力…）估算 DPS 算不到 → 晶片仍照晶片價值表（chipScore）；價值表沒有資料的晶片才用試裝
 
-const MOD_VAL = { drone: 1.15, shield: 1.12, thruster: 1.06, endshell: 1.08, gravity: 1.04, swarmcore: 1.05, reactive: 1.03, blink: 1.02 };
 const ACCEL_HIT = 1.6;  // 裝加速晶片時，子彈打中時大約是出手彈速的幾倍（動能彈頭用）
 
 function buildScore() {
@@ -19,13 +17,13 @@ function buildScore() {
   const dps = S.dpsEst * rate * kin;
   const ehp = p.maxHp / M.taken;
   const traits = Object.values(T).filter(Boolean).length;
-  return dps * Math.sqrt(ehp) * Math.sqrt(M.speed) * Math.pow(1 / M.dashCd, 0.15) * Math.pow(1.04, traits) * (MOD_VAL[M.module] || 1);
+  return dps * Math.sqrt(ehp) * Math.sqrt(M.speed) * Math.pow(1 / M.dashCd, 0.15) * Math.pow(1.04, traits);
 }
 
 // 試裝：改動 → 算分 → 全部還原（不留下紀錄、不改 HP）
 function trial(change) {
   const p = G.player, sv = {
-    chain: [...G.chain], socks: (G.socks || []).map(s => [...(s || [])]), inventory: [...G.inventory], parts: { ...G.parts }, module: G.module,
+    chain: [...G.chain], socks: (G.socks || []).map(s => [...(s || [])]), inventory: [...G.inventory], parts: { ...G.parts },
     weapon: { ...G.weapon }, partSlots: G.partSlots, hp: p.hp, maxHp: p.maxHp,
     got: G.runStats ? G.runStats.got.length : 0, upg: G.runStats ? G.runStats.upgrades.length : 0 };
   try {
@@ -33,7 +31,7 @@ function trial(change) {
     G.refreshWeapon();  // 含 recalc
     return buildScore();
   } finally {
-    Object.assign(G, { chain: sv.chain, socks: sv.socks, inventory: sv.inventory, parts: sv.parts, module: sv.module, weapon: sv.weapon, partSlots: sv.partSlots });
+    Object.assign(G, { chain: sv.chain, socks: sv.socks, inventory: sv.inventory, parts: sv.parts, weapon: sv.weapon, partSlots: sv.partSlots });
     G.refreshWeapon();
     p.hp = sv.hp; p.maxHp = sv.maxHp;
     if (G.runStats) { G.runStats.got.length = sv.got; G.runStats.upgrades.length = sv.upg; }
@@ -98,17 +96,14 @@ function partScore(k) {
   const fix = partGain(k) / Math.max(1e-9, gainOf(() => { G.parts = { [k]: 1 }; }) / Math.max(1e-9, gainOf(() => { G.parts = {}; })));
   return m * Math.max(0.7, Math.min(1.5, fix));
 }
-// 模組：表裡的倍數（換掉現在的模組時，比兩個的倍數）
-const moduleScore = id => rvItem('mod:' + id) ?? moduleGain(id);
 // 拿這個東西之後，整套配裝的分數變成幾倍
 const gainOf = change => trial(() => { planUpgrade(); change(); }) / trial(planUpgrade);
 const partGain = id => gainOf(() => { G.parts[id] = (G.parts[id] || 0) + 1; });
-const moduleGain = id => gainOf(() => { G.module = id; });
 // 晶片價值表沒有資料的晶片：試裝（晶片放進電路空格、沒有空格就暫時多一格；組件插武器，滿了插第一個晶片）
 //   同一套配裝算過就記住（排電路時 chipScore 會被叫很多次）
 const TRIAL_CACHE = new Map();
 function chipTrialGain(id) {
-  const key = [id, G.chain.join(), JSON.stringify(G.socks || []), JSON.stringify(G.parts), G.module, G.weapon.id, G.weapon.path, G.weapon.final].join('|');
+  const key = [id, G.chain.join(), JSON.stringify(G.socks || []), JSON.stringify(G.parts), G.weapon.id, G.weapon.path, G.weapon.final].join('|');
   if (TRIAL_CACHE.has(key)) return TRIAL_CACHE.get(key);
   if (TRIAL_CACHE.size > 5000) TRIAL_CACHE.clear();
   const v = chipTrialRaw(id);
@@ -140,7 +135,7 @@ function chipTrialRaw(id) {
 const UPV = globalThis.__UPV || {};
 function upgradeScore(path, f) {
   const set = () => { G.weapon = { ...G.weapon, path, final: f }; };
-  const bare = () => { G.parts = {}; G.module = null; };
+  const bare = () => { G.parts = {}; };
   const T = UPV[G.weapon.id];
   if (!T) return trial(set);
   const L = (G.sector - 1) * 7 + (G.node ? G.node.L : 0), x = T[nearKey(T, L)][path + f];
@@ -176,5 +171,3 @@ function workshop() {
   }
   if (sw && G.credits >= G.shopPrice(PART_SWAP_PRICE)) { G.wsFrom(sw[0]); G.wsTo(sw[1]); }
 }
-// 背包模組（精英獎勵三選一）：挑試裝分數最高的
-const pickModuleBy = opts => opts.reduce((a, b) => moduleScore(b) > moduleScore(a) ? b : a);

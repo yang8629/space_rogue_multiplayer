@@ -69,7 +69,7 @@ const BANK = { lost: 0 };
 }
 
 function run1(chain, s, cfg, setup) {
-  seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {}; G.module = null;
+  seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {};
   const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(String(id).split(/[#~]/)[0], T_.levelOf(id), 2) : id));
   G.chain = r.chain; G.socks = r.socks;
   G.wSock = L < 7 ? 0 : L < 14 ? 1 : 2;

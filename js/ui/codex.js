@@ -249,9 +249,9 @@ const Codex = {
     const svCell = (v, lo, hi, tip) => { const c = v == null ? '' : v > hi ? 'rgba(255,140,60,.28)' : v >= lo + 0.25 ? 'rgba(46,230,166,.22)' : v >= lo ? 'rgba(46,230,166,.09)' : v < 1 ? 'rgba(255,77,109,.22)' : 'rgba(255,209,102,.16)';
       return `<td style="background:${c};text-align:right" title="${tip || ''}">${v == null ? '—' : v.toFixed(2)}</td>`; };
     const pathName = (w, k) => k === 'none' ? '沒升級' : k.length === 1 ? WEAPONS[w].paths[k].name : WEAPONS[w].paths[k[0]].next[+k[1]].name;
-    const itemName = id => { const m = /^part:(\w+):(\d)$/.exec(id), mo = /^mod:(\w+)$/.exec(id);
-      return m ? `${PARTS[m[1]] ? PARTS[m[1]].name : m[1]} +${m[2]} 層` : mo ? `模組 ${MODULES[mo[1]] ? MODULES[mo[1]].name : mo[1]}` : CHIPS[id] ? CHIPS[id].name : id; };
-    let upHtml = '<div class="cap">還沒有模擬資料（在 mp_tests 跑 node botsim.js --upval，再 node exportvalue.js）。</div>', rvHtml = upHtml;
+    const itemName = id => { const m = /^part:(\w+):(\d)$/.exec(id);
+      return m ? `${PARTS[m[1]] ? PARTS[m[1]].name : m[1]} +${m[2]} 層` : CHIPS[id] ? CHIPS[id].name : id; };
+    let upHtml = '<div class="cap">還沒有模擬資料（在 tests 跑 node botsim.js --upval，再 node exportvalue.js）。</div>', rvHtml = upHtml;
     if (SV && Object.keys(SV.upval).length) upHtml = svTabs('sv-up', w => {
       const U = SV.upval[w]; if (!U) return '<div class="cap">這把武器還沒有資料。</div>';
       const Ls = Object.keys(U).map(Number).sort((a, b) => a - b), P = WEAPONS[w].paths;
@@ -263,11 +263,11 @@ const Codex = {
     if (SV && Object.keys(SV.route).length) rvHtml = svTabs('sv-rv', w => {
       const R = SV.route[w]; if (!R) return '<div class="cap">這把武器還沒有資料。</div>';
       const P = WEAPONS[w].paths, cols = ['none', ...Object.keys(P), ...Object.keys(P).flatMap(p => [p + '0', p + '1'])].filter(k => R[k]);
-      // 列的順序固定（不照分數排）：晶片照晶片清單的順序（玩法晶片、組件、觸發器），再來零件（每種 +1／+2／+4 層），最後背包模組
+      // 列的順序固定（不照分數排）：晶片照晶片清單的順序（玩法晶片、組件、觸發器），再來零件（每種 +1／+2／+4 層）；遊戲裡已經沒有的東西不列
       const have = new Set(cols.flatMap(k => Object.keys(R[k].items)));
-      const order = [...Object.keys(CHIPS).filter(id => !id.includes('#') && !id.includes('~')), ...Object.keys(PARTS).flatMap(p => [1, 2, 4].map(n => 'part:' + p + ':' + n)), ...Object.keys(MODULES).map(m => 'mod:' + m)];
-      const items = [...order.filter(id => have.has(id)), ...[...have].filter(id => !order.includes(id))];
-      return `<div class="cap">路線價值表 ${SV.when[w][1] || ''} 量的。每一欄是一條路線（括號是量的難度），每一列是一樣東西（順序固定：晶片、零件、背包模組）。只有「沒升級」那一欄有數值晶片、組件、觸發器（其他路線沒量）。</div>
+      const order = [...Object.keys(CHIPS).filter(id => !id.includes('#') && !id.includes('~')), ...Object.keys(PARTS).flatMap(p => [1, 2, 4].map(n => 'part:' + p + ':' + n))];
+      const items = order.filter(id => have.has(id));
+      return `<div class="cap">路線價值表 ${SV.when[w][1] || ''} 量的。每一欄是一條路線（括號是量的難度），每一列是一樣東西（順序固定：晶片、零件）。只有「沒升級」那一欄有數值晶片、組件、觸發器（其他路線沒量）。</div>
         <div class="tbl"><table><tr><th>東西</th>${cols.map(k => `<th>${pathName(w, k)}<br><span style="color:#6a79ad;font-weight:normal">（${R[k].L}）</span></th>`).join('')}</tr>
         ${items.map(id => `<tr><td>${itemName(id)}</td>${cols.map(k => { const x = R[k].items[id]; return svCell(x ? x[0] : null, 1, 9, x ? `${pathName(w, k)}：清場速度 ${x2(x[1])}、掉血 ${x2(x[2])}（${x[3]} 組）` : ''); }).join('')}</tr>`).join('')}</table></div>`;
     });
@@ -281,8 +281,8 @@ const Codex = {
           ${SV ? `資料匯出 ${SV.date}。` : ''}</div>
         ${upHtml}</div>
 
-      <div class="viz"><h4>路線價值：晶片、零件、模組（自動對戰模擬）</h4>
-        <div class="cap">整局模擬的電腦挑晶片、零件、背包模組時查的表：每條武器升級路線各自量，同一組配裝比「加這樣東西」和「不加」。
+      <div class="viz"><h4>路線價值：晶片、零件（自動對戰模擬）</h4>
+        <div class="cap">整局模擬的電腦挑晶片、零件時查的表：每條武器升級路線各自量，同一組配裝比「加這樣東西」和「不加」。
           分數 ＝ 清場快幾倍 ÷ √掉血是幾倍（1 ＝ 跟不加一樣；綠 = 比較好、紅 = 加了反而更差）；滑鼠移到數字上看速度和掉血。</div>
         ${rvHtml}</div>
 
@@ -336,7 +336,7 @@ const Codex = {
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格，放暫時不用的晶片。不要的晶片可以回收，拿回 40% 售價。`)}
       ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT} 起，隨星區上漲）、精英戰獎勵、武器升滿後的軍械台。`)}
       ${R('奇異點（航圖）', `投入 1 個晶片（晶片會消失）：隨機一個還沒強化過的電路格（武器格也可能）得到一個屬性，每格只能強化一次，屬性留在格子上（換晶片也還在）。好結果的機率看投入晶片的等級：Lv1 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。也可以不投入直接離開。屬性見「插座與奇異點」分頁。`)}
-      ${R('機體與地圖', '零件（改裝廠）、背包模組（精英、旗艦）、4 艘飛船與地圖物件，見「機體與地圖」分頁。')}
+      ${R('機體與地圖', '零件（改裝廠）、4 艘飛船（各自的能力）與地圖物件，見「機體與地圖」分頁。')}
     </div>`;
   },
 
@@ -358,19 +358,16 @@ const Codex = {
     return `<div class="sub" style="margin:6px 0 10px">組件不佔電路格，拖到晶片、武器或觸發器的<b>插座</b>上才有作用（超過插座數的變灰）。插在武器上作用在射出的子彈；插在玩法晶片上只作用在那個晶片的產物。每個晶片的產物見「插座與奇異點」分頁。</div>` + this.chips(['comp']);
   },
 
-  // 機體與地圖：飛船、零件、背包模組、地圖物件
+  // 機體與地圖：飛船、零件、地圖物件
   bodyTab() {
     const ships = Object.values(SHIPS).map(S => `<div class="card" style="border-color:${S.color}"><div class="ttl" style="color:${S.color}">${S.name}</div>
       ${shipStatLine(S)}${shipDescHtml(S)}</div>`).join('');
     const parts = PART_IDS.map(id => partCard(id, '', this.hasRun() ? Game.parts : {})).join('');
-    const mods = Object.keys(MODULES).map(id => moduleCard(id)).join('');
     const R = (t, d) => `<div><b>${t}</b><br>${d}</div>`;
-    return `<div class="codex-sec"><h3>🚀 飛船（開局配置）</h3><div class="cards" style="justify-content:flex-start;margin:0">${ships}</div></div>
+    return `<div class="codex-sec"><h3>🚀 飛船（開局配置與專屬能力）</h3><div class="cards" style="justify-content:flex-start;margin:0">${ships}</div></div>
       <div class="codex-sec"><h3>⚙ 零件</h3><div class="sub">零件格開局 6 格（先鋒號 8 格），擊沉旗艦時可以選零件格 +1（或電路插槽 +1）。每層小好處＋小代價，同種疊到 2 層、4 層開啟特性；
         <b>${BALANCE.name}</b>：${BALANCE.desc}。零件在「🔧 改裝廠」三選一取得，也可以付 ◆${PART_SWAP_PRICE}（隨星區上漲）把 1 層換成另一種。</div>
         <div class="cards" style="justify-content:flex-start;margin:0">${parts}</div></div>
-      <div class="codex-sec"><h3>🎒 背包模組（只有 1 格）</h3><div class="sub">精英戰鬥勝利後三選一；擊沉旗艦時可以裝上那隻旗艦的專屬模組。換上新的，舊的就沒了。</div>
-        <div class="cards" style="justify-content:flex-start;margin:0">${mods}</div></div>
       <div class="codex-sec"><h3>🪐 地圖物件</h3><div class="rules">
         ${R('大地圖', '一般戰、精英戰是一張不規則的大地圖，分成 2～3 個區域（一區一波），區域之間用通道相連、通道中間有閘門。牆擋住飛船、敵人和雙方的子彈：牆反彈的子彈照牆面的角度彈開，其他子彈打到牆就消失（敵人的子彈也一樣，牆可以當掩護）。閘門在這一區清完才打開，穿過去就開始下一區，不能回頭（多人：一個人穿過去就開始，另一個人之後自己飛過去）。右上角有小地圖。沙盒、靶場是方形場地。旗艦戰是一區的王關場地，形狀照王（母艦：圓形大廳＋凹室；獵艦：細長菱形；核心：中間四根柱子），終焉核心會在你身邊標紅圈轟炸。')}
         ${R('擺放', '大地圖的每個區域各自抽：一半機率沒有，有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）。行星、黑洞放在空地上，不擋閘門；小行星帶從一邊的牆拉到另一邊的牆；彗星只在你所在的區域出現。旗艦戰沒有（王關場地本身就有凹室、柱子這些地形）。沙盒、靶場沒有。')}
@@ -446,8 +443,7 @@ const Codex = {
       ${s.layers.length ? `<div class="layers">${s.layers.map((l, i) => `◎ 觸發第 ${i + 1} 層：每次觸發展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　')}</div>` : ''}
       <div class="codex-sec"><h3>電路逐格拆解（${Game.chain.length} 格）</h3><div class="rules">${rows}</div></div>
       <div class="codex-sec"><h3>機體（零件 ${partsUsed(Game.parts)} / ${Game.partSlots}）</h3>
-        <div class="sub">${PART_IDS.filter(id => Game.parts[id]).map(id => `${PARTS[id].name} ${Game.parts[id]} 層`).join('、') || '沒有零件'}
-          ${Game.module ? `<br>背包模組：<b>${MODULES[Game.module].name}</b>` : ''}</div></div>
+        <div class="sub">${PART_IDS.filter(id => Game.parts[id]).map(id => `${PARTS[id].name} ${Game.parts[id]} 層`).join('、') || '沒有零件'}</div></div>
       <div class="codex-sec"><h3>倉庫（${Game.inventory.filter(Boolean).length} / ${CFG.INV_SLOTS}）</h3>
         <div class="sub">${Game.inventory.filter(Boolean).map(id => CHIPS[id].name).join('、') || '倉庫是空的'}</div></div>`;
   },

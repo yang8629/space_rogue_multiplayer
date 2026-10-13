@@ -15,7 +15,7 @@ for (const [id, setup] of [['vanguard', ''], ['bulwark', 'armor'], ['wraith', 'b
     Game.newRun('range', id, 'laser');
     const p = Game.player;
     if (setup === 'armor') Game.parts = { armor: 3, sink: 2 };
-    if (setup === 'booster') { Game.parts = { booster: 3, sensor: 2 }; Game.setModule('drone'); }
+    if (setup === 'booster') { Game.parts = { booster: 3, sensor: 2 }; }
     Game.recalc && Game.recalc();
     Input.joy = { bx: 0, by: 0, x: -60, y: 0 };  // 搖桿往左推：移動中（噴焰）
     window.__keep = setInterval(() => { p.x = Arena.start.x; p.y = Arena.start.y; if (setup === 'hot') p.dashT = 0.2; }, 5);

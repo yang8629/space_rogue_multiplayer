@@ -89,7 +89,7 @@ const WEAPONS = {
           p.speed *= 0.75; p.radius *= 2.2; p.life *= 1.5; p.pierce += 4; },  // 2026-10-13 半徑 ×1.6 → ×2.2、速度 ×0.6 → ×0.75（以前跟沒升級幾乎一樣快：×1.03～1.07）
         next: [
           { name: '重量砲', desc: `飛船移動速度 −${WEIGHT.self * 100}%；移動速度每比原本慢 1%，傷害 +${WEIGHT.per}%（沒有上限，光這個升級就 +${WEIGHT.self * 100 * WEIGHT.per}%）：越重越痛（重裝甲、護盾產生器、被凍住都算；加速器會抵銷）。`, apply: p => { p.weight = WEIGHT; } },
-          { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層、重力井模組、彗星的冰可以再疊：剩下的速度相乘）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
+          { name: '冰封', desc: `命中的敵人減速 ${FROSTBITE.slow * 100}%（${FROSTBITE.dur} 秒）；敵人每被減速 1%，受到你的傷害 +${FROSTBITE.per}%（冰凍塗層、彗星的冰可以再疊：剩下的速度相乘）：先冰住再打。`, apply: p => { p.slow = FROSTBITE.slow; p.slowDur = FROSTBITE.dur; p.frostbite = FROSTBITE; } }] },
       C: { name: '新星', desc: '命中時爆炸（半徑 120，80% 傷害）。', apply: p => { p.explode = { r: 120, ratio: 0.8 }; },  // 2026-10-13 半徑 90 → 120（以前 65% 的爆炸只炸到 1 隻）
         next: [
           { name: '餘震', desc: `爆炸 ${AFTERSHOCK.t} 秒後在同一點再炸一次（同半徑、同傷害），地上先出現縮小的圈：朝敵人要走到的地方打。`, apply: p => { p.aftershock = AFTERSHOCK; } },

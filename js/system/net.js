@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'module', 'partSlots', 'cap', 'mech'];
+const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'partSlots', 'cap', 'mech'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -76,7 +76,7 @@ const Net = {
       this.sendTo(q, { t: 'hold', why: others.some(o => o.waiting) ? '有隊友斷線，等待重新連線…' : null });  // 三人以上：別的隊友斷線，房主在等
     }
   },
-  waitMods(on) { for (const q of this.peers) { const m = this.mateOf(q); q.modWait = !!on && q.linked && !!m && !m.gone; } },  // 房主：等隊友處理旗艦模組
+  waitMods(on) { for (const q of this.peers) { const m = this.mateOf(q); q.modWait = !!on && q.linked && !!m && !m.gone; } },  // 房主：等隊友選好旗艦獎勵（二選一）
   modWaiting() { return this.peers.some(q => q.modWait); },
   resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; },
   close() {
@@ -450,7 +450,7 @@ const Net = {
       others: this.peers.filter(o => o !== q && o.pick).map(o => ({ slot: o.slot, ...o.pick })),  // 其他隊友（三人以上）
       you: { pick: q.pick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
-        parts: L.parts, module: L.module, ps: L.partSlots, cap: L.cap, ws: L.wSock, growth: L.growth, bp: L.bonusPicks || 0 },
+        parts: L.parts, ps: L.partSlots, cap: L.cap, ws: L.wSock, growth: L.growth, bp: L.bonusPicks || 0 },
       map: this.packMap(G.map), chapter: G.chapterId, sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
       lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
@@ -490,7 +490,6 @@ const Net = {
       G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
       G.cap = clamp(Math.floor(num(Y.cap, G.cap)), 0, 40);
       G.wSock = clamp(Math.floor(num(Y.ws, G.wSock)), 1, CFG.WEAPON_SOCKETS);
-      G.module = typeof Y.module === 'string' && MODULES[Y.module] ? Y.module : null;
       G.growth = {};
       if (Y.growth && typeof Y.growth === 'object') for (const k in Y.growth) if (CHIPS[k] && CHIPS[k].grow) G.growth[k] = Math.max(0, num(Y.growth[k]));
       G.refreshWeapon();
@@ -517,7 +516,7 @@ const Net = {
       G.inArena = false; G.state = 'victory';
       if (!(soft && G.victory)) G.victory = { slot: false, boss: G.bossId, pick: 'lost' };  // pick 'lost'：重新整理過，二選一的結果已經在配裝裡  // 同一個頁面：保留原本的勝利畫面（模組還能裝）
       Screen.victory();
-      if (bossDone(G.victory)) this.send({ t: 'moddone' });  // 房主可能在等隊友選模組
+      if (bossDone(G.victory)) this.send({ t: 'moddone' });  // 房主可能在等隊友選旗艦獎勵
     } else if (soft && G.state === 'reward' && G.reward && G.reward.kind === 'start') G.view();  // 同一個頁面、正在開局三選一：留在原本的畫面（showMap 會跳到下一次，少選一次）
     else G.showMap('已重新連線，回到這一局。');
     this.send({ t: 'back' });
@@ -687,7 +686,7 @@ const Net = {
         }
         break;
       case 'finish': if (client && Game.state === 'victory') Game.finishRun(); break;
-      case 'moddone':  // 隊友裝上或略過了旗艦模組：大家都好了，房主就可以前往下一星區
+      case 'moddone':  // 隊友選好了旗艦獎勵：大家都好了，房主就可以前往下一星區
         if (host && q.modWait) { q.modWait = false; if (!this.modWaiting() && Game.state === 'victory') Screen.victory(); }
         break;
       case 'ping': {
@@ -763,13 +762,13 @@ const Net = {
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
       chain: startChain(p.chip), socks: [], inventory: startInv(p.chip), slotAttr: [], growth: {}, pullHits: 0,
-      parts: { ...SHIPS[p.ship].parts }, module: null, partSlots: SHIPS[p.ship].partSlots, cap: SHIPS[p.ship].cap, wSock: CFG.START_WSOCK,
+      parts: { ...SHIPS[p.ship].parts }, partSlots: SHIPS[p.ship].partSlots, cap: SHIPS[p.ship].cap, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     const ST = Game.chapter().start;  // 章節的開局補償：電路格、插座先加；晶體和剩下的三選一次數先記著，之後隊友的配裝同步會蓋過去
     applyChapterStart(L, ST);
     L.credits = ST ? ST.credits || 0 : 0; L.bonusPicks = ST ? ST.picks || 0 : 0;
     L.wp = weaponParams(L.weapon);
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.wp); });
     return L;
   },
   startHost() {
@@ -906,7 +905,7 @@ const Net = {
     if (this.role !== 'client' || !this.linked) return;
     const G = Game;
     this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
-      parts: G.parts, module: G.module, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft() });
+      parts: G.parts, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft() });
   },
   // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶等級 #2、插座數 ~2，見 parseChipId）
   sanitizeLoadout(m) {
@@ -931,15 +930,14 @@ const Net = {
     L.credits = Math.max(0, num(m.cr, L.credits || 0));  // 隊友的錢包（重新連線時還原用）
     L.lootAtLo = this.lootTotal || 0;  // 之後撿到的掉落另外算
     L.chain = chain; L.socks = socks; L.inventory = inventory; L.slotAttr = slotAttr; L.wp = weaponParams(L.weapon);
-    // 機體：零件層數（0～20）、零件格、背包模組（不認得的模組當作沒有）
+    // 機體：零件層數（0～20）、零件格
     const P = m.parts && typeof m.parts === 'object' ? m.parts : {};
     L.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(P[id])), 0, 20)]));
     L.partSlots = clamp(Math.floor(num(m.ps, L.partSlots || 6)), 1, 20);
     L.cap = clamp(Math.floor(num(m.cap, L.cap || 4)), 0, 40);
     L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
-    L.module = typeof m.module === 'string' && MODULES[m.module] ? m.module : null;
     L.bonusPicks = clamp(Math.floor(num(m.bp, L.bonusPicks || 0)), 0, 9);  // 開局三選一還剩幾次（隊友重新整理時還原）
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.wp); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
     if (!Game.inArena) mate.hp = clamp(num(m.hp, mate.hp), 1, mate.maxHp);  // 戰鬥中的血量以房主為準
     else mate.hp = Math.min(mate.hp, mate.maxHp);
@@ -1034,18 +1032,19 @@ const Net = {
     if (this.sendAcc < NET_RATE || !to.length || !Game.inArena) return;
     this.sendAcc = Math.min(this.sendAcc - NET_RATE, NET_RATE);  // 保留零頭，才能穩定每秒 30 次
     const G = Game, P = G.player, r = Math.round;
-    // 每艘飛船（給別人畫）：[號碼, 17 項狀態, 零件與模組, 拾取範圍, 離線]
-    const row = (p, slot, parts, module, magnet) => [slot, r(p.x), r(p.y), r2(p.aim), r2(p.hp), p.maxHp, r2(Math.max(0, p.dashT)), r2(Math.max(0, p.iframe)),
+    // 每艘飛船（給別人畫）：[號碼, 17 項狀態, 零件, 拾取範圍, 離線]
+    const row = (p, slot, parts, magnet) => [slot, r(p.x), r(p.y), r2(p.aim), r2(p.hp), p.maxHp, r2(Math.max(0, p.dashT)), r2(Math.max(0, p.iframe)),
       p.overdrive > 0 ? 1 : 0, p.moving ? 1 : 0, p.dead ? 1 : 0, r(p.vx), r(p.vy), r2(p.reviveT),
-      p.gravField ? p.gravField.R : 0, p.shield || 0, p.frostT > 0 ? 1 : 0, p.revengeT > 0 ? 1 : 0,  // 重力井範圍、護盾層數、被凍住、逆襲中
-      [...PART_IDS.map(id => parts[id] || 0), module || ''], r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0];  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
-    const rows = [row(P, 1, G.parts, G.module, G.passives.magnet), ...G.mates.map(m => row(m, m.slot, m.L.parts, m.L.module, m.L.passives.magnet))];
+      0, p.shield || 0, p.frostT > 0 ? 1 : 0, p.revengeT > 0 ? 1 : 0,  // （空位）、護盾層數、被凍住、逆襲中
+      PART_IDS.map(id => parts[id] || 0), r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0];  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
+    const rows = [row(P, 1, G.parts, G.passives.magnet), ...G.mates.map(m => row(m, m.slot, m.L.parts, m.L.passives.magnet))];
     const shared = {
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
       zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 王的落點轟炸（紅圈）
       fl: G.flames.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 火毯（散彈升級）留在地上的火
       qk: G.quakes.map(q => [r(q.x), r(q.y), q.r, r2(q.t), q.max]),  // 餘震（電漿升級）的預告圈
+      dc: G.decoys.map(d => [r(d.x), r(d.y), r2(d.t), d.slot, r2(d.aim)]),  // 殘影（幻影號）
       tr: G.trails.map(L => [r(L.x1), r(L.y1), r(L.x2), r(L.y2), r2(L.t), L.max]),  // 殘留彈道（軌道升級）的電軌
       lk: G.links.map(L => [r2(L.t), ...L.es.filter(e => !e.dead && e.link === L).map(e => e.id)]),  // 共鳴（電漿升級）：剩幾秒、連結的敵人
       e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
@@ -1070,7 +1069,7 @@ const Net = {
       this.sendTo(q, { t: 's', ...shared,
         p: rows.filter(a => a[0] !== q.slot),  // 其他人的飛船
         me: [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), m.gravField ? m.gravField.R : 0, r2(Math.max(0, m.frostT || 0)), standStacks(m, m.L.stats.stand), m.crowdK || 0, r2(Math.max(0, m.revengeT || 0)), m.streak || 0, m.focusK || 0, m.spreadK || 0, m.grazeK || 0, m.staticK || 0, m.parryK || 0],  // …、群戰的敵人數、逆襲剩幾秒、無傷連殺層數、專注／分散／擦彈層數  // 修復無人機的可回復量（畫血條用）、重力井範圍、被凍住剩幾秒（隊友自己的船要變慢）
+        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), standStacks(m, m.L.stats.stand), m.crowdK || 0, r2(Math.max(0, m.revengeT || 0)), m.streak || 0, m.focusK || 0, m.spreadK || 0, m.grazeK || 0, m.staticK || 0, m.parryK || 0],  // …、群戰的敵人數、逆襲剩幾秒、無傷連殺層數、專注／分散／擦彈層數  // 灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）
         gr: m.L.growth,  // 這個隊友各晶片的累積用量（隊友那邊照這個升級）
         b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
           ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
@@ -1126,14 +1125,14 @@ const Net = {
     const G = Game;
     if (G.mode !== 'coop' || !G.combat || !G.inArena || (G.state !== 'play' && G.state !== 'dead')) return;
     const arr = v => (Array.isArray(v) ? v : []);
-    for (const row of arr(s.p)) {  // 其他人的飛船：[號碼, 17 項狀態, 零件與模組, 拾取範圍, 離線]（見 hostSend）
+    for (const row of arr(s.p)) {  // 其他人的飛船：[號碼, 17 項狀態, 零件, 拾取範圍, 離線]（見 hostSend）
       const m = Array.isArray(row) && G.mates.find(q => q.slot === row[0]), p = m && row.slice(1);
       if (!m) continue;
       m.x = num(p[0], m.x); m.y = num(p[1], m.y); m.aim = num(p[2]); m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
       m.dashT = num(p[5]); m.iframe = num(p[6]); m.overdrive = p[7] ? 1 : 0; m.moving = !!p[8]; m.dead = !!p[9];
       m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
-      m.gravField = p[13] > 0 ? { R: num(p[13]), slow: 0 } : null; m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0; m.revengeT = p[16] ? 0.2 : 0;  // 逆襲中（畫那艘船發紅光）
-      const pp = arr(p[17]); m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(pp[i]), 0, 20)])); m.module = MODULES[pp[5]] ? pp[5] : null;
+      m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0; m.revengeT = p[16] ? 0.2 : 0;  // 逆襲中（畫那艘船發紅光）
+      const pp = arr(p[17]); m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(pp[i]), 0, 20)]));
       m.magnet = num(p[18], CFG.MAGNET_RANGE); m.gone = !!p[19];
     }
     const P = G.player;
@@ -1152,7 +1151,6 @@ const Net = {
       else if (!s.me[3] && P.dead && hp > 0) { P.dead = false; P.vx = P.vy = 0; P.iframe = CFG.REVIVE.iframe; }  // 被隊友救起來
       P.reviveT = num(s.me[5]);
       P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]); P.shield = num(s.me[9]);
-      P.gravField = s.me[11] > 0 ? { R: num(s.me[11]), slow: 0 } : null;
       if (s.me[12] > 0) P.frostT = Math.max(P.frostT || 0, num(s.me[12]));
       P.standK = num(s.me[13], 0);  // 架設的層數  // 被彗星凍住（房主判定，自己的船自己變慢）
       P.crowdK = num(s.me[14], 0); P.revengeT = num(s.me[15], 0); P.streak = num(s.me[16], 0);  // 群戰、逆襲、無傷連殺（畫左上小條用）
@@ -1195,6 +1193,7 @@ const Net = {
     G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.flames = arr(s.fl).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 30), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.quakes = arr(s.qk).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 90), t: num(a[3]), max: num(a[4], 1) || 1 }));
+    G.decoys = arr(s.dc).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]), r: 12, decoy: true }));
     G.trails = arr(s.tr).filter(Array.isArray).map(a => ({ x1: num(a[0]), y1: num(a[1]), x2: num(a[2]), y2: num(a[3]), t: num(a[4]), max: num(a[5], 1) || 1 }));
     G.links = arr(s.lk).filter(Array.isArray).map(a => ({ t: num(a[0]), ids: a.slice(1) }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
