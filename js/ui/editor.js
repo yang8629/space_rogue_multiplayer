@@ -269,13 +269,13 @@ const Editor = {
       return `<tr><td><b style="color:${color(k)}">${dmgKeyName(k)}</b>${where}</td>${cell(S.chips[k], tS, color(k))}${cell(R.chips[k], tR, color(k))}</tr>`;
     }).join('');
     const label = Game.freePlay() ? (Game.mode === 'range' ? '本次靶場' : '本次沙盒') : Game.isEndless() ? `本關（無盡 · 星區 ${Game.sector}）` : `本關（星區 ${Game.sector}）`;
-    const coop = Game.mode === 'coop' && Game.mate, mate = coop && Net.mateChipRows();
-    const me = coop ? `<h3>${Net.role === 'host' ? '1P' : '2P'}（你）</h3>` : '';
-    const mateTable = !mate ? '' : `<h3>${mate.tag} 隊友（整局）</h3>
+    const coop = Game.mode === 'coop' && Game.mates.length, mates = coop ? Net.mateChipRows() : [];
+    const me = coop ? `<h3>${Net.mySlot()}P（你）</h3>` : '';
+    const mateTable = mates.map(mate => `<h3>${mate.tag} 隊友（整局）</h3>
       <table class="dmg-table"><thead><tr><th>來源</th><th>整局</th></tr></thead>
         <tbody>${mate.rows.map(([n, c, v]) => `<tr><td><b style="color:${c}">${n}</b></td>${cell(v, mate.total, c)}</tr>`).join('')
           || '<tr><td colspan="2" class="sub">還沒有造成傷害。</td></tr>'}</tbody>
-        <tfoot><tr><td><b>合計</b></td><td>${fmt(mate.total)}</td></tr></tfoot></table>`;
+        <tfoot><tr><td><b>合計</b></td><td>${fmt(mate.total)}</td></tr></tfoot></table>`).join('');
     this.dmgEl.innerHTML = `${coop ? Net.teamSummaryHtml() : ''}${me}
       <table class="dmg-table"><thead><tr><th>來源</th><th>${label}</th><th>整局</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="3" class="sub">還沒有造成傷害。</td></tr>'}</tbody>

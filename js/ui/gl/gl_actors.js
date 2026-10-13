@@ -20,7 +20,7 @@ const GLActors = {
 
   draw() {
     const G = Game, g = this.gE; g.clear();
-    const viewer = G.player.dead && G.mate && !G.mate.dead ? G.mate : G.player;
+    const viewer = G.viewShip();
     this.wormInfo();
     for (const e of G.enemies) {
       const rock = e.t.boss ? null : Objects.blocker(viewer, e);
@@ -135,13 +135,13 @@ const GLActors = {
   // ---------- 飛船 ----------
   ships() {
     const G = Game, g = this.gS; g.clear();
-    const tagOf = me => G.mate ? (Net.role === 'host' ? (me ? '1P' : '2P') : (me ? '2P' : '1P')) : '';
-    if (G.mate && G.state === 'play') {
-      if (G.mate.dead && !G.mate.gone) this.downed(G.mate, tagOf(false), !G.player.dead);
-      if (G.player.dead) this.downed(G.player, tagOf(true), false);
+    const tagOf = p => G.mates.length ? G.tagOf(p) : '';
+    if (G.mates.length && G.state === 'play') {
+      for (const m of G.mates) if (m.dead && !m.gone) this.downed(m, tagOf(m), !G.player.dead);
+      if (G.player.dead) this.downed(G.player, tagOf(G.player), false);
     }
-    if (G.mate && !G.mate.dead && !G.mate.gone) this.ship(G.mate, tagOf(false));
-    if (G.state !== 'dead' && !G.player.dead) this.ship(G.player, tagOf(true));
+    for (const m of G.mates) if (!m.dead && !m.gone) this.ship(m, tagOf(m));
+    if (G.state !== 'dead' && !G.player.dead) this.ship(G.player, tagOf(G.player));
   },
   ship(p, tag) {
     const G = Game, g = this.gS, t = G.time, S = p.ship, A = SHIP_ART.get(S), own = p === G.player, P = this.pS;

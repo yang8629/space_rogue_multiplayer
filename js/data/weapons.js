@@ -174,7 +174,7 @@ function staticArcs(p) {
   return k ? { ...p.arcs, n: p.arcs.n + k } : p.arcs;
 }
 // 開火的人（雙人：隊友的電路在 withLoadout 裡開火時是隊友）
-const shooterNow = () => Game.shooter ? Game.mate : Game.player;
+const shooterNow = () => Game.shipOf(Game.shooter);
 // 逆襲（散彈升級）：開火的人受傷後的爆發時間還在
 function revengeOn() { const P = shooterNow(); return !!P && P.revengeT > 0; }
 // 數值換傷害（武器升級）：重量砲（移動速度越慢越痛）、玻璃砲（受到的傷害越多越痛）；照開火的人現在的機體算（雙人在 withLoadout 裡就是隊友的）

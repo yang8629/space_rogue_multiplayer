@@ -40,7 +40,7 @@ const MechCheck = {
     const m = new Player(SHIPS.vanguard);
     m.L = L; m.hp = m.maxHp = Game.maxHpOf(m.ship, L.passives, L.mech);
     m.x = Game.player.x; m.y = Game.player.y + 300; m.aim = 0; m.dashSeq = 0; m.wantFire = false;
-    Game.mate = m;
+    m.slot = 2; Game.mates = [m];
     Game.state = 'play';
     return m;
   },
@@ -1837,7 +1837,7 @@ const MechCheck = {
       let mine = 0, other = 0;
       for (let f = 0; f < 120; f++) {
         Game.time += dt; m.wantFire = true;
-        Net.hostUpdateMate(dt);
+        Net.hostUpdateMates(dt);
         for (const b of Game.bullets) if (b.owner === m.L && b.ownerP === m) mine++; else other++;
         Game.updateBullets(dt);
       }
@@ -1850,7 +1850,7 @@ const MechCheck = {
       m.hp = 50; P.hp = 50;
       for (let f = 0; f < 120; f++) {
         Game.time += dt; m.wantFire = true;
-        Net.hostUpdateMate(dt);
+        Net.hostUpdateMates(dt);
         for (const b of Game.bullets) b.lifesteal = 2;
         Game.updateBullets(dt);
       }

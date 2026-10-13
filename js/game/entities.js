@@ -259,7 +259,7 @@ class Bullet {
     this.hitSet = new Set();
     if (ignoreId != null) this.hitSet.add(ignoreId);
     this.owner = Game.shooter || null;  // 雙人：這顆子彈是誰的電路射出的（null = 房主自己）
-    this.ownerP = Game.shooter ? Game.mate : Game.player;  // 環繞、迴旋要跟著／飛回的飛船
+    this.ownerP = Game.shipOf(Game.shooter);  // 環繞、迴旋要跟著／飛回的飛船
     this.dead = false;
     // V2 改玩法的晶片
     this.baseSpeed = this.speed0 = s.speed;  // speed0：武器原本的速度（佈雷衝出去會改 baseSpeed，迴旋回程用這個）
