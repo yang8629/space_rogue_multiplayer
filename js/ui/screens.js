@@ -403,7 +403,7 @@ const Screen = {
       }
       const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
-    }).join('') + (R.slot ? slotCard() : '');  // 精英獎勵多一張「電路擴充」
+    }).join('') + (R.slot ? slotCard() : '');  // 有電路擴充卡的三選一（CFG.REWARDS 的 slotCard）
     this.show(`<div class="scr">
       <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：三選一（或電路擴充）' : R.kind === 'start' ? `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）` : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
         <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>

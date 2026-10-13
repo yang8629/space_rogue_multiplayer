@@ -21,6 +21,13 @@ const CFG = {
   DECOY: { t: 1.5, r: 400 },  // 幻影號・殘影：衝刺起點留殘影 1.5 秒，附近 400 內的敵人改打殘影
   WORM_FAST: 0.8,  // 列隊蟲越短越快：只剩頭時速度 ×(1 ＋ 0.8)
   WAVE_MUL: 1.4,            // 一波的敵人預算倍數（主題小兵加入後調）
+  // 三選一的種類：同一個畫面、同一套程式（Game.openReward），差別只寫在這張表
+  //   reroll／rerollUp：刷新第一次的價格、之後每次多多少（都照星區漲價）；slotCard：多一張「電路擴充（插槽 +1）」
+  REWARDS: {
+    start:  { reroll: 15, rerollUp: 10, slotCard: false },  // 從後面星區開始的章節：出發前的三選一
+    combat: { reroll: 15, rerollUp: 10, slotCard: false },
+    elite:  { reroll: 30, rerollUp: 20, slotCard: true },
+  },
   ELITE_ESCORT: 0.3,         // 精英戰最後一區（精英的場子）的護衛：一般一波預算的幾倍
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   //   成長需求 ×COOP_GROW（兩人都能打到同一隻，每人拿到的不是剛好一半，照雙人模擬實測）
