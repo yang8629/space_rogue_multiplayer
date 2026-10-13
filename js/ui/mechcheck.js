@@ -28,6 +28,22 @@ const MechCheck = {
     p.x = 1200; p.y = 800; p.aim = 0; p.vx = p.vy = 0;
     Game.bullets = []; Game.eBullets = []; Game.triggerQueue = []; Events.emit('fxClear'); Game.pickups = [];
   },
+  // 雙人（房主這邊）：加一個本機的隊友（不連線），擺在房主下方 300；回傳隊友的飛船（p.L 是它的配裝）
+  //   隊友放進 Game 的寫法只在這裡，其他檢查都透過回傳值拿隊友
+  coop(mateWeapon = 'laser', mateChain = ['weapon', null, null, null]) {
+    this.setup('coop', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+    const L = Net.makeLoadout({ ship: 'vanguard', weapon: mateWeapon, chip: null });
+    const r = splitChain(mateChain.map(fullChip));
+    while (r.chain.length < mateChain.length) { r.chain.push(null); r.socks.push([]); }
+    L.chain = r.chain; L.socks = r.socks; L.cap = 99;
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
+    const m = new Player(SHIPS.vanguard);
+    m.L = L; m.hp = m.maxHp = Game.maxHpOf(m.ship, L.passives, L.mech);
+    m.x = Game.player.x; m.y = Game.player.y + 300; m.aim = 0; m.dashSeq = 0; m.wantFire = false;
+    Game.mate = m;
+    Game.state = 'play';
+    return m;
+  },
   // 在玩家前方擺靶（dx, dy 相對玩家）；frozen 的靶不會動也不會攻擊
   targets(list, type = 'brute', frozen = true, hpScale = 60) {
     const p = Game.player;
@@ -1813,6 +1829,66 @@ const MechCheck = {
       out.push(picksOk ? `連續 ${screens} 次三選一後到航圖` : `三選一次數不對（錯誤）：出現 ${screens} 次，最後在 ${Game.state}`);
       Game.chapterId = 1;
       return { ok: plain && given && picksOk, got: out.join('；') };
+    }],
+    // ---- 雙人（房主這邊，用本機的隊友，不連線）：改成多人架構時的安全網 ----
+    ['雙人', '隊友的子彈算隊友的', '隊友開火：子彈的擁有者是隊友的配裝、環繞類跟著隊友的船；傷害記在隊友身上，房主的傷害是 0', M => {
+      const m = M.coop(), dt = 1 / 60;
+      M.targets([[250, 300]]);  // 隊友正前方 250
+      let mine = 0, other = 0;
+      for (let f = 0; f < 120; f++) {
+        Game.time += dt; m.wantFire = true;
+        Net.hostUpdateMate(dt);
+        for (const b of Game.bullets) if (b.owner === m.L && b.ownerP === m) mine++; else other++;
+        Game.updateBullets(dt);
+      }
+      const sum = R => Object.values(R.dmg).reduce((a, b) => a + b, 0), md = sum(m.L.R), hd = sum(Game.runStats);
+      return { ok: mine > 0 && other === 0 && md > 0 && hd === 0, got: `隊友的子彈 ${mine}、別人的 ${other}；隊友傷害 ${Math.round(md)}、房主傷害 ${Math.round(hd)}` };
+    }],
+    ['雙人', '吸血補開火的人', '隊友的子彈吸血：補隊友的血，房主的血不變', M => {
+      const m = M.coop(), P = Game.player, dt = 1 / 60;
+      M.targets([[250, 300]]);
+      m.hp = 50; P.hp = 50;
+      for (let f = 0; f < 120; f++) {
+        Game.time += dt; m.wantFire = true;
+        Net.hostUpdateMate(dt);
+        for (const b of Game.bullets) b.lifesteal = 2;
+        Game.updateBullets(dt);
+      }
+      return { ok: m.hp > 50 && P.hp === 50, got: `隊友 HP 50 → ${Math.round(m.hp)}、房主 HP 50 → ${Math.round(P.hp)}` };
+    }],
+    ['雙人', '擊殺效果給打最後一擊的人', '連殺裝填、無傷連殺：記在打出最後一擊的那個人身上（隊友殺的給隊友、房主殺的給房主）', M => {
+      const m = M.coop(), P = Game.player;
+      m.L.wp = { ...m.L.wp, reload: true }; Game.wp = { ...Game.wp, reload: true };
+      const streakOn = mc => ({ ...mc, traits: { ...mc.traits, streak: true } });
+      m.L.mech = streakOn(m.L.mech); Game.mech = streakOn(Game.mech);
+      m.fireCd = 5; P.fireCd = 5; m.streak = 0; P.streak = 0;
+      Game.onReloadKill({ killer: m.L }); Game.onStreakKill({ killer: m.L });
+      const a = m.fireCd === 0 && P.fireCd === 5 && m.streak === 1 && P.streak === 0;
+      Game.onReloadKill({ killer: null }); Game.onStreakKill({ killer: null });
+      const b = P.fireCd === 0 && P.streak === 1 && m.streak === 1;
+      return { ok: a && b, got: `${a ? '隊友殺的給隊友' : '隊友殺的給錯人（錯誤）'}；${b ? '房主殺的給房主' : '房主殺的給錯人（錯誤）'}` };
+    }],
+    ['雙人', '救援', '一人被擊墜（另一人還活著 → 不結束）；活著的人待在旁邊 2 秒救起來，分出自己一半的血；房主、隊友互救都可以', M => {
+      const m = M.coop(), P = Game.player, dt = 1 / 60;
+      const save = (down, helper) => {
+        down.dead = false; helper.dead = false; down.reviveT = 0;
+        helper.hp = 80; Game.playerDown(down);
+        const stillPlay = Game.state === 'play';
+        helper.x = down.x + 30; helper.y = down.y;
+        for (let f = 0; f < 60 * (CFG.REVIVE.time + 0.2); f++) Game.updateRevive(dt);
+        return stillPlay && !down.dead && near1(down.hp, 40) && near1(helper.hp, 40);
+      };
+      const a = save(m, P), b = save(P, m);
+      return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
+    }],
+    ['雙人', '在場的玩家', '兩人都在：在場 2 人、算雙人難度、敵人找最近的那個；隊友離線或倒下：只剩房主、恢復單人難度（離線）', M => {
+      const m = M.coop(), P = Game.player;
+      const both = Game.players().length === 2 && Game.coopOn() && Game.nearestPlayer(m.x, m.y) === m && Game.nearestPlayer(P.x, P.y) === P;
+      m.gone = true;
+      const gone = Game.players().length === 1 && !Game.coopOn() && Game.nearestPlayer(m.x, m.y) === P;
+      m.gone = false; m.dead = true;
+      const dead = Game.players().length === 1 && Game.coopOn() && Game.nearestPlayer(m.x, m.y) === P;
+      return { ok: both && gone && dead, got: `兩人都在${both ? '' : '（錯誤）'}；隊友離線${gone ? '' : '（錯誤）'}；隊友倒下${dead ? '' : '（錯誤）'}` };
     }],
   ],
 
