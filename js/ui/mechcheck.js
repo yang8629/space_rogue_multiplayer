@@ -36,7 +36,7 @@ const MechCheck = {
     const r = splitChain(mateChain.map(fullChip));
     while (r.chain.length < mateChain.length) { r.chain.push(null); r.socks.push([]); }
     L.chain = r.chain; L.socks = r.socks; L.cap = 99;
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.module, Game.wp); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.wp); });
     const m = new Player(SHIPS.vanguard);
     m.L = L; m.hp = m.maxHp = Game.maxHpOf(m.ship, L.passives, L.mech);
     m.x = Game.player.x; m.y = Game.player.y + 300; m.aim = 0; m.dashSeq = 0; m.wantFire = false;
@@ -612,17 +612,17 @@ const MechCheck = {
       return { ok: Game.mech.traits.streak && s5 === 5 && near1(d5 / d0, 1.15) && s20 === 15 && sSh === 15 && sHit === 0,
         got: `殺 5 隻 ${s5} 層，傷害 ×${(d5 / d0).toFixed(2)}（要 ×1.15）；再殺 20 隻 ${s20} 層（要 15）；護盾擋下 ${sSh} 層；被打中 ${sHit} 層（要 0）` };
     }],
-    ['機體', '射速加成相加','疾風（移動中）+20%、急冷（散熱片 2 層）+30% 相加 = +50%（不是相乘的 +56%；散熱片本身不加射速，2026-10-10 改成能量容量）；重力井 −10% 再相乘', M => {
-      const count = (gravity) => {
+    ['機體', '射速加成相加','疾風（移動中）+20%、急冷（散熱片 2 層）+30% 相加 = +50%（不是相乘的 +56%；散熱片本身不加射速，2026-10-10 改成能量容量）', M => {
+      const count = () => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
-        Game.parts.sink = 2; Game.parts.booster = 2; Game.module = gravity ? 'gravity' : null; Game.recalc();
+        Game.parts.sink = 2; Game.parts.booster = 2; Game.recalc();
         const P = Game.player, iv = Game.stats.interval; let n = 0; const orig = P.fire; P.fire = () => { n++; };
         P.moving = true; P.fireCd = 0;
         try { for (let f = 0; f < 600; f++) { P.quenchT = 1; P.tickFire(1 / 60, true); } } finally { P.fire = orig; }
         return n / (10 / iv);
       };
-      const a = count(false), b = count(true);
-      return { ok: Math.abs(a - 1.5) < 0.03 && Math.abs(b - 1.5 * 0.9) < 0.03, got: `射速 ×${a.toFixed(2)}（要 ×1.50）；加上重力井 ×${b.toFixed(2)}（要 ×${(1.5 * 0.9).toFixed(2)}）` };
+      const a = count();
+      return { ok: Math.abs(a - 1.5) < 0.03, got: `射速 ×${a.toFixed(2)}（要 ×1.50）` };
     }],
     ['電路晶片', '牆反彈', '子彈碰到場地邊緣反彈', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'wallbounce', null, null]); M.targets([]);
@@ -1312,18 +1312,6 @@ const MechCheck = {
       Game.updateEnemyBullets(1 / 60);
       return { ok: p.hp === hp, got: `HP ${hp} → ${p.hp}` };
     }],
-    ['機體', '星噬核心', '每 6 秒朝四周 6 個方向各用電路開一槍：吃晶片效果（裝分裂 = 每個方向 3 發）；有環繞時直接射出、不存在身邊', M => {
-      const go = chain => {
-        M.setup('sandbox', 'vanguard', 'laser', null, null, chain); Game.module = 'swarmcore'; Game.recalc(); Game.enemies = [];
-        const p = Game.player; Game.resetMechCombat(p);
-        let max = 0, orb = 0, firstT = null;
-        for (let f = 0; f < 60 * 6.5; f++) { Game.tickModules(p, 1 / 60); Game.updateBullets(1 / 60); if (firstT == null && Game.bullets.length) firstT = f / 60; max = Math.max(max, Game.bullets.length); orb = Math.max(orb, Game.bullets.filter(b => b.mode === 'orbit').length); }
-        return { max, orb, firstT };
-      };
-      const plain = go(['weapon', null, null, null]), split = go(['weapon', 'split', null, null]), orbit = go(['weapon', 'orbit', null, null]);
-      return { ok: plain.max === 6 && split.max === 18 && orbit.max === 6 && orbit.orb === 0 && Math.abs(plain.firstT - 6) < 0.1,
-        got: `第 ${plain.firstT == null ? '-' : plain.firstT.toFixed(1)} 秒放出：一般 ${plain.max} 發、裝分裂 ${split.max} 發、裝環繞 ${orbit.max} 發（存在身邊 ${orbit.orb}）` };
-    }],
     ['機體', '按住衝刺', '按住衝刺鍵：冷卻一好就自動再衝；同時按其他鍵也不會斷；放開就停', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); Game.enemies = [];
       const p = Game.player, keys = new Set(Input.keys);
@@ -1362,16 +1350,44 @@ const MechCheck = {
       return { ok: Game.parts.armor === 1 && Game.parts.booster === 1 && Game.credits === 100 - PART_SWAP_PRICE,
         got: `重裝甲 ${Game.parts.armor}、加速器 ${Game.parts.booster}，剩 ◆${Game.credits}` };
     }],
-    ['機體', '背包模組：護盾產生器', '8 秒充好 1 層護盾，擋下一次傷害', M => {
+    ['機體', '堡壘號：灰血', '受傷的 40% 變成灰血（最多最大 HP 的 25%）；4 秒沒被打才開始回、每秒 6；戰鬥結束時剩下的回滿；其他飛船沒有灰血', M => {
+      M.setup('run', 'bulwark', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, G = CFG.GRAY; Game.state = 'play'; Game.resetMechCombat(p); p.hp = p.maxHp; p.drRec = 0;
+      p.iframe = 0; p.dashT = 0; Game.hurtPlayer(30, 'mc', p);
+      const hp1 = p.hp, rec = p.drRec, lost = p.maxHp - hp1;  // 實際扣的血（重裝甲、厚甲會減）
+      for (let i = 0; i < 60 * (G.delay - 0.1); i++) Game.tickMech(p, 1 / 60);
+      const early = p.hp - hp1;
+      for (let i = 0; i < 60 * 3; i++) Game.tickMech(p, 1 / 60);
+      const back = p.hp - hp1;
+      p.hp = p.maxHp; p.drRec = 0;
+      for (let i = 0; i < 4; i++) { p.iframe = 0; Game.hurtPlayer(25, 'mc', p); }  // 連續挨打（不會死）：灰血到上限
+      const cap = p.drRec, hpEnd0 = p.hp;
+      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.inArena = true; Game.combatWon();
+      const end = p.hp, endRec = p.drRec;
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
-      Game.setModule('shield');
-      const p = Game.player; p.hp = p.maxHp; Game.state = 'play'; Game.resetMechCombat(p);
-      for (let i = 0; i < 60 * 8.1; i++) Game.tickModules(p, 1 / 60);
-      const got1 = p.shield;
-      Game.hurtPlayer(30);
-      return { ok: got1 === 1 && p.hp === p.maxHp && p.shield === 0, got: `護盾 ${got1} 層，被打後 HP ${p.hp}/${p.maxHp}` };
+      const q = Game.player; Game.state = 'play'; q.iframe = 0; q.dashT = 0; Game.hurtPlayer(30, 'mc', q);
+      const other = q.drRec || 0;
+      const ok = Math.abs(rec - lost * G.share) < 0.01 && early === 0 && Math.abs(back - rec) < 0.5 && Math.abs(cap - p.maxHp * G.cap) < 0.01 && endRec === 0 && Math.abs(end - (hpEnd0 + cap)) < 0.01 && other === 0;
+      return { ok, got: `扣 ${lost.toFixed(1)} 血：灰血 ${rec.toFixed(1)}；${G.delay - 0.1} 秒內回 ${early}、之後回 ${back.toFixed(1)}；連續挨打：灰血上限 ${cap.toFixed(1)}（最大 HP ${p.maxHp} 的 ${G.cap * 100}%）；戰鬥結束 ${Math.round(hpEnd0)} → ${Math.round(end)}（灰血剩 ${endRec}）；先鋒號灰血 ${other}` };
     }],
-    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送；衝刺途中穿門不會把門越拉越長；相位跳躍也會開門', M => {
+    ['機體', '幻影號：殘影', '衝刺時在起點留下殘影：附近 400 內的敵人追殘影（400 外照樣追玩家），1.5 秒後消失；其他飛船沒有殘影', M => {
+      M.setup('sandbox', 'wraith', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player;
+      Game.startCombat({ sandbox: true, level: 0, wavesTotal: 99 }); Game.combat.waveTimer = 1e9; Game.state = 'play'; Game.enemies = [];
+      p.dashSX = p.x; p.dashSY = p.y; p.onDash();
+      const d = Game.decoys[0];
+      p.x += 600;
+      const near = new Enemy('brute', d.x + 200, d.y, 1), far = new Enemy('brute', d.x - 500, d.y, 1);
+      const tn = Game.enemyTarget(near), tf = Game.enemyTarget(far);
+      for (let i = 0; i < 60 * (CFG.DECOY.t + 0.1); i++) Game.update(1 / 60);
+      const gone = !Game.decoys.length;
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const q = Game.player; Game.decoys = []; q.dashSX = q.x; q.dashSY = q.y; q.onDash();
+      const none = !Game.decoys.length;
+      return { ok: !!d && tn === d && tf === p && gone && none,
+        got: `衝刺：${d ? '留下殘影' : '沒有殘影（錯誤）'}；200 外的敵人追${tn === d ? '殘影' : '玩家（錯誤）'}；500 外的追${tf === p ? '玩家' : '殘影（錯誤）'}；${CFG.DECOY.t} 秒後${gone ? '消失' : '還在（錯誤）'}；先鋒號${none ? '沒有殘影' : '也有殘影（錯誤）'}` };
+    }],
+    ['機體', '星門號：傳送門', '衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送；衝刺途中穿門不會把門越拉越長', M => {
       M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, x0 = p.x;
       p.dashSX = p.x; p.dashSY = p.y; p.dashT = 0.1; p.vx = 900; p.tickDash();
@@ -1391,12 +1407,7 @@ const MechCheck = {
       let at = null;
       for (let i = 0; i < 20 && at == null; i++) { Game.updateBullets(1 / 60); if (b.portalT) at = b.x; }
       if (at == null || Math.abs(at - q.ax) >= 60) return { ok: false, got: `門在 ${Math.round(q.ax - x0)} 與 ${Math.round(q.bx - x0)}，子彈沒有穿門` };
-      M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
-      Game.setModule('blink');
-      const p2 = Game.player; p2.dashCd = 0; Game.portals = []; Input.dash = true;
-      for (let f = 0; f < 20; f++) { p2.update(1 / 60); p2.tickDash(); }
-      const q2 = Game.portals[0], len = q2 ? Math.round(Math.hypot(q2.bx - q2.ax, q2.by - q2.ay)) : 0;
-      return { ok: len > 130 && len < 170, got: `子彈從 ${Math.round(q.bx - x0)} 的門進去，從 ${Math.round(at - x0)} 出來；相位跳躍${len ? `開出相距 ${len} 的門` : '沒開門'}` };
+      return { ok: true, got: `子彈從 ${Math.round(q.bx - x0)} 的門進去，從 ${Math.round(at - x0)} 出來` };
     }],
     ['地圖物件', '行星', '正對行星的子彈被擋住；從旁邊經過的電漿球被彎過去；旗艦的子彈打到行星會讓它變小、打光崩解；一般敵人的子彈只會被擋住', M => M.all([
       M => {  // 行星：擋子彈、彈弓

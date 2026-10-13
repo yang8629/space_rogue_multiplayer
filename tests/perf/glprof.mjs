@@ -12,12 +12,12 @@ const r = await p.evaluate(async build => {
   SFX.setMuted && SFX.setMuted(true);
   Game.newRun('sandbox', 'vanguard', 'scatter');
   const B = {
-    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('rear', 1, 2), chipId('boomerang', 3, 3), chipId('wallbounce', 1, 1)], socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []], module: 'swarmcore' },
-    intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2, 2), chipId('accel', 3, 2), chipId('orbit', 3, 2), chipId('wallbounce', 2, 1), chipId('quick', 3, 1), chipId('intercept', 3, 2), chipId('dashfire', 1, 3)], socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []], module: 'swarmcore' },
-    trig2: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('trigend', 2, 1)], socks: [[], ['split'], ['split']], module: 'swarmcore' },
+    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('rear', 1, 2), chipId('boomerang', 3, 3), chipId('wallbounce', 1, 1)], socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []] },
+    intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2, 2), chipId('accel', 3, 2), chipId('orbit', 3, 2), chipId('wallbounce', 2, 1), chipId('quick', 3, 1), chipId('intercept', 3, 2), chipId('dashfire', 1, 3)], socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []] },
+    trig2: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('trigend', 2, 1)], socks: [[], ['split'], ['split']] },
   }[build];
   Game.weapon = { id: B.w[0], path: B.w[1], final: B.w[2] }; Game.refreshWeapon();
-  Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; Game.setModule(B.module); Game.recalc();
+  Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; Game.recalc();
   const pl = Game.player; pl.hp = pl.maxHp = 1e9; Game.enemies = [];
   for (let i = 0; i < 40; i++) { const a = i / 40 * 6.283, d = 150 + (i % 5) * 70; const e = new Enemy('brute', pl.x + Math.cos(a) * d * 1.3, pl.y + Math.sin(a) * d * 0.8, 1); e.hp = e.maxHp = 1e9; e.t = { ...e.t, speed: 0, dmg: 0 }; Game.enemies.push(e); }
   const T = {}, wrap = (obj, name, key) => { const f = obj[name]; T[key] = 0; obj[name] = function (...a) { const t = performance.now(); const r = f.apply(this, a); T[key] += performance.now() - t; return r; }; };

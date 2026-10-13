@@ -29,7 +29,7 @@ const Game = {
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mates: [], shooter: null,  // mates：其他玩家的飛船（房主這邊每艘帶 L = 那個人的配裝；slot = 幾號玩家）
   // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
-  parts: {}, module: null, partSlots: 6, cap: 4, mech: mechStats({}, null), objs: [], portals: [],
+  parts: {}, partSlots: 6, cap: 4, mech: mechStats({}), objs: [], portals: [], decoys: [],
   growth: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
@@ -50,6 +50,17 @@ const Game = {
     let best = null, bd = Infinity;
     for (const p of this.players()) { const d = dist2(x, y, p.x, p.y); if (d < bd) { bd = d; best = p; } }
     return best || this.player;
+  },
+  // 敵人的目標：身邊 CFG.DECOY.r 內有殘影（幻影號）就追最近的殘影，不然追最近的玩家
+  enemyTarget(e) {
+    let best = null, bd = CFG.DECOY.r * CFG.DECOY.r;
+    for (const d of this.decoys) { const q = dist2(e.x, e.y, d.x, d.y); if (q < bd) { bd = q; best = d; } }
+    return best || this.nearestPlayer(e.x, e.y);
+  },
+  // 幻影號・殘影：衝刺起點留下一個假目標（打不壞），CFG.DECOY.t 秒後消失；同一個人同時只有一個
+  addDecoy(p, x, y) {
+    this.decoys = this.decoys.filter(d => d.owner !== p);
+    this.decoys.push({ x, y, r: p.r, vx: 0, vy: 0, t: CFG.DECOY.t, owner: p, slot: p === this.player ? Net.mySlot() : p.slot || 0, aim: p.aim, decoy: true });
   },
   // 暫時把 Game 的配裝換成 L（隊友的），執行完再換回來；L 為 null 時就是房主自己
   withLoadout(L, fn) {
@@ -90,7 +101,7 @@ const Game = {
     this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
     this.growth = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
-    this.parts = { ...S.parts }; this.module = null; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
+    this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
@@ -206,8 +217,8 @@ const Game = {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
-    for (const q of this.players()) if (q) q.drRec = 0;  // 修復無人機的可回復量每場重算
-    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
+    for (const q of this.players()) if (q) q.drRec = 0;  // 灰血（堡壘號）每場重算
+    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.decoys = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
     this.kills = 0; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -375,7 +386,7 @@ const Game = {
     this.credits += left;  // 沒吸完的晶體直接入帳（雙人時兩人都拿）
     this.pickups = [];
     const p = this.player;
-    if (!client) for (const q of this.players()) if (q && !q.dead && q.drRec > 0) { q.hp = Math.min(q.maxHp, q.hp + q.drRec); q.drRec = 0; }  // 修復無人機：沒補完的補回
+    if (!client) for (const q of this.players()) if (q && !q.dead && q.drRec > 0) { q.hp = Math.min(q.maxHp, q.hp + q.drRec); q.drRec = 0; }  // 灰血（堡壘號）：戰鬥結束時剩下的回滿回
     if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
     this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
     Events.emit('combatWon', { boss: this.node.type === 'boss' });
@@ -389,15 +400,15 @@ const Game = {
       this.recalc();
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       if (this.sector === this.lastSector() && !MechCheck.running) markChapterCleared(this.chapterId);  // 打完這章最後一隻王：記下通關、開下一章（雙人兩邊各自記）
-      this.victory = { slot, ws, boss: this.bossId, module: bossModuleOf(this.bossId), took: false, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
-      if (this.mode === 'coop' && Net.role === 'host') Net.waitMods(this.coopOn());  // 雙人：等隊友選好二選一、裝上或略過旗艦模組才能前往
+      this.victory = { slot, ws, boss: this.bossId, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
+      if (this.mode === 'coop' && Net.role === 'host') Net.waitMods(this.coopOn());  // 雙人：等隊友選好二選一才能前往
       if (client && bossDone(this.victory)) Net.send({ t: 'moddone' });
       this.state = 'victory';
       this.view();
       return;
     }
     const kind = type === 'elite' ? 'elite' : 'combat';
-    this.reward = { kind, options: kind === 'elite' ? pickN(NORMAL_MODULES.filter(id => id !== this.module), 3) : this.rewardOptions(), bonus: kind === 'elite' ? 15 : 0, reroll: this.shopPrice(15),
+    this.reward = { kind, options: this.rewardOptions(), bonus: kind === 'elite' ? 15 : 0, reroll: this.shopPrice(15),
       slot: kind === 'elite' && this.chain.length < CFG.MAX_SLOTS };  // 精英獎勵多一張「電路擴充」
     this.credits += this.reward.bonus;  // 精英獎勵：雙人時兩人各自拿
     this.state = 'reward';
@@ -448,12 +459,6 @@ const Game = {
     this.recalc();
     return `獲得「${CHIPS[id].name}」，已放入倉庫`;
   },
-  takeModule(id) {  // 精英獎勵：裝上背包模組（取代目前的）
-    if (!MODULES[id]) return;
-    this.setModule(id);
-    Events.emit('upgrade');
-    this.showMap(`裝上背包模組「${MODULES[id].name}」`);  // 背包模組本身就是強化，不算機體強化（不加電路格）
-  },
   pickBossSlot(k) {  // 擊沉旗艦的二選一：電路插槽 +1 或零件格 +1
     const V = this.victory;
     if (!V || V.pick || (k !== 'chain' && k !== 'part') || (k === 'chain' && this.chain.length >= CFG.MAX_SLOTS)) return;
@@ -462,22 +467,6 @@ const Game = {
     this.recalc();
     if (this.runStats) this.runStats.got.push(`${this.here()} ${k === 'chain' ? '插槽 +1' : '零件格 +1'}（旗艦二選一）`);
     Events.emit('upgrade');
-    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
-    this.view();
-  },
-  takeBossModule() {  // 擊沉旗艦：裝上旗艦專屬模組
-    const V = this.victory;
-    if (!V || V.took || !V.module) return;
-    V.took = true;
-    this.setModule(V.module);
-    Events.emit('upgrade');
-    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
-    this.view();
-  },
-  skipBossModule() {  // 雙人的隊友：不裝旗艦模組（房主才能前往）
-    const V = this.victory;
-    if (!V || V.took || V.skip) return;
-    V.skip = true;
     if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
     this.view();
   },
@@ -739,11 +728,10 @@ const Game = {
     };
     return rec;
   },
-  // 機體（遊玩紀錄用）：零件層數、零件格、背包模組、開啟的特性、各晶片的用量成長
+  // 機體（遊玩紀錄用）：零件層數、零件格、開啟的特性、各晶片的用量成長
   mechRecord() {
     const T = this.mech.traits;
     return { parts: Object.fromEntries(PART_IDS.filter(id => this.parts[id]).map(id => [PARTS[id].name, this.parts[id]])), slots: this.partSlots,
-      module: this.module ? MODULES[this.module].name : null,
       traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
       growth: Object.fromEntries(Object.entries(this.growth).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, Math.round(v)])) };
   },
@@ -791,7 +779,7 @@ const Game = {
 
   // ---------- 共用 ----------
   recalc() {
-    this.mech = mechStats(this.parts, this.module, this.wp);  // 先算機體：估算 DPS 會用到（玻璃砲看受到的傷害、重量砲看移動速度）
+    this.mech = mechStats(this.parts, this.wp);  // 先算機體：估算 DPS 會用到（玻璃砲看受到的傷害、重量砲看移動速度）
     this.stats = analyzeChain(this.chain);
     this.passives = computePassives(this.inventory);
     const p = this.player;
@@ -897,15 +885,10 @@ const Game = {
     if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - this.lastSector());  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
     if (!this.freePlay()) dmg *= this.chapter().dmg;  // 章節：受到的傷害再 ×（第一章 1）
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
-    if (M.module === 'endshell' && !p.shellUsed && p.hp - dmg <= 0) {  // 終焉護殼：留 1 HP
-      p.shellUsed = true; dmg = Math.max(0, p.hp - 1); p.iframe = 2;
-      floatText(p.x, p.y - 30, '終焉護殼', '#2ee6a6', true);
-    }
     if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
     if (dmg > 0) { this.onRevenge(p); p.streak = 0; }  // 逆襲開始；無傷連殺歸零
-    if (M.module === 'drone' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.DRONE_CAP, (p.drRec || 0) + dmg * CFG.DRONE_SHARE);  // 修復無人機：這次傷害的一半之後可以補回來
-    this.withLoadout(p.L, () => this.onPlayerHurt(p, sx, sy));
+    if (p.ship.ability === 'gray' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.GRAY.cap, (p.drRec || 0) + dmg * CFG.GRAY.share);  // 堡壘號・灰血：這次傷害的一部分之後可以回來
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
       p.lastHit = cause;
@@ -960,7 +943,7 @@ const Game = {
     if (p.dashT > 0) { p.dashSX = p.x; p.dashSY = p.y; }  // 衝刺途中穿門：起點改成出口，新門不會越拉越長
   },
 
-  // ---------- 機體成長線（零件、背包模組）：房主執行，隊友的飛船用隊友的配裝 ----------
+  // ---------- 機體成長線（零件、飛船能力）：房主執行，隊友的飛船用隊友的配裝 ----------
   maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
   mechOf(p) { return p.L ? p.L.mech : this.mech; },
   wpOf(p) { return p.L ? p.L.wp : this.wp; },
@@ -1133,44 +1116,19 @@ const Game = {
     }
   },
   igniteFrom(e, o) { o.burnDps = Math.max(o.burnT > 0 ? o.burnDps : 0, e.burnDps); o.burnT = Math.max(o.burnT, 3); o.burnAtt = e.burnAtt; o.wild = e.wild; o.wildT = 0; },
-  // 被打到之後：反應裝甲（在打到的那個人的配裝下執行）
-  onPlayerHurt(p, sx, sy) {
-    const M = this.mech;
-    if (M.module === 'reactive') this.explode(p.x, p.y, M.heavy ? 180 : 120, 30, '#ff9f1c', null, { src: 'ship', cr: null, owner: this.shooter || null });
-  },
-  // 背包模組的持續效果（每幀，房主）：護盾回復、修復無人機、重力井、星噬核心
-  tickModules(p, dt) {
-    const M = this.mech, mod = M.module;
+  // 機體的持續效果（每幀，房主）：沒被打的時間、堡壘號的灰血回復
+  tickMech(p, dt) {
     p.calm = (p.calm || 0) + dt;
-    if (mod === 'shield') {
-      const max = M.heavy ? 2 : 1;
-      if (p.shield < max) { p.shieldT = (p.shieldT || 0) + dt; if (p.shieldT >= (M.light ? 4 : 8)) { p.shield++; p.shieldT = 0; } }
-      else p.shieldT = 0;
-    } else p.shield = 0;
-    // 修復無人機：只補「最近受的傷」存下來的可回復量（每次受傷的一半，最多最大 HP 的 30%），不會無限回；戰鬥結束時沒補完的直接補回（見 combatWon）
-    if (mod !== 'drone') p.drRec = 0;
-    else if (p.drRec > 0 && p.calm >= (M.light ? 3 : 5)) {
-      const h = Math.min(p.drRec, (M.heavy ? 16 : 8) * dt, Math.max(0, p.maxHp - p.hp));
+    // 灰血：只回「最近受的傷」存下來的那段（每次受傷的 40%，最多最大 HP 的 25%）；戰鬥結束時剩下的回滿（見 combatWon）
+    if (p.ship.ability !== 'gray') p.drRec = 0;
+    else if (p.drRec > 0 && p.calm >= CFG.GRAY.delay) {
+      const h = Math.min(p.drRec, CFG.GRAY.rate * dt, Math.max(0, p.maxHp - p.hp));
       p.hp += h; p.drRec = p.hp >= p.maxHp ? 0 : p.drRec - h;
-    }
-    // 重力井：身邊的減速場，敵人移動 −40%（重裝甲加成 −60%），敵彈在場內也變慢（見 updateEnemyBullets）
-    p.gravField = mod === 'gravity' ? { R: M.light ? 220 : 150, slow: M.heavy ? 0.6 : 0.4 } : null;
-    if (p.gravField) {
-      const F = p.gravField;
-      for (const e of this.enemies) {
-        if (e.dead || e.spawnT > 0 || dist2(e.x, e.y, p.x, p.y) > F.R * F.R) continue;
-        e.slowBy('grav', F.slow, 0.1);
-      }
-    }
-    if (mod === 'swarmcore' && (p.coreT -= dt) <= 0) {  // 每 6 秒朝四周 6 個方向各用電路開一槍（吃全部晶片效果；環繞不存彈，直接射出）
-      p.coreT = CFG.SWARMCORE.every;
-      const list = runOps(this.stats.ops, 0).map(q => q.orbit ? { ...q, orbit: 0 } : q), n = CFG.SWARMCORE.dirs;
-      if (list.length) for (let i = 0; i < n; i++) spawnShots(list, p.x, p.y, p.aim + i / n * TAU, 0, null);
     }
   },
   // 每場戰鬥開始時重置的機體狀態
   resetMechCombat(p) {
-    p.shield = 0; p.shieldT = 0; p.calm = 0; p.gravT = 6; p.coreT = CFG.SWARMCORE.every; p.shellUsed = false; p.noFireT = 0; p.quenchT = 0;
+    p.shield = 0; p.calm = 0; p.quenchT = 0;
     p.portalCd = 0; p.pullV = null; p.icWs = [];
     p.revengeT = 0; p.streak = 0; p.crowdK = 0;  // 逆襲、無傷連殺、群戰
     p.focusId = null; p.focusK = 0; p.spreadK = 0; p.spreadT = 0; p.grazeK = 0; p.grazeT = 0;  // 專注、分散、擦彈
@@ -1178,7 +1136,7 @@ const Game = {
     p.parryK = 0; p.parryT = 0;  // 格擋流
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
-  // 機體強化（零件 1 層；背包模組不算）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
+  // 機體強化（零件 1 層）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
   mechGain() {
     const k = CFG.MECH_SLOT_EVERY;
     if (!k) return '';
@@ -1205,13 +1163,6 @@ const Game = {
     });
     return true;
   },
-  setModule(id) {
-    const old = this.module;
-    this.module = MODULES[id] ? id : null;
-    this.recalc();
-    if (this.runStats && id) this.runStats.got.push(`${this.here()} 背包模組 ${MODULES[id].name}${old ? `（取代 ${MODULES[old].name}）` : ''}`);
-  },
-
   // 雙人：一方被擊墜 → 等隊友；兩人都被擊墜 → 結束（房主判定）
   // 這個人的統計（房主：自己的 runStats、隊友的 mate.L.R）：倒下、救人次數記在這裡
   statsOf(p) { return p === this.player ? this.runStats : p && p.L ? p.L.R : null; },
@@ -1263,7 +1214,8 @@ const Game = {
       if (!this.player.dead) this.player.update(dt);
       this.updateWaves(dt);
       this.updateEnemies(dt);
-      for (const p of this.players()) this.withLoadout(p.L, () => { this.tickModules(p, dt); this.tickWeaponFx(p, dt); });
+      for (const p of this.players()) this.withLoadout(p.L, () => { this.tickMech(p, dt); this.tickWeaponFx(p, dt); });
+      if (this.decoys.length) { for (const d of this.decoys) d.t -= dt; this.decoys = this.decoys.filter(d => d.t > 0); }  // 殘影
       this.updateFlames(dt); this.updateWildfire(dt); this.updateLinksQuakes(dt); this.updateTrails(dt);
       Objects.update(dt);
       this.updatePortals(dt);
@@ -1301,7 +1253,7 @@ const Game = {
     for (const e of E) {
       if (e.stickT > 0 && (e.stickT -= dt) <= 0) this.detonate(e);  // 黏著的子彈時間到一起爆炸
       if (e.dead) continue;
-      e.update(dt, this.nearestPlayer(e.x, e.y));  // 雙人：追最近的玩家
+      e.update(dt, this.enemyTarget(e));  // 追最近的玩家（附近有殘影就追殘影）
       if (e.spawnT <= 0) for (const p of this.players()) {
         if (e.shieldA != null && this.shieldBlock(e, p) && !this.mechOf(p).traits.ram) this.hurtPlayer(e.t.dmg, e.t.name + '（盾）', p, e.x, e.y);
         const rr = e.r + p.r;
@@ -1885,7 +1837,6 @@ const Game = {
     const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return' && !b.fromIntercept) || b.parry) && b.mode !== 'wait');
     // 攔截子彈照這一幀的路徑分進格子，敵彈只跟附近幾格的比（以前每顆敵彈跟全部攔截子彈比：上千 × 上千）；候選照 I 的順序，結果不變
     if (I.length > 16) IGrid.build(I, q => { const p = q.r + 2; return [Math.min(q.px, q.x) - p, Math.min(q.py, q.y) - p, Math.max(q.px, q.x) + p, Math.max(q.py, q.y) + p]; });
-    const fields = ps.filter(p => p.gravField);  // 重力井：場內的敵彈變慢
     for (const b of this.eBullets) {
       if (b.home > 0) {  // 精英「追蹤彈」：射出後一段時間內轉向最近的玩家（每秒最多 40°）
         b.home -= dt;
@@ -1896,11 +1847,9 @@ const Game = {
           b.vx = Math.cos(na) * s; b.vy = Math.sin(na) * s;
         }
       }
-      let k = 1;
-      for (const p of fields) if (dist2(b.x, b.y, p.x, p.y) < p.gravField.R ** 2) k = Math.min(k, 1 - p.gravField.slow);
-      b.x += b.vx * dt * k; b.y += b.vy * dt * k; b.life -= dt;
+      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
-      if (!Arena.rect && (Arena.f(b.x, b.y) < 0 || Arena.gateCross(b.x - b.vx * dt * k, b.y - b.vy * dt * k, b.x, b.y))) { b.life = 0; continue; }  // 大地圖：敵彈打到牆、閘門就消失
+      if (!Arena.rect && (Arena.f(b.x, b.y) < 0 || Arena.gateCross(b.x - b.vx * dt, b.y - b.vy * dt, b.x, b.y))) { b.life = 0; continue; }  // 大地圖：敵彈打到牆、閘門就消失
       if (Objects.eBulletHit(b)) continue;
       if (I.length && this.interceptHit(b, I.length > 16 ? IGrid.query(b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r) : I)) continue;
       for (const p of ps) {
@@ -1962,5 +1911,5 @@ const THEMES = {
   gunboat: { cost: 3, from: 1 }, worm: { cost: 4, from: 1 }, splitter: { cost: 4, from: 1 },
   shield: { cost: 5, from: 2 }, lurker: { cost: 3, from: 2 }, hive: { cost: 8, from: 3, max: 1 },
 };
-// 擊沉旗艦的勝利畫面：二選一選好了、旗艦模組裝上或略過了（雙人的隊友這時才通知房主可以前往）
-function bossDone(V) { return !!V && !!V.pick && (!V.module || !!V.took || !!V.skip); }
+// 擊沉旗艦的勝利畫面：二選一選好了（雙人的隊友這時才通知房主可以前往）
+function bossDone(V) { return !!V && !!V.pick; }

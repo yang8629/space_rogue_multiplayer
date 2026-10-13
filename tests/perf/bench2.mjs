@@ -15,12 +15,12 @@ const rows = await page.evaluate(async build => {
   Game.newRun('sandbox', 'vanguard', 'scatter');
   const B = {
     boom: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('rear', 1, 2), chipId('boomerang', 3, 3), chipId('wallbounce', 1, 1)],
-      socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []], module: 'swarmcore' },
+      socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []] },
     intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2, 2), chipId('accel', 3, 2), chipId('orbit', 3, 2), chipId('wallbounce', 2, 1), chipId('quick', 3, 1), chipId('intercept', 3, 2), chipId('dashfire', 1, 3)],
-      socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []], module: 'swarmcore' },
+      socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []] },
   }[build];
   Game.weapon = { id: B.w[0], path: B.w[1], final: B.w[2] }; Game.refreshWeapon();
-  Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; if (B.module) Game.setModule(B.module); Game.recalc();
+  Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; Game.recalc();
   const p = Game.player; p.hp = p.maxHp = 1e9;
   Game.enemies = [];
   const pos = [[260, -120], [300, 60], [220, 180], [-250, 100], [-280, -150], [0, -260], [80, 240], [-60, 220], [380, -20], [-380, 0]];

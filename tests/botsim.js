@@ -143,7 +143,7 @@ if (process.argv.includes('--weapons')) {
 
 // 打一場（通用）：cfg = 戰鬥設定；setup() 在開打前調整配裝；real = 用真的 HP（會死）
 function run1(w, chain, s, cfg, setup, real, botFn = bot) {  // botFn：電腦（預設這個檔案的；--value／--upval 用 bot/ 的熟練玩家）
-  seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {}; G.module = null;
+  seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {};
   if (T_.splitChain) {  // 組件寫在晶片後面 = 插在它的插座上；沒有插座數的晶片給 2 個
     const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(String(id).split(/[#~]/)[0], T_.levelOf(id), 2) : id));
     G.chain = r.chain; G.socks = r.socks;
@@ -160,12 +160,12 @@ function run1(w, chain, s, cfg, setup, real, botFn = bot) {  // botFn：電腦�
 }
 
 // --routeval：路線價值表（2026-10-09；取代只分武器的單晶片價值表）
-//   每把武器 10 條路線（none = 沒升級、A／B／C = 只升第一段、A0～C1 = 6 個終極升級）× 每樣東西：晶片、零件 +1／+2／+4 層（part:armor:2）、背包模組（mod:drone）
+//   每把武器 10 條路線（none = 沒升級、A／B／C = 只升第一段、A0～C1 = 6 個終極升級）× 每樣東西：晶片、零件 +1／+2／+4 層（part:armor:2）
 //   量法：照難度隨機配一組基本配裝（晶片少一格、零件、路線），同一組配裝、同一個亂數種子「加這樣東西」和「不加」各打一般戰＋精英戰，
 //     飛船不會死，比清場時間和掉血（電腦是整局模擬的熟練玩家 bot/）。單位跟晶片價值表一樣：速度 = 不加的時間 ÷ 加的時間、掉血 = 加的掉血 ÷ 不加的掉血
 //     掉血用「最大 HP 的幾 %」記（lost／lost0），所以重裝甲 +20 HP 這種加血量的東西也算得到
 //   難度：none 量 1／3／6，只升第一段量 6（第 1 星區後段～第 2 星區前段），終極升級量 8（大約第 2 星區中段，升滿的時候）
-//   改玩法的晶片（有成長的）、零件、模組每條路線都量；數值晶片、組件、觸發器跟路線關係小，只量 none（電腦查不到路線的就用 none 的）
+//   改玩法的晶片（有成長的）、零件每條路線都量；數值晶片、組件、觸發器跟路線關係小，只量 none（電腦查不到路線的就用 none 的）
 //   存 routevalue_<武器>.json：{ 路線: { 難度: { 東西: { t, lost, t0, lost0, n } } } }（原始加總，只重跑某幾樣時合併進去）
 //   用法：node botsim.js --routeval --w=laser --n=6 [--items=sticky,part:armor:1] [--routes=none,A0]
 if (process.argv.includes('--routeval')) {
@@ -174,7 +174,7 @@ if (process.argv.includes('--routeval')) {
   const TIER = { 1: { chips: 1, lv2: 0, parts: 0 }, 3: { chips: 3, lv2: 0.2, parts: 1 }, 6: { chips: 5, lv2: 0.5, parts: 3 }, 8: { chips: 6, lv2: 0.5, parts: 4 } };
   const POOL = NORMAL_IDS.filter(id => !CH[id].comp);  // 基本配裝的晶片（組件由 sortChain 插）
   const PLAY = NORMAL_IDS.filter(id => CH[id].grow);
-  const ITEMS_ROUTE = [...PLAY, ...PART_IDS.flatMap(k => [1, 2, 4].map(n => `part:${k}:${n}`)), ...Object.keys(MODULES).map(k => 'mod:' + k)];
+  const ITEMS_ROUTE = [...PLAY, ...PART_IDS.flatMap(k => [1, 2, 4].map(n => `part:${k}:${n}`))];
   const ITEMS_NONE = [...NORMAL_IDS.filter(id => !CH[id].grow), ...ITEMS_ROUTE];
   const SOFF = +(arg('seedoff') || 0);  // --seedoff=6：換一批配裝和亂數（量雜訊用）
   const only = arg('items') ? arg('items').split(',') : null, onlyR = arg('routes') ? arg('routes').split(',') : null;
@@ -190,10 +190,10 @@ if (process.argv.includes('--routeval')) {
       for (const L of tiers) {
         const tier = TIER[L], cell = ((out[rk] = out[rk] || {})[L] = out[rk][L] || {});
         const baseCache = new Map();
-        const fight = (chain, parts, mod, s) => {
+        const fight = (chain, parts, s) => {
           let t = 0, lost = 0;
           for (const cfg of [{ level: L, wavesTotal: 3, elites: 0 }, { level: L, wavesTotal: 2, elites: 1 }]) {
-            const r = run1(w, chain, s, cfg, () => { B.resetBot(); G.weapon = { id: w, path, final: fi }; G.refreshWeapon(); G.parts = { ...parts }; G.module = mod; B.sortChain(); }, false, B.bot);
+            const r = run1(w, chain, s, cfg, () => { B.resetBot(); G.weapon = { id: w, path, final: fi }; G.refreshWeapon(); G.parts = { ...parts }; B.sortChain(); }, false, B.bot);
             t += r.t; lost += r.lost / r.maxHp * 100;  // 掉血 = 最大 HP 的幾 %（加血量的零件才算得到價值）
           }
           return { t, lost };
@@ -207,12 +207,11 @@ if (process.argv.includes('--routeval')) {
             const base = ['weapon', ...ids.map(id => Math.random() < tier.lv2 ? leveledId(id, 2) : id)];
             const parts = {}; for (let k = 0; k < tier.parts; k++) { const q = pick(PART_IDS); parts[q] = (parts[q] || 0) + 1; }
             const key = base.join() + '|' + JSON.stringify(parts) + '|' + s;
-            if (!baseCache.has(key)) baseCache.set(key, fight(base, parts, null, s));
+            if (!baseCache.has(key)) baseCache.set(key, fight(base, parts, s));
             const b0 = baseCache.get(key);
             let r;
-            if (chip) r = fight([...base, chip], parts, null, s);
-            else if (it.startsWith('part:')) { const [, k, n] = it.split(':'), p2 = { ...parts }; p2[k] = (p2[k] || 0) + +n; r = fight(base, p2, null, s); }
-            else r = fight(base, parts, it.slice(4), s);
+            if (chip) r = fight([...base, chip], parts, s);
+            else { const [, k, n] = it.split(':'), p2 = { ...parts }; p2[k] = (p2[k] || 0) + +n; r = fight(base, p2, s); }
             acc.t += r.t; acc.lost += r.lost; acc.t0 += b0.t; acc.lost0 += b0.lost; acc.n++; acc.s.push([+r.t.toFixed(2), +r.lost.toFixed(2), +b0.t.toFixed(2), +b0.lost.toFixed(2)]);
           }
           cell[it] = acc;
@@ -223,7 +222,7 @@ if (process.argv.includes('--routeval')) {
     }
     if (!process.env.TABLE_DIR && !process.env.GAME_DIR) require('./exportvalue').exportValue();  // 遊戲裡「數值圖表」的兩張模擬表
     // 印每條路線分數最高的 5 樣（速度 ÷ √掉血）
-    const nm = it => CH[it] ? CH[it].name : it.startsWith('part:') ? PARTS[it.split(':')[1]].name + ' +' + it.split(':')[2] : MODULES[it.slice(4)].name;
+    const nm = it => CH[it] ? CH[it].name : PARTS[it.split(':')[1]].name + ' +' + it.split(':')[2];
     for (const [rk, path, fi] of routes) {
       const R = out[rk]; if (!R) continue;
       const L = Object.keys(R).map(Number).pop(), C = R[L];
@@ -434,7 +433,7 @@ if (process.argv.includes('--value')) {
     // 要量的組件（onW）先不放進去：其他晶片照原本的插座數排好，再多給武器插座、把要量的組件插進多出來的空插座
     //   （以前是先多給插座再排，電腦會把其他組件插進多的那格，要量的組件硬插進去時把它擠掉 → 量到的是「這個組件 vs 被擠掉的組件」）
     const onW = opt.onW || [];
-    seed(3000 + s); G.newRun('run', 'vanguard', w); G.chain = ['weapon', ...chips.filter(c => !onW.includes(c)), null]; G.parts = {}; G.module = null;
+    seed(3000 + s); G.newRun('run', 'vanguard', w); G.chain = ['weapon', ...chips.filter(c => !onW.includes(c)), null]; G.parts = {};
     G.wSock = cfg.level < 7 ? 0 : cfg.level < 14 ? 1 : 2;  // 武器插座：照難度算打完幾隻王（第 1 星區 0 個、第 2 星區 1 個、第 3 星區 2 個）
     globalThis.__KEEP0 = opt.keep0 || null;
     setup(); RSB.sortChain();
@@ -599,10 +598,9 @@ if (process.argv.includes('--build')) {
     console.log(JSON.stringify(out));
     process.exit(0);
   }
-  if (process.argv.includes('--mechscan')) {  // 零件、模組：配裝的晶片和武器照樣隨機，只把零件／模組換成要測的那一種
-    const CONF = [['（沒有零件、模組）', () => {}],
-      ...Object.keys(PARTS).flatMap(k => [2, 4].map(n => [`${PARTS[k].name} ${n} 層`, () => { G.parts = { [k]: n }; }])),
-      ...Object.keys(MODULES).map(k => [`模組 ${MODULES[k].name}`, () => { G.parts = {}; G.module = k; }])];
+  if (process.argv.includes('--mechscan')) {  // 零件：配裝的晶片和武器照樣隨機，只把零件換成要測的那一種
+    const CONF = [['（沒有零件）', () => {}],
+      ...Object.keys(PARTS).flatMap(k => [2, 4].map(n => [`${PARTS[k].name} ${n} 層`, () => { G.parts = { [k]: n }; }]))];
     console.log(`零件／模組：難度 3、6 的隨機配裝（晶片、武器升級照樣隨機），五把武器 × ${N} 組 × 一般戰＋精英戰，真的 HP。欄位：清場秒數（活著打完的）｜掉血｜陣亡率`);
     for (const [name, apply] of CONF.filter(([nm]) => !arg('only') || arg('only').split(',').some(k => nm.includes(k)))) {
       let t = 0, tn = 0, lost = 0, dead = 0, n = 0;
@@ -639,13 +637,12 @@ if (process.argv.includes('--build')) {
   process.exit(0);
 }
 
-// --mech：零件（2 層、4 層）和背包模組，用真的 HP 打難度 6 的一般戰＋第一隻旗艦
+// --mech：零件（2 層、4 層），用真的 HP 打難度 6 的一般戰＋第一隻旗艦
 if (process.argv.includes('--mech')) {
   const FIGHTS = [{ level: 6, wavesTotal: 3, elites: 0 }, { level: 4, wavesTotal: 2, elites: 1 }];
   const CHAIN = arg('chain') ? ['weapon', ...arg('chain').split(','), null] : ['weapon', null, null, null];
-  const CONF = arg('chain') ? [[arg('chain'), () => {}]] : [['（沒有零件、模組）', () => {}],
-    ...Object.keys(PARTS).flatMap(k => [2, 4].map(n => [`${PARTS[k].name} ${n} 層`, () => { G.parts = { [k]: n }; }])),
-    ...Object.keys(MODULES).map(k => [`模組 ${MODULES[k].name}`, () => { G.module = k; }])];
+  const CONF = arg('chain') ? [[arg('chain'), () => {}]] : [['（沒有零件）', () => {}],
+    ...Object.keys(PARTS).flatMap(k => [2, 4].map(n => [`${PARTS[k].name} ${n} 層`, () => { G.parts = { [k]: n }; }]))];
   console.log(`難度 6 一般戰＋難度 4 精英戰，真的 HP，五把武器 × ${N} 場。欄位：清場秒數（只算活著打完的）｜平均掉血（最大 HP）｜陣亡率`);
   for (const [name, setup] of CONF) {
     let t = 0, tn = 0, lost = 0, dead = 0, n = 0, mh = 0;

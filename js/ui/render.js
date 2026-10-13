@@ -229,8 +229,8 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 20, hpW + 4, 18);
   ctx.fillStyle = p.hp / p.maxHp > 0.3 ? '#4cc9f0' : '#ff4d6d';
   ctx.fillRect(22, 22, hpW * p.hp / p.maxHp, 14);
-  if (p.drRec > 0 && p.hp < p.maxHp) {  // 修復無人機：之後還能補回來的血量（淡色接在血條後面）
-    ctx.fillStyle = 'rgba(157, 255, 107, 0.35)';
+  if (p.drRec > 0 && p.hp < p.maxHp) {  // 灰血（堡壘號）：之後還能補回來的血量（淡色接在血條後面）
+    ctx.fillStyle = 'rgba(176, 186, 206, 0.55)';  // 灰色
     ctx.fillRect(22 + hpW * Math.max(0, p.hp) / p.maxHp, 22, hpW * Math.min(p.drRec, p.maxHp - Math.max(0, p.hp)) / p.maxHp, 14);
   }
   ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
@@ -277,7 +277,7 @@ function drawHUD() {
   ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px Segoe UI';
   ctx.fillText(`◆ ${Game.credits}`, 20, 72);
   ctx.fillStyle = p.ship.color; ctx.font = 'bold 12px Microsoft JhengHei';
-  ctx.fillText(p.ship.name + (Game.module ? `　${MODULES[Game.module].icon} ${MODULES[Game.module].name}${p.shield ? ' ' + '⛨'.repeat(p.shield) : ''}` : ''), 72, 72);
+  ctx.fillText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 72, 72);  // 護盾層數
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
     const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;
     ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, y, mw + 4, 12);

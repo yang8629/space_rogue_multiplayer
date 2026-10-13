@@ -32,7 +32,7 @@ ${T ? Object.entries(T).map(([k, v]) => `globalThis.${k} = ${JSON.stringify(v)};
 ${read('fight.js')}
 ${read('value.js')}
 ${read('pick.js')}
-return { rvItem, rvScore, partScore, moduleScore, stallSecs: () => G.time - stall.t, setRoute, bot, baseBot, resetBot, hasChip, bOf, equip, sortChain, chipScore, rewardScore, pickReward, pickModule, shopBuy, chooseNode, bossPick, handle, closeEditor, buildScore, trial, partGain, moduleGain, pickUpgrade, upgradeScore };
+return { rvItem, rvScore, partScore, stallSecs: () => G.time - stall.t, setRoute, bot, baseBot, resetBot, hasChip, bOf, equip, sortChain, chipScore, rewardScore, pickReward, shopBuy, chooseNode, bossPick, handle, closeEditor, buildScore, trial, partGain, pickUpgrade, upgradeScore };
 })()`;
 }
 

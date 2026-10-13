@@ -82,7 +82,7 @@ function splitDamage(amount, att, rateCr) {
 }
 function dmgKeyName(key) {
   if (key === 'weapon') return '武器・' + weaponTitle(Game.weapon);
-  if (key === 'ship') return '機體（零件・模組）';
+  if (key === 'ship') return '機體（零件）';
   if (key === 'comet') return '彗星（打爆的碎片）';
   const d = CHIPS[key];
   return d ? d.name : key;

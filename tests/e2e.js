@@ -86,7 +86,6 @@ function finishNode(H) {
   const G = H.Game;
   switch (G.state) {
     case 'reward':
-      if (G.reward.kind === 'elite') { G.takeModule(G.reward.options[0]); break; }
       G.takeReward(G.reward.options.find(id => G.canAcquire(id)) || null); if (G.state === 'editor') G.toggleEditor(); break;
     case 'workshop': G.wsPick(G.ws.options[0]); G.showMap(); break;
     case 'shop': case 'blackhole': case 'armory': G.showMap(); break;
@@ -161,7 +160,7 @@ while (!sector2 && guard++ < 40) {
     ok(!HA.Game.inArena && !HB.Game.inArena, `${type} won on both sides (host ${HA.Game.state}, client ${HB.Game.state})`);
     if (type === 'boss') {
       ok(HA.Game.state === 'victory' && HB.Game.state === 'victory', 'both see victory');
-      // 旗艦二選一（電路插槽 +1／零件格 +1，各選各的）＋旗艦模組：房主要等隊友選好、裝上或略過才能前往
+      // 旗艦二選一（電路插槽 +1／零件格 +1，各選各的）：房主要等隊友選好才能前往
       const pA0 = HA.Game.partSlots, pB0 = HB.Game.partSlots;
       const btn = (act, arg) => ({ dataset: { act, arg }, disabled: false });
       HA.Screen.clickLock = 0; HB.Screen.clickLock = 0;
@@ -169,16 +168,14 @@ while (!sector2 && guard++ < 40) {
       HA.Screen.act(btn('next')); pump();
       const blockPick = HA.Game.sector === 1 && String(HA.Screen.el.innerHTML).includes('先選一個獎勵');
       HA.Screen.act(btn('bossslot', 'chain')); pump();
-      const waited = HA.Net.modWaiting() && HB.Game.victory.module && String(HB.Screen.el.innerHTML).includes('data-act="modskip"');
+      const waited = HA.Net.modWaiting() && String(HB.Screen.el.innerHTML).includes('data-act="bossslot"');
       HA.Screen.act(btn('next')); pump();
       const blocked = HA.Game.sector === 1 && String(HA.Screen.el.innerHTML).includes('等隊友選好獎勵');
-      HB.Screen.act(btn('modskip')); pump(); step(1);
-      const stillWait = HA.Net.modWaiting();  // 隊友略過了模組，但還沒選二選一
       HB.Screen.act(btn('bossslot', 'part')); pump(); step(1);
       ok(unpicked && HA.Game.chain.length === sA0 + 1 && HA.Game.partSlots === pA0 && HB.Game.chain.length === sB0 && HB.Game.partSlots === pB0 + 1,
         `boss pick: host chain ${sA0} → ${HA.Game.chain.length} (parts ${pA0} → ${HA.Game.partSlots}), client parts ${pB0} → ${HB.Game.partSlots} (chain ${sB0} → ${HB.Game.chain.length})`);
-      ok(blockPick && waited && blocked && stillWait && !HA.Net.modWaiting() && HB.Game.victory.skip,
-        `host waits for own pick + teammate's pick and module (pick block ${blockPick}, waited ${!!waited}, blocked ${blocked}, still waiting after skip ${stillWait}, after pick ${HA.Net.modWaiting()})`);
+      ok(blockPick && waited && blocked && !HA.Net.modWaiting(),
+        `host waits for own pick + teammate's pick (pick block ${blockPick}, waited ${!!waited}, blocked ${blocked}, after pick ${HA.Net.modWaiting()})`);
       HA.Game.nextSector(); pump(); step(3);
       ok(HB.Game.sector === 2 && HA.Game.sector === 2 && HA.Game.bossId === HB.Game.bossId &&
         JSON.stringify(HA.Net.packMap(HA.Game.map)) === JSON.stringify(HB.Net.packMap(HB.Game.map)), 'sector 2 map synced');
@@ -189,8 +186,8 @@ while (!sector2 && guard++ < 40) {
   both(finishNode); pump(); step(3);
 }
 const np = P => ["armor", "larmor", "booster", "sink", "sensor"].map(k => (P && P[k]) || 0).join(",");
-ok(np(HA.Game.mates[0].L.parts) === np(HB.Game.parts) && HA.Game.mates[0].L.module === HB.Game.module && HA.Game.mates[0].L.partSlots === HB.Game.partSlots,
-  `client parts/module synced to host (client ${JSON.stringify(HB.Game.parts)} ${HB.Game.module} / ${HB.Game.partSlots}; host sees ${JSON.stringify(HA.Game.mates[0].L.parts)} ${HA.Game.mates[0].L.module} / ${HA.Game.mates[0].L.partSlots})`);
+ok(np(HA.Game.mates[0].L.parts) === np(HB.Game.parts) && HA.Game.mates[0].L.partSlots === HB.Game.partSlots,
+  `client parts synced to host (client ${JSON.stringify(HB.Game.parts)} / ${HB.Game.partSlots}; host sees ${JSON.stringify(HA.Game.mates[0].L.parts)} / ${HA.Game.mates[0].L.partSlots})`);
 ok(sector2, `reached sector 2 (${fights} fights, ${drawn} drawn votes)`);
 const dA = Object.values(HA.Game.runStats.dmg).reduce((x, y) => x + y, 0), dM = Object.values(HA.Game.mates[0].L.R.dmg).reduce((x, y) => x + y, 0);
 const dB = Object.values(HB.Game.runStats.dmg).reduce((x, y) => x + y, 0);

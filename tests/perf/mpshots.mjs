@@ -41,8 +41,8 @@ await H.p.evaluate(id => Net.vote(id), nid); await C.p.evaluate(id => Net.vote(i
 await wait(3500);
 console.log('節點', await H.p.evaluate(() => Game.state + ' ' + (Game.node && Game.node.type)), await C.p.evaluate(() => Game.state));
 // 擺場景：兩邊的配裝（零件、模組）、隊友站在房主旁邊；房主那邊放一排敵人（列隊蟲、王、各種狀態）
-await C.p.evaluate(() => { Game.parts = { armor: 2, sink: 2, sensor: 1, booster: 1, larmor: 1 }; Game.setModule('shield'); Game.recalc(); Net.sendLoadout && Net.sendLoadout(); Game.player.hp = Game.player.maxHp = 1e9; });
-await H.p.evaluate(() => { Game.parts = { armor: 1, sink: 1 }; Game.setModule('gravity'); Game.recalc(); Game.player.hp = Game.player.maxHp = 1e9; });
+await C.p.evaluate(() => { Game.parts = { armor: 2, sink: 2, sensor: 1, booster: 1, larmor: 1 }; Game.recalc(); Net.sendLoadout && Net.sendLoadout(); Game.player.hp = Game.player.maxHp = 1e9; });
+await H.p.evaluate(() => { Game.parts = { armor: 1, sink: 1 }; Game.recalc(); Game.player.hp = Game.player.maxHp = 1e9; });
 await wait(400);
 await H.p.evaluate(() => {
   const p = Game.player, A = Arena;
@@ -56,7 +56,7 @@ await H.p.evaluate(() => {
 });
 await C.p.evaluate(() => { window.__hold = setInterval(() => { const q = Game.player; if (Game.mates[0]) { q.x = Game.mates[0].x + 60; q.y = Game.mates[0].y + 20; } }, 5); });
 await wait(1500);
-const info = async X => X.p.evaluate(() => ({ state: Game.state, enemies: Game.enemies.length, worms: Game.enemies.filter(e => e.type === 'worm').length, mate: !!Game.mates[0], mateMod: Game.mates[0] && (Game.mates[0].module || (Game.mates[0].L && Game.mates[0].L.module)), gl: window.GLR ? GLR.on : null }));
+const info = async X => X.p.evaluate(() => ({ state: Game.state, enemies: Game.enemies.length, worms: Game.enemies.filter(e => e.type === 'worm').length, mate: !!Game.mates[0], gl: window.GLR ? GLR.on : null }));
 console.log('房主', JSON.stringify(await info(H)));
 console.log('隊友', JSON.stringify(await info(C)));
 const shots = [];

@@ -5,7 +5,7 @@
 // =====================================================================
 // SCREENS — DOM 畫面（標題 / 航圖 / 獎勵 / 商店 / 結算）
 // =====================================================================
-// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、組件金、機體強化（零件、背包模組）銀白
+// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、組件金、機體強化（零件）銀白
 const CARD_CAT = { chip: '晶片', comp: '組件', mech: '機體強化' };
 const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 
@@ -29,13 +29,6 @@ function sockLine(id) {
   return `<div class="ty sockln">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}${P ? `<br>產物：${P}` : ''}</div>`;
 }
 
-// 背包模組卡片：效果、代價（紅）、重裝甲／加速器 2 層以上的加成；band：跟晶片混在一起選的時候標「機體強化」
-function moduleCard(id, footer = '', band = false) {
-  const M = MODULES[id];
-  return `<div class="card cat-mech">${band ? catBand('mech') : ''}
-    <div class="ttl">${M.icon} ${M.name}${M.boss ? '<span class="tag boss">旗艦專屬</span>' : ''}</div>
-    <div class="ds">${moduleLine(id)}</div>${footer}</div>`;
-}
 // 零件卡片：名稱＋層數（圓點，4 層開滿）、每層效果（圖示）、2／4 層特性（已開啟的亮起來）
 function partCard(id, footer = '', parts = Game.parts, band = false) {
   const P = PARTS[id], n = (parts && parts[id]) || 0;
@@ -61,7 +54,7 @@ const Screen = {
     const p = Game.player;
     return `<div class="row"><span class="pill">${statIcon('hp')}${Math.ceil(p.hp)} / ${p.maxHp}</span>
       <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體每人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
-      <span class="pill" title="零件已用／零件格">${statIcon('slots')}零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>${Game.module ? `<span class="pill">${MODULES[Game.module].icon} ${MODULES[Game.module].name}</span>` : ''}
+      <span class="pill" title="零件已用／零件格">${statIcon('slots')}零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>
       <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
   // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
@@ -114,23 +107,13 @@ const Screen = {
       case 'bhpick': Game.bhToggle(arg); break;
       case 'bhfuse': Game.bhFuse(); break;
       case 'bossslot': Game.pickBossSlot(arg); break;
-      case 'next': {  // 還沒裝上旗艦模組：先提醒一次（可以勾「不再提醒」）
+      case 'next': {
         const V = Game.victory;
         if (V && !V.pick) { this.victory(); break; }  // 二選一還沒選
-        if (Net.modWaiting() && Game.coopOn()) { this.victory(); break; }  // 雙人：隊友還沒裝上或略過旗艦模組
-        let warn = true;
-        try { warn = localStorage.getItem('noModWarn') !== '1'; } catch (e) {}
-        if (V && V.module && !V.took && warn) this.victory(true); else Game.nextSector();
+        if (Net.modWaiting() && Game.coopOn()) { this.victory(); break; }  // 雙人：隊友還沒選好旗艦獎勵
+        Game.nextSector();
         break;
       }
-      case 'nextok': {
-        const cb = document.getElementById('noModWarn');
-        if (cb && cb.checked) try { localStorage.setItem('noModWarn', '1'); } catch (e) {}
-        if (Net.modWaiting() && Game.coopOn()) this.victory(); else Game.nextSector();
-        break;
-      }
-      case 'nextno': this.victory(); break;
-      case 'modskip': Game.skipBossModule(); break;
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
       case 'refresh': Screen.hardRefresh(); break;
@@ -144,8 +127,6 @@ const Screen = {
       case 'copyone': Screen.copyOne(+arg); break;
       case 'heal': Game.shopHeal(); break;
       case 'cap': Game.buyCap(); break;
-      case 'module': Game.takeModule(arg); break;
-      case 'bossmod': Game.takeBossModule(); break;
       case 'wspick': Game.wsPick(arg); break;
       case 'wsfrom': Game.wsFrom(arg); break;
       case 'wsto': Game.wsTo(arg); break;
@@ -188,7 +169,7 @@ const Screen = {
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
-        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件，或星門號的傳送門），之後的成長都靠零件和背包模組。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
+        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件）加上專屬能力（灰血、殘影、傳送門），之後的成長靠零件。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
       <div class="cards left">${cards}</div></div>`);
   },
@@ -415,19 +396,17 @@ const Screen = {
       <div class="ty" style="color:#2ee6a6">⊞ 電路擴充</div><div class="ttl">插槽 +1</div>
       <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
       <button data-act="slot" data-arg="reward">選擇</button></div>`;
-    const cards = R.kind === 'elite'
-      ? R.options.map(id => moduleCard(id, `<button data-act="module" data-arg="${id}">裝上${Game.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>`)).join('') + (R.slot ? slotCard() : '')
-      : R.options.map(id => {
+    const cards = R.options.map(id => {
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
         return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
       }
       const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
       return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
-    }).join('');
+    }).join('') + (R.slot ? slotCard() : '');  // 精英獎勵多一張「電路擴充」
     this.show(`<div class="scr">
-      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：背包模組' : R.kind === 'start' ? `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）` : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
-        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}${R.kind === 'elite' ? '背包模組只有 1 格，換上新的舊的就沒了。重裝甲、加速器 ≥ 2 層時模組有額外加成。' : '獲得的晶片會放入倉庫，按 Tab 裝上電路。'}</div></div>${this.status()}</div>
+      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：三選一（或電路擴充）' : R.kind === 'start' ? `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）` : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
+        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}${R.bonus ? `額外獎勵 ◆ +${R.bonus}　` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
@@ -536,14 +515,11 @@ const Screen = {
       ${run ? '<div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div><div id="copyBox"></div>' : ''}</div>`);
   },
 
-  victory(askMod = false) {  // askMod：按了前往但還沒裝上旗艦模組 → 先確認
+  victory() {
     const V = Game.victory, boss = ENEMY_TYPES[V.boss || Game.bossId];
     const cleared = Game.chapterDone() && !Game.isEndless();  // 剛打完這章最後一個星區：章節完成
     const reward = `獎勵：◆ +50${!V.slot && V.pick ? '　· <b style="color:#9fe8ff">零件格 +1</b>（電路插槽已達上限）' : ''}${V.ws ? `　· <b style="color:#ffd166">武器插座 +1（${Game.wSock} 個）</b>` : ''}`;
-    const skipBtn = Game.isClient() ? '<button data-act="modskip">略過</button>' : '';  // 雙人的隊友：房主等你裝上或略過才能前往
-    const mod = V.module ? `<div class="cards" style="justify-content:center">${moduleCard(V.module, V.took ? '<button disabled>已裝上</button>' : V.skip ? '<button disabled>已略過</button>'
-      : `<button data-act="bossmod">裝上${Game.module && Game.module !== V.module ? `（取代 ${MODULES[Game.module].name}）` : ''}</button>${skipBtn}`)}</div>` : '';
-    const wait = !Game.isClient() && Net.modWaiting() && Game.coopOn();  // 房主：隊友還沒選好二選一、裝上或略過旗艦模組
+    const wait = !Game.isClient() && Net.modWaiting() && Game.coopOn();  // 房主：隊友還沒選好旗艦獎勵
     // 二選一：電路插槽 +1（多一格放晶片）或零件格 +1（多疊一層零件）；電路已滿時直接給零件格
     const pk = (k, icon, name, note, col) => `<button class="big" data-act="bossslot" data-arg="${k}"${V.pick ? ' disabled' : ''} style="min-width:230px;line-height:1.5${V.pick === k ? `;opacity:1;border-color:${col};box-shadow:0 0 14px ${col}` : ''}"><b style="color:${col}">${icon} ${name}</b>${V.pick === k ? ' ✓' : ''}<br><small style="color:#8fa3d9">${note}</small></button>`;
     const pick = !V.slot || V.pick === 'lost' ? '' : `<div class="sub" style="margin-bottom:4px;color:${V.pick ? '#8fa3d9' : '#ffd166'}">${V.pick ? '已選好' : '二選一：'}</div><div class="row" style="margin-top:0">
@@ -556,14 +532,10 @@ const Screen = {
       : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
     this.show(`<div class="scr title-wrap">${head}
       ${pick}
-      ${mod}
       ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
-      ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${!V.pick ? '👥 房主在等你：先選二選一的獎勵' : V.module && !V.took && !V.skip ? '👥 房主在等你：裝上旗艦模組，或按「略過」' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : askMod ? `
-      <div class="sub" style="color:#ffd166">還沒裝上旗艦模組「${MODULES[V.module].name}」，離開這個畫面就拿不到了。確定要前往？</div>
-      <div class="row"><button class="big" data-act="nextok">確定前往</button><button class="big" data-act="nextno">返回</button></div>
-      <div class="row" style="margin-top:0"><label style="cursor:pointer"><input type="checkbox" id="noModWarn"> 不再提醒</label></div>` : `
-      ${!V.pick ? '<div class="sub" style="color:#ffd166">先選一個獎勵才能前往</div>' : ''}${wait ? '<div class="sub" style="color:#ff9dbd">👥 等隊友選好獎勵、裝上或略過旗艦模組…</div>' : ''}
+      ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${!V.pick ? '👥 房主在等你：先選二選一的獎勵' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : `
+      ${!V.pick ? '<div class="sub" style="color:#ffd166">先選一個獎勵才能前往</div>' : ''}${wait ? '<div class="sub" style="color:#ff9dbd">👥 等隊友選好獎勵…</div>' : ''}
       <div class="row"><button class="big" data-act="next"${wait || !V.pick ? ' style="opacity:.45"' : ''}>${cleared ? '繼續無盡模式' : Game.isEndless() ? `前往星區 ${Game.sector + 1}（無盡）` : `前往星區 ${Game.sector + 1}`}</button>
         <button class="big" data-act="finish">結束遠征</button></div>`}
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);

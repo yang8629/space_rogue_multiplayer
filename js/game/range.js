@@ -61,7 +61,7 @@ const Range = {
       G.weapon = { id: 'scatter', path: 'A', final: 0 }; G.refreshWeapon();
       G.chain = ['weapon', chipId('rear', 2, 2), chipId('accel', 3, 2), chipId('orbit', 3, 2), chipId('wallbounce', 2, 1), chipId('intercept', 3, 2), chipId('dashfire', 1, 3)];
       G.socks = [['mirror', 'split'], ['shock'], ['ignite'], [], [], [], []];
-      G.wSock = Math.max(G.wSock || 0, 3); G.setModule('swarmcore'); G.recalc();
+      G.wSock = Math.max(G.wSock || 0, 3); G.recalc();
       this.ringT = 1;
       floatText(p.x, p.y - 30, '已換上爆量配裝（按住射擊）', '#ff9f1c', true);
     }

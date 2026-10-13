@@ -17,14 +17,13 @@ class Player {
     this.dashT = 0; this.dashCd = 0; this.dashA = 0; this.overdrive = 0; this.target = null;
     this.reviveT = 0;  // 雙人：倒下後隊友救援的進度（秒）
     // V2 晶片：蓄力進度（0～1）、超頻模組的連續射擊秒數與過熱停火秒數、衝刺狀態（衝刺射擊／流星用）
-    this.chargeC = 0; this.ohT = 0; this.ohLock = 0; this.blinkT = 0;
+    this.chargeC = 0; this.ohT = 0; this.ohLock = 0;
     this.wasDash = false; this.dashDir = 0; this.dashHit = new Set(); this.dx0 = this.x; this.dy0 = this.y;
   }
   // 開火（房主執行；隊友的飛船要在 withLoadout(隊友配裝) 裡呼叫）：超頻模組過熱、蓄力、一般連射
   tickFire(dt, want) {
     const S = Game.stats, held = want;
     this.fireCd -= dt;
-    if (this.noFireT > 0) { this.noFireT -= dt; want = false; }  // 裂界推進器：衝刺後不能射擊
     if (S.heatLimit) {
       if (this.ohLock > 0) { this.ohLock -= dt; want = false; }
       else if (want) {
@@ -41,7 +40,7 @@ class Player {
     else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
     else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + weaponRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、武器升級的群戰／分散／擦彈／狂怒），減少相乘（重力井）
+      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + weaponRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、武器升級的群戰／分散／擦彈／狂怒），減少相乘
       Game.standFull = !!S.stand && sk >= standMax(S.stand);
       Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
       try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
@@ -72,8 +71,6 @@ class Player {
     if (!dashing && this.wasDash) {  // 衝刺結束
       const M = Game.mech;
       if (M.traits.quench) this.quenchT = 2;
-      if (M.module === 'thruster') this.noFireT = 0.5;
-      if (M.module === 'blink' && M.heavy) Game.explode(this.x, this.y, 110, 25, '#b388ff', null, { src: 'ship', cr: null, owner: Game.shooter || null });
       if (this.ship.ability === 'portal') Game.openPortal(this, this.dashSX, this.dashSY, this.x, this.y);
     }
     if (!dashing && this.wasDash && S.dashfire) { this.dfN = S.dashfire >= 2 ? 2 : 1; this.dfAt = Game.time; }  // 衝刺射擊：衝刺結束時開槍（Lv2 連開 2 槍）
@@ -88,8 +85,9 @@ class Player {
     }
     this.wasDash = dashing;
   }
-  onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：排熱爆發
+  onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：排熱爆發、幻影號的殘影
     if (Net.role === 'client') return;
+    if (this.ship.ability === 'decoy') Game.addDecoy(this, this.dashSX != null ? this.dashSX : this.x, this.dashSY != null ? this.dashSY : this.y);
     if (Game.mech.traits.vent) {  // 排熱爆發（散熱片 4 層）：朝四周放出 12 發
       const w = Game.wp, list = Array.from({ length: 12 }, (_, i) => shot({ angle: i / 12 * TAU, speed: Math.min(700, w.speed), damage: w.damage,
         radius: w.radius, life: 0.6, color: '#ffb38a', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
@@ -134,22 +132,10 @@ class Player {
       Input.dash = false;
       if (this.dashCd <= 0) {
         const M = Game.mech;
-        this.dashT = CFG.DASH_TIME * M.dashDist;
+        this.dashT = CFG.DASH_TIME;
         this.dashCd = this.ship.dashCd * (1 - P.dashCd) * M.dashCd;
         this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
         this.dashSX = this.x; this.dashSY = this.y;  // 衝刺起點（星門號的第一個門）：在瞬移之前記
-        if (M.module === 'blink') {  // 相位跳躍：瞬移，留一小段「衝刺中」讓衝刺結束的效果照常觸發
-          const x0 = this.x, y0 = this.y;
-          if (Arena.rect) {
-            this.x = clamp(this.x + Math.cos(this.dashA) * 150, this.r, CFG.WORLD_W - this.r);
-            this.y = clamp(this.y + Math.sin(this.dashA) * 150, this.r, CFG.WORLD_H - this.r);
-          } else {  // 大地圖：不能瞬移穿牆、穿閘門
-            const d = Arena.rayFree(this.x, this.y, this.dashA, 150, this.r);
-            this.x += Math.cos(this.dashA) * d; this.y += Math.sin(this.dashA) * d;
-          }
-          this.dashT = 0.05; this.blinkT = 0.05;
-          burst(x0, y0, '#b388ff', 12, 160, 0.3, 2);
-        }
         this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
         burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
         if (Game.runStats) Game.runStats.dashes++;
@@ -159,8 +145,7 @@ class Player {
     }
     if (this.dashT > 0) {
       this.dashT -= dt;
-      const sp = this.blinkT > 0 ? 0 : CFG.DASH_SPEED;
-      this.blinkT -= dt;
+      const sp = CFG.DASH_SPEED;
       this.vx = Math.cos(this.dashA) * sp;
       this.vy = Math.sin(this.dashA) * sp;
       trail(this.x, this.y, this.ship.color, 0.25, 5);
@@ -180,7 +165,6 @@ class Player {
       Arena.collide(this, this.r, Arena.shipPass(this));
       Arena.updateZone(this);
     }
-    this.moduleMove(dt);
     Objects.moveShip(this, dt);  // 地圖物件：黑洞拉扯、行星與小行星擋住
     // 被兩顆小行星（或小行星和牆）輪流推、還卡在裡面 = 想擠過比飛船窄的縫 → 退回這一幀開頭（以前衝刺會擠過去、卡進凹洞出不來）
     if (free0 && !Objects.shipFree(this, this.x, this.y)) { this.x = x0; this.y = y0; }
@@ -211,8 +195,6 @@ class Player {
     }
     return (this.autoT = pickE);
   }
-  // 背包模組對飛船移動的影響：目前沒有（重力井改成減速場，見 Game.tickModules）
-  moduleMove(dt) {}
 
   fire() {
     const list = runOps(Game.stats.ops, 0);
@@ -689,7 +671,7 @@ class Enemy {
       if (this.whT > 0 && this.wallN) Game.wallSlam(this);
     }
   }
-  // 減速（2026-10-10 改相乘）：每個來源（shot 子彈、grav 重力井模組、comet 彗星的冰）各自計時；同一來源再打中取大的、刷新時間；
+  // 減速（2026-10-10 改相乘）：每個來源（shot 子彈、comet 彗星的冰）各自計時；同一來源再打中取大的、刷新時間；
   //   剩下的速度相乘（兩個 40% = 64%），沒有上限。slowAmt／slowT = 合起來的減速和最久的剩餘時間（冰封、畫面、連線用）
   slowBy(src, amt, t) {
     const S = this.slows || (this.slows = {}), o = S[src];

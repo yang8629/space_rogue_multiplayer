@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · gl/gl_actors.js：WebGL 繪圖層：敵人（動畫格照牠在遊戲裡的狀態挑）、預警線、狀態圈、飛船（船身、噴焰、零件、背包模組效果）、倒下的隊友
+// 星環電路 雙人版 · gl/gl_actors.js：WebGL 繪圖層：敵人（動畫格照牠在遊戲裡的狀態挑）、預警線、狀態圈、飛船（船身、噴焰、零件、護盾）、殘影、倒下的隊友
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -163,12 +163,24 @@ const GLActors = {
       for (const m of G.mates) if (m.dead && !m.gone) this.downed(m, tagOf(m), !G.player.dead);
       if (G.player.dead) this.downed(G.player, tagOf(G.player), false);
     }
+    if (G.decoys.length && G.state === 'play') this.decoys();
     for (const m of G.mates) if (!m.dead && !m.gone) this.ship(m, tagOf(m));
     if (G.state !== 'dead' && !G.player.dead) this.ship(G.player, tagOf(G.player));
   },
+  // 幻影號的殘影：半透明的船身一閃一閃＋淡紫光，快消失時變淡；朝向衝刺當下的準星
+  decoys() {
+    const G = Game, t = G.time, A = SHIP_ART.get(SHIPS.wraith), P = this.pS;
+    for (const d of G.decoys) {
+      const k = Math.min(1, d.t / 0.4), col = glColor(G.mates.length ? G.slotColor(d.slot || 1) : SHIPS.wraith.color);
+      this.glowAt(P, d.x, d.y, 34, col, 0.35 * k);
+      const s = GLR.sprite(P, GLR.T(`s/${A.id}/0`)); s.position.set(d.x, d.y); s.scale.set(1 / 4); s.rotation = d.aim || 0;
+      s.tint = col; s.alpha = (0.65 + 0.2 * Math.sin(t * 24)) * k;
+      const s2 = GLR.sprite(P, GLR.T(`s/${A.id}/0`)); s2.position.set(d.x, d.y); s2.scale.set(1 / 4); s2.rotation = d.aim || 0; s2.tint = col; s2.blendMode = 'add'; s2.alpha = 0.35 * k;  // 加一層發光
+    }
+  },
   ship(p, tag) {
     const G = Game, g = this.gS, t = G.time, S = p.ship, A = SHIP_ART.get(S), own = p === G.player, P = this.pS;
-    const parts = own ? G.parts : p.L ? p.L.parts : p.parts || {}, mod = own ? G.module : p.L ? p.L.module : p.module;
+    const parts = own ? G.parts : p.L ? p.L.parts : p.parts || {};
     const n = id => (parts && parts[id]) || 0, a = p.aim, ca = Math.cos(a), sa = Math.sin(a);
     const L = (lx, ly) => [p.x + lx * ca - ly * sa, p.y + lx * sa + ly * ca];  // 船的座標 → 世界座標
     const fade = p.iframe > 0 && Math.floor(t * 20) % 2 ? 0.35 : 1, col = glColor(S.color);
@@ -178,10 +190,6 @@ const GLActors = {
       if (q.text !== tag) q.text = tag; q.anchor.set(0.5, 1); q.position.set(p.x, p.y - p.r - 8); q.tint = pc; q.alpha = 1;
       this.glowAt(P, p.x, p.y, 30, pc, 0.4 * fade);
     }
-    // 背包模組（船後面那層）
-    if (mod === 'gravity') sprL(GLR.T('m/gravity'), 0, 0, 1 / 3, t);
-    if (mod === 'thruster') sprL(GLR.T('m/thruster'), 0, 0, 1 / 3);
-    if (mod === 'blink') for (let k = 3; k >= 1; k--) { const s = sprL(GLR.T(`s/${A.id}/0`), -k * 8, 0, 1 / 4); s.alpha = fade * 0.5 * (4 - k) / 3; s.tint = col; }
     // 零件：散熱鰭、感測器天線（船底下）
     if (n('sink')) for (let i = 0; i < Math.min(4, n('sink')); i++) for (const sg of [-1, 1]) { const [x0, y0] = L(-2 - i * 4, sg * 9), [x1, y1] = L(-5 - i * 4, sg * 16); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 2, color: 0x8f9bb8, alpha: fade }); }
     if (n('sensor')) { const [x0, y0] = L(16, 0), [x1, y1] = L(22 + n('sensor') * 2, 0); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 1.5, color: 0x8f9bb8, alpha: fade }); g.circle(x1, y1, 2).fill({ color: 0x9dff6b, alpha: fade }); }
@@ -203,16 +211,9 @@ const GLActors = {
       const fr = sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4); fr.tint = 0xff4d6d; fr.blendMode = 'add'; fr.alpha = fade * (0.75 + 0.25 * Math.sin(t * 16));
       this.glowAt(P, p.x, p.y, 40, 0xff4d6d, 0.8 * fade);
     }
-    // 背包模組（船上面那層）
-    if (mod === 'shield') sprL(GLR.T('m/shield'), 0, 0, 1 / 3, t * 0.3);
-    if (mod === 'reactive') sprL(GLR.T('m/reactive'), 0, 0, 1 / 3);
-    if (mod === 'endshell') sprL(GLR.T('m/endshell'), 0, 0, 1 / 3, -t * 0.4);
-    if (mod === 'swarmcore') sprL(GLR.T(`m/swarmcore/${Math.floor(t / (TAU / 4) * 8) % 8}`), 0, 0, 1 / 3);
-    if (mod === 'drone') { const da = t * 1.8, s = GLR.sprite(P, GLR.T('m/drone')); s.position.set(p.x + Math.cos(da) * 22, p.y + Math.sin(da) * 22); s.scale.set(1 / 4); s.rotation = da + Math.PI / 2; s.alpha = fade; }
-    // 外圈：輕裝甲薄殼、護盾、重力井範圍、蓄力環
+    // 外圈：輕裝甲薄殼、護盾、蓄力環
     for (let i = 0; i < Math.min(3, n('larmor')); i++) g.circle(p.x, p.y, 22 + i * 4).stroke({ width: 1, color: 0x9fe8ff, alpha: 0.45 * fade });
     for (let i = 0; i < (p.shield || 0); i++) g.circle(p.x, p.y, 26 + i * 5).stroke({ width: 2.5, color: 0x4cc9f0, alpha: 0.85 * fade });
-    if (p.gravField) this.dashed(g, p.x, p.y, p.gravField.R, 4, 8, { width: 1.5, color: 0xb388ff, alpha: 0.35 });
     if (own && G.stats && G.stats.charge && (p.chargeC || 0) > 0.02) {
       const k = Math.min(1, p.chargeC), full = k >= 1;
       g.circle(p.x, p.y, 34).stroke({ width: 4, color: 0xffb347, alpha: 0.18 });

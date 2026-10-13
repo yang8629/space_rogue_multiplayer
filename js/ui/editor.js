@@ -51,8 +51,7 @@ const Editor = {
       else if (kind === 'part') {  // 沙盒／靶場：直接加減零件層數（不受零件格限制）
         Game.parts[id] = clamp((Game.parts[id] || 0) + +v, 0, 8);
         Game.recalc();
-      } else if (kind === 'module') { Game.module = MODULES[id] ? id : null; Game.recalc(); }
-      else if (kind === 'weapon') { Game.weapon = { id, path: null, final: null }; Game.refreshWeapon(); }
+      } else if (kind === 'weapon') { Game.weapon = { id, path: null, final: null }; Game.refreshWeapon(); }
       else {
         const [path, final] = id.split('.');
         Game.weapon.path = path || null;
@@ -193,14 +192,12 @@ const Editor = {
     if (tab === 'dmg') this.renderDmg();
     if (tab === 'ship') this.renderShip();
   },
-  // 機體分頁：零件、背包模組、已開啟的特性（遠征／雙人只能看）；沙盒／靶場另外可以換機體、武器、直接調零件和模組
+  // 機體分頁：飛船能力、零件、已開啟的特性（遠征／雙人只能看）；沙盒／靶場另外可以換機體、武器、直接調零件
   renderShip() {
     const on = (yes, col) => yes ? `outline:2px solid ${col};outline-offset:2px` : '';
     const free = Game.freePlay(), T = Game.mech.traits, M = Game.mech;
     const traits = [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]), ...(T.balance ? [BALANCE] : [])];
     const partCards = PART_IDS.map(id => partCard(id, free ? `<div class="bar"><button data-pick="part:${id}:-1">−1 層</button><button data-pick="part:${id}:1">+1 層</button></div>` : '')).join('');
-    const modCards = (free ? Object.keys(MODULES) : Game.module ? [Game.module] : []).map(id =>
-      moduleCard(id, free ? `<button data-pick="module:${id}">${Game.module === id ? '使用中' : '裝上'}</button>` : '')).join('');
     const SH = SHIPS[Game.shipId];  // 目前的飛船
     // 跟原本比變了多少（%）：沒變就不寫；好綠壞紅
     const pct = (mul, good) => { const v = Math.round((mul - 1) * 100); return v ? `<span class="sv ${v * good > 0 ? 'good' : 'bad'}">${signed(v, true)}</span>` : ''; };
@@ -210,15 +207,13 @@ const Editor = {
     };
     const rows = [stat('hp', Game.player.maxHp), SH && stat('speed', Math.round(SH.speed * M.speed), M.speed), SH && stat('dashCd', `${+(SH.dashCd * M.dashCd).toFixed(2)} 秒`, M.dashCd),
       ...[['taken', M.taken], ['rate', M.rate * M.rateMul], ['bspeed', M.bspeed]].filter(([, m]) => Math.round((m - 1) * 100)).map(([id, m]) => stat(id, '', m))].filter(Boolean);
-    const on2 = [...traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`), ...(M.heavy ? ['<span style="color:#ffd166">模組裝甲加成</span>'] : []), ...(M.light ? ['<span style="color:#4cc9f0">模組加速加成</span>'] : [])];
-    const ability = SH && !Object.keys(SH.parts).length && SH.ability !== 'slots' ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.abilityDesc}</div>` : '';  // 星門號的傳送門這種飛船本身的能力
+    const on2 = [...traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`)];
+    const ability = SH && SH.ability !== 'slots' ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.skillDesc ? SH.skillDesc() : SH.abilityDesc}</div>` : '';  // 飛船專屬能力（灰血、殘影、傳送門）
     const mech = `<h3 class="between" style="margin-top:4px"><span style="color:${SH ? SH.color : '#8fa3d9'}">${SH ? SH.name : ''}</span><span>零件 ${partsUsed(Game.parts)} / ${Game.partSlots}${free ? '（靶場不受格數限制）' : ''}</span></h3>
       <div class="statl big">${rows.join('')}</div>${ability}
       <div class="sub">已開啟：${on2.length ? on2.join(' · ') : '無'}</div>
-      <div class="cards" style="margin:8px 0">${partCards}</div>
-      <h3>背包模組${free ? ` <button data-pick="module:none">拿掉模組</button>` : ''}</h3>
-      <div class="cards" style="margin:8px 0">${modCards || '<div class="sub">還沒有背包模組（精英戰鬥勝利後三選一）。</div>'}</div>`;
-    if (!free) { this.shipEl.innerHTML = mech + '<p class="hint">零件在「🔧 改裝廠」取得或更換，背包模組來自精英戰鬥與擊沉旗艦。</p>'; return; }
+      <div class="cards" style="margin:8px 0">${partCards}</div>`;
+    if (!free) { this.shipEl.innerHTML = mech + '<p class="hint">零件在「🔧 改裝廠」取得或更換。</p>'; return; }
     const ships = Object.entries(SHIPS).map(([id, S]) => `<div class="card" style="border-color:${S.color};${on(Game.shipId === id, S.color)}">
         <div class="ttl" style="color:${S.color}">${S.name}</div>
         ${shipStatLine(S)}

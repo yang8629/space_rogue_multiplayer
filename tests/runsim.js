@@ -131,11 +131,11 @@ function oneRun(w, s) {
     else if (!handle()) { log.stuck = st; break; }  // 獎勵、補給站、改裝廠、軍械台、維修站、編輯器（bot/pick.js）
   }
   log.sector = G.sector;
-  // 最後的配裝：武器升級（第一段、第二段的名稱）、零件、背包模組、電路（分組、--builds 用）
+  // 最後的配裝：武器升級（第一段、第二段的名稱）、零件、電路（分組、--builds 用）
   const WP = WEAPONS[G.weapon.id], P1 = G.weapon.path && WP.paths[G.weapon.path];
   log.build = { code: route ? route.path + route.final : null, route: route ? WP.paths[route.path].name + '→' + WP.paths[route.path].next[route.final].name : null, done: G.weapon.final != null, path: P1 ? P1.name : '沒升級', final: P1 && G.weapon.final != null ? P1.next[G.weapon.final].name : null,
     parts: Object.entries(G.parts).filter(([, n]) => n > 0).map(([k, n]) => PARTS[k].name + n).join(' ') || '沒有零件',
-    module: G.module ? MODULES[G.module].name : '沒有模組', chain: G.chain.slice(1).filter(Boolean).map(id => CH[id].short || CH[id].name).join(' ') + (G.energyCap ? ` ⚡${G.stats.heat}/${G.energyCap()}` : '') };  // 能量／容量（2026-10-10）
+    chain: G.chain.slice(1).filter(Boolean).map(id => CH[id].short || CH[id].name).join(' ') + (G.energyCap ? ` ⚡${G.stats.heat}/${G.energyCap()}` : '') };  // 能量／容量（2026-10-10）
   return log;
 }
 
@@ -153,13 +153,13 @@ function parseReplay(txt) {
   return { ship, weapon, steps, inv };  // inv：最後放在倉庫的晶片（電路滿了時優先放倉庫）
 }
 function replayState(R, s, L) {  // 打完 s-L 之後應該有的東西
-  const st = { order: [], lv: {}, parts: {}, module: null, path: null, final: null, extra: 0 };
+  const st = { order: [], lv: {}, parts: {}, path: null, final: null, extra: 0 };
   const W = WEAPONS[R.weapon];
   for (const q of R.steps) {
     if (q.s > s || (q.s === s && q.L > L)) break;
     const mk = q.t.endsWith('§'), m = q.t.replace(/§$/, '').match(/^(.*?)(\d*)$/), name = m[1].replace(/\(.*\)$/, ''), k = +(m[2] || 1);
     let chip = NORMAL_IDS.find(id => CH[id].short === name || CH[id].name === name); const evo = NORMAL_IDS.find(id => CH[id].evo === name);
-    const part = Object.keys(PARTS).find(id => PARTS[id].name.startsWith(name)), mod = Object.keys(MODULES).find(id => MODULES[id].name === name);
+    const part = Object.keys(PARTS).find(id => PARTS[id].name.startsWith(name));
     const path = Object.keys(W.paths).find(p => W.paths[p].name === name), fin = st.path ? W.paths[st.path].next.findIndex(n => n.name === name) : -1;
     if (chip && part && !mk) chip = null;  // 同名（加速＝晶片／加速器零件）：沒有「（插座 N）」的算零件
     if (chip) {  // 已經有的晶片再拿到一次、又沒寫數字 = 合成升一級（例如 3-6 的「倍增」→ 倍增2）
@@ -168,7 +168,6 @@ function replayState(R, s, L) {  // 打完 s-L 之後應該有的東西
     }
     else if (evo) { if (!st.order.includes(evo)) st.order.push(evo); if (process.argv.includes('--replay-evo')) st.lv[evo] = 3; }
     else if (part) st.parts[part] = k;
-    else if (mod) st.module = mod;
     else if (path) st.path = path;
     else if (fin >= 0) st.final = fin;
     else if (name === '插槽') st.extra++;
@@ -183,7 +182,7 @@ function applyReplay(log) {
   const slots = Math.min(CFG.MAX_SLOTS - 1, CFG.START_SLOTS - 1 + (G.sector - 1) + st.extra);
   G.chain = ['weapon', ...ids.slice(0, slots), ...Array(Math.max(0, slots - ids.length)).fill(null)];
   G.inventory = [...ids.slice(slots), ...Array(Math.max(0, CFG.INV_SLOTS - Math.max(0, ids.length - slots))).fill(null)].slice(0, CFG.INV_SLOTS);
-  G.parts = st.parts; G.module = st.module; G.socks = [];
+  G.parts = st.parts; G.socks = [];
   G.weapon = { id: R.weapon, path: st.path, final: st.path ? st.final : null }; G.refreshWeapon();
   sortChain(); G.recalc();
 }
@@ -205,7 +204,7 @@ for (const w of WPN) {
     if (s < FROM) continue;
     const r = oneRun(w, s);
     if (PROBE) console.log(`  ${WN[w]} 第 ${s} 局 ${r.build ? r.build.route || '' : ''}${r.build && r.build.done ? '（升滿）' : '（沒升滿）'} ${r.won ? '通關' : '死在 ' + r.sector + '-' + r.layer}｜${PROBE.text()}`);
-    if (BUILDS && r.build) { const b = r.build; console.log(`  第 ${s} 局 ${r.won ? '通關' : '死在 ' + r.sector + '-' + r.layer}｜${b.path}${b.final ? '→' + b.final : ''}｜${b.parts}｜${b.module}｜${b.chain}`); }
+    if (BUILDS && r.build) { const b = r.build; console.log(`  第 ${s} 局 ${r.won ? '通關' : '死在 ' + r.sector + '-' + r.layer}｜${b.path}${b.final ? '→' + b.final : ''}｜${b.parts}｜${b.chain}`); }
     if (r.stuck || r.timeout) console.log(`  ${WN[w]} 第 ${s} 局卡住：${r.stuck || '戰鬥超過 300 秒、最近 60 秒沒打掉血（最多打到 900 秒）'}（星區 ${r.sector} 第 ${r.layer} 層）${r.cause ? '｜原因：' + r.cause : ''}${r.why ? '\n    ' + r.why : ''}`);
     if (r.stuck || r.timeout) { stuck++; continue; }
     reach.push(r.won ? 22 : (r.sector - 1) * 7 + r.layer);  // 打到第幾個節點（1～21；通關 = 22）

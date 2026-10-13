@@ -8,14 +8,14 @@
 // desc：航圖下方的節點介紹（數字直接讀 CFG，改數值時說明會跟著變）
 const NODE_META = {
   combat: { label: '戰鬥', icon: '⚔', color: '#4cc9f0', desc: () => '2 個區域（第 4 層起 3 個），整場是一張不規則的大地圖，一區一波敵人：清完打開閘門，穿過去到下一區（不能回頭；地上的晶體直接收下）。打完最後一區後從 3 個晶片選 1 個。' },
-  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => '分成 2 個區域（大地圖），最後一區出現精英「虛空獵手」，每一區一半機率有行星或彗星。勝利後從 3 個背包模組（只有 1 格，換上新的舊的就沒了）或「插槽 +1」選 1 個，另得 ◆15。之後至少有一條路通往維修站。' },
+  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => '分成 2 個區域（大地圖），最後一區出現精英「虛空獵手」，每一區一半機率有行星或彗星。勝利後晶片三選一（跟一般戰鬥一樣），另外多一張「插槽 +1」可以選，另得 ◆15。之後至少有一條路通往維修站。' },
   workshop: { label: '改裝廠', icon: '🔧', color: '#9fe8ff', desc: () => `零件三選一（佔 1 個零件格）；也可以付 ◆${Game.shopPrice(PART_SWAP_PRICE)} 把 1 層零件換成另一種（價格隨星區上漲）。` },
   shop:   { label: '補給站', icon: '◆', color: '#2ee6a6',
     desc: () => `買晶片、補血（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）、電路擴充（◆${Game.shopPrice(CFG.SHOP_SLOT)}）。不賣武器升級。價格隨星區上漲（第 2 星區 ×${+(1 + CFG.SHOP_PRICE_UP).toFixed(2)}、第 3 星區 ×${+(1 + 4 * CFG.SHOP_PRICE_UP).toFixed(2)}）。` },
   repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP。` },
   blackhole: { label: '奇異點', icon: '◐', color: '#b388ff', desc: () => `投入 1 個晶片：隨機一個還沒強化過的電路格（武器格也可能）得到一個屬性（好結果 70%～90%，看晶片等級；也可能是壞的）。也可以不投入直接離開。一條路線最多一個黑洞。` },
   armory: { label: '軍械台', icon: '⚒', color: '#ff9f1c', desc: () => `武器升級（每張圖只有 1 個）。武器升滿後改選「插槽 +1」或 ◆${CFG.ARMORY_BONUS.credits}＋HP ${CFG.ARMORY_BONUS.hp}。` },
-  boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場可能有行星、小行星帶、彗星；旗艦的子彈會削掉行星、打碎小行星）。勝利後 ◆50，電路插槽 +1／零件格 +1 二選一，可以裝上這隻旗艦的專屬模組；進入下一關時修復 30% HP。' },
+  boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場可能有行星、小行星帶、彗星；旗艦的子彈會削掉行星、打碎小行星）。勝利後 ◆50，電路插槽 +1／零件格 +1 二選一；進入下一關時修復 30% HP。' },
 };
 
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）

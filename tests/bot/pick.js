@@ -167,8 +167,6 @@ function equip() {
   sortChain();
   G.recalc();
 }
-// 背包模組：試裝分數最高的（bot/value.js；數值以外的保命效果照自動對戰模擬的排名給係數 MOD_VAL）
-const pickModule = opts => pickModuleBy(opts);
 // 選獎勵：挑分數最高的（晶片不會合成）
 // 刷新三選一（2026-10-09）：最好的選項沒讓配裝變好（不到 1.03 倍）就花晶體刷新；刷完至少留 ◆40（照星區漲）補血，每次三選一最多刷 2 次
 //   「變好幾倍」：零件 = 試裝分數的倍數；晶片（電路有空格）= 晶片分數；晶片（電路滿了）= 跟電路上最弱那顆比；組件 = 晶片分數
@@ -261,18 +259,16 @@ function chooseNode() {
 
 
 // 非戰鬥畫面（單人、雙人共用）：獎勵三選一、精英獎勵、補給站、改裝廠、軍械台、維修站／黑洞、編輯器；
-//   旗艦勝利畫面只做二選一＋裝上旗艦模組（前往下一星區由呼叫的人決定）。回傳 true = 有處理
+//   旗艦勝利畫面只做二選一（前往下一星區由呼叫的人決定）。回傳 true = 有處理
 function handle() {
   const st = G.state;
   if (st === 'reward') {
     const R = G.reward;
     if (R.kind === 'elite') {
-      // 電路擴充 vs 背包模組（以前一半一半隨機，之後改成看倉庫有沒有晶片在等）
-      //   2026-10-09 改成比數字：電路格的分數（slotValues）vs 最好的模組比現在的模組好幾倍
-      const m = pickModule(R.options), mg = moduleScore(m) / (G.module ? moduleScore(G.module) : 1);
-      if (R.slot && slotValues().chain > mg) G.expandSlot('reward');
-      else if (!G.module || mg > 1) G.takeModule(m);
-      else G.takeReward(null);  // 模組沒比現在的好：跳過（拿 ◆）
+      // 精英獎勵：跟一般戰鬥同一個三選一，另外多一張電路擴充：電路格的分數（slotValues）比最好的選項高就拿電路擴充
+      const id = pickReward(R);
+      if (R.slot && (!id || slotValues().chain > rewardGain(id))) G.expandSlot('reward');
+      else { G.takeReward(id); closeEditor(); }
     } else {
       maybeReroll(R);
       G.takeReward(pickReward(R)); closeEditor();
@@ -287,7 +283,7 @@ function handle() {
     if (G.weaponStage() < 2) G.upgradeWeapon(pickUpgrade());  // 試裝挑最好的路線（第一段往後看一步）（bot/value.js；以前隨機）
     else G.armoryBonus();
   } else if (st === 'blackhole' || st === 'repair') G.showMap();
-  else if (st === 'victory') { bossPick(); const V = G.victory; if (V && V.module && (!G.module || moduleScore(V.module) > moduleScore(G.module))) G.takeBossModule(); }  // 旗艦模組比現在的好才換
+  else if (st === 'victory') bossPick();
   else if (st === 'editor') closeEditor();
   else return false;
   return true;
