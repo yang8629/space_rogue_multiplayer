@@ -69,6 +69,17 @@ assert(Game.enemies.length === snap.e.length && Game.bullets.length === snap.b.l
 for (let i = 0; i < 120; i++) { Game.update(1 / 60); render(); }
 Net.onDmg(dmgMsg);
 assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.runStats.kills === dmgMsg.team[2].kills, 'client got its own damage from host');
+// 盾衛：隊友被夾在牆和盾中間（飛船推不出去，改推盾衛）。隊友這邊的敵人是房主傳來的普通物件（沒有 push），不能當掉
+{
+  const P = Game.player, ST = T.ENEMY_TYPES.shield, rect = T.Arena.rect;
+  T.Arena.rect = rect || true;  // 方形場地：場地邊緣就是牆
+  P.x = P.r; P.y = 500; P.dashT = 0;
+  const e = { id: 9999, type: 'shield', t: ST, r: ST.radius, x: P.r + 30, y: 500, vx: 0, vy: 0, shieldA: Math.PI, spawnT: 0, dead: false };
+  let err = null, x0 = e.x;
+  try { Game.shieldBlock(e, P); } catch (ex) { err = ex.message; }
+  T.Arena.rect = rect;
+  assert(!err && e.x > x0, `client pinned by shield guard against wall: no crash, guard pushed back (${err || `${Math.round(x0)} → ${Math.round(e.x)}`})`);
+}
 const rows = Net.teamRows(); assert(rows[1].me && rows[1].dmg > 0 && rows[0].dmg === 0, 'team rows: 2P is me with damage');
 assert(Net.teamSummaryHtml().includes('多人傷害結算'), 'team summary html');
 assert(sent.some(m => m.t === 'i'), 'client sends input');

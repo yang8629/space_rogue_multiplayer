@@ -107,7 +107,7 @@ function oneRun(s) {
       else if (st === 'victory') {
         if (G.victory && !G.victory.pick) G.pickBossSlot(Math.random() < 0.5 ? 'chain' : 'part');
         if (Math.random() < 0.6) G.takeBossModule();
-        if (G.sector >= G.lastSector()) return 'won';
+        if (G.chapterDone()) return 'won';
         G.nextSector(); randomEquip();
       } else if (st === 'dead') return 'dead';
       else if (st === 'editor') G.toggleEditor();

@@ -153,6 +153,8 @@ const Game = {
   lastSector() { return this.chapter().sectors[1]; },
   bossFor(sector) { return this.chapter().bosses[sector] || pick(CFG.BOSS_ORDER); },
   isEndless() { return this.sector > this.lastSector(); },
+  // 這章打完了沒：最後一個星區的王打掉了（停在那一關的旗艦獎勵畫面），或已經進了無盡模式（結算、紀錄、模擬判斷通關都用這個）
+  chapterDone() { return this.isEndless() || (this.sector === this.lastSector() && this.state === 'victory'); },
   nodeById(id) { return this.map.flat().find(n => n.id === id); },
   reachable() {
     return this.node ? this.node.next.map(id => this.nodeById(id)) : this.map[0];
@@ -664,7 +666,7 @@ const Game = {
   },
   // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到標題
   finishRun() {
-    this.saveRecord(this.sector >= this.lastSector() ? 'cleared' : 'retired');
+    this.saveRecord(this.chapterDone() ? 'cleared' : 'retired');
     if (this.mode === 'coop') {  // 雙人：房主決定結束，兩人一起回到房間
       if (Net.role === 'host') Net.send({ t: 'finish' });
       Net.backToRoom();
@@ -1280,7 +1282,7 @@ const Game = {
       const k = R - d2, ux = d2 > 0.01 ? (p.x - e.x) / d2 : dx / d, uy = d2 > 0.01 ? (p.y - e.y) / d2 : dy / d;
       e.x -= ux * k; e.y -= uy * k;
       if (Arena.rect) { e.x = clamp(e.x, e.r, CFG.WORLD_W - e.r); e.y = clamp(e.y, e.r, CFG.WORLD_H - e.r); } else Arena.collide(e, e.r, null);
-      e.push(-ux * 400, -uy * 400);
+      if (!this.isClient()) e.push(-ux * 400, -uy * 400);  // 隊友那邊的敵人只是房主傳來的位置（不能推）：擊退由房主那邊算（房主也會替隊友的船算這次碰撞）
     }
     if (!(p.dashT > 0) && !pinned) { p.vx = dx / d * 520; p.vy = dy / d * 520; p.kbT = 0.2; }
     return true;

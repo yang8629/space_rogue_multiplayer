@@ -1801,7 +1801,16 @@ const MechCheck = {
         return { ok: fresh && next && once && bad && noWrite, got: out.join('；') };
       } finally { put(saved); Game.chapterId = 1; }
     }],
-    ['章節', '機制檢查固定第一章', '玩家選了別章再跑機制檢查：setup 一律從第一章的星區 1 開始', M => {
+    ['章節', '通關判斷', '打掉這章最後一個星區的王（旗艦獎勵畫面）才算打完這章；無盡模式算打完；最後一個星區還在打、前面星區的旗艦獎勵都不算', M => {
+      const G = Game, out = [];
+      G.newRun('run', 'vanguard', 'laser');
+      const at = (sector, state) => { G.sector = sector; G.state = state; return G.chapterDone(); };
+      const last = G.lastSector(), cases = [[last, 'victory', true], [last, 'play', false], [last, 'map', false], [last - 1, 'victory', false], [last + 1, 'map', true]];
+      const nm = { victory: '旗艦獎勵', play: '戰鬥中', map: '航圖' };
+      for (const [s, st, want] of cases) { const got = at(s, st); out.push(`星區 ${s} ${nm[st]}：${got ? '打完' : '沒打完'}${got === want ? '' : '（錯誤）'}`); }
+      return { ok: !out.some(t => t.includes('錯誤')), got: out.join('；') };
+    }],
+    ['章節', '機制檢查固定第一章','玩家選了別章再跑機制檢查：setup 一律從第一章的星區 1 開始', M => {
       Game.chapterId = CHAPTERS[CHAPTERS.length - 1].id;
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const ok = Game.chapterId === 1 && Game.sector === 1;

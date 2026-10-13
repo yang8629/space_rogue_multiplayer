@@ -464,7 +464,9 @@ const Arena = {
     }
     const to = ([x, y]) => { const l = Math.hypot(x - p.x, y - p.y) || 1; return [(x - p.x) / l, (y - p.y) / l]; };
     for (let i = 0; i < path.length; i += 4) if (this.clearLine(p.x, p.y, path[i][0], path[i][1], pad)) return to(path[i]);
-    return path.length ? to(path[path.length - 1]) : null;
+    // 一點都看不到（飛船貼著牆，離牆比 pad 近，哪條線都算擦到牆）：指向路線上往前兩格（走得通的格子）。
+    //   以前指向最後一點 = 飛船自己那一格的中心，可能就在牆那一側 → 一直往牆推、卡死（2026-10-13 雙人整局模擬：房主貼牆要去救隊友，停 250 秒）
+    return path.length ? to(path[Math.max(0, path.length - 3)]) : null;
   },
   // 出口方向（電腦操作用、畫面箭頭）：從閘門往外算步數，回傳往閘門走的方向；閘門沒開回傳 null；r = 飛船半徑（線寬加上去，不挑擦過牆角的點）
   exitDir(x, y, k, r = 0) {

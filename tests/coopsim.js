@@ -82,9 +82,10 @@ function oneRun(s) {
       continue;
     }
     if (sa === 'victory') {
+      const done = GA.chapterDone();  // 這章打完了沒（遊戲判斷；在獎勵畫面處理完之前先問）
       HA.B.handle(); HB.B.handle();  // 旗艦二選一、裝上旗艦模組（bot/pick.js 的 handle）
       pump(); step(1);
-      if (GA.sector >= GA.lastSector()) { log.won = true; break; }
+      if (done) { log.won = true; break; }
       GA.nextSector(); pump(); step(3); log.sector = GA.sector;
       continue;
     }
