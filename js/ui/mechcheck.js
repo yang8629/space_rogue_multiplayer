@@ -1791,6 +1791,29 @@ const MechCheck = {
       const ok = Game.chapterId === 1 && Game.sector === 1;
       return { ok, got: `setup 之後：第 ${Game.chapterId} 章、星區 ${Game.sector}` };
     }],
+    ['章節', '開局補償', '有開局補償的章節：開局晶體、武器插座、電路格照設定加上去；先連續選完幾次三選一（跳過也算一次）才到航圖；第一章沒有補償', M => {
+      const out = [];
+      Game.chapterId = 1; Game.newRun('run', 'vanguard', 'laser');
+      const plain = Game.state === 'map' && Game.credits === 0 && Game.wSock === CFG.START_WSOCK && Game.chain.length === CFG.START_SLOTS;
+      out.push(plain ? '第一章：直接到航圖、沒有補償' : `第一章不對（錯誤）：${Game.state}、◆${Game.credits}、插座 ${Game.wSock}、電路 ${Game.chain.length}`);
+      const ch = CHAPTERS.find(c => c.start);
+      if (!ch) return { ok: false, got: '沒有任何章節有開局補償（錯誤）' };
+      const S = ch.start;
+      Game.chapterId = ch.id; Game.newRun('run', 'vanguard', 'laser');
+      const given = Game.credits === S.credits && Game.wSock === CFG.START_WSOCK + S.wSock && Game.chain.length === CFG.START_SLOTS + S.slots;
+      out.push(given ? `${ch.name}：◆${S.credits}、插座 +${S.wSock}、電路 +${S.slots}` : `${ch.name} 補償不對（錯誤）：◆${Game.credits}、插座 ${Game.wSock}、電路 ${Game.chain.length}`);
+      let screens = 0;
+      for (let i = 0; i < S.picks + 2 && Game.state === 'reward'; i++) {
+        if (Game.reward.kind !== 'start') break;
+        screens++;
+        Game.takeReward(null);  // 跳過（◆ +10）也算用掉一次
+        if (Game.state === 'editor') Game.toggleEditor();
+      }
+      const picksOk = screens === S.picks && Game.state === 'map' && Game.bonusPicks === 0;
+      out.push(picksOk ? `連續 ${screens} 次三選一後到航圖` : `三選一次數不對（錯誤）：出現 ${screens} 次，最後在 ${Game.state}`);
+      Game.chapterId = 1;
+      return { ok: plain && given && picksOk, got: out.join('；') };
+    }],
   ],
 
   // ---------- 執行：存檔 → 逐項檢查 → 還原 ----------

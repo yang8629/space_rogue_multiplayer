@@ -7,10 +7,17 @@
 // =====================================================================
 // 吸引：被拉的敵人往中心的速度（同時被拉很多次也只到這個速度）
 const PULL_V = 380;
+// 章節的開局補償：電路格、武器插座（晶體和三選一另外給，見 newRun）；L 是 Game 自己或雙人隊友的配裝
+function applyChapterStart(L, S) {
+  if (!S) return;
+  for (let i = 0; i < (S.slots || 0) && L.chain.length < CFG.MAX_SLOTS; i++) L.chain.push(null);
+  L.wSock = Math.min(CFG.WEAPON_SOCKETS, (L.wSock || CFG.START_WSOCK) + (S.wSock || 0));
+}
 
 const Game = {
   state: 'title', returnState: null, mode: null,
   chapterId: 1,  // 這一局的章節（見 chapters.js）：單人在選章畫面設
+  bonusPicks: 0,  // 章節的開局補償：到航圖之前還要連續三選一幾次
   chain: [], socks: [], inventory: [], slotAttr: [], credits: 0,  // socks[i]：插在第 i 格晶片上的組件
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
@@ -85,6 +92,10 @@ const Game = {
     this.sectorStats = { chips: {}, t0: 0, kills0: 0, dmg0: 0 };  // 「本關」＝目前這個星區
     this.nodeLog = null;
     this.lastHit = '';
+    const ST = this.freePlay() ? null : this.chapter().start;  // 章節的開局補償（從星區 2 以後開始的章節）
+    applyChapterStart(this, ST);
+    this.credits += ST ? ST.credits || 0 : 0;
+    this.bonusPicks = ST ? ST.picks || 0 : 0;  // 開局先連續三選一幾次（到航圖之前，見 showMap）
     this.refreshWeapon();  // 內含 recalc()
     this.player.hp = this.player.maxHp;
     if (mode !== 'coop') { this.mate = null; Net.close(); }
@@ -135,9 +146,18 @@ const Game = {
     return this.node ? this.node.next.map(id => this.nodeById(id)) : this.map[0];
   },
   showMap(toast = '') {
+    if (this.bonusPicks > 0) { this.bonusPicks--; this.openStartPick(toast); return; }  // 章節的開局補償：先選完三選一才到航圖
     this.inArena = false; this.state = 'map';
     if (this.mode === 'coop') Net.atMap();  // 雙人：告訴隊友「我回到航圖了」（隊友這邊順便送出最新配裝）
     this.view(toast);
+  },
+  // 章節的開局補償：一般戰鬥的三選一（晶片或零件），選完（或跳過）回到 showMap，次數用完才真的到航圖
+  //   note：上一次三選一的結果（第一次是章節開場文字），顯示在標題下面，不然會被下一個三選一蓋掉
+  openStartPick(note = '') {
+    this.inArena = false;
+    this.reward = { kind: 'start', options: this.rewardOptions(), bonus: 0, reroll: this.shopPrice(15), slot: false, note };
+    this.state = 'reward';
+    this.view();
   },
   // 畫面：照目前的 state 顯示對應的畫面（怎麼畫由 ui/listeners.js 決定）；msg：畫面上的提示文字
   view(msg = '') { Events.emit('view', { state: this.state, msg }); },
