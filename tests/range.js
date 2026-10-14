@@ -32,7 +32,7 @@ Range.key('t'); ok(Range.slow, 'key t: slow motion on');
 Range.key('r'); ok(Range.total === 0, 'key r: clear');
 // 觸發＋分裂：開火的片數帶觸發，命中後展開 3 倍
 G.weapon = { id: 'blade', path: 'B', final: null }; G.refreshWeapon();
-G.chain = ['weapon', T.chipId('trigger', 1, 1), null, null, null, null]; G.socks = [[], ['split']]; G.recalc();  // 分裂插在觸發器上 = 作用在回響
+G.chain = ['weapon', T.chipId('trigger', 1), null, null, null, null]; G.socks = [[], ['split']]; G.recalc();  // 分裂插在觸發器上 = 作用在回響
 const bc = WEAPONS.blade.base.count;  // 相刃基礎型的片數（分裂後 ×3）
 ok(G.stats.count === bc && G.stats.layers[0] && G.stats.layers[0].count === bc * 3, `blade+trigger+split: fire ${G.stats.count}, on-hit ${G.stats.layers[0] && G.stats.layers[0].count}`);
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');

@@ -315,7 +315,7 @@ function drawHUD() {
       const col = id === 'weapon' ? Game.wp.color : TYPE_META[CHIPS[id].type].color;
       ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39);
       ctx.fillStyle = col; ctx.font = `bold ${T ? 11 : 13}px Microsoft JhengHei`;
-      ctx.fillText(CHIPS[id].short, x + w / 2, y + 25);
+      ctx.fillText(lvShort(id, slotLv(i)), x + w / 2, y + 25);
     } else {
       ctx.strokeStyle = '#2f3f78'; ctx.setLineDash([3, 3]); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39); ctx.setLineDash([]);
     }

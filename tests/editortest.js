@@ -7,10 +7,10 @@ const ok = (c, msg) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${msg}`); if (!c) f
 const reset = () => {
   G.newRun('run', 'vanguard', 'laser');
   G.wSock = 1;
-  G.chain = ['weapon', T.chipId('sticky', 1, 2), T.chipId('orbit', 1, 1), null, null];
+  G.chain = ['weapon', T.chipId('sticky', 2), T.chipId('orbit', 1), null, null];
   G.socks = [[], [], []];
   G.slotAttr = [null, 'eff', null, 'flaky'];
-  G.inventory = ['amp', 'split', 'overclock', T.chipId('rear', 1, 1), null, null];
+  G.inventory = ['amp', 'split', 'overclock', T.chipId('rear', 1), null, null];
   G.recalc(); G.toggleEditor();
 };
 const S = () => JSON.stringify(G.socks.map(s => s || []));
@@ -62,11 +62,11 @@ G.inventory[4] = 'mirror'; G.recalc();
 E.plug(1, { from: 'inv', index: 4 });  // 鏡像插在黏著的第一格：再爆一次 → 可以放
 ok((G.socks[1] || []).join() === 'mirror' && G.inventory[4] === null, '鏡像插在玩法晶片第一格：可以放（產物多一份）');
 reset();
-G.chain[1] = T.chipId('pull', 1, 2); G.inventory[4] = 'mirror'; G.recalc();
-E.plug(1, { from: 'inv', index: 4 });  // 吸引只能插巨彈 → 擋
-ok((G.socks[1] || []).length === 0 && G.inventory[4] === 'mirror' && /只能插巨彈/.test(E.infoEl.innerHTML), '鏡像插在吸引上：不給放');
+G.chain[1] = T.chipId('pull', 2); G.inventory[4] = 'mirror'; G.recalc();
+E.plug(1, { from: 'inv', index: 4 });  // 吸引只有巨彈有效果；其他組件插在玩法晶片上照樣升級 → 可以放
+ok((G.socks[1] || []).join() === 'mirror' && T.slotLv(1) === 2 && /吸引 升到 Lv2/.test(E.infoEl.innerHTML), `鏡像插在吸引上：可以放（只升級，沒有效果），吸引 Lv${T.slotLv(1)}`);
 reset();
-G.chain[3] = T.chipId('trigger', 1, 1); G.recalc();
+G.chain[3] = T.chipId('trigger', 1); G.recalc();
 E.dropOn(G.chain, 4, { from: 'slot', index: 2 });  // 環繞移到觸發器右邊：沒作用 → 擋
 ok(T.baseOf(G.chain[2]) === 'orbit' && G.chain[4] === null && /不給放/.test(E.infoEl.innerHTML), '環繞放到觸發器右邊：不給放');
 G.socks[1] = ['amp', 'split']; G.recalc();
@@ -75,7 +75,7 @@ ok(T.baseOf(G.chain[1]) === 'sticky' && G.socks[1].length === 2 && /不給放/.t
 G.toggleEditor();
 // 靶場：沒有倉庫，右鍵直接拿掉
 G.toggleEditor();
-G.newRun('range', 'vanguard', 'laser'); G.chain = ['weapon', T.chipId('sticky', 1, 3), null, null, null, null]; G.socks = [['amp'], ['split']]; G.recalc(); G.toggleEditor();
+G.newRun('range', 'vanguard', 'laser'); G.chain = ['weapon', T.chipId('sticky', 3), null, null, null, null]; G.socks = [['amp'], ['split']]; G.recalc(); G.toggleEditor();
 ok(E.invEl.classList.contains('hidden'), '靶場：倉庫藏起來');
 E.quickMove(G.chain, 1);
 ok(G.chain[1] === null && (G.socks[1] || []).length === 0, '靶場：右鍵直接拿掉晶片（插件一起拿掉）');

@@ -41,8 +41,8 @@ globalThis.location = { hash: '' };
 // 從遊戲腳本內部匯出的名稱（都是遊戲的頂層宣告）
 const EXPORTS = `Game, CHIPS, WEAPONS, NORMAL_IDS, COMPOSITE_IDS, OVERLOADS, CFG, SHIPS, Enemy, Screen, Editor, Codex,
   TYPE_META, NODE_META, PASSIVE_LABEL, LV_INFO, ENEMY_TYPES, lvMulOf,
-  leveledId, chipId, fullChip, newChip, socketsOf, isComp, isHost, parseChipId, SLOT_ATTRS, splitChain, flatChain, sockCount, analyzeChain, compileChain, runOps, weaponParams, weaponTitle, genMap,
-  canLevelUp, baseOf, levelOf, MechCheck, SockCheck, Net, Player, render, Objects, Arena`;
+  chipId, fullChip, newChip, socketsOf, isComp, isHost, parseChipId, SLOT_ATTRS, splitChain, flatChain, sockCount, analyzeChain, compileChain, runOps, weaponParams, weaponTitle, genMap,
+  hasLv, slotLv, lvName, compsFor, bhGood, baseOf, MechCheck, SockCheck, Net, Player, render, Objects, Arena`;
 
 // 在某個 vm context 裡依序執行每個遊戲檔案（run = vm.runInThisContext 或 (code, opt) => vm.runInContext(code, ctx, opt)）
 function runFiles(run, pre = '') {

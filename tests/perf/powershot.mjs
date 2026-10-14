@@ -14,7 +14,7 @@ const shot = async (cap, name) => {
     Game.newRun('run', 'vanguard', 'laser');
     Game.wSock = 1; Game.cap = cap;
     // 武器［分裂 2］→ 迴旋 2［倍增 3］→ 反向 2 → 黏著 1 → 環繞 2
-    Game.chain = ['weapon', chipId('boomerang', 1, 2), chipId('rear', 1, 1), chipId('sticky', 1, 1), chipId('orbit', 1, 1)];
+    Game.chain = ['weapon', chipId('boomerang', 2), chipId('rear', 1), chipId('sticky', 1), chipId('orbit', 1)];
     Game.socks = [['split'], ['amp'], [], [], []];
     Game.recalc(); Game.state = 'map'; Game.toggleEditor();
     const s = Game.stats;

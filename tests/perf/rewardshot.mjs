@@ -8,7 +8,7 @@ await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 1500));
 await p.evaluate(() => {
   Game.newRun('run', 'vanguard', 'laser');
   Game.node = { type: 'combat', id: 'c', L: 1 }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 }); Game.combatWon();
-  Game.reward.options = [chipId('orbit', 1, 2), chipId('boomerang', 1, 1), 'split']; Game.view();
+  Game.reward.options = [chipId('orbit', 2), chipId('boomerang', 1), 'split']; Game.view();
 });
 await new Promise(r => setTimeout(r, 400));
 await p.screenshot({ path: SHOTS + '三選一獎勵.png' });

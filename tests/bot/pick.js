@@ -1,6 +1,6 @@
 // 星環電路 整局模擬的電腦（做選擇）
 //   在遊戲的全域範圍裡執行（runsim／botsim／qasim 用 vm.runInThisContext，coopsim 每份遊戲各一份 vm context），由 bot/load.js 載入
-//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、levelOf、pick、randInt
+//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、hasLv、compsFor、pick、randInt
 
 // 倉庫裡的晶片填進電路的空格（中等玩家：有空格就裝上）
 // 晶片分數：晶片價值表（botsim --value：chipvalue_base.json）裡這把武器、最接近現在難度的「速度 ÷ √掉血」
@@ -38,8 +38,8 @@ function chipScore(id) {
     if (q) { const y = q[nearKey(q, L)]; v *= Math.max(0.7, Math.min(1.4, y.s[w] / (1 + Math.max(-0.5, y.d[w] - 1) * 0.5))); }  // 單格場數少：夾在 0.7～1.4
   }
   {  // 熟練玩家：玩法晶片疊在同一批子彈上（每顆子彈同時養好幾個晶片、效果一起觸發）
-    const play = new Set(G.chain.slice(1).filter(x => x && CH[x] && CH[bOf(x)] && CH[bOf(x)].grow && bOf(x) !== b).map(bOf)).size;
-    if (CH[b].grow) v *= Math.min(1.5, 1 + 0.1 * play);  // 每多一個玩法晶片 +10%，最多 +50%
+    const play = new Set(G.chain.slice(1).filter(x => x && CH[x] && hasLv(x) && bOf(x) !== b).map(bOf)).size;
+    if (hasLv(b)) v *= Math.min(1.5, 1 + 0.1 * play);  // 每多一個玩法晶片 +10%，最多 +50%
     if (b === 'split' || b === 'rear') v *= Math.min(1.5, 1 + 0.1 * play);  // 讓子彈變多的：電路上的玩法晶片越多越值錢
   }
   // 插座的價值（2026-10-03）：每個插座 ≈ 組件插在這個晶片上的平均好處（組件本身的價值 × 插在這個晶片上的加乘，兩兩組合表的「插晶片」）；沒量過當 6%
@@ -113,16 +113,17 @@ function sortChain() {
   const ids = [...G.chain.slice(1).filter(Boolean), ...(G.socks || []).flat(), ...invC.map(j => G.inventory[j])];
   for (const j of invC) G.inventory[j] = null;
   const comps = ids.filter(id => CH[id].comp).map(bOf).sort((a, b) => COMP_ORDER.indexOf(a) - COMP_ORDER.indexOf(b));
-  const hosts = ids.filter(id => !CH[id].comp).map(id => socketsOf(id) || globalThis.__KEEP0 === bOf(id) ? id : chipId(bOf(id), levelOf(id), 2))
+  const hosts = ids.filter(id => !CH[id].comp).map(id => socketsOf(id) || globalThis.__KEEP0 === bOf(id) ? id : chipId(bOf(id), 2))
     .sort((a, b) => orderOf(a) - orderOf(b));
   // 分配插座（2026-10-03 改聰明一點）：
   //   1. 武器先拿：鏡像（武器多射一次）、超頻、分裂、穿甲（作用在全部子彈），再加第一個倍增、巨彈
   //   2. 多的倍增、巨彈插在產物傷害大的晶片上（黏著的爆炸、環繞放出、蓄滿那發、迴旋回程、地雷、感染）：武器層 × 宿主層相乘，分散比疊在武器上痛
-  //   3. 剩下的照順序插進還有空插座的晶片，最後才回頭塞武器的空格
+  //   3. 剩下的先插還沒進化的玩法晶片（組件升級：插 1 個升 1 級），再塞武器的空格，最後才插其他晶片
   const BIG = ['sticky', 'orbit', 'charge', 'boomerang', 'stasis', 'infect'];
   const W = [], H = new Map(hosts.map(h => [h, []]));
   const cap = h => socketsOf(h) - H.get(h).length;
   const okOn = (h, c) => c !== 'overclock' && (bOf(h) !== 'pull' || c === 'bigshot');
+  const lvRoom = h => hasLv(h) && cap(h) > 0 && H.get(h).length < compsFor(CFG.MAX_CHIP_LV);  // 還能靠組件升級（放錯的組件也算等級，但這裡只插有效果的）
   const grab = c => comps.splice(comps.indexOf(c), 1)[0];
   for (const c of ['mirror', 'mirror', 'overclock', 'split', 'pierce']) if (comps.includes(c) && W.length < socketsOf('weapon')) W.push(grab(c));
   // 兩兩組合表有量過的：組件插在晶片上比插武器好（速度加乘高 5% 以上）就插晶片；沒量過的照 BIG
@@ -137,8 +138,9 @@ function sortChain() {
   for (const c of ['amp', 'bigshot']) if (comps.includes(c) && W.length < socketsOf('weapon') && !W.includes(c)) W.push(grab(c));
   for (const c of [...comps]) {
     if (c === 'overclock' || c === 'mirror') continue;
-    const h = hosts.find(h => cap(h) > 0 && okOn(h, c));
-    if (W.length < socketsOf('weapon')) W.push(grab(c));  // 武器還有空格先插武器（作用在全部子彈）
+    const up = hosts.find(h => lvRoom(h) && okOn(h, c)), h = hosts.find(h => cap(h) > 0 && okOn(h, c));
+    if (up) H.get(up).push(grab(c));  // 讓玩法晶片升級
+    else if (W.length < socketsOf('weapon')) W.push(grab(c));  // 武器還有空格插武器（作用在全部子彈）
     else if (h) H.get(h).push(grab(c));
   }
   for (const c of [...comps]) {  // 武器插不下的鏡像：產物多一份，先挑產物傷害大的晶片

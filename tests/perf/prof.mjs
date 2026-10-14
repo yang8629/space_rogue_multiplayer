@@ -12,7 +12,7 @@ await page.evaluate(() => {
   SFX.setMuted && SFX.setMuted(true);
   Game.newRun('sandbox', 'vanguard', 'scatter');
   Game.weapon = { id: 'scatter', path: 'A', final: null }; Game.refreshWeapon();
-  Game.chain = ['weapon', chipId('trigend', 1, 1), chipId('rear', 1, 2), chipId('boomerang', 3, 3), chipId('wallbounce', 1, 1)];
+  Game.chain = ['weapon', chipId('trigend', 1), chipId('rear', 2), chipId('boomerang', 3), chipId('wallbounce', 1)];
   Game.socks = [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []]; Game.wSock = 3; Game.recalc();
   const p = Game.player; p.hp = p.maxHp = 1e9; Game.enemies = [];
   for (const [x, y] of [[260, -120], [300, 60], [220, 180], [-250, 100], [-280, -150], [0, -260], [80, 240], [-60, 220], [380, -20], [-380, 0]]) { const e = new Enemy('brute', p.x + x, p.y + y, 1); e.hp = e.maxHp = 1e9; e.t = { ...e.t, speed: 0, dmg: 0 }; Game.enemies.push(e); }

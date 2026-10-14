@@ -17,7 +17,7 @@ const W = T_.WEAPONS[w];
 if (!W) { console.log(`用法：node weapondiag.js --w=<${Object.keys(T_.WEAPONS).join('|')}> --n=20 [--level=6] [--routes=none,A,A0]`); process.exit(1); }
 const ROUTES = (arg('routes') || 'none,A,A0,A1,B,B0,B1,C,C0,C1').split(',');
 const name = rk => rk === 'none' ? '沒升級' : rk.length === 1 ? W.paths[rk].name : W.paths[rk[0]].next[+rk[1]].name;
-const TIER = { 3: { chips: 3, lv2: 0.2, parts: 1 }, 6: { chips: 5, lv2: 0.5, parts: 3 }, 10: { chips: 6, lv2: 0.5, parts: 4 } }[L];
+const TIER = { 3: { chips: 3, parts: 1 }, 6: { chips: 5, parts: 3 }, 10: { chips: 6, parts: 4 } }[L];
 if (!TIER) { console.log('--level 只能是 3、6、10（跟武器升級價值表一樣）'); process.exit(1); }
 const POOL = T_.NORMAL_IDS.filter(id => !T_.isComp || !T_.isComp(id));
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -70,7 +70,7 @@ const BANK = { lost: 0 };
 
 function run1(chain, s, cfg, setup) {
   seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {};
-  const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(String(id).split(/[#~]/)[0], T_.levelOf(id), 2) : id));
+  const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(T_.baseOf(id), 2) : id));
   G.chain = r.chain; G.socks = r.socks;
   G.wSock = L < 7 ? 0 : L < 14 ? 1 : 2;
   setup(); G.recalc();
@@ -105,7 +105,7 @@ for (const rk of ROUTES) res[rk] = { S: reset(), t: 0, lost: 0 };
 for (let s = 0; s < N; s++) {
   seed(5000 + s * 37 + L);
   const ids = []; while (ids.length < TIER.chips) { const id = pick(POOL); if (!ids.includes(id)) ids.push(id); }
-  const chain = ['weapon', ...ids.map(id => Math.random() < TIER.lv2 ? T_.leveledId(id, 2) : id)];
+  const chain = ['weapon', ...ids];
   const parts = {}; for (let k = 0; k < TIER.parts; k++) { const q = pick(Object.keys(PARTS)); parts[q] = (parts[q] || 0) + 1; }
   for (const rk of ROUTES) {
     S = res[rk].S;

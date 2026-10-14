@@ -28,9 +28,9 @@ const Game = {
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mates: [], shooter: null,  // mates：其他玩家的飛船（房主這邊每艘帶 L = 那個人的配裝；slot = 幾號玩家）
-  // V2 晶片：各晶片的累積用量（成長）、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
+  // V2 晶片：各晶片的玩法擊殺數、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
   parts: {}, partSlots: 6, cap: 4, mech: mechStats({}), objs: [], portals: [], decoys: [],
-  growth: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
+  playKills: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
   allShips() { return [this.player, ...this.mates]; },  // 所有飛船（含倒下、離線的）
@@ -75,7 +75,7 @@ const Game = {
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
   isClient() { return Net.role === 'client' && this.mode === 'coop'; },
-  coopOn() { return this.mode === 'coop' && this.mates.some(m => !m.gone); },  // 雙人而且有隊友在線（都離線時敵人數量、血量、成長需求都恢復單人）
+  coopOn() { return this.mode === 'coop' && this.mates.some(m => !m.gone); },  // 雙人而且有隊友在線（都離線時敵人數量、血量都恢復單人）
   freePlay() { return this.mode === 'sandbox' || this.mode === 'range'; },  // 沙盒、靶場：晶片無限供應、可以隨意改武器
   // 錢：雙人時每人各自一個錢包。怪物掉落的晶體兩人都拿（見 Net 的 loot），其他收入、花費都是自己的
   pay(price, fn) {
@@ -99,7 +99,7 @@ const Game = {
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.socks = mode === 'sandbox' ? [['split']] : [];
     this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
-    this.growth = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
+    this.playKills = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
@@ -414,9 +414,9 @@ const Game = {
   rewardOptions() {
     const offers = this.chipOffers(), chips = pickN(offers, 3), parts = pickN(PART_IDS, 3), empty = this.chain.includes(null);
     const out = this.withComp([0, 1, 2].map(i => (!empty || i === 2) && Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i])));  // 晶片的插座數在這裡決定
-    const isPlay = id => !String(id).startsWith('part:') && !!CHIPS[baseOf(id)].grow;
+    const isPlay = id => !String(id).startsWith('part:') && hasLv(id);
     if (this.playDry && !out.some(isPlay)) {
-      const pool = offers.filter(id => CHIPS[id].grow && !out.some(o => CHIPS[o] && baseOf(o) === id));
+      const pool = offers.filter(id => hasLv(id) && !out.some(o => CHIPS[o] && baseOf(o) === id));
       const nComp = out.filter(isComp).length, k = out.findIndex(id => !isComp(id) || nComp > 1);  // 換掉零件、觸發器（或多出來的組件）；保底的那個組件留著
       if (pool.length && k >= 0) out[k] = newChip(pick(pool));
     }
@@ -442,12 +442,12 @@ const Game = {
     if (!R || this.credits < R.reroll) return;
     this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(); this.view(); });
   },
-  // 獎勵、商店可以出現的晶片：已經有的改玩法晶片不再出現（它們只能靠用量成長升級）
+  // 獎勵、商店可以出現的晶片：已經有的玩法晶片不再出現（同一種只有一個；升級靠插組件）
   chipOffers() {
     const own = new Set([...this.chain, ...this.socks.flat(), ...this.inventory].filter(Boolean).map(baseOf));
-    return NORMAL_IDS.filter(id => !(CHIPS[id].grow && own.has(id)));
+    return NORMAL_IDS.filter(id => !(hasLv(id) && own.has(id)));
   },
-  // ---------- 取得晶片：放進倉庫（不會合成：改玩法的晶片靠用量成長升級，組件、觸發器不會升級） ----------
+  // ---------- 取得晶片：放進倉庫（不會合成：玩法晶片靠插組件升級，組件、觸發器不會升級） ----------
   canAcquire(id) {
     if (String(id).startsWith('part:')) return partsUsed(this.parts) < this.partSlots;  // 零件：要有空的零件格
     return this.inventory.includes(null);
@@ -692,9 +692,9 @@ const Game = {
     const R = this.runStats;
     const total = Object.values(R.dmg).reduce((a, b) => a + b, 0);
     const chips = Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]);
-    // 晶片名稱＋插座數（◇2）；電路格另外標奇異點強化的屬性
-    const name = id => id ? CHIPS[id].name + (isHost(id) && id !== 'weapon' ? '◇' + socketsOf(id) : '') : null, A = this.slotAttr || [];
-    const withSock = (id, i) => id && (this.socks[i] || []).length ? `${name(id)}［${this.socks[i].map(c => CHIPS[c].name).join('、')}］` : name(id);
+    // 晶片名稱（電路上的照組件升到的等級）＋插座數（◇2）；電路格另外標奇異點強化的屬性
+    const name = (id, lv = 1) => id ? lvName(id, lv) + (isHost(id) && id !== 'weapon' ? '◇' + socketsOf(id) : '') : null, A = this.slotAttr || [];
+    const withSock = (id, i) => id && (this.socks[i] || []).length ? `${name(id, slotLv(i))}［${this.socks[i].map(c => CHIPS[c].name).join('、')}］` : name(id, slotLv(i));
     // 打到哪：星區、層、節點種類、波次；王戰時再加上王剩多少血
     const node = this.node, C = this.combat, boss = (this.enemies || []).find(e => e.t.boss && !e.dead);
     let where = node ? `${this.isEndless() ? '無盡 · ' : ''}星區 ${this.sector} 第 ${node.L + 1} 層（${NODE_META[node.type].label}）` : `星區 ${this.sector} 航圖`;
@@ -729,15 +729,15 @@ const Game = {
     };
     return rec;
   },
-  // 機體（遊玩紀錄用）：零件層數、零件格、開啟的特性、各晶片的用量成長
+  // 機體（遊玩紀錄用）：零件層數、零件格、開啟的特性、各晶片的玩法擊殺數
   mechRecord() {
     const T = this.mech.traits;
     return { parts: Object.fromEntries(PART_IDS.filter(id => this.parts[id]).map(id => [PARTS[id].name, this.parts[id]])), slots: this.partSlots,
       traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
-      growth: Object.fromEntries(Object.entries(this.growth).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, Math.round(v)])) };
+      playKills: Object.fromEntries(Object.entries(this.playKills).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, v])) };
   },
   // ---------- 奇異點：投入 1 個晶片，隨機一個還沒強化過的電路格（武器格也可以）抽一個屬性 ----------
-  //   好結果的機率照投入晶片的等級（BH_GOOD）；屬性留在格子上（換晶片也還在），每格只能強化一次
+  //   好結果的機率照投入晶片的插座數（BH_GOOD）；屬性留在格子上（換晶片也還在），每格只能強化一次
   ownedFusable() {  // 電路、倉庫、插座中可以投入奇異點的晶片
     const out = [];
     this.chain.forEach((id, i) => { if (i > 0 && canSacrifice(id)) out.push({ key: 'chain:' + i, arr: this.chain, i, id }); });
@@ -758,7 +758,7 @@ const Game = {
   bhFuse() {
     const a = this.ownedFusable().find(o => o.key === this.bh.sel), free = this.bhFreeSlots();
     if (!a || !free.length) return;
-    const good = Math.random() < BH_GOOD[Math.min(levelOf(a.id), 3) - 1];
+    const good = Math.random() < bhGood(a.id);
     const attr = pick(good ? GOOD_ATTRS : BAD_ATTRS), slot = pick(free);
     if (this.runStats) this.runStats.got.push(`${this.here()} 奇異點 投入${CHIPS[a.id].name} → 第 ${slot + 1} 格${SLOT_ATTRS[attr].name}`);
     if (a.arr === this.chain) for (const c of this.socks[a.i] || []) { const k = this.inventory.indexOf(null); if (k >= 0) this.inventory[k] = c; }  // 投入電路上的晶片：插座上的組件退回倉庫（放不下的一起被吞掉）
@@ -839,7 +839,7 @@ const Game = {
     if (KR) KR.kills++;
     const big = e.type === 'brute' || e.type === 'elite';
     if (!this.isClient()) {
-      this.infectBurst(e); this.payGrowTags(e); this.onStreakKill(e); this.onReloadKill(e);
+      this.infectBurst(e); this.payPlayTags(e); this.onStreakKill(e); this.onReloadKill(e);
       if (e.wild && e.burnT > 0) {  // 野火：燒著死掉 → 火噴到附近所有敵人
         const R = e.wild.deathR;
         for (const o of enemiesNear(e.x, e.y, R)) if (o !== e && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, e.x, e.y) < R * R) this.igniteFrom(e, o);
@@ -1343,19 +1343,19 @@ const Game = {
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.reflectShot(e, b, ca); break; }
         }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
-        // 用量成長：照著晶片的玩法打中敵人 → 在牠身上貼標記（1 秒），牠死掉時每個標記各加「牠的晶體值」（見 tagGrow）
+        // 玩法擊殺：照著晶片的玩法打中敵人 → 在牠身上貼標記（1 秒），牠死掉時每個標記各算一次（見 tagPlay）
         const own = b.owner;
-        if (b.mode === 'return') this.tagGrow(e, own, 'boomerang');
-        if (orbit || b.orbShot) this.tagGrow(e, own, 'orbit');
-        if (b.stasis && b.dashed) this.tagGrow(e, own, 'stasis');
-        if (b.accel && b.accelMul >= 2) this.tagGrow(e, own, 'accel');
-        if (b.bounced) this.tagGrow(e, own, 'wallbounce');
-        if (b.full) this.tagGrow(e, own, 'charge');
-        if (b.rear) this.tagGrow(e, own, 'rear');
-        if (b.dashShot) this.tagGrow(e, own, 'dashfire');
-        if (b.stand) this.tagGrow(e, own, 'stand');
-        if (b.infGen > 0) this.tagGrow(e, own, 'infect');
-        if (b.att.src === 'intercept') this.tagGrow(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
+        if (b.mode === 'return') this.tagPlay(e, own, 'boomerang');
+        if (orbit || b.orbShot) this.tagPlay(e, own, 'orbit');
+        if (b.stasis && b.dashed) this.tagPlay(e, own, 'stasis');
+        if (b.accel && b.accelMul >= 2) this.tagPlay(e, own, 'accel');
+        if (b.bounced) this.tagPlay(e, own, 'wallbounce');
+        if (b.full) this.tagPlay(e, own, 'charge');
+        if (b.rear) this.tagPlay(e, own, 'rear');
+        if (b.dashShot) this.tagPlay(e, own, 'dashfire');
+        if (b.stand) this.tagPlay(e, own, 'stand');
+        if (b.infGen > 0) this.tagPlay(e, own, 'infect');
+        if (b.att.src === 'intercept') this.tagPlay(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
         if (b.pull && b.mode !== 'orbit') this.pullAt(b, e);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
         let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
         let att = b.att;
@@ -1517,7 +1517,7 @@ const Game = {
       if (d > R + o.r || d < 1) continue;
       const ux = (cx - o.x) / d, uy = (cy - o.y) / d, add = Math.max(0, PULL_V - (o.vx * ux + o.vy * uy));
       o.vx += ux * add; o.vy += uy * add;
-      this.tagGrow(o, b.owner, 'pull');
+      this.tagPlay(o, b.owner, 'pull');
       n++;
     }
     if (b.pull >= 3) {
@@ -1534,7 +1534,7 @@ const Game = {
         const d = Math.hypot(o.x - v.x, o.y - v.y);
         if (d > v.r || d < 4) continue;
         o.vx += (v.x - o.x) / d * 1600 * dt; o.vy += (v.y - o.y) / d * 1600 * dt;
-        this.tagGrow(o, v.owner, 'pull');
+        this.tagPlay(o, v.owner, 'pull');
       }
       if (v.fx <= 0) {
         v.fx = 0.3;
@@ -1583,7 +1583,7 @@ const Game = {
     let total = S.reduce((a, q) => a + q.dmg, 0) * M, att = attCredit(mergeAtt(S.map(q => ({ att: q.att, w: q.dmg }))), 'sticky', M);
     const x = e.x, y = e.y, H = this.stickyHost(S, total, att);  // 插在黏著上的組件
     total = H.total; att = H.att;
-    this.tagGrow(e, S[0].owner, 'sticky');
+    this.tagPlay(e, S[0].owner, 'sticky');
     const ring = (r, c) => ringFx(x, y, r, c);
     ring(e.r + 20 + n * 3, '#f78cff');
     e.hurt(total, 0, 0, 'explode', att);
@@ -1719,7 +1719,6 @@ const Game = {
     if (list.length) spawnShots(list, x, y, t ? Math.atan2(t.y - y, t.x - x) : ang, 1, null);  // 第 1 層：不會進環繞的圈
     for (let i = n0; i < this.bullets.length; i++) this.bullets[i].fromIntercept = true;  // 永久標記（迴旋折返會把來源改成迴旋，盾要靠這個認）
   },
-  // 用量成長：owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
   // 盾衛反彈：子彈照盾面的法線反彈，變成敵人的子彈（傷害 ×0.5，最多 25），我方子彈消失
   reflectShot(e, b, ca) {
     const nx = Math.cos(ca), ny = Math.sin(ca), vx = Math.cos(b.angle), vy = Math.sin(b.angle), dot = vx * nx + vy * ny;
@@ -1732,46 +1731,21 @@ const Game = {
     b.dead = true;
     burst(e.x + nx * (e.r + SHIELD_OUT), e.y + ny * (e.r + SHIELD_OUT), '#bfefff', 6, 160, 0.25, 2);
   },
-  // 成長標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），1 秒內敵人死掉就各加「牠的晶體值」
-  //   蟲群 1、噴吐者 2、刺殼 4、虛空獵手 12、旗艦 40；子彈再多，同一隻敵人死掉也只算一份
-  tagGrow(e, owner, id, dur = CFG.GROW_TAG_TIME) {
-    const T = e.growTags || (e.growTags = []), o = owner || null;
+  // 玩法擊殺標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），1 秒內敵人死掉就各記一次
+  //   owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
+  //   子彈再多，同一隻敵人死掉也只算一次；紀錄畫面顯示各晶片的玩法擊殺數
+  tagPlay(e, owner, id, dur = CFG.PLAY_TAG_TIME) {
+    const T = e.playTags || (e.playTags = []), o = owner || null;
     const t = T.find(q => q.id === id && q.owner === o);
     if (t) { t.t = this.time; t.dur = dur; } else T.push({ id, owner: o, t: this.time, dur });
   },
-  payGrowTags(e) {
-    if (e.noGrow) { e.growTags = null; return; }  // 母巢生的蟲群不給成長
-    for (const q of e.growTags || []) if (this.time - q.t <= (q.dur || CFG.GROW_TAG_TIME)) this.grow(q.owner, q.id, e.t.credits || 0);
-    e.growTags = null;
-  },
-  grow(owner, id, n = 1) {
-    const L = owner || this, g = L.growth;
-    if (!g || !(n > 0)) return;
-    const at = (L.slotAttr || [])[L.chain.findIndex(c => c && baseOf(c) === id)];  // 奇異點強化的格子：成長 ×2／不會成長
-    if (at === 'nogrow') return;
-    if (at === 'grow2') n *= 2;
-    g[id] = (g[id] || 0) + n;
-    if (!owner) this.checkGrowth();
-  },
-  // 電路上的晶片累積用量到了就升級（Lv3 進化）。雙人的隊友：房主把累積量傳過來，隊友升級後把新電路傳回去
-  checkGrowth() {
-    const msgs = [];
-    this.chain.forEach((id, i) => {
-      const base = baseOf(id), g = id && CHIPS[base] && CHIPS[base].grow;
-      if (!g) return;
-      let lv = levelOf(id);
-      while (lv < CFG.MAX_CHIP_LV && (this.growth[base] || 0) >= growNeed(base, lv)) lv++;
-      if (lv <= levelOf(id)) return;
-      this.chain[i] = chipId(base, lv, socketsOf(id));  // 插座數不變
-      msgs.push(lv >= CFG.MAX_CHIP_LV ? `${CHIPS[base].name} 進化 → ${CHIPS[base].evo}！` : `${CHIPS[base].name} 升到 Lv${lv}`);
-    });
-    if (!msgs.length) return;
-    this.recalc();
-    const p = this.player;
-    for (const [k, m] of msgs.entries()) floatText(p.x, p.y - 40 - k * 20, m, '#ffd166', true);
-    Events.emit('upgrade');
-    if (this.runStats) for (const m of msgs) this.runStats.got.push(`${this.here()} ${m}（用量成長）`);
-    if (this.isClient()) Net.sendLoadout();
+  payPlayTags(e) {
+    if (e.noPlay) { e.playTags = null; return; }  // 叫出來、生出來的小怪不算（不然可以一直刷）
+    for (const q of e.playTags || []) if (this.time - q.t <= (q.dur || CFG.PLAY_TAG_TIME)) {
+      const K = (q.owner || this).playKills;
+      if (K) K[q.id] = (K[q.id] || 0) + 1;
+    }
+    e.playTags = null;
   },
   // cmp：壓縮（電漿升級）——先把 cmp.pull 內看得到中心的敵人吸到中心附近（旗艦、母巢不吸），
   //   再數炸到幾隻（含被直擊的 skipId 那隻；牠不再吃爆炸傷害），第 2 隻起每多 1 隻傷害 +cmp.per

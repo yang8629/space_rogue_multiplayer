@@ -12,9 +12,9 @@ const r = await p.evaluate(async build => {
   SFX.setMuted && SFX.setMuted(true);
   Game.newRun('sandbox', 'vanguard', 'scatter');
   const B = {
-    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('rear', 1, 2), chipId('boomerang', 3, 3), chipId('wallbounce', 1, 1)], socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []] },
-    intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2, 2), chipId('accel', 3, 2), chipId('orbit', 3, 2), chipId('wallbounce', 2, 1), chipId('quick', 3, 1), chipId('intercept', 3, 2), chipId('dashfire', 1, 3)], socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []] },
-    trig2: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1, 1), chipId('trigend', 2, 1)], socks: [[], ['split'], ['split']] },
+    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1), chipId('rear', 2), chipId('boomerang', 3), chipId('wallbounce', 1)], socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []] },
+    intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2), chipId('accel', 2), chipId('orbit', 2), chipId('wallbounce', 1), chipId('quick', 1), chipId('intercept', 2), chipId('dashfire', 3)], socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []] },
+    trig2: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1), chipId('trigend', 1)], socks: [[], ['split'], ['split']] },
   }[build];
   Game.weapon = { id: B.w[0], path: B.w[1], final: B.w[2] }; Game.refreshWeapon();
   Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; Game.recalc();

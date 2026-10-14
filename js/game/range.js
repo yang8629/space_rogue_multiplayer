@@ -59,8 +59,9 @@ const Range = {
     }
     if (layout === 'flood') {  // 爆量重現：QA 第 195 局那組配裝（以前一擋下環形波就整條電路回射，幾秒內幾萬發）
       G.weapon = { id: 'scatter', path: 'A', final: 0 }; G.refreshWeapon();
-      G.chain = ['weapon', chipId('rear', 2, 2), chipId('accel', 3, 2), chipId('orbit', 3, 2), chipId('wallbounce', 2, 1), chipId('intercept', 3, 2), chipId('dashfire', 1, 3)];
-      G.socks = [['mirror', 'split'], ['shock'], ['ignite'], [], [], [], []];
+      // 等級靠插組件：收束透鏡插在玩法晶片上沒有效果、只升級（反向 Lv2、加速 Lv3、環繞 Lv3、牆反彈 Lv2、攔截 Lv3）
+      G.chain = ['weapon', chipId('rear', 2), chipId('accel', 2), chipId('orbit', 2), chipId('wallbounce', 1), chipId('intercept', 2), chipId('dashfire', 3)];
+      G.socks = [['mirror', 'split'], ['shock'], ['ignite', 'focus'], ['focus', 'focus'], ['focus'], ['focus', 'focus'], []];
       G.wSock = Math.max(G.wSock || 0, 3); G.recalc();
       this.ringT = 1;
       floatText(p.x, p.y - 30, '已換上爆量配裝（按住射擊）', '#ff9f1c', true);
