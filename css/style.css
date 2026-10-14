@@ -108,6 +108,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
   border: 1px solid #2a3a7a; border-radius: 12px; padding: 18px 22px; box-shadow: 0 0 40px rgba(76, 201, 240, .15); }
 .panel h2 { color: #4cc9f0; letter-spacing: 2px; font-size: 19px; }
 .panel h3 { font-size: 13px; color: #8fa3d9; margin: 14px 0 8px; font-weight: 600; }
+#editor .panel { max-width: 1400px; }  /* 螢幕寬 1440 時，武器＋電路 8 格（放大後的晶片）排得下一行 */
 .chain, .inv { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 14px 12px;
   background: #070b1a; border-radius: 10px; border: 1px dashed #22305e; }
 .inv { gap: 10px; }
@@ -125,11 +126,17 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 /* 電路：每一格一欄，晶片卡靠上，下面固定留一排插座（大圓，組件插在裡面；滑鼠移上去看是什麼） */
 .chain { align-items: flex-start; }
 #edMain.free #chain { position: sticky; top: -1px; z-index: 3; background: #0b1024; box-shadow: 0 6px 10px -6px #000; }  /* 沙盒／靶場：電路固定在上方 */
-.chain .arrow { margin-top: 30px; }
+.chain .arrow { margin-top: 43px; width: 16px; }
+/* 電路、倉庫的晶片放大（晶片庫維持小格，一次看得到全部） */
+.chain .slot, .inv .slot { width: 124px; height: 102px; }
+.chain .chip, .inv .chip { width: 114px; height: 90px; padding: 6px 8px; }  /* 高度留給最長的名稱排三行（進化＋稀有詞條） */
+.chain .chip .nm, .inv .chip .nm { font-size: 15px; }
+.chain .chip .top, .inv .chip .top { font-size: 11px; }
+.chain .chip .sk, .inv .chip .sk { font-size: 11px; }
 .hgroup { display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .socks { display: flex; gap: 5px; justify-content: center; align-items: center; height: 42px; padding: 0 6px; border-radius: 21px; }
 .hgroup .slot:not(:empty) + .socks:not(:empty) { background: rgba(255, 209, 102, 0.05); }
-.sock { --c: #ffd166; position: relative; width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--c); color: var(--c);
+.sock { --c: #d4a373; position: relative; width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--c); color: var(--c);
   display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; text-align: center; line-height: 1;
   background: radial-gradient(circle at 35% 30%, #1d2650, #0b1028 70%); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 35%, transparent);
   cursor: grab; user-select: none; transition: transform .1s; }
@@ -149,21 +156,23 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .hgroup.cut::after { left: -8px; top: calc(100% - 3px); transform: translateX(-50%); }
 .cutmark { position: relative; flex: none; width: 3px; height: 34px; border-radius: 2px; background: #ff5d73; box-shadow: 0 0 8px #ff5d73; }
 .cutmark::after { top: calc(100% + 1px); left: 50%; transform: translateX(-50%); }
-.chaincount { font-size: 12px; color: #8fa3d9; margin: 24px 0 0 10px; text-align: center; }
+.chaincount { font-size: 12px; color: #8fa3d9; font-weight: 400; margin-left: 12px; }  /* 跟在「電路」標題後面 */
 .chaincount span { font-size: 10px; color: #6a79ad; }
 .slot.ag { border: 2px solid #9dff6b; box-shadow: 0 0 12px #9dff6b66; }
 .slot.ab { border: 2px solid #ff6b6b; box-shadow: 0 0 12px #ff6b6b66; }
 .slot .sattr { position: absolute; bottom: -10px; left: 6px; font-size: 12px; font-weight: 700; padding: 0 4px; background: #070b1a; white-space: nowrap; border-radius: 4px; }
 .slot .sattr.good { color: #9dff6b; border: 1px solid #3f6b2a; }
 .slot .sattr.bad { color: #ff6b6b; border: 1px solid #6b2a2a; }
-.card .sockln { color: #ffd166; }
-.chip .sk { display: block; font-size: 10px; color: #ffd166; line-height: 1; }
+.card .sockln { color: #d4a373; }  /* 插座、組件：青銅色 */
+.chip .sk { display: block; font-size: 10px; color: #d4a373; line-height: 1; }
 .bh-slots { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0; }
 .bh-slot { border: 1px solid #2f3f78; border-radius: 6px; padding: 2px 8px; }
 .chip { width: 98px; height: 64px; border-radius: 7px; padding: 5px 7px; cursor: grab; display: flex;
   flex-direction: column; justify-content: space-between; border: 1px solid; font-size: 13px; background: #0d1433; }
 .chip .top { display: flex; justify-content: space-between; font-size: 10px; opacity: .85; }
 .chip .nm { font-weight: 600; font-size: 13px; line-height: 1.15; }
+.chip .nm small { font-size: .72em; font-weight: 400; opacity: .8; }
+.chip .nm small, .chip .nm .rt { display: inline-block; white-space: nowrap; }  /* 整塊換行：不拆成「（迴旋／Lv3）」「淨／空」 */
 .chip.idle { opacity: .4; filter: grayscale(.7); }
 .t-source { border-color: #4cc9f0; color: #bdf0ff; box-shadow: inset 0 0 14px rgba(76, 201, 240, .22); }
 .t-path { border-color: #5ef2d0; color: #c9fff3; box-shadow: inset 0 0 14px rgba(94, 242, 208, .22); }
@@ -173,8 +182,10 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .t-mod { border-color: #b388ff; color: #e3d4ff; box-shadow: inset 0 0 14px rgba(179, 136, 255, .22); }
 .t-amp { border-color: #ffd166; color: #fff0c7; box-shadow: inset 0 0 14px rgba(255, 209, 102, .2); }
 .t-trigger { border-color: #ff6b9d; color: #ffd3e2; box-shadow: inset 0 0 14px rgba(255, 107, 157, .25); }
-.t-comp { border-color: #ffd166; color: #fff0c7; background: linear-gradient(160deg, #2b2208, #120f08); box-shadow: inset 0 0 14px rgba(255, 209, 102, .25); }
+.t-comp { border-color: #d4a373; color: #f3e1cc; background: linear-gradient(160deg, #2a1d12, #110c08); box-shadow: inset 0 0 14px rgba(212, 163, 115, .25); }  /* 組件：青銅色（金色留給稀有晶片） */
 .chip.t-comp { border-radius: 26px; border-style: double; border-width: 3px; }
+.chip.rare { border-color: #ffd166; box-shadow: 0 0 10px rgba(255, 209, 102, .55), inset 0 0 12px rgba(255, 209, 102, .18); animation: rareGlow 2.4s ease-in-out infinite; }  /* 稀有晶片 */
+.chip.rare .nm::before { content: '★ '; color: #ffd166; }
 .t-link { border-color: #2ee6a6; color: #c8ffe9; box-shadow: inset 0 0 14px rgba(46, 230, 166, .2); }
 .t-composite { border-color: #ff9f1c; color: #ffe2b8; background: linear-gradient(135deg, #2a1a08, #0d1433);
   box-shadow: inset 0 0 16px rgba(255, 159, 28, .35); }
@@ -188,7 +199,7 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .card.cat-chip, .card.cat-comp, .card.cat-mech { padding-top: 0; overflow: hidden; border-width: 2px; border-style: solid; }
 .card .cat { margin: 0 -14px; padding: 3px 14px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #070b1a; }
 .card.cat-chip { border-color: #4cc9f0; } .cat-chip .cat { background: #4cc9f0; }
-.card.cat-comp { border-color: #ffd166; } .cat-comp .cat { background: #ffd166; }
+.card.cat-comp { border-color: #d4a373; } .cat-comp .cat { background: #d4a373; }
 .card.cat-mech { border-color: #cfe8ff; } .cat-mech .cat { background: #cfe8ff; }
 .card.picked { outline: 2px solid #e0aaff; outline-offset: 3px; }
 /* 晶片的插座數當稀有度：框色 1 灰、2 藍、3 紫（上方的類別色帶不變） */
@@ -197,6 +208,24 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
 .card.cat-chip.sk3 { border-color: #b388ff; box-shadow: 0 0 16px rgba(179, 136, 255, .55); }
 .card.sk2 .sockln { color: #8fb8ff; }
 .card.sk3 .sockln { color: #c9a6ff; font-weight: 700; }
+/* 稀有晶片：金框、金色色帶、流光掃過、外圈呼吸發光（框色不看插座數，插座數看 ◇ 那行） */
+.card.rare { position: relative; border-color: #ffd166 !important; box-shadow: 0 0 18px rgba(255, 209, 102, .55), inset 0 0 22px rgba(255, 209, 102, .12);
+  background: linear-gradient(170deg, #1c1606, #070b1a 55%); animation: rareGlow 2.4s ease-in-out infinite; }
+.card.rare::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 240, 190, .28) 48%, transparent 60%); background-size: 260% 100%; animation: rareSheen 3.2s linear infinite; }
+.card .cat.rareband { background: linear-gradient(90deg, #b8860b, #ffd166, #fff3c4, #ffd166, #b8860b); background-size: 200% 100%; color: #2a1d02; animation: rareSheen 3.2s linear infinite; }
+.card .rareln { color: #ffd166; font-size: 12px; font-weight: 700; line-height: 1.5; text-shadow: 0 0 8px rgba(255, 209, 102, .5); }
+@keyframes rareGlow { 50% { box-shadow: 0 0 30px rgba(255, 209, 102, .85), inset 0 0 26px rgba(255, 209, 102, .2); } }
+@keyframes rareSheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+/* 揭曉：其他卡片先翻開；稀有那格先醞釀（蓋住內容、不能按），最後翻開 */
+.card.flipin { animation: cardFlip .45s ease-out both; }
+@keyframes cardFlip { from { transform: perspective(700px) rotateY(90deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.card.rare-wait > :not(.rare-veil) { visibility: hidden; }
+.card.rare-wait .rare-veil { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 54px; color: #ffd166; z-index: 2;
+  background: radial-gradient(circle, rgba(255, 209, 102, .25), transparent 65%); text-shadow: 0 0 24px #ffd166; animation: veilPulse .8s ease-in-out infinite; }
+@keyframes veilPulse { 50% { transform: scale(1.18) rotate(20deg); text-shadow: 0 0 40px #fff3c4; } }
+.card.rare-pop { animation: rarePop .6s cubic-bezier(.2, 1.6, .4, 1) both, rareGlow 2.4s ease-in-out .6s infinite; }
+@keyframes rarePop { from { transform: perspective(700px) rotateY(90deg) scale(.9); filter: brightness(2.2); } to { transform: none; filter: none; } }
 .bh-core { width: 120px; height: 120px; margin: 8px auto 0; border-radius: 50%;
   background: radial-gradient(circle, #000 38%, #3a1d5c 55%, #b388ff 62%, transparent 72%);
   box-shadow: 0 0 40px #7b2cbf; animation: bhspin 4s linear infinite; }
@@ -364,10 +393,10 @@ button.big { font-size: 16px; padding: 10px 28px; border-radius: 8px; }
   .node { width: 40px; height: 40px; font-size: 16px; }
   .node small { font-size: 8px; }
   .card { width: 100%; }
-  .slot { width: 84px; height: 64px; }
-  .chip { width: 76px; height: 54px; padding: 4px 5px; }
-  .chip .nm { font-size: 12px; }
-  .chip .top { font-size: 9px; }
+  .slot, .chain .slot, .inv .slot { width: 84px; height: 64px; }
+  .chip, .chain .chip, .inv .chip { width: 76px; height: 54px; padding: 4px 5px; }
+  .chip .nm, .chain .chip .nm, .inv .chip .nm { font-size: 12px; }
+  .chip .top, .chain .chip .top, .inv .chip .top { font-size: 9px; }
   .arrow { width: 14px; font-size: 14px; }
   .arrow.trig { width: 30px; font-size: 9px; }
   .sock { width: 28px; height: 28px; font-size: 9px; }

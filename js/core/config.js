@@ -24,11 +24,15 @@ const CFG = {
   WAVE_MUL: 1.4,            // 一波的敵人預算倍數（主題小兵加入後調）
   // 三選一的種類：同一個畫面、同一套程式（Game.openReward），差別只寫在這張表
   //   reroll／rerollUp：刷新第一次的價格、之後每次多多少（都照星區漲價）；slotCard：多一張「電路擴充（插槽 +1）」
+  //   rare：保證幾格稀有晶片（刷新也保證）；after：選完之後回到哪個畫面（旗艦：勝利畫面的二選一；沒寫 = 航圖）
   REWARDS: {
-    start:  { reroll: 15, rerollUp: 10, slotCard: false },  // 從後面星區開始的章節：出發前的三選一
-    combat: { reroll: 15, rerollUp: 10, slotCard: false },
-    elite:  { reroll: 30, rerollUp: 20, slotCard: true },
+    start:  { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },  // 從後面星區開始的章節：出發前的三選一
+    combat: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },
+    elite:  { reroll: 30, rerollUp: 20, slotCard: true, rare: 1 },
+    boss:   { reroll: 30, rerollUp: 20, slotCard: false, rare: 1, after: 'victory' },  // 擊沉旗艦：先三選一，再到勝利畫面
   },
+  // 稀有晶片（玩法晶片＋詞條，見 RARE）：三選一每一格玩法晶片 chance 機率變稀有；詞條等級 Lv1／Lv2／Lv3 的機率 lv
+  RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
   ELITE_ESCORT: 0.3,         // 精英戰最後一區（精英的場子）的護衛：一般一波預算的幾倍
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],

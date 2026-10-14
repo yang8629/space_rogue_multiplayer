@@ -10,16 +10,38 @@ const CARD_CAT = { chip: '晶片', comp: '組件', mech: '機體強化' };
 const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 
 function chipCard(id, footer = '') {
-  const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip';
+  const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip', r = rareOf(id);
   const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
   const lv = LV_INFO[baseOf(id)] ? `<div class="ty" style="line-height:1.6">${lvLine(baseOf(id), 1)}<br>每插 1 個組件升 ${CFG.LV_PER_COMP} 級</div>` : '';  // 卡片上的晶片還沒插組件，一律 Lv1
   const sk = isHost(id) && id !== 'weapon' && socketsOf(id) ? ' sk' + socketsOf(id) : '';  // 插座數 = 稀有度：框色 1 灰、2 藍、3 紫
-  return `<div class="card cat-${cat}${sk}">${catBand(cat)}
+  // 稀有晶片：金色色帶、金框流光，名稱下面一行詞條（框色改金色，插座數看 ◇ 那行）
+  const band = r ? '<div class="cat rareband">★ 稀有晶片</div>' : catBand(cat), rl = r ? `<div class="rareln">★ ${rareTxt(r)}</div>` : '';
+  return `<div class="card cat-${cat}${sk}${r ? ' rare' : ''}">${band}
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
-    <div class="ttl">${d.name}</div>
+    <div class="ttl">${d.name}</div>${rl}
     ${sockLine(id)}
     <div class="ds brief">${chipBrief(id)}</div>
     <div class="det"><div class="ds">${d.desc}</div>${lv}${ps}</div>${footer}</div>`;
+}
+// 三選一的標題（種類見 CFG.REWARDS）
+const REWARD_TITLE = {
+  start: () => `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）`,
+  combat: () => '⚔ 戰鬥勝利：三選一（晶片或零件）',
+  elite: () => '☠ 精英擊破：三選一（或電路擴充）',
+  boss: () => '♛ 旗艦擊沉：三選一（選完再領旗艦獎勵）',
+};
+const REVEAL_MS = 1600;  // 揭曉動畫：有稀有晶片時，其他卡先翻開，稀有那格醞釀到這時候才翻開
+// 稀有版本、身上已經有這個晶片：身上那個變稀有。已有不同詞條時兩個按鈕：替換（新詞條從 1 級）／增強（原本的 +1 級）
+function rareButtons(id, wait) {
+  const o = Game.ownedChip(baseOf(id)), old = o.arr[o.i], r0 = rareOf(old), r1 = rareOf(id), off = wait ? 'disabled' : '';
+  const where = `${o.arr === Game.chain ? `電路第 ${o.i + 1} 格` : '倉庫'}的${CHIPS[baseOf(id)].name}`, sk = Math.max(socketsOf(old), socketsOf(id));
+  const note = `<div class="ty rareln">${where}變稀有（插座 ${sk} 個，組件不動）</div>`;
+  const btn = (mode, txt, dis) => `<button ${off || dis ? 'disabled' : ''} data-act="reward" data-arg="${id}|${mode}">${txt}</button>`;
+  const up = r => mergeRare(r0, r1, r);
+  if (!r0) return note + btn('boost', `選擇：${RARE[r1.k].name} Lv${r1.lv}`);
+  if (r0.k === r1.k) return note + btn('boost', r0.lv >= RARE_MAX_LV ? '詞條已滿級' : `增強：${RARE[r0.k].name} Lv${r0.lv} → Lv${up('boost').lv}`, r0.lv >= RARE_MAX_LV);
+  return note + btn('replace', `替換：${RARE[r0.k].name} → ${RARE[r1.k].name} Lv1`)
+    + btn('boost', r0.lv >= RARE_MAX_LV ? `${RARE[r0.k].name}已滿級` : `增強：${RARE[r0.k].name} Lv${r0.lv} → Lv${up('boost').lv}`, r0.lv >= RARE_MAX_LV);
 }
 // 插座說明：宿主顯示插座數與產物；組件顯示「插在左邊的晶片上」
 function sockLine(id) {
@@ -71,7 +93,7 @@ const Screen = {
       case 'codex': Codex.open('rules'); break;
       case 'run': this.restart(); break;
       case 'editor': Game.toggleEditor(); break;
-      case 'reward': Game.takeReward(arg || null); break;
+      case 'reward': { const [id, mode] = (arg || '').split('|'); Game.takeReward(id || null, mode || 'boost'); break; }  // 稀有版本：id|replace 替換／id|boost 增強
       case 'reroll': Game.rerollReward(); break;
       case 'buy': Game.buy(+arg); break;
       case 'leave': Game.showMap(); break;
@@ -393,20 +415,27 @@ const Screen = {
 
   reward() {
     const R = Game.reward, full = !Game.inventory.includes(null);
+    if (!R) return;
+    if (!R.options.some(rareOf)) R.revealed = true;  // 沒有稀有晶片：不演揭曉
     const slotCard = () => `<div class="card" style="border-color:#2ee6a6">
       <div class="ty" style="color:#2ee6a6">⊞ 電路擴充</div><div class="ttl">插槽 +1</div>
       <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
       <button data-act="slot" data-arg="reward">選擇</button></div>`;
-    const cards = R.options.map(id => {
+    const cards = R.options.map((id, i) => {
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
         return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
       }
-      const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
-      return chipCard(id, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
+      const wait = rareOf(id) && !R.revealed;  // 揭曉動畫：稀有那格最後才翻開，翻開前不能按
+      const ok = Game.canAcquire(id) && !wait, label = Game.canAcquire(id) ? '選擇' : '倉庫已滿';
+      const html = chipCard(id, rareOf(id) && Game.ownedChip(baseOf(id)) ? rareButtons(id, wait) : `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
+      return !R.revealed ? html.replace(/^<div class="card([^"]*)">/, (_, c) => wait ? `<div class="card${c} rare-wait"><div class="rare-veil">✦</div>` : `<div class="card${c} flipin" style="animation-delay:${i * 0.12}s">`)
+        : rareOf(id) && !R.popped ? html.replace('class="card', 'class="card rare-pop') : html;
     }).join('') + (R.slot ? slotCard() : '');  // 有電路擴充卡的三選一（CFG.REWARDS 的 slotCard）
+    if (!R.revealed) setTimeout(() => { if (Game.reward === R && Game.state === 'reward') { R.revealed = true; this.reward(); } }, REVEAL_MS);
+    else R.popped = true;  // 翻開的動畫只播一次（之後重畫不再播）
     this.show(`<div class="scr">
-      <div class="between"><div><h2>${R.kind === 'elite' ? '☠ 精英擊破：三選一（或電路擴充）' : R.kind === 'start' ? `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）` : '⚔ 戰鬥勝利：三選一（晶片或零件）'}</h2>
+      <div class="between"><div><h2>${REWARD_TITLE[R.kind]()}</h2>
         <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">

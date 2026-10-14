@@ -1,5 +1,6 @@
 // 自動對戰模擬：電腦用手機操作（自動瞄準、自動攻擊、搖桿走位、危險時衝刺）打真正的戰鬥（波次、會動會攻擊的敵人、地圖物件）
-// 量每個玩法晶片的「玩法擊殺（每分鐘）」、清場時間、掉血。晶片固定 Lv1（沒插組件）。
+// 量每個玩法晶片的「玩法擊殺（每分鐘）」「發動（每秒）」、清場時間、掉血。晶片固定 Lv1（沒插組件）。
+//   發動每秒的中位數就是 CHIPS[晶片].actRate（稀有詞條「爆發」照它算充能速度）
 // 配裝裡的等級：玩法晶片的等級 = 1 ＋ 插在它上面的組件數（遊戲的組件升級），隨機配裝不另外抽 Lv2。
 // 用法：node botsim.js                  所有玩法晶片 × 5 把武器，各打 N 場（預設 3）
 //       node botsim.js --chips=stasis,graze --w=laser --n=5 --level=3
@@ -87,8 +88,15 @@ function bot(p) {
   if (danger && p.dashCd <= 0) I.dash = true;
 }
 
+// 數每個晶片發動幾次（Game.rareAct：迴旋折返、環繞放出…）
+const ACTS = {};
+{ const o = G.rareAct.bind(G); G.rareAct = (b, ...a) => { ACTS[b] = (ACTS[b] || 0) + 1; return o(b, ...a); }; }
+let SKILLED = null;  // 熟練玩家（bot/，跟整局模擬同一套；會放開蓄力、站著架設），用到才載入
 function fight(w, chip, s) {
+  SKILLED = SKILLED || require('./bot/load').loadBot(code => require('vm').runInThisContext(code));
+  SKILLED.resetBot(); Object.assign(Input, { down: false, dash: false, joy: null, aimStick: null, mx: 0, my: 0 }); Input.keys.clear(); G.time = 0; G.nextId = 1;
   seed(1000 + s);
+  for (const k in ACTS) delete ACTS[k];
   G.newRun('run', 'vanguard', w);
   G.chain = ['weapon', chip, null, null]; G.recalc();
   G.playKills = {};
@@ -96,8 +104,8 @@ function fight(w, chip, s) {
   G.startCombat({ level: LEVEL, wavesTotal: 3, elites: 0 });
   const p = G.player, hp0 = immortal(p);
   let t = 0, hpNow = p.hp;
-  while (G.state === 'play' && t < CAP) { bot(p); G.update(dt); t += dt; if (G.state === 'play') hpNow = p.hp; }
-  return { t, hp: lostSince(hp0, hpNow), pk: (chip && G.playKills[chip]) || 0, kills: G.kills };
+  while (G.state === 'play' && t < CAP) { SKILLED.bot(p); G.update(dt); t += dt; if (G.state === 'play') hpNow = p.hp; }
+  return { t, hp: lostSince(hp0, hpNow), pk: (chip && G.playKills[chip]) || 0, act: (chip && ACTS[chip]) || 0, kills: G.kills };
 }
 
 // --weapons：只比較武器（不裝晶片），打很多種戰鬥：一般戰（不同難度）、精英戰、三隻旗艦
@@ -430,7 +438,7 @@ if (process.argv.includes('--value')) {
     globalThis.__KEEP0 = null;
     G.wSock += opt.wPlus || 0;  // 對照組也一樣多一個空插座
     for (const c of onW) G.socks[0].push(c);
-    if (onHost) { const [h, c] = hostComp(chips); G.chain = ['weapon', T_.chipId(h, 1, 2), null]; G.socks = [[], [c]]; }
+    if (onHost) { const [h, c] = hostComp(chips); G.chain = ['weapon', T_.chipId(h, 2), null]; G.socks = [[], [c]]; }
     G.recalc();
     G.node = { type: 'combat', L: 2, id: 'sim' }; G.startCombat({ ...cfg, boss: false });
     const p = G.player, hp0 = immortal(p);
@@ -649,23 +657,23 @@ const rows = [];
 for (const chip of [null, ...CHIPS]) {
   const per = {};
   for (const w of WPN) {
-    let t = 0, hp = 0, gr = 0;
-    for (let s = 0; s < N; s++) { const r = fight(w, chip, s); t += r.t; hp += r.hp; gr += r.pk; }
-    per[w] = { t: t / N, hp: hp / N, gpm: gr / (t / 60) };
+    let t = 0, hp = 0, gr = 0, act = 0;
+    for (let s = 0; s < N; s++) { const r = fight(w, chip, s); t += r.t; hp += r.hp; gr += r.pk; act += r.act; }
+    per[w] = { t: t / N, hp: hp / N, gpm: gr / (t / 60), aps: act / t };
   }
   rows.push({ chip, per });
 }
 const base = rows[0].per;
-console.log(`每場：星區難度 ${LEVEL}、3 波，${N} 場平均。欄位：清場秒數／掉血（只有武器的對照）｜玩法擊殺每分鐘`);
+console.log(`每場：星區難度 ${LEVEL}、3 波，${N} 場平均。欄位：清場秒數／掉血（只有武器的對照）｜玩法擊殺每分鐘｜發動每秒`);
 const med = a => { const v = [...a].sort((x, y) => x - y); return v[v.length >> 1]; };
-console.log('晶片'.padEnd(10) + WPN.map(w => WN[w].padStart(16)).join('') + '   玩法擊殺');
+console.log('晶片'.padEnd(10) + WPN.map(w => WN[w].padStart(20)).join('') + '   玩法擊殺｜發動（actRate）');
 for (const { chip, per } of rows) {
   const name = chip ? CH[chip].name : '（只有武器）';
   const cells = WPN.map(w => {
     const r = per[w];
-    return (chip ? `${Math.round(r.t)}s/${Math.round(r.hp)}｜${r.gpm.toFixed(0)}` : `${Math.round(r.t)}s/${Math.round(r.hp)}`).padStart(16);
+    return (chip ? `${Math.round(r.t)}s/${Math.round(r.hp)}｜${r.gpm.toFixed(0)}｜${r.aps.toFixed(2)}` : `${Math.round(r.t)}s/${Math.round(r.hp)}`).padStart(20);
   }).join('');
-  const m = chip ? med(WPN.map(w => per[w].gpm)) : 0;
-  const g = chip ? `   中位數 ${m.toFixed(1)}/分｜${CH[chip].kill}` : '';
+  const m = chip ? med(WPN.map(w => per[w].gpm)) : 0, a = chip ? med(WPN.map(w => per[w].aps)) : 0;
+  const g = chip ? `   中位數 ${m.toFixed(1)}/分｜${CH[chip].kill}｜發動 ${a.toFixed(2)}/秒（現在 actRate ${CH[chip].actRate}）` : '';
   console.log(name.padEnd(10) + cells + g);
 }

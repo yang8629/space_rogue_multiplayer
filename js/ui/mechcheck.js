@@ -1185,6 +1185,120 @@ const MechCheck = {
       const a = kill('laser', 'swarmer', 0), b = kill('scatter', 'swarmer', 0), c = kill('laser', 'brute', 0), d = kill('laser', 'swarmer', 3);
       return { ok: a === 1 && b === 1 && c === 1 && d === 0, got: `雷射殺蟲群 +${a}；散彈殺蟲群 +${b}；雷射殺刺殼 +${c}；打中 3 秒後才死 +${d}` };
     }],
+    ['稀有晶片', 'id 與同步', '稀有晶片的 id = 玩法晶片~插座!詞條＋等級；多人同步照 id 還原；組件、觸發器、不認得的詞條不收；有電的才算（電路統計的 rares）', M => {
+      const id = chipId('boomerang', 2, { k: 'aftershock', lv: 2 });
+      const back = parseChipId(id), bad = [parseChipId('amp!reap1'), parseChipId('trigger~1!reap1'), parseChipId('boomerang~2!nope1')];
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', id, null, null]);
+      const r = Game.stats.rares.boomerang;
+      Game.cap = 0; Game.recalc();
+      const off = !Game.stats.rares.boomerang;  // 沒電：詞條不算
+      const ok = id === 'boomerang~2!aftershock2' && back === id && bad.every(x => x === null) && r && r.k === 'aftershock' && r.lv === 2 && off && CHIPS[id].name.includes(RARE.aftershock.name);
+      return { ok, got: `${id} → ${back}；組件／觸發器／不認得的詞條 → ${bad.map(x => x === null ? '不收' : x).join('、')}；電路統計 ${r ? r.k + r.lv : '沒有'}、沒電時${off ? '不算' : '還算（錯誤）'}` };
+    }],
+    ['稀有晶片', '三選一出現', `一般戰鬥每格玩法晶片 ${CFG.RARE.chance * 100}% 變稀有；精英、旗艦保證一格（刷新也保證）；擊沉旗艦先三選一，選完（或跳過）回到勝利畫面`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      const N = 600, has = o => o.some(rareOf);
+      let combat = 0, elite = 0, eliteRe = 0;
+      for (let i = 0; i < N; i++) { if (has(Game.rewardOptions('combat'))) combat++; if (has(Game.rewardOptions('elite'))) elite++; }
+      Game.credits = 1e6; Game.openReward('elite');
+      for (let i = 0; i < 50; i++) { Game.rerollReward(); if (has(Game.reward.options)) eliteRe++; }
+      Game.victory = { pick: 'part', rew: false }; Game.openReward('boss');
+      const bossRare = has(Game.reward.options);
+      Game.takeReward(null);
+      const back = Game.state === 'victory' && Game.victory.rew === true && bossDone(Game.victory), rate = combat / N;
+      return { ok: rate > 0.01 && rate < 0.12 && elite === N && eliteRe === 50 && bossRare && back,
+        got: `一般戰鬥有稀有 ${(rate * 100).toFixed(1)}%；精英 ${elite}/${N}、刷新 ${eliteRe}/50；旗艦${bossRare ? '有' : '沒有'}稀有、跳過後${back ? '回到勝利畫面' : `在 ${Game.state}（錯誤）`}` };
+    }],
+    ['稀有晶片', '變稀有、替換／增強', '身上已經有的晶片拿到稀有版本：留在原本的格子、組件不動、插座數取多的、倉庫滿了也能拿；同一個詞條 +1 級（最多 3）；不同詞條可以替換（新詞條 Lv1）或增強（原本的 +1 級）', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.chain[1] = chipId('boomerang', 1); Game.socks[1] = ['amp']; Game.inventory = Game.inventory.map(() => 'split'); Game.recalc();  // 倉庫塞滿
+      const take = (sk, k, lv, mode) => { Game.reward = { kind: 'combat', options: [] }; Game.takeReward(chipId('boomerang', sk, { k, lv }), mode); return Game.chain[1]; };
+      const can = Game.canAcquire(chipId('boomerang', 3, { k: 'aftershock', lv: 1 }));
+      const a = take(3, 'aftershock', 1), sockOk = Game.socks[1].join() === 'amp' && socketsOf(a) === 3;
+      const b = take(1, 'aftershock', 2);  // 同一個詞條：+1 級（不看卡片上的等級）
+      const c = take(2, 'purge', 2, 'boost'), d = take(1, 'purge', 3, 'replace');
+      take(1, 'purge', 1); take(1, 'purge', 1);
+      const e = take(1, 'purge', 1);  // 最多 3 級
+      const invOk = Game.inventory.every(x => x === 'split');
+      const ok = can && a === 'boomerang~3!aftershock1' && sockOk && b === 'boomerang~3!aftershock2' && c === 'boomerang~3!aftershock3' && d === 'boomerang~3!purge1' && e === 'boomerang~3!purge3' && invOk;
+      return { ok, got: `倉庫滿了${can ? '可以拿' : '不能拿（錯誤）'}；${[a, b, c, d, e].join(' → ')}；組件 ${Game.socks[1].join()}、倉庫${invOk ? '沒動' : '被動到（錯誤）'}` };
+    }],
+    ['稀有晶片', '詞條效果', '餘波（震波推開＋傷害、冷卻）、淨空（清掉範圍內的敵彈）、迅捷（衝刺冷卻）、狂熱（射速層數、3 秒消失）、爆發（照發動頻率充滿後 8 個方向開槍）、反擊（受傷時強制發動，冷卻 2 秒）、結晶（N 次玩法擊殺 1 層護盾）、收割（回血，每秒最多 3）', M => {
+      const rig = (base, k, lv = 1) => { M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', chipId(base, 1, { k, lv }), null, null]); Game.state = 'play'; const p = Game.player; p.iframe = 0; return p; };
+      const kill = (base, n) => { for (let i = 0; i < n; i++) Game.rareRun('kill', base, null, Game.player.x, Game.player.y); };
+      return M.all([
+        M => {  // 餘波
+          const p = rig('boomerang', 'aftershock', 3), [e] = M.targets([[60, 0]]), hp = e.hp, x0 = e.x;
+          Game.rareAct('boomerang', e.x - 20, e.y, null); const d1 = hp - e.hp;
+          Game.rareAct('boomerang', e.x - 20, e.y, null); const d2 = hp - e.hp - d1;  // 冷卻中
+          for (let f = 0; f < 10; f++) e.update(1 / 60, p);
+          return { ok: near1(d1, Game.wp.damage * RARE.aftershock.dmg) && d2 === 0 && e.x > x0 + 1, got: `餘波 ${d1.toFixed(1)}（應為 ${(Game.wp.damage * RARE.aftershock.dmg).toFixed(1)}）、冷卻中 +${d2}、推開 ${(e.x - x0).toFixed(1)}` };
+        },
+        M => {  // 淨空
+          const p = rig('rear', 'purge', 1), eb = (dx) => ({ x: p.x + dx, y: p.y, vx: 0, vy: 0, r: 5, dmg: 1, life: 3, from: 'test' });
+          Game.eBullets = [eb(30), eb(200)]; Game.rareAct('rear', p.x, p.y, null);
+          return { ok: Game.eBullets.length === 1 && Game.eBullets[0].x === p.x + 200, got: `清完剩 ${Game.eBullets.length} 顆（應剩 200 外的 1 顆）` };
+        },
+        M => {  // 迅捷
+          const p = rig('rear', 'swift', 2); p.dashCd = 1; Game.rareAct('rear', p.x, p.y, null);
+          return { ok: near1(p.dashCd, 1 - RARE.swift.v[1]), got: `衝刺冷卻 1 → ${p.dashCd.toFixed(2)}` };
+        },
+        M => {  // 狂熱
+          const p = rig('boomerang', 'frenzy', 3); kill('boomerang', 6);
+          const a = rareRateAdd(p); Game.time += RARE.frenzy.t + 0.1; const b = rareRateAdd(p);
+          return { ok: near1(a, RARE.frenzy.max * RARE.frenzy.v[2]) && b === 0, got: `6 次擊殺 → 射速 +${Math.round(a * 100)}%（最多 ${RARE.frenzy.max} 層）；${RARE.frenzy.t} 秒後 +${Math.round(b * 100)}%` };
+        },
+        M => {  // 爆發
+          const p = rig('sticky', 'burst', 1), n = Math.ceil(CHIPS.sticky.actRate * RARE.burst.v[0] - 1e-9), per = runOps(Game.stats.ops, 0).length;
+          Game.bullets = [];
+          for (let i = 0; i < n - 1; i++) Game.rareAct('sticky', p.x, p.y, null);
+          const before = Game.bullets.length; Game.rareAct('sticky', p.x, p.y, null);
+          return { ok: before === 0 && Game.bullets.length === RARE.burst.dirs * per, got: `發動 ${n - 1} 次 ${before} 發、第 ${n} 次 ${Game.bullets.length} 發（應為 ${RARE.burst.dirs} × ${per}）` };
+        },
+        M => {  // 反擊（蓄力：強制發動 = 下一發蓄滿）
+          const p = rig('charge', 'retort', 1), hit = () => { p.chargeC = 0; p.iframe = 0; Game.hurtPlayer(1, 'test'); return p.chargeC; };
+          const a = hit(), b = hit(); Game.time += RARE.retort.cd + 0.1; const c = hit();
+          return { ok: a === 1 && b === 0 && c === 1, got: `受傷 → 蓄力 ${a}；冷卻中再受傷 → ${b}；${RARE.retort.cd} 秒後 → ${c}` };
+        },
+        M => {  // 結晶
+          const p = rig('sticky', 'crystal', 1), v = RARE.crystal.v[0]; p.shield = 0;
+          kill('sticky', v - 1); const a = p.shield; kill('sticky', 1); const b = p.shield; kill('sticky', v); const c = p.shield;
+          return { ok: !a && b === 1 && c === 1, got: `${v - 1} 次 → 護盾 ${a || 0}；${v} 次 → ${b}；再 ${v} 次 → ${c}（最多 1）` };
+        },
+        M => {  // 收割
+          const p = rig('boomerang', 'reap', 3); p.hp = p.maxHp - 50;
+          const h0 = p.hp; kill('boomerang', 10); const a = p.hp - h0; Game.time += 1.1; kill('boomerang', 1); const b = p.hp - h0 - a;
+          return { ok: near1(a, RARE.reap.cap) && near1(b, RARE.reap.v[2]), got: `同一秒 10 次 → 回 ${a}（每秒最多 ${RARE.reap.cap}）；下一秒 1 次 → 回 ${b}` };
+        },
+      ]);
+    }],
+    ['稀有晶片', '發動點', '13 個玩法晶片照玩法打都會發動（詞條「發動時」「爆發」照這個觸發）：迴旋折返、環繞放出、地雷衝出去、加速過 2 倍、反彈、反向射出、蓄滿射出、黏著爆炸、感染爆出、吸引拉到、衝刺射擊、架設疊滿、攔截擋下', M => {
+      const got = new Set(), orig = Game.rareAct;
+      Game.rareAct = function (base, ...a) { got.add(base); return orig.call(this, base, ...a); };
+      const P = () => Game.player, R = () => Game.wp.speed * Game.wp.life, set = flat => M.setup('sandbox', 'vanguard', 'laser', null, null, flat);
+      try {
+        set(['weapon', 'boomerang', null, null]); M.targets([[150, 0]]); M.run(60);
+        set(['weapon', 'orbit', null, null]); M.run(10);
+        set(['weapon', 'stasis', null, null]); M.targets([[R() * 0.5 + 40, 0]]); M.run(150);
+        set(['weapon', 'accel', null, null]); M.run(90);
+        set(['weapon', 'wallbounce', null, null]); P().x = CFG.WORLD_W - 60; M.run(20);
+        set(['weapon', 'rear', null, null]); M.run(3);
+        set(['weapon', 'charge', null, null]); Game.chargeC = 1; P().fire(); Game.chargeC = null;
+        set(['weapon', 'sticky', null, null]); { const [e] = M.targets([[120, 0]]); M.run(20); for (let f = 0; f < 150 && !got.has('sticky'); f++) { Game.time += 1 / 60; Game.updateEnemies(1 / 60); } }
+        set(['weapon', 'infect', null, null]); M.targets([[120, 0]], 'swarmer', true, 0.01); M.run(30);
+        set(['weapon', 'pull', null, null]); M.targets([[150, 0], [150, 50]]); M.run(30);
+        set(['weapon', 'dashfire', null, null]); P().wasDash = true; P().dashT = 0; P().tickDash();
+        set(['weapon', 'stand', null, null]); P().standT = 5; P().moving = false; P().fireCd = 0; P().tickFire(1 / 60, true);
+        set(['weapon', 'intercept', null, null]); {
+          const gp = P(); M.targets([[300, 0]], 'swarmer', true, 1);
+          spawnShots([shot({ angle: 0, speed: 600, damage: 10, life: 1, intercept: 1 })], gp.x, gp.y, 0, 0, null);
+          Game.eBullets = [{ x: gp.x + 60, y: gp.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'test' }];
+          for (let f = 0; f < 30; f++) { Game.time += 1 / 60; Game.updateBullets(1 / 60); Game.updateEnemyBullets(1 / 60); }
+        }
+      } finally { Game.rareAct = orig; }
+      const all = NORMAL_IDS.filter(hasLv), miss = all.filter(b => !got.has(b));
+      return { ok: !miss.length, got: miss.length ? `沒有發動：${miss.map(b => CHIPS[b].name).join('、')}` : `${all.length} 個玩法晶片都發動了` };
+    }],
     ['構築系統', '傷害統計', '武器＋倍增器（×2）：兩者各分到一半，合計等於總傷害；結算的傷害總計 = 敵人實際被扣的血量，並分出來源；往前的子彈不算反向的；多射出來的那發基礎傷害算反向；攔截回射算「攔截回射」和攔截晶片（不是回響）；迴旋回程打中的傷害算迴旋；回射打中後 1 秒內擊殺，才算攔截的玩法擊殺', M => M.all([
       M => {  // 晶片傷害統計
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'amp', null, null]); M.targets([[120, 0]]);

@@ -165,6 +165,11 @@ while (!sector2 && guard++ < 40) {
     ok(gA === gB && gA > rw, `drops shared: host +${gA}, client +${gB}`);
     ok(!HA.Game.inArena && !HB.Game.inArena, `${type} won on both sides (host ${HA.Game.state}, client ${HB.Game.state})`);
     if (type === 'boss') {
+      // 擊沉旗艦：先各自三選一（保證一格稀有），選完才到勝利畫面
+      const RA = HA.Game.reward, RB = HB.Game.reward;
+      ok(HA.Game.state === 'reward' && RA.kind === 'boss' && HB.Game.state === 'reward' && RB.kind === 'boss' && RA.options.some(id => HA.CHIPS[id] && HA.CHIPS[id].rare),
+        `both get the boss 3-pick first, with a rare chip (host ${HA.Game.state}, client ${HB.Game.state})`);
+      finishNode(HA); finishNode(HB); pump();
       ok(HA.Game.state === 'victory' && HB.Game.state === 'victory', 'both see victory');
       // 旗艦二選一（電路插槽 +1／零件格 +1，各選各的）：房主要等隊友選好才能前往
       const pA0 = HA.Game.partSlots, pB0 = HB.Game.partSlots;

@@ -8,7 +8,7 @@
 const Editor = {
   init() {
     const $ = id => document.getElementById(id);
-    this.el = $('editor'); this.chainEl = $('chain'); this.invEl = $('inv'); this.libEl = $('library');
+    this.el = $('editor'); this.chainEl = $('chain'); this.countEl = $('chainCount'); this.invEl = $('inv'); this.libEl = $('library');
     this.statsEl = $('stats'); this.layersEl = $('layers'); this.passEl = $('passives'); this.infoEl = $('info');
     this.recycleEl = $('recycle'); this.creditsEl = $('edCredits'); this.toolsEl = $('sandboxTools');
 
@@ -90,7 +90,7 @@ const Editor = {
     // 晶片庫分三區：玩法晶片（放電路格）、觸發器（放電路格）、組件（插進晶片的插座）
     const SECS = [['玩法晶片（放在電路格）', '#5ef2d0', id => PLAY_TYPES.includes(CHIPS[id].type)],
       ['觸發器（放在電路格，右邊的晶片作用在回響上）', '#ff6b9d', id => CHIPS[id].type === 'trigger'],
-      ['◆ 組件（拖進晶片下面的插座，不佔電路格）', '#ffd166', id => isComp(id)]];
+      ['◆ 組件（拖進晶片下面的插座，不佔電路格）', TYPE_META.comp.color, id => isComp(id)]];
     const grids = SECS.map(([t, col]) => {
       const sec = document.createElement('div');
       sec.className = 'libsec';
@@ -429,20 +429,21 @@ const Editor = {
   },
   showDefaultInfo() {
     this.infoEl.innerHTML = '電路由左至右執行：第 1 格固定是<b style="color:#4cc9f0">你的武器</b> → <b style="color:#5ef2d0">玩法晶片</b>依序改變子彈的玩法。' +
-      '晶片下面的圓是<b style="color:#ffd166">插座</b>：把組件（分裂、巨彈、穿甲、倍增、超頻、鏡像、爆裂、燃燒、冰凍、電擊、破甲）拖進去（組件不佔電路格）。插在武器上作用在全部子彈（倍增、巨彈的傷害加成只算直擊，產物不吃），插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。' +
+      `晶片下面的圓是<b style="color:${TYPE_META.comp.color}">插座</b>：把組件（分裂、巨彈、穿甲、倍增、超頻、鏡像、爆裂、燃燒、冰凍、電擊、破甲）拖進去（組件不佔電路格）。插在武器上作用在全部子彈（倍增、巨彈的傷害加成只算直擊，產物不吃），插在玩法晶片上只作用在它的產物（例：插在環繞上 = 放出的那一波）。` +
       '<b style="color:#ff6b9d">觸發器</b>（命中／消失／定時）用武器再射一次回響（50%），右邊的晶片只作用在回響上。滑鼠移到晶片、插座上可看說明。';
   },
   showInfo(id, slot = -1, J = null) {
     if (!id) { this.infoEl.innerHTML = slot > 0 ? `第 ${slot + 1} 格：空插槽${slotAttrLine(slot)}` : ''; return; }
     const d = CHIPS[id], m = TYPE_META[d.type];
     const P = HOST_PRODUCT[baseOf(id)];
-    const ps = isComp(id) ? '<br><span style="color:#ffd166">◇ 組件：拖到武器、玩法晶片或觸發器上就插進它的插座（不佔電路格）。</span>'
-      : P ? `<br><span style="color:#ffd166">◇ 插座 ${socketsOf(id)} 個　插在它上面的組件只作用在：${P}</span>` : '';
+    const ps = isComp(id) ? `<br><span style="color:${TYPE_META.comp.color}">◇ 組件：拖到武器、玩法晶片或觸發器上就插進它的插座（不佔電路格）。</span>`
+      : P ? `<br><span style="color:${TYPE_META.comp.color}">◇ 插座 ${socketsOf(id)} 個　插在它上面的組件只作用在：${P}</span>` : '';
     const price = !Game.freePlay() ? `　回收價 ◆${sellPrice(id)}` : '';
     const onChain = slot > 0 && Game.chain[slot] === id, info = onChain && compileChain(Game.chain).info, lv = onChain ? slotLv(slot, info) : 1;
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${lvName(id, lv)}</b>　` +
       `<span style="color:#6a79ad">${m.label} · 能量 ⚡${d.cost}${price}</span>` +
       (hasLv(id) ? '<br>' + lvUpLine(id, slot, info) : '') +  // 等級放在名稱下面（說明框高度有限，放最後會被切掉）
+      (rareOf(id) ? `<br><b style="color:#ffd166">★ 稀有詞條　${rareTxt(rareOf(id))}</b>` : '') +
       (LV_INFO[baseOf(id)] ? '<br>' + lvLine(baseOf(id), lv) + `<br>${CHIPS[baseOf(id)].desc}` : `<br>${d.desc}`) +
       `${ps}` +
       (slot > 0 ? slotAttrLine(slot) : '') + (J && J.idle ? `<br><b style="color:#ff8a8a">✖ 這個插座沒有作用：${J.why}</b>` : J && J.lvOnly ? `<br><b style="color:#ffd166">◇ ${J.why}</b>` : '');
@@ -467,7 +468,7 @@ const Editor = {
       el.addEventListener('mouseenter', () => {
         if (this.sel) return;  // 選取中：說明框固定顯示選取的那一個
         this.showInfo(id, -1, J);
-        this.infoEl.innerHTML = `<b style="color:${J && J.idle ? '#ff8a8a' : '#ffd166'}">◆ ${CHIPS[id].name}插在${h === 0 ? '武器' : CHIPS[C[h]].name}上：${fx}</b><br>` + this.infoEl.innerHTML;
+        this.infoEl.innerHTML = `<b style="color:${J && J.idle ? '#ff8a8a' : TYPE_META.comp.color}">◆ ${CHIPS[id].name}插在${h === 0 ? '武器' : CHIPS[C[h]].name}上：${fx}</b><br>` + this.infoEl.innerHTML;
       });
       el.addEventListener('contextmenu', e => {  // 右鍵：拔回倉庫
         e.preventDefault(); e.stopPropagation();
@@ -485,7 +486,7 @@ const Editor = {
       el.className = 'sock empty';
       el.innerHTML = '<span>＋</span>';
       el.title = `空的插座：把組件拖進來插在${CHIPS[C[h]].name}上`;
-      el.addEventListener('mouseenter', () => { this.infoEl.innerHTML = `<b style="color:#ffd166">◇ ${CHIPS[C[h]].name}的空插座</b>：把組件拖進來（或先點組件再點這裡）。插在它上面的組件只作用在：${HOST_PRODUCT[baseOf(C[h])] || ''}`; });
+      el.addEventListener('mouseenter', () => { this.infoEl.innerHTML = `<b style="color:${TYPE_META.comp.color}">◇ ${CHIPS[C[h]].name}的空插座</b>：把組件拖進來（或先點組件再點這裡）。插在它上面的組件只作用在：${HOST_PRODUCT[baseOf(C[h])] || ''}`; });
       el.addEventListener('click', e => { e.stopPropagation(); if (this.sel) { const d = this.sel; this.sel = null; this.plug(h, d); } });
     }
     el.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('over'); });
@@ -571,7 +572,7 @@ const Editor = {
       col.appendChild(socks);
       this.chainEl.appendChild(col);
     });
-    this.chainEl.insertAdjacentHTML('beforeend', `<div class="chaincount">電路 ${chain.filter(Boolean).length - 1} / ${chain.length - 1} 格<br><span>插座上 ${sockCount()} 個組件</span>${CFG.MECH_SLOT_EVERY && chain.length < CFG.MAX_SLOTS ? `<br><span>機體強化 ${(Game.mechN || 0) % CFG.MECH_SLOT_EVERY} / ${CFG.MECH_SLOT_EVERY} → 電路格 +1</span>` : ''}</div>`);
+    this.countEl.innerHTML = `電路 ${chain.filter(Boolean).length - 1} / ${chain.length - 1} 格 · <span>插座上 ${sockCount()} 個組件</span>${CFG.MECH_SLOT_EVERY && chain.length < CFG.MAX_SLOTS ? ` · <span>機體強化 ${(Game.mechN || 0) % CFG.MECH_SLOT_EVERY} / ${CFG.MECH_SLOT_EVERY} → 電路格 +1</span>` : ''}`;
 
     this.invEl.innerHTML = '';
     Game.inventory.forEach((_, i) => this.invEl.appendChild(this.makeSlot(Game.inventory, i, 'inv', '倉庫 ' + (i + 1))));
@@ -676,10 +677,10 @@ function slotAttrLine(i) {
 function chipEl(id, lv = 1) {  // lv：電路上的玩法晶片照組件升到的等級（倉庫、晶片庫一律 Lv1）
   const d = CHIPS[id], m = TYPE_META[d.type];
   const el = document.createElement('div');
-  el.className = 'chip t-' + d.type;
+  el.className = 'chip t-' + d.type + (rareOf(id) ? ' rare' : '');  // 稀有晶片：金框發光
   el.draggable = !d.locked;
   const sk = isHost(id) && id !== 'weapon' ? `<span class="sk">${'◇'.repeat(socketsOf(id))}</span>` : '';  // 組件的卡片本身就是金色圓角，不用再標
-  el.innerHTML = `<div class="top"><span>${m.icon} ${m.label}</span><span>⚡${d.cost}</span></div><div class="nm">${lvName(id, lv)}</div>${sk}`;
+  el.innerHTML = `<div class="top"><span>${m.icon} ${m.label}</span><span>⚡${d.cost}</span></div><div class="nm">${lvName(id, lv).replace(/（.*?）/, t => `<small>${t}</small>`).replace(/・[^・]+$/, t => `<span class="rt">${t}</span>`)}</div>${sk}`;  // 進化名稱的「（迴旋 Lv3）」縮小、稀有詞條「・淨空」不拆行，加上詞條也排得下
   el.addEventListener('mouseenter', () => { if (!Editor.sel) Editor.showInfo(id); });  // 選取中：說明框固定顯示選取的那一個（滑鼠移去目標格的路上不要亂切）
   return el;
 }
