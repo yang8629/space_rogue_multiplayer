@@ -316,6 +316,7 @@ function drawHUD() {
       ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39);
       ctx.fillStyle = col; ctx.font = `bold ${T ? 11 : 13}px Microsoft JhengHei`;
       ctx.fillText(lvShort(id, slotLv(i)), x + w / 2, y + 25);
+      if (rareOf(id)) { ctx.fillStyle = '#ffd166'; ctx.font = `bold ${T ? 10 : 12}px Segoe UI`; ctx.fillText('★', x + w - 7, y + 12); }  // 稀有晶片
     } else {
       ctx.strokeStyle = '#2f3f78'; ctx.setLineDash([3, 3]); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39); ctx.setLineDash([]);
     }

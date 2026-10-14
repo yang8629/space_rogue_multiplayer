@@ -265,8 +265,11 @@ function analyzeChain(chain) {
     layers.push({ count: sub.length, dmg: sum(sub), trig: carrier.payload[0].trig });
     carrier = sub.find(s => s.payload);
   }
+  // 稀有晶片的詞條（有電的玩法晶片才算）：rares[晶片] = { k, lv }（見 Game.rareAct）
+  const rares = {};
+  for (const o of ops) { const r = rareOf(o.id); if (r) rares[o.key] = r; }
   return { ops, info: ops.info, heat, used, off, cap, interval, rps: 1 / interval, count: top.length, dmg: sum(top), dpsEst: est / interval + burnDps, layers, rateCr,
-    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept'), stand: lvOf('stand') };
+    charge, chargeTime, heatLimit, dashfire: lvOf('dashfire'), intercept: lvOf('intercept'), stand: lvOf('stand'), rares };
 }
 
 function computePassives(inventory) {

@@ -375,6 +375,7 @@ const Objects = {
         b.hitSet.clear(); b.life = Math.max(b.life, 0.5);
         b.bounced = true;
         if (b.prism) { b.copy(0.4); b.angle -= 0.2; }
+        Game.rareAct('wallbounce', b.x, b.y, b.owner);  // 稀有晶片：牆反彈發動（撞行星、小行星反彈）
         return false;
       }
       b.x = o.x + nx * (o.r + b.r); b.y = o.y + ny * (o.r + b.r);

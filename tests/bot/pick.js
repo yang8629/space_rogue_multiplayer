@@ -1,6 +1,6 @@
 // 星環電路 整局模擬的電腦（做選擇）
 //   在遊戲的全域範圍裡執行（runsim／botsim／qasim 用 vm.runInThisContext，coopsim 每份遊戲各一份 vm context），由 bot/load.js 載入
-//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、hasLv、compsFor、pick、randInt
+//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、hasLv、compsFor、rareOf、mergeRare、pick、randInt
 
 // 倉庫裡的晶片填進電路的空格（中等玩家：有空格就裝上）
 // 晶片分數：晶片價值表（botsim --value：chipvalue_base.json）裡這把武器、最接近現在難度的「速度 ÷ √掉血」
@@ -56,7 +56,14 @@ function chipScore(id) {
   }
   // 組件：電路上（武器或晶片）沒有空插座的話，拿了也插不上
   const freeSock = CH[id].comp && typeof socketsOf === 'function' ? G.chain.some((c, i) => c && ((G.socks || [])[i] || []).length < socketsOf(c)) : true;
-  return v * (1 + 0.3 * (((CH[id].lv) || 1) - 1)) * (1 + g * sk) * (freeSock ? 1 : 0.3);
+  return v * (1 + RARE_W * ((rareOf(id) || { lv: 0 }).lv)) * (1 + g * sk) * (freeSock ? 1 : 0.3);
+}
+// 稀有晶片：詞條每級 +10%（估的，沒有量過）。身上已經有這個晶片時拿稀有版本 = 那個晶片多了詞條（或詞條 +1 級），預設增強
+const RARE_W = 0.1;
+const rareUpgrade = id => !!(CH[id] && rareOf(id) && G.ownedChip && G.ownedChip(bOf(id)));
+function rareUpgradeGain(id) {
+  const o = G.ownedChip(bOf(id)), r0 = rareOf(o.arr[o.i]), r = mergeRare(r0, rareOf(id));
+  return 1 + RARE_W * (r.lv - (r0 ? r0.lv : 0));
 }
 // 晶片順序：鏡像迴路緊接武器 → 數值（分裂、巨彈、穿甲）→ 發射（反向、蓄力）→ 增幅（倍增、超頻）→ 彈道 → 命中 → 機體 → 其他 → 觸發器放最後
 const ORDER = { mod: 0, launch: 1, amp: 2, path: 3, impact: 4, body: 5, link: 6, singularity: 6, composite: 6, trigger: 9, scrap: 10 };
@@ -173,6 +180,7 @@ function equip() {
 // 刷新三選一（2026-10-09）：最好的選項沒讓配裝變好（不到 1.03 倍）就花晶體刷新；刷完至少留 ◆40（照星區漲）補血，每次三選一最多刷 2 次
 //   「變好幾倍」：零件 = 試裝分數的倍數；晶片（電路有空格）= 晶片分數；晶片（電路滿了）= 跟電路上最弱那顆比；組件 = 晶片分數
 function rewardGain(id) {
+  if (rareUpgrade(id)) return rareUpgradeGain(id);
   if (!CH[id]) return chipScore(id);
   if (CH[id].comp || G.chain.includes(null)) return chipScore(id);
   const cur = G.chain.filter((x, i) => i > 0 && x && !CH[x].locked).map(chipScore);
@@ -196,14 +204,15 @@ function pickReward(R) {
   const ok = R.options.filter(id => G.canAcquire(id)), merge = G.mergeTarget && ok.find(id => G.mergeTarget(id));  // 舊版：能合成升級的優先
   if (merge) return merge;
   if (G.chain.includes(null)) {  // 熟練玩家：電路還有空格就拿晶片（不拿零件）
-    const c = ok.filter(id => CH[id]);
-    if (c.length) return c.reduce((a, b) => chipScore(b) > chipScore(a) ? b : a);
+    const c = ok.filter(id => CH[id] && !rareUpgrade(id));  // 身上已經有的稀有版本不佔格子，跟其他選項比進步幅度（rewardScore）
+    if (c.length && !ok.some(rareUpgrade)) return c.reduce((a, b) => chipScore(b) > chipScore(a) ? b : a);
   }
   return ok.length ? ok.reduce((a, b) => rewardScore(b) > rewardScore(a) ? b : a) : null;
 }
 // 三選一的分數：電路滿了（沒有空格）時，新的電路晶片裝不上去，只值「換掉電路上最弱那顆的進步」＋ 1/4 的原分數（之後有格子、或拿來換的彈性）
 //   2026-10-05 以前直接用晶片分數：電路滿了還一直拿晶片丟倉庫，倉庫有晶片在等位置時也不拿零件換格子
 function rewardScore(id) {
+  if (rareUpgrade(id)) return rareUpgradeGain(id);
   const s = chipScore(id);
   if (!CH[id] || CH[id].comp || G.chain.includes(null)) return s;
   const cur = G.chain.filter((x, i) => i > 0 && x && !CH[x].locked).map(chipScore);

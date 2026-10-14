@@ -40,8 +40,10 @@ class Player {
     else if (this.moving || this.dashT > 0) { this.standMv = (this.standMv || 0) + dt; if (this.standMv > 0.15) this.standT = 0; }
     else { this.standMv = 0; this.standT = (this.standT || 0) + dt; }
     if (want && this.fireCd <= 0) {
-      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + weaponRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、武器升級的群戰／分散／擦彈／狂怒），減少相乘
+      const M = Game.mech, sk = standStacks(this, S.stand), rate = (M.rate + (M.traits.gale && this.moving ? 0.2 : 0) + (this.quenchT > 0 ? 0.3 : 0) + hpRateAdd(this) + 0.1 * sk + weaponRateAdd(this) + rareRateAdd(this)) * M.rateMul;  // 射速增加相加（散熱片、疾風、急冷、裝甲供能、架設、武器升級的群戰／分散／擦彈／狂怒、稀有詞條的狂熱），減少相乘
       Game.standFull = !!S.stand && sk >= standMax(S.stand);
+      if (Game.standFull && !this.standWas) Game.rareAct('stand', this.x, this.y, Game.shooter || null);  // 稀有晶片：架設發動（疊滿後的第一發）
+      this.standWas = Game.standFull;
       Game.chargeC = S.charge ? this.chargeC : null; Game.heatC = S.heatLimit ? this.ohT / S.heatLimit : null;  // 超頻：熱度越高越痛
       try { this.fire(); } finally { Game.chargeC = null; Game.heatC = null; Game.standFull = false; }
       if (Game.wp.static) this.staticK = 0;  // 靜電（軌道升級）：充的電射出去就用掉
@@ -81,7 +83,7 @@ class Player {
       try { list = runOps(S.ops, 0); } finally { Game.fireMode = null; Game.chargeC = null; }
       for (const s of list) s.src = 'dashfire';  // 傷害統計：衝刺結束這一槍算衝刺射擊的
       this.chargeC = 0;
-      if (list.length) spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null);
+      if (list.length) { spawnShots(list, this.x + Math.cos(this.aim) * 4, this.y + Math.sin(this.aim) * 4, this.aim, 0, null); Game.rareAct('dashfire', this.x, this.y, Game.shooter || null); }  // 稀有晶片：衝刺射擊發動
     }
     this.wasDash = dashing;
   }
@@ -270,8 +272,9 @@ class Bullet {
   }
   // 速度倍率 = 起始倍率 ＋ 加速（照射程進度），0.5～5
   setMul() {
-    const p = Math.min(1, this.dist / this.R);
+    const p = Math.min(1, this.dist / this.R), was = this.accelMul;
     this.accelMul = clamp(this.mul0 + accelAdd(this.accel, p, this.accFull), 0.5, SPD_CAP);
+    if (this.accel && was < 2 && this.accelMul >= 2) Game.rareAct('accel', this.x, this.y, this.owner);  // 稀有晶片：加速發動（越過 2 倍速，跟玩法擊殺的條件一樣）
     this.speed = this.baseSpeed * this.accelMul;
     // 加速的產物：速度 1.5 倍以上（武器插座的傷害加成不算；掉回 1.5 倍以下時加回來）
     if (this.accelMul >= CFG.HOST_SPEED) stripW(this); else if (this.wsbOff) restoreW(this);
@@ -301,6 +304,19 @@ class Bullet {
     Game.bullets.push(c);
     return c;
   }
+  // 佈雷：地雷朝敵人 e 衝出去（×1.2）。TR = 觸發範圍
+  mineGo(e, TR) {
+    this.angle = Math.atan2(e.y - this.y, e.x - this.x);
+    this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
+    // 衝出去用武器原本的速度，跑剩下的射程（至少觸發範圍 + 30，射程很短的相刃才碰得到）；
+    // 速度倍率接著停住前的射程進度繼續算（加速不重新開始）
+    this.mode = 'fly'; this.dashed = true; this.baseSpeed = this.speed0;
+    this.life = Math.max(this.R - this.dist, TR + 30) / (this.speed0 * this.mul0);
+    this.flyAge = 0; this.setMul();
+    stripW(this);
+    hostFire(this, 'stasis');  // 插在佈雷上的組件：衝出去的地雷
+    Game.rareAct('stasis', this.x, this.y, this.owner);  // 稀有晶片：佈雷發動（衝出去）
+  }
   // 迴旋：去程穿甲用完（先穿過去再折返，回程會再打牠一次）、撞到牆（或行星、小行星）、飛到盡頭都會折返，追著射出它的飛船飛回來
   startReturn() {
     const o = this.ownerP;
@@ -313,6 +329,7 @@ class Bullet {
     stripW(this);  // 產物：武器插座的傷害加成只算直擊
     const cs = this.boom >= 3 ? [-0.7, 0.7].map(off => this.copy(off)) : [];  // 迴旋風暴：折返時分裂成 3 發（打中、撞牆、飛到盡頭都一樣）
     for (const b of [this, ...cs]) hostFire(b, 'boomerang');  // 插在迴旋上的組件：折返之後的每一發（風暴＋分裂 = 9 發）
+    Game.rareAct('boomerang', this.x, this.y, this.owner);  // 稀有晶片：迴旋發動（折返）
   }
   update(dt) {
     this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
@@ -321,7 +338,7 @@ class Bullet {
       const o = this.ownerP;
       if (!o || o.dead) { this.dead = true; return; }
       const spin = orbSpinOf(this.orbit, o.orbHeld || 0);
-      if (!o.wantFire || (o.autoMode && spin >= orbSpinMax(this.orbit))) {  // 放開射擊才放出（衝刺不會）；右邊晶片的效果（迴旋、加速……）從這裡開始
+      if (!o.wantFire || this.forceOut || (o.autoMode && spin >= orbSpinMax(this.orbit))) {  // 放開射擊才放出（衝刺不會；forceOut = 稀有詞條「反擊」強制放出）；右邊晶片的效果（迴旋、加速……）從這裡開始
         const d = Math.max(120, o.aimD || 300), tx = o.x + Math.cos(o.aim) * d, ty = o.y + Math.sin(o.aim) * d;
         this.mode = 'fly'; this.angle = Math.atan2(ty - this.y, tx - this.x);  // 從所在位置朝滑鼠當下那一點射出
         // 速度倍率 = 傷害倍率：轉速 1～3 倍 → 放出時速度倍率 1～2（Lv1 最多 1.5）；有加速時從這裡繼續加上去（不相乘）
@@ -333,6 +350,7 @@ class Bullet {
         this.orbit = 0;
         stripW(this);
         hostFire(this, 'orbit');  // 插在環繞上的組件：放出的那一波
+        Game.rareAct('orbit', this.x, this.y, this.owner);  // 稀有晶片：環繞發動（放出）
         return;
       }
       (o.orbV || (o.orbV = new Set())).add(this.vid);
@@ -352,17 +370,7 @@ class Bullet {
         if (gap < TR && gap < nb) { nb = gap; near = e; }
       }
       if (!near && this.waitT <= 0) { this.dead = true; this.endTrig(); burst(this.x, this.y, this.color, 4, 60, 0.2, 2); return; }  // 時間到沒被觸發：消失
-      if (near) {
-        this.angle = Math.atan2(near.y - this.y, near.x - this.x);
-        this.damage *= 1.2; this.att = attCredit(this.att, 'stasis', 1.2);
-        // 衝出去用武器原本的速度，跑剩下的射程（至少觸發範圍 + 30，射程很短的相刃才碰得到）；
-        // 速度倍率接著停住前的射程進度繼續算（加速不重新開始）
-        this.mode = 'fly'; this.dashed = true; this.baseSpeed = this.speed0;
-        this.life = Math.max(this.R - this.dist, TR + 30) / (this.speed0 * this.mul0);
-        this.flyAge = 0; this.setMul();
-        stripW(this);
-        hostFire(this, 'stasis');  // 插在佈雷上的組件：衝出去的地雷
-      }
+      if (near) this.mineGo(near, TR);
       return;
     }
     if (this.stasis && !this.dashed && this.mode === 'fly' && this.dist >= 0.5 * this.R && !(this.overT > 0)) {  // 飛到射程一半停住；迴旋已經打中、準備折返的不變地雷
@@ -455,6 +463,7 @@ class Bullet {
     const c = this.prism ? this.copy(0.4) : null;  // 稜鏡：反彈時分裂
     if (c) this.angle -= 0.2;
     for (const b of c ? [this, c] : [this]) hostFire(b, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後（兩發都套用）
+    Game.rareAct('wallbounce', this.x, this.y, this.owner);  // 稀有晶片：牆反彈發動（反彈）
   }
   // 無限穿透：迴旋的回程、超音速（加速 Lv3 且 2 倍速以上）
   get infPierce() { return (!!this.boom && this.mode === 'return') || (this.accel >= 3 && this.accelMul >= 2); }
@@ -463,6 +472,9 @@ class Bullet {
 function spawnShots(list, x, y, baseAngle, depth, ignoreId) {
   const B = Game.bullets, M = Game.mech;  // 射出這些子彈的人的機體：感測器（子彈速度、鎖定、弱點標記）
   curVolley = ++volleySeq;
+  // 稀有晶片：反向發動（射出往後的子彈）、蓄力發動（射出蓄滿的那一發）
+  if (list.some(s => s.rear)) Game.rareAct('rear', x, y, Game.shooter || null);
+  if (list.some(s => s.full)) Game.rareAct('charge', x, y, Game.shooter || null);
   for (const s0 of list) {
     const s = M.bspeed !== 1 ? { ...s0, speed: s0.speed * M.bspeed } : s0;
     const b = new Bullet(x, y, baseAngle + s.angle, s, depth, ignoreId);

@@ -400,9 +400,9 @@ const Game = {
       if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
       if (this.sector === this.lastSector() && !MechCheck.running) markChapterCleared(this.chapterId);  // 打完這章最後一隻王：記下通關、開下一章（雙人兩邊各自記）
       this.victory = { slot, ws, boss: this.bossId, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
+      this.victory.rew = false;  // 旗艦的三選一還沒選（選完才回到勝利畫面，見 afterReward）
       if (this.mode === 'coop' && Net.role === 'host') Net.waitMods(this.coopOn());  // 雙人：等隊友選好二選一才能前往
-      if (client && bossDone(this.victory)) Net.send({ t: 'moddone' });
-      this.state = 'victory';
+      this.openReward('boss');
       this.view();
       return;
     }
@@ -411,7 +411,8 @@ const Game = {
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
   // 保底：電路有空格時，零件只會出現在最後一格；上一次三選一沒有玩法晶片，這一次一定有（刷新也算一次）
-  rewardOptions() {
+  // 稀有晶片：見 withRare（kind = CFG.REWARDS 的種類，決定保證幾格稀有）
+  rewardOptions(kind = 'combat') {
     const offers = this.chipOffers(), chips = pickN(offers, 3), parts = pickN(PART_IDS, 3), empty = this.chain.includes(null);
     const out = this.withComp([0, 1, 2].map(i => (!empty || i === 2) && Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i])));  // 晶片的插座數在這裡決定
     const isPlay = id => !String(id).startsWith('part:') && hasLv(id);
@@ -420,8 +421,41 @@ const Game = {
       const nComp = out.filter(isComp).length, k = out.findIndex(id => !isComp(id) || nComp > 1);  // 換掉零件、觸發器（或多出來的組件）；保底的那個組件留著
       if (pool.length && k >= 0) out[k] = newChip(pick(pool));
     }
+    this.withRare(out, CFG.REWARDS[kind].rare);
     this.playDry = !out.some(isPlay);
     return out;
+  },
+  // 稀有晶片：每一格玩法晶片 CFG.RARE.chance 機率變稀有（換成隨機一個玩法晶片＋詞條；身上已經有的也會出現）；need = 至少幾格稀有
+  withRare(out, need = 0) {
+    const make = i => {
+      const pool = NORMAL_IDS.filter(id => hasLv(id) && !out.some((o, j) => j !== i && CHIPS[o] && baseOf(o) === id));
+      out[i] = newChip(pick(pool), null, rollRare());
+    };
+    out.forEach((id, i) => { if (CHIPS[id] && hasLv(id) && Math.random() < CFG.RARE.chance) make(i); });
+    for (let n = out.filter(rareOf).length; n < need; n++) {
+      const free = out.map((id, i) => i).filter(i => !rareOf(out[i]));
+      const nComp = out.filter(isComp).length;
+      // 先換玩法晶片；沒有就換零件、觸發器，最後才換組件（至少留一個組件，見 withComp）
+      const i = free.find(i => CHIPS[out[i]] && hasLv(out[i])) ?? free.find(i => !isComp(out[i])) ?? free.find(() => nComp > 1);
+      if (i == null) break;
+      make(i);
+    }
+    return out;
+  },
+  // 身上（電路、倉庫）的這種玩法晶片在哪裡：{ arr, i } 或 null
+  ownedChip(base) {
+    for (const arr of [this.chain, this.inventory]) { const i = arr.findIndex(c => c && baseOf(c) === base); if (i >= 0) return { arr, i }; }
+    return null;
+  },
+  // 拿到稀有版本、身上已經有這個晶片：身上那個變稀有，留在原本的位置、插座上的組件不動；插座數取兩個裡比較多的
+  takeRare(id, mode) {
+    const o = this.ownedChip(baseOf(id)), old = o.arr[o.i];
+    const r = mergeRare(rareOf(old), rareOf(id), mode), nid = chipId(baseOf(id), Math.max(socketsOf(old), socketsOf(id)), r);
+    o.arr[o.i] = nid;
+    this.recalc();
+    Events.emit('upgrade');
+    if (this.runStats) this.runStats.got.push(`${this.here()} ${CHIPS[nid].name} Lv${r.lv}（稀有）`);
+    return `${CHIPS[baseOf(id)].name}變成稀有：${rareTxt(r)}`;
   },
   // 至少一格是組件（組件才填得滿插座）：沒抽到就隨機把一格換成組件
   withComp(ids) {
@@ -433,14 +467,14 @@ const Game = {
   // 打開三選一：每種三選一（出發前、戰鬥、精英）的差別都在 CFG.REWARDS（刷新價格、有沒有電路擴充卡）
   openReward(kind, extra = {}) {
     const K = CFG.REWARDS[kind];
-    this.reward = { kind, options: this.rewardOptions(), reroll: this.shopPrice(K.reroll), slot: K.slotCard && this.chain.length < CFG.MAX_SLOTS, ...extra };
+    this.reward = { kind, options: this.rewardOptions(kind), reroll: this.shopPrice(K.reroll), slot: K.slotCard && this.chain.length < CFG.MAX_SLOTS, after: K.after || null, ...extra };
     this.state = 'reward';
   },
   // 花晶體刷新三選一（價格見 CFG.REWARDS：每刷一次就更貴）
   rerollReward() {
     const R = this.reward;
     if (!R || this.credits < R.reroll) return;
-    this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(); this.view(); });
+    this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(R.kind); R.revealed = false; this.view(); });  // 刷新：稀有那格重新演揭曉
   },
   // 獎勵、商店可以出現的晶片：已經有的玩法晶片不再出現（同一種只有一個；升級靠插組件）
   chipOffers() {
@@ -450,6 +484,7 @@ const Game = {
   // ---------- 取得晶片：放進倉庫（不會合成：玩法晶片靠插組件升級，組件、觸發器不會升級） ----------
   canAcquire(id) {
     if (String(id).startsWith('part:')) return partsUsed(this.parts) < this.partSlots;  // 零件：要有空的零件格
+    if (rareOf(id) && this.ownedChip(baseOf(id))) return true;  // 稀有版本、身上已經有：直接變稀有，不用倉庫
     return this.inventory.includes(null);
   },
   acquire(id) {
@@ -493,15 +528,17 @@ const Game = {
     if (this.swapPart(from, id)) { W.msg = `改裝完成：${PARTS[from].name} → ${PARTS[id].name}`; W.from = null; Events.emit('upgrade'); }
     this.view();
   },
-  takeReward(id) {
+  // mode：稀有版本、身上那個已經有不同的詞條時，replace 替換／boost 增強（預設）
+  takeReward(id, mode = 'boost') {
     let msg;
     if (id && id.startsWith('part:')) {  // 零件
       const k = id.slice(5);
       if (!this.addPart(k)) return;
       Events.emit('upgrade');
-      this.showMap(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）` + this.mechGain());
+      this.afterReward(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）` + this.mechGain());
       return;
     }
+    if (id && rareOf(id) && this.ownedChip(baseOf(id))) return this.afterReward(this.takeRare(id, mode));
     if (id) {
       msg = this.acquire(id);
       if (!msg) return;
@@ -519,8 +556,19 @@ const Game = {
       else if (j >= 0 && !isComp(id) && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
       else toInv = j >= 0;
     }
-    this.showMap(msg);
+    this.afterReward(msg);
     if (toInv) this.openEditorWith(msg);
+  },
+  // 選完三選一：回到 CFG.REWARDS 的 after（旗艦：勝利畫面），沒寫就回航圖
+  afterReward(msg) {
+    const R = this.reward;
+    this.reward = null;
+    if (!R || R.after !== 'victory') return this.showMap(msg);
+    const V = this.victory;
+    V.rew = true;
+    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
+    this.state = 'victory';
+    this.view();
   },
   openEditorWith(msg) {
     this.toggleEditor();
@@ -888,7 +936,7 @@ const Game = {
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
     if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
-    if (dmg > 0) { this.onRevenge(p); p.streak = 0; }  // 逆襲開始；無傷連殺歸零
+    if (dmg > 0) { this.onRevenge(p); p.streak = 0; this.rareHurt(p); }  // 逆襲開始；無傷連殺歸零；稀有晶片的反擊
     if (p.ship.ability === 'gray' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.GRAY.cap, (p.drRec || 0) + dmg * CFG.GRAY.share);  // 堡壘號・灰血：這次傷害的一部分之後可以回來
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
@@ -1520,6 +1568,7 @@ const Game = {
       this.tagPlay(o, b.owner, 'pull');
       n++;
     }
+    if (n) this.rareAct('pull', cx, cy, b.owner);  // 稀有晶片：吸引發動（拉到敵人）
     if (b.pull >= 3) {
       const L = b.owner || this;
       L.pullHits = (L.pullHits || 0) + 1;
@@ -1584,6 +1633,7 @@ const Game = {
     const x = e.x, y = e.y, H = this.stickyHost(S, total, att);  // 插在黏著上的組件
     total = H.total; att = H.att;
     this.tagPlay(e, S[0].owner, 'sticky');
+    this.rareAct('sticky', x, y, S[0].owner);  // 稀有晶片：黏著發動（爆炸）
     const ring = (r, c) => ringFx(x, y, r, c);
     ring(e.r + 20 + n * 3, '#f78cff');
     e.hurt(total, 0, 0, 'explode', att);
@@ -1656,6 +1706,7 @@ const Game = {
     let list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
     if (comps) list = runComps(list, comps, 'h');  // 插在感染上的組件：爆出來的子彈
     this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
+    this.rareAct('infect', e.x, e.y, A.owner);  // 稀有晶片：感染發動（爆出子彈）
   },
   // 攔截：帶攔截的子彈碰到敵彈就把它打掉（自己照常飛），從那裡用整條電路朝最近的敵人回射；反射鏡（Lv3）把敵彈反彈回去
   interceptHit(eb, I) {
@@ -1668,6 +1719,7 @@ const Game = {
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
       if (b.parry) this.parryHit(b.ownerP);  // 格擋流（相位刃升級）：砍掉敵彈疊傷害
       if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 格擋（相位刃・格擋流）：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
+      this.rareAct('intercept', eb.x, eb.y, b.owner);  // 稀有晶片：攔截發動（擋下敵彈）
       // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
       //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
       const p = this.shipOf(b.owner) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
@@ -1744,8 +1796,34 @@ const Game = {
     for (const q of e.playTags || []) if (this.time - q.t <= (q.dur || CFG.PLAY_TAG_TIME)) {
       const K = (q.owner || this).playKills;
       if (K) K[q.id] = (K[q.id] || 0) + 1;
+      this.rareRun('kill', q.id, q.owner, e.x, e.y);  // 稀有晶片：玩法擊殺的詞條（狂熱、結晶、收割）
     }
     e.playTags = null;
+  },
+  // ---------- 稀有晶片的詞條（RARE）：只在房主跑；owner = 那個人的配裝 L（房主自己 null） ----------
+  // 這個人電路上那個晶片的詞條（有電的才算，見 analyzeChain 的 rares）
+  rareOf(base, owner) { const S = owner ? owner.stats : this.stats; return (S && S.rares && S.rares[base]) || null; },
+  // 詞條狀態（冷卻、充能、層數…）記在飛船上，每個晶片各一份
+  rareSt(p, base) { const R = p.rare || (p.rare = {}); return R[base] || (R[base] = {}); },
+  // on 符合這個詞條的時機才跑：冷卻照 RARE[k].cd；充能照晶片平常的發動頻率（CHIPS[晶片].actRate 次／秒）算，約 v 秒充滿
+  rareRun(on, base, owner, x, y) {
+    if (this.isClient()) return;
+    const r = this.rareOf(base, owner), D = r && RARE[r.k];
+    if (!D || D.on !== on) return;
+    const p = this.shipOf(owner);
+    if (!p || p.dead) return;
+    const st = this.rareSt(p, base), v = D.v ? D.v[r.lv - 1] : null;
+    if (D.cd) { if (this.time < (st.cd || 0)) return; st.cd = this.time + D.cd; }
+    if (on === 'charge') { st.c = (st.c || 0) + 1 / (CHIPS[base].actRate * v); if (st.c < 1) return; st.c = 0; }
+    Events.emit('rare', { k: r.k, x: x ?? p.x, y: y ?? p.y });
+    D.fx(p, st, v, x ?? p.x, y ?? p.y, base, owner);
+  },
+  // 晶片發動了（迴旋折返、環繞放出、地雷衝出去…；發動點寫在各晶片的程式裡）：發動時的詞條＋充能
+  rareAct(base, x, y, owner) { this.rareRun('act', base, owner, x, y); this.rareRun('charge', base, owner, x, y); },
+  // 受傷了：這個人電路上「受傷時」的詞條（反擊）
+  rareHurt(p) {
+    const owner = p === this.player ? null : p.L || null, S = owner ? owner.stats : this.stats;
+    for (const base in (S && S.rares) || {}) this.rareRun('hurt', base, owner, p.x, p.y);
   },
   // cmp：壓縮（電漿升級）——先把 cmp.pull 內看得到中心的敵人吸到中心附近（旗艦、母巢不吸），
   //   再數炸到幾隻（含被直擊的 skipId 那隻；牠不再吃爆炸傷害），第 2 隻起每多 1 隻傷害 +cmp.per
@@ -1887,4 +1965,4 @@ const THEMES = {
   shield: { cost: 5, from: 2 }, lurker: { cost: 3, from: 2 }, hive: { cost: 8, from: 3, max: 1 },
 };
 // 擊沉旗艦的勝利畫面：二選一選好了（雙人的隊友這時才通知房主可以前往）
-function bossDone(V) { return !!V && !!V.pick; }
+function bossDone(V) { return !!V && !!V.pick && V.rew !== false; }  // 旗艦獎勵選好了：二選一＋三選一（rew）
