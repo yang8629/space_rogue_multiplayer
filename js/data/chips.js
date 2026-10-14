@@ -1,10 +1,10 @@
-// 星環電路 雙人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO、用量成長、插座與組件、奇異點強化格子、起始電路
+// 星環電路 雙人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO（組件升級）、插座與組件、奇異點強化格子、起始電路
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // V2 晶片池：
-//   改玩法的晶片（彈道／發射／命中／機體）：照著它的玩法打就會成長（grow），Lv3 進化（evo，改名、玩法再變一次）
-//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像、元素組件 爆裂／燃燒／冰凍／電擊／破甲）：插在武器／玩法晶片／觸發器的插座裡（Game.socks，不佔電路格），不會升級
+//   改玩法的晶片（彈道／發射／命中／機體）：等級 = 1 ＋ 插在它上面的組件數（見 compileChain），Lv3 進化（evo，改名、玩法再變一次）；kill = 照它的玩法擊殺怎麼算
+//   組件（分裂、巨彈、穿甲、倍增、超頻模組、鏡像、元素組件 爆裂／燃燒／冰凍／電擊／破甲）：插在武器／玩法晶片／觸發器的插座裡（Game.socks，不佔電路格），本身不會升級；插在玩法晶片上讓它升一級
 //   觸發器（命中、消失、定時）：放在電路格，右邊的晶片只作用在它的回響上
 //   玩法晶片照順序作用在「它左邊」已經產生的子彈
 const CHIPS = {
@@ -17,34 +17,34 @@ const CHIPS = {
 
   // ---------- 彈道：子彈怎麼飛 ----------
   boomerang: { name: '迴旋', short: '迴旋', type: 'path', cost: 2, evo: '迴旋風暴',
-    grow: { what: '回程擊殺', need: [70, 235] },
+    kill: '回程擊殺',
     desc: '一定會飛回來：打中敵人（有穿甲時穿甲用完）就穿過去再折返，回程再打牠一次；撞到牆、行星、小行星，或飛到射程盡頭也折返。回程追著射出它的飛船，一路無限穿透。傷害 ×0.7。',
     lvs: ['回程傷害 ×1', '回程傷害 ×1.5', '進化：折返時分裂成 3 發'],
     apply: (list, pw, o) => list.map(b => ({ ...b, boom: o.lv, damage: b.damage * 0.7 })) },
   orbit: { name: '環繞', short: '環繞', type: 'path', cost: 2, evo: '星環',
-    grow: { what: '環繞擊殺', need: [190, 645] },
+    kill: '環繞擊殺',
     desc: '按住射擊時子彈存在飛船旁邊繞圈（碰到敵人照打，同一隻隔 0.5 秒可再打；每打一次扣一次穿甲，用完消失），越繞越快；放開射擊時全部從所在位置朝滑鼠那一點射出，轉越快放出越快：速度倍率就是傷害倍率（Lv1 最多 ×1.5，Lv2 最多 ×2）。右邊晶片的效果從射出後開始。',
     lvs: ['最多存 10 發（一次開火算一發）；3 秒轉滿（放出 ×1.5 速度與傷害）', '最多存 20 發；2 秒轉滿（放出 ×2 速度與傷害）', '進化：射出的子彈追蹤敵人'],
     apply: (list, pw, o) => list.map(b => ({ ...b, orbit: o.lv })) },
   stasis: { name: '佈雷', short: '佈雷', type: 'path', cost: 1, evo: '伏擊網',  // 程式代號沿用 stasis（原本的「停滯」）
-    grow: { what: '地雷擊殺', need: [165, 565] },
+    kill: '地雷擊殺',
     desc: '子彈飛到射程一半時停住變成地雷：敵人靠近就朝牠衝出去（傷害 ×1.2，跑完剩下的射程，至少比觸發範圍遠 30；衝出去後照常吃其他晶片的效果，加速接著停住前的進度算）；時間到還沒被觸發就消失。停住時不會打到敵人，也不擋子彈。',
     lvs: ['停 4 秒，觸發範圍 50', '停 6 秒，觸發範圍 70', '進化：停住的子彈之間拉出電弧，碰到的敵人持續受傷'],
     apply: (list, pw, o) => list.map(b => ({ ...b, stasis: o.lv })) },
   accel: { name: '加速', short: '加速', type: 'path', cost: 1, evo: '超音速',
-    grow: { what: '2 倍速以上擊殺', need: [100, 330] },
+    kill: '2 倍速以上擊殺',
     desc: '子彈出手只有 0.5 倍速，越飛越快，射程 ×1.5。速度照「飛了射程的幾成」算，飛到射程盡頭最快，每把武器都一樣（遠近照各自的射程換算）。速度倍率加進傷害加成（0.5 倍速 = −50%，4 倍速 = +300%，和倍增器等加成相加），所以近距離很虧、遠距離很痛。搭環繞：從放出時的倍率繼續加上去；搭佈雷、迴旋：衝出去、回程接著原本的進度算。速度倍率最多 5 倍。',
     lvs: ['0.5 倍 → 射程盡頭 3 倍', '0.5 倍 → 射程盡頭 4 倍', '進化：速度超過 2 倍時無限穿透'],
     apply: (list, pw, o) => list.map(b => ({ ...b, accel: o.lv })) },
   wallbounce: { name: '牆反彈', short: '反彈', type: 'path', cost: 1, evo: '稜鏡',
-    grow: { what: '反彈後擊殺', need: [155, 525] },
+    kill: '反彈後擊殺',
     desc: '射程 ×1.5，子彈碰到場地邊緣會反彈。搭配穿透（穿甲、加速 Lv3、蓄力 Lv3）效果最好：打中敵人的子彈沒有穿透就會消失。',
     lvs: ['反彈 1 次', '反彈 3 次', '進化：每次反彈分裂成 2 發'],
     apply: (list, pw, o) => list.map(b => ({ ...b, bounce: b.bounce + (o.lv >= 2 ? 3 : 1), life: b.life * 1.5, prism: o.lv >= 3 })) },
 
   // ---------- 發射：從哪裡、朝哪裡射 ----------
   rear: { name: '反向', short: '反向', type: 'launch', cost: 2, evo: '全向',
-    grow: { what: '反向擊殺', need: [175, 720] },
+    kill: '反向擊殺',
     desc: '目前的子彈另外朝反方向也射一份。',
     copyCredit: true,  // 傷害統計：只有多射出來的子彈算反向的（當成它的基礎傷害），原本往前的不算
     lvs: ['反方向 1 份', '反方向 2 份（稍微張開）', '進化：前後左右 4 個方向'],
@@ -53,7 +53,7 @@ const CHIPS = {
       return [...list, ...offs.flatMap(d => list.map(b => ({ ...b, angle: b.angle + d, rear: true, src: o.key || b.src })))];
     } },
   charge: { name: '蓄力', short: '蓄力', type: 'launch', cost: 0, evo: '過載砲',
-    grow: { what: '蓄滿擊殺', need: [200, 685] },
+    kill: '蓄滿擊殺',
     desc: '停止射擊時開始蓄力；再按下射擊的第一發依蓄力程度變強（蓄滿：左邊的子彈傷害 +400%、體積 +150%；和倍增器等加成相加），之後照常連射。',
     lvs: ['蓄滿要 2 秒', '蓄滿只要 1.5 秒', '進化：蓄滿的一發無限穿透，飛到盡頭爆炸'],
     apply: (list, pw, o) => {
@@ -64,36 +64,36 @@ const CHIPS = {
 
   // ---------- 命中之後 ----------
   sticky: { name: '黏著', short: '黏著', type: 'impact', cost: 1, evo: '連鎖引爆',
-    grow: { what: '黏著擊殺', need: [185, 625] },
+    kill: '黏著擊殺',
     desc: '子彈黏在敵人身上（先造成 30% 傷害）；第一發黏上後 2 秒，黏著的子彈一起爆炸（之後黏上的不重新計時）。黏越多發，爆炸倍率越高。會穿透的子彈每穿過一隻就留一份，穿甲用完才黏住；迴旋每打一隻留一份，照常折返。適合打血厚的敵人。',
     lvs: ['爆炸 ×(1.5 ＋ 每發 0.1)，最多 ×3', '爆炸 ×(2 ＋ 每發 0.15)，最多 ×4.5', '進化：爆炸時立刻引爆周圍敵人身上的子彈（連鎖）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, sticky: o.lv })) },
   infect: { name: '感染', short: '感染', type: 'impact', cost: 2, evo: '瘟疫',
-    grow: { what: '爆出子彈擊殺', need: [65, 215] },
+    kill: '爆出子彈擊殺',
     desc: '被這些子彈擊殺的敵人爆出子彈（傷害 ×1.5，帶著這發子彈身上的晶片效果）。',
     lvs: ['爆出 3 發', '爆出 5 發', '進化：爆出的子彈也帶感染（最多傳 2 代）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, infect: o.lv })) },
   pull: { name: '吸引', short: '吸引', type: 'impact', cost: 1, evo: '引力漩渦',
-    grow: { what: '拉過後擊殺', need: [215, 720] },
+    kill: '拉過後擊殺',
     desc: '命中時把被打中那一隻附近的敵人拉到牠身邊（被打中的那一隻不動；旗艦不會被拉；環繞還在繞圈的子彈不會拉，放出去之後才會）。',
     lvs: ['範圍 90', '範圍 130', '進化：每命中 8 次生成一個 1.5 秒的引力漩渦'],
     apply: (list, pw, o) => list.map(b => ({ ...b, pull: o.lv })) },
 
   // ---------- 跟機體連動 ----------
   dashfire: { name: '衝刺射擊', short: '衝射', type: 'body', cost: 1, evo: '流星',
-    grow: { what: '衝刺射擊擊殺', need: [155, 525] },
+    kill: '衝刺射擊擊殺',
     desc: '衝刺結束時，用整條電路朝準星額外開一槍（傷害 +50%，不佔射擊冷卻；有停火蓄力時會用掉蓄力）。平常開火不受影響。',
     lvs: ['開 1 槍', '連開 2 槍', '進化：衝刺的那一槍無限穿透，傷害 +100%'],
     apply: (list, pw, o) => Game.fireMode !== 'dashfire' ? list
       : list.map(b => ({ ...addBonus(b, o.lv >= 3 ? 1 : 0.5), dashShot: true, pierce: o.lv >= 3 ? 99 : b.pierce })) },
   stand: { name: '架設', short: '架設', type: 'body', cost: 1, evo: '要塞',
-    grow: { what: '架設滿層擊殺', need: [155, 525] },
+    kill: '架設滿層擊殺',
     desc: '站著不動時越射越快：站 2 秒疊滿，每層射速 +10%（Lv1 每 1/3 秒 1 層、最多 6 層；Lv2 每 0.25 秒 1 層、最多 8 層；停下來就開始累積，不用一直按著射擊）。移動或衝刺就歸零（手抖 0.15 秒內不算）。跟加速器的「疾風」（移動中射速 +20%）相反。',
     lvs: ['最多 +60%（站 2 秒）', '最多 +80%（站 2 秒）', '進化：滿層時子彈穿透 +1、擊退 ×2'],
     apply: (list, pw, o) => !Game.standFull ? list
       : list.map(b => ({ ...b, stand: o.lv, pierce: o.lv >= 3 ? b.pierce + 1 : b.pierce, knock: o.lv >= 3 ? b.knock * 2 : b.knock })) },
   intercept: { name: '攔截', short: '攔截', type: 'impact', cost: 1, evo: '反射鏡',
-    grow: { what: '回射擊殺', need: [100, 330] },
+    kill: '回射擊殺',
     desc: `子彈碰到敵彈時把它打掉。<b>合併回射</b>：擋下後 ${CFG.COUNTER.win} 秒才回射，這段時間內在 ${CFG.COUNTER.join} 以內擋下的合成一次，用整條電路朝最近的敵人回射（每多擋 1 顆傷害 +${Math.round(CFG.COUNTER.per * 100)}%，最多 ×${CFG.COUNTER.max}，子彈跟著變大、變白；更遠的另外集氣）。不會用掉停火蓄力；回射出來的子彈、飛回來的迴旋只會格擋，不會再回射。打掉一發敵彈跟打中敵人一樣扣 1 穿甲，沒有穿甲就消失。子彈越多、越大越會攔：散彈、相位刃（無限穿透）特別好用。`,
     lvs: ['回射傷害 ×0.5', '回射傷害 ×1', '進化：打掉的敵彈也反彈回去（敵彈傷害 ×2）'],
     apply: (list, pw, o) => list.map(b => ({ ...b, intercept: o.lv, damage: Game.fireMode === 'intercept' ? b.damage * (o.lv >= 2 ? 1 : 0.5) : b.damage })) },
@@ -212,7 +212,7 @@ const sizeUp = (b, add) => { const r0 = b.r0 || b.radius, sb = (b.sizeB || 0) + 
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => CHIPS[id].type !== 'composite' && !CHIPS[id].hidden);
 const COMPOSITE_IDS = [];  // V2 拿掉了軍規複合晶片
 const OVERLOADS = ['ov_power', 'ov_rate', 'ov_pierce', 'ov_seek'];
-const chipPrice = id => (30 + CHIPS[id].cost * 8) * levelOf(id) + 6 * socketsOf(id);
+const chipPrice = id => 30 + CHIPS[id].cost * 8 + 6 * socketsOf(id);
 
 // ---------- 插座 ----------
 // 宿主 = 武器、玩法晶片、觸發器；組件（comp）插在宿主的插座裡（Game.socks），超過插座數就沒有作用
@@ -222,9 +222,9 @@ const isHost = id => !!(id && CHIPS[id] && (id === 'weapon' || HOST_TYPES.includ
 const socketsOf = id => !id || !CHIPS[id] ? 0 : id === 'weapon' ? (Game.wSock ?? CFG.WEAPON_SOCKETS) : CHIPS[id].sk || 0;
 // 掉落時隨機決定插座數：1 個 50%、2 個 35%、3 個 15%；沙盒／靶場一律 3 個
 function rollSockets() { const r = Math.random(); return r < 0.5 ? 1 : r < 0.85 ? 2 : 3; }
-const newChip = (base, sk) => isHost(base) && base !== 'weapon' ? chipId(base, 1, sk != null ? sk : Game.freePlay && Game.freePlay() ? CFG.MAX_SOCKETS : rollSockets()) : base;
+const newChip = (base, sk) => isHost(base) && base !== 'weapon' ? chipId(base, sk != null ? sk : Game.freePlay && Game.freePlay() ? CFG.MAX_SOCKETS : rollSockets()) : base;
 // 沙盒、預設電路、機制檢查用：宿主一律給滿插座
-const fullChip = id => !id || !isHost(id) || id === 'weapon' || socketsOf(id) ? id : chipId(baseOf(id), levelOf(id), CFG.MAX_SOCKETS);
+const fullChip = id => !id || !isHost(id) || id === 'weapon' || socketsOf(id) ? id : chipId(baseOf(id), CFG.MAX_SOCKETS);
 // ---------- 電路資料：Game.chain = 電路格（武器、玩法晶片、觸發器、空格）；Game.socks[i] = 插在第 i 格晶片上的組件 ----------
 //   組件插在晶片的插座裡，不佔電路格
 const sockCount = (socks = Game.socks) => (socks || []).reduce((a, s) => a + ((s && s.length) || 0), 0);
@@ -247,7 +247,7 @@ const HOST_PRODUCT = {
   boomerang: '折返之後的子彈', orbit: '放出的那一波', stasis: '衝出去的地雷', accel: '速度到 1.5 倍之後的子彈',
   wallbounce: '第一次反彈之後的子彈', rear: '往後射的那一份',
   charge: '蓄滿的那一發', sticky: '爆炸（分裂：噴出 3 發碎片；巨彈：波及周圍；穿甲：黏住前多穿 2 隻）', infect: '爆出來的子彈',
-  pull: '拉力（只能插巨彈：範圍 ×1.5）', intercept: '回射的子彈', dashfire: '衝刺那一槍', stand: '架設滿層時射出的子彈',
+  pull: '拉力（只有巨彈有效果：範圍 ×1.5；其他組件只升級）', intercept: '回射的子彈', dashfire: '衝刺那一槍', stand: '架設滿層時射出的子彈',
   trigger: '回響（跟插在武器上一樣，傷害加成只算回響的直擊）', trigend: '回響（跟插在武器上一樣，傷害加成只算回響的直擊）', trigtime: '回響（跟插在武器上一樣，傷害加成只算回響的直擊）',
 };
 // 武器層／宿主層：倍增、巨彈、超載・威力插在武器（或觸發器）上加進武器層（bonus），插在玩法晶片上加進宿主層（hb）；最終 = 基礎 ×（1 ＋ 武器層）×（1 ＋ 宿主層）
@@ -260,71 +260,58 @@ const addLayer = (b, add, o) => (o && o.layer === 'h' ? addHB(b, add) : addBonus
 // ---------- 奇異點（航圖節點）：強化格子（每格只能強化一次，武器格也可以；屬性留在格子上，換晶片也還在） ----------
 const SLOT_ATTRS = {
   eff:       { good: true, name: '效果 ×1.5', desc: '放在這格的晶片，插座上的組件效果 ×1.5' },
-  grow2:     { good: true, name: '成長 ×2', desc: '這格的玩法晶片用量成長 ×2' },
   free:      { good: true, name: '能量歸零', desc: '放在這格的晶片不算能量負載（插座上的組件照算）' },
   ov_power:  { good: true, name: '超載・威力', desc: '這格的晶片多插一個「傷害 +50%」（不佔插座）' },
   ov_rate:   { good: true, name: '超載・頻率', desc: '這格有晶片時，整條電路' + rateTxt(0.8) },
   ov_pierce: { good: true, name: '超載・貫穿', desc: '這格的晶片多插一個「穿透 +1」（不佔插座）' },
   ov_seek:   { good: true, name: '超載・導引', desc: '這格的晶片多插一個「子彈追蹤敵人」（不佔插座）' },
   weak:      { good: false, name: '效果 ×0.7', desc: '放在這格的晶片，插座上的組件效果 ×0.7' },
-  nogrow:    { good: false, name: '不會成長', desc: '這格的玩法晶片不會用量成長' },
   heavy:     { good: false, name: '能量 +2', desc: '放在這格的晶片能量負載 +2' },
   flaky:     { good: false, name: '間歇失效', desc: '這格的晶片每 8 秒有 2 秒沒有作用' },
 };
 const GOOD_ATTRS = Object.keys(SLOT_ATTRS).filter(k => SLOT_ATTRS[k].good);
 const BAD_ATTRS = Object.keys(SLOT_ATTRS).filter(k => !SLOT_ATTRS[k].good);
-const BH_GOOD = [0.7, 0.8, 0.9];  // 投入的晶片等級 Lv1／Lv2／Lv3 → 好結果的機率
+const BH_GOOD = [0.7, 0.8, 0.9];  // 投入的晶片插座 1／2／3 個 → 好結果的機率（組件、沒有插座的算 1 個）
+const bhGood = id => BH_GOOD[Math.min(BH_GOOD.length, Math.max(1, socketsOf(id))) - 1];
+const bhOddsTxt = () => BH_GOOD.map((p, i) => `插座 ${i + 1} 個 ${Math.round(p * 100)}%`).join('、') + '（組件、沒有插座的算 1 個）';
 const flakyOff = () => Game.time % 8 >= 6;  // 間歇失效：每 8 秒的最後 2 秒沒有作用
 const canSacrifice = id => !!id && !CHIPS[id].locked;  // 可以投入奇異點的晶片（武器以外都可以，插座上的組件也可以）
 
-// ---------- 晶片 id：base、#等級（Lv2／Lv3，改玩法的晶片照用量成長）、~插座數 ----------
+// ---------- 晶片 id：base、~插座數 ----------
+//   等級不寫在 id：玩法晶片的等級 = 1 ＋ 插在它上面的組件數（compileChain 算好放在 info[i].lv），拔插組件、換格子就跟著變
 const LV_MARK = ['', '', '²', '³'];
 const lvMulOf = lv => 1 + 0.5 * (lv - 1);
-function chipId(base, lv = 1, sk = 0) {  // 動態建立 Lv2 / Lv3、有插座的晶片定義
-  const id = base + (lv > 1 ? '#' + lv : '') + (sk > 0 ? '~' + sk : '');
-  if (!CHIPS[id]) {
-    const B = CHIPS[base], m = lvMulOf(lv), evo = lv >= 3 && B.evo;
-    CHIPS[id] = { ...B, base, lv, lvMul: m, sk };
-    if (lv > 1) Object.assign(CHIPS[id], { name: evo ? `${B.evo}（${B.name} Lv3）` : `${B.name} Lv${lv}`, short: evo ? B.evo.slice(0, 2) + '³' : B.short + LV_MARK[lv],
-      desc: B.desc + `<br>${lvLine(base, lv)}` });
-  }
+function chipId(base, sk = 0) {  // 動態建立有插座的晶片定義
+  const id = base + (sk > 0 ? '~' + sk : '');
+  if (!CHIPS[id]) CHIPS[id] = { ...CHIPS[base], base, sk };
   return id;
 }
-const leveledId = (base, lv) => chipId(base, lv, 0);
 // 對方傳來的晶片 id：認得的才收（不認得的回傳 null）
 function parseChipId(id) {
   if (typeof id !== 'string') return null;
   if (NORMAL_IDS.includes(id)) return id;
-  const m = /^([a-z_]+)(?:#([23]))?(?:~([1-9]))?$/.exec(id);
+  const m = /^([a-z_]+)(?:~([1-9]))?$/.exec(id);
   if (!m || !NORMAL_IDS.includes(m[1])) return null;
-  const lv = m[2] ? +m[2] : 1, sk = m[3] ? Math.min(CFG.MAX_SOCKETS, +m[3]) : 0;
-  if (lv > 1 && !CHIPS[m[1]].grow) return null;
+  const sk = m[2] ? Math.min(CFG.MAX_SOCKETS, +m[2]) : 0;
   if (sk && !isHost(m[1])) return null;
-  return chipId(m[1], lv, sk);
+  return chipId(m[1], sk);
 }
 const baseOf = id => (id && CHIPS[id].base) || id;
-const levelOf = id => (id && CHIPS[id].lv) || 1;
-const canLevelUp = id => !!id && !!CHIPS[baseOf(id)].grow && levelOf(id) < CFG.MAX_CHIP_LV;
+const hasLv = id => !!(id && CHIPS[id] && CHIPS[baseOf(id)].lvs);  // 玩法晶片才有等級（觸發器、組件沒有）
 const sellPrice = id => Math.floor(chipPrice(id) * 0.4);
-
-// 成長需求：雙人（隊友在線）×COOP_GROW
-const growNeed = (base, lv) => Math.round(CHIPS[base].grow.need[lv - 1] * (Game.coopOn && Game.coopOn() ? CFG.COOP_GROW : 1));
-// 用量成長的進度說明（編輯器、卡片用）：目前累積、下一級需要多少、本局平均每分鐘多少
-function growLine(id, growth, minutes) {
-  const base = baseOf(id), g = CHIPS[base] && CHIPS[base].grow;
-  if (!g) return '';
-  const lv = levelOf(id), have = Math.floor((growth && growth[base]) || 0);
-  const rate = minutes > 0.05 ? `（本局每分鐘 +${(have / minutes).toFixed(1)}）` : '';
-  if (lv >= CFG.MAX_CHIP_LV) return `<span style="color:#ffd166">已進化</span>　累積${g.what} ${have}${rate}`;
-  return `<span style="color:#9dff6b">成長：${g.what} ${have} / ${growNeed(base, lv)}</span>${rate}　到了自動升 Lv${lv + 1}${lv + 1 >= 3 ? '（進化）' : ''}`;
+const compsFor = lv => Math.ceil((lv - 1) / CFG.LV_PER_COMP);  // 升到 lv 要插幾個組件
+// 電路第 i 格的等級（info = compileChain(...).info；預設看自己的電路）
+const slotLv = (i, info = Game.stats && Game.stats.info) => (info && info[i] && info[i].lv) || 1;
+// 照等級的名稱：Lv2「迴旋 Lv2」、Lv3「迴旋風暴（迴旋 Lv3）」；short 是電路縮圖上的兩個字
+function lvName(id, lv = 1) {
+  const B = CHIPS[baseOf(id)];
+  if (!hasLv(id) || lv <= 1) return CHIPS[id].name;
+  return lv >= 3 && B.evo ? `${B.evo}（${B.name} Lv3）` : `${B.name} Lv${lv}`;
 }
-
-// 電路格子底下的成長進度條＋實際數值（例如 62/70；玩法晶片、還沒進化才有）
-function growBar(id) {
-  const base = baseOf(id), g = CHIPS[base] && CHIPS[base].grow, lv = levelOf(id);
-  if (!g || lv >= CFG.MAX_CHIP_LV) return '';
-  const have = Math.floor(Game.growth[base] || 0), need = growNeed(base, lv), f = Math.min(1, have / need);
-  return `<div class="gbar" title="成長：${g.what} ${have} / ${need} → Lv${lv + 1}${lv + 1 >= CFG.MAX_CHIP_LV ? '（進化）' : ''}"><i style="width:${Math.round(f * 100)}%"></i></div><span class="gnum">${have}/${need}</span>`;
+function lvShort(id, lv = 1) {
+  const B = CHIPS[baseOf(id)];
+  if (!hasLv(id) || lv <= 1) return CHIPS[id].short;
+  return lv >= 3 && B.evo ? B.evo.slice(0, 2) + LV_MARK[3] : B.short + LV_MARK[lv];
 }
 
 // 開局電路：武器＋三選一的起始晶片（沒選就空著）；組件不佔電路格，開局又沒有插座可插 → 放進倉庫（startInv）

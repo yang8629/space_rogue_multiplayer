@@ -1,6 +1,6 @@
 // 星環電路 整局模擬的電腦（戰鬥操作）
 //   在遊戲的全域範圍裡執行（runsim／botsim／qasim 用 vm.runInThisContext，coopsim 每份遊戲各一份 vm context），由 bot/load.js 載入
-//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、levelOf、pick、randInt
+//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、pick、randInt
 //   2026-10-09 從 runsim.js 搬出來（以前 coopsim／botsim／qasim 從 runsim.js 剪文字來用）
 
 function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危險時衝刺
@@ -143,7 +143,7 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
 // 照配裝打：電路上有這些玩法晶片時，刻意照它們的玩法打（可以同時好幾種）
 //   反向：背對敵人射；衝刺射擊：安全時朝敵人衝；環繞：貼近讓繞圈的子彈磨敵人；
 //   牆反彈：直接打（打偏的自然會彈回來；2026-09-30 比過：刻意瞄牆比較差）；蓄力：平常照打，血厚的敵人才停火蓄滿再放
-const bOf = id => String(id).split(/[#~]/)[0];  // 晶片 id：base#等級~插座數
+const bOf = id => String(id).split('~')[0];  // 晶片 id：base~插座數
 const hasChip = b => G.chain.some(id => id && bOf(id) === b);
 // 久打不到：記住敵人總血量上次減少的時間（新的一波生出來也算有進展）；有旗艦時只看旗艦（打死牠召喚的蟲群不算進展）
 const stall = { hp: 0, t: 0, n: 0 };

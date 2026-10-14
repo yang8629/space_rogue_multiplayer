@@ -12,8 +12,9 @@ const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 function chipCard(id, footer = '') {
   const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip';
   const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
-  const lv = levelOf(id) <= 1 && LV_INFO[baseOf(id)] ? `<div class="ty" style="line-height:1.6">${lvLine(baseOf(id), 1)}</div>` : '';  // Lv2+ 的說明已寫在 desc 裡；有插座的 Lv1（orbit~2）也要列
-  return `<div class="card cat-${cat}">${catBand(cat)}
+  const lv = LV_INFO[baseOf(id)] ? `<div class="ty" style="line-height:1.6">${lvLine(baseOf(id), 1)}<br>每插 1 個組件升 ${CFG.LV_PER_COMP} 級</div>` : '';  // 卡片上的晶片還沒插組件，一律 Lv1
+  const sk = isHost(id) && id !== 'weapon' && socketsOf(id) ? ' sk' + socketsOf(id) : '';  // 插座數 = 稀有度：框色 1 灰、2 藍、3 紫
+  return `<div class="card cat-${cat}${sk}">${catBand(cat)}
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
     <div class="ttl">${d.name}</div>
     ${sockLine(id)}
@@ -281,14 +282,14 @@ const Screen = {
         <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
     } else {
       const cards = owned.map(o => {
-        const on = B.sel === o.key, odds = Math.round(BH_GOOD[Math.min(levelOf(o.id), 3) - 1] * 100);
+        const on = B.sel === o.key, odds = Math.round(bhGood(o.id) * 100);
         return chipCard(o.id, `<div class="ty">位置：${o.sock != null ? `插在${CHIPS[Game.chain[o.sock]].name}上` : o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}　好結果 ${odds}%</div>
           <button data-act="bhpick" data-arg="${o.key}">${on ? '已選取（點擊取消）' : '投入這個'}</button>`)
           .replace('class="card', `class="card${on ? ' picked' : ''}`);
       }).join('');
       body = `<div class="bh-core"></div>
         <div class="sub" style="text-align:center">投入 1 個晶片（晶片會消失）：隨機一個<b>還沒強化過</b>的電路格（武器格也可能）得到一個屬性，每格只能強化一次。<br>
-          好結果的機率看投入晶片的等級：Lv1 ${BH_GOOD[0] * 100}%、Lv2 ${BH_GOOD[1] * 100}%、Lv3 ${BH_GOOD[2] * 100}%。<br>
+          好結果的機率看投入晶片的插座數：${bhOddsTxt()}。<br>
           好：${GOOD_ATTRS.map(attrTag).join('、')}<br>壞：${BAD_ATTRS.map(attrTag).join('、')}</div>
         <div class="sub bh-slots">${slots}</div>
         <div class="cards">${cards || '<div class="sub">目前沒有可投入的晶片。</div>'}</div>
@@ -560,7 +561,7 @@ const Screen = {
           return list2('隊友的各晶片傷害', r.coop.mateChipDmg.map(([n, v]) => `${n}　${fmt(v)}（${t ? Math.round(v / t * 100) : 0}%）`));
         })() : '',
         r.taken ? list2(`受到的傷害（被打 ${r.hits} 下、衝刺 ${r.dashes} 次）`, Object.entries(r.taken).map(([k, v]) => `${k}　${fmt(v)}`)) : '',
-        r.mech ? `<div><b>機體</b><br>零件：${Object.entries(r.mech.parts).map(([k, v]) => `${k} ${v}`).join('、') || '無'}（${r.mech.slots} 格）${r.mech.module ? `　·　模組：${r.mech.module}` : ''}${r.mech.traits.length ? `<br>特性：${r.mech.traits.join('、')}` : ''}${Object.keys(r.mech.growth).length ? `<br>晶片成長：${Object.entries(r.mech.growth).map(([k, v]) => `${k} ${v}`).join('、')}` : ''}</div>` : '',
+        r.mech ? `<div><b>機體</b><br>零件：${Object.entries(r.mech.parts).map(([k, v]) => `${k} ${v}`).join('、') || '無'}（${r.mech.slots} 格）${r.mech.module ? `　·　模組：${r.mech.module}` : ''}${r.mech.traits.length ? `<br>特性：${r.mech.traits.join('、')}` : ''}${Object.keys(r.mech.playKills || {}).length ? `<br>玩法擊殺：${Object.entries(r.mech.playKills).map(([k, v]) => `${k} ${v}`).join('、')}` : ''}</div>` : '',
         list2('各關摘要', r.sectors), list2('走過的節點', r.path), list2('武器升級', r.upgrades), list2('取得的晶片', r.got),
       ].join('');
       return `<div class="rec"><div class="between"><span><b style="color:${color}">${label}</b>　${r.where || `${r.chapter > 1 ? `第 ${r.chapter} 章 · ` : ''}${r.endless ? '無盡 · ' : ''}星區 ${r.sector} 第 ${r.layer} 層`}　·　${when}</span>
@@ -653,8 +654,8 @@ function recordText(r) {
   const M = r.mech;
   if (M) {
     L.push(`機體 ${Object.entries(M.parts).map(([k, v]) => k.slice(0, 2) + v).join(' ') || '無零件'}${M.module ? `｜${M.module}${M.traits.length ? `(${M.traits.join(' ')})` : ''}` : M.traits.length ? `(${M.traits.join(' ')})` : ''} HP${r.hp}/${r.maxHp} 晶${r.credits}`);
-    const g = Object.entries(M.growth).sort((a, b) => b[1] - a[1]);
-    if (g.length) L.push(`成長 ${g.map(([k, v]) => k + v).join(' ')}`);
+    const g = Object.entries(M.playKills || {}).sort((a, b) => b[1] - a[1]);  // 舊紀錄沒有 playKills（以前是用量成長）
+    if (g.length) L.push(`玩法擊殺 ${g.map(([k, v]) => k + v).join(' ')}`);
   }
   const src = Object.entries(r.dmgBySource || {}).map(([k, v]) => (C.src[k] || k) + v).join(' ');
   const cd = (r.chipDmg || []).map(([k, v]) => (/^武器・/.test(k) ? '武器' : /^機體/.test(k) ? '機體' : chip(k)) + v).join(' ');

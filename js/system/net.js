@@ -8,7 +8,7 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'growth', 'pullHits', 'parts', 'partSlots', 'cap', 'mech'];
+const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'playKills', 'pullHits', 'parts', 'partSlots', 'cap', 'mech'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -450,7 +450,7 @@ const Net = {
       others: this.peers.filter(o => o !== q && o.pick).map(o => ({ slot: o.slot, ...o.pick })),  // 其他隊友（三人以上）
       you: { pick: q.pick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
-        parts: L.parts, ps: L.partSlots, cap: L.cap, ws: L.wSock, growth: L.growth, bp: L.bonusPicks || 0 },
+        parts: L.parts, ps: L.partSlots, cap: L.cap, ws: L.wSock, pk: L.playKills, bp: L.bonusPicks || 0 },
       map: this.packMap(G.map), chapter: G.chapterId, sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
       lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
@@ -485,13 +485,13 @@ const Net = {
       const lo = this.sanitizeLoadout(Y);
       if (lo.weapon && lo.weapon.id === G.weapon.id) G.weapon = lo.weapon;
       G.chain = lo.chain; G.socks = lo.socks; G.inventory = lo.inventory; G.slotAttr = lo.slotAttr;
-      const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與用量成長也以房主記住的為準
+      const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與玩法擊殺也以房主記住的為準
       G.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(YP[id])), 0, 20)]));
       G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
       G.cap = clamp(Math.floor(num(Y.cap, G.cap)), 0, 40);
       G.wSock = clamp(Math.floor(num(Y.ws, G.wSock)), 1, CFG.WEAPON_SOCKETS);
-      G.growth = {};
-      if (Y.growth && typeof Y.growth === 'object') for (const k in Y.growth) if (CHIPS[k] && CHIPS[k].grow) G.growth[k] = Math.max(0, num(Y.growth[k]));
+      G.playKills = {};
+      if (Y.pk && typeof Y.pk === 'object') for (const k in Y.pk) if (hasLv(k)) G.playKills[k] = Math.max(0, Math.floor(num(Y.pk[k])));
       G.refreshWeapon();
       G.credits = Math.max(0, num(Y.credits));
       this.resetRun();
@@ -761,7 +761,7 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), socks: [], inventory: startInv(p.chip), slotAttr: [], growth: {}, pullHits: 0,
+      chain: startChain(p.chip), socks: [], inventory: startInv(p.chip), slotAttr: [], playKills: {}, pullHits: 0,
       parts: { ...SHIPS[p.ship].parts }, partSlots: SHIPS[p.ship].partSlots, cap: SHIPS[p.ship].cap, wSock: CFG.START_WSOCK,
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     const ST = Game.chapter().start;  // 章節的開局補償：電路格、插座先加；晶體和剩下的三選一次數先記著，之後隊友的配裝同步會蓋過去
@@ -907,7 +907,7 @@ const Net = {
     this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
       parts: G.parts, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft() });
   },
-  // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶等級 #2、插座數 ~2，見 parseChipId）
+  // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶插座數 ~2，見 parseChipId）
   sanitizeLoadout(m) {
     const fix = id => parseChipId(id);
     const chain = (Array.isArray(m.chain) ? m.chain : []).slice(0, CFG.MAX_SLOTS).map((id, i) => (i === 0 ? 'weapon' : fix(id)));
@@ -1070,7 +1070,7 @@ const Net = {
         p: rows.filter(a => a[0] !== q.slot),  // 其他人的飛船
         me: [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
         r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), standStacks(m, m.L.stats.stand), m.crowdK || 0, r2(Math.max(0, m.revengeT || 0)), m.streak || 0, m.focusK || 0, m.spreadK || 0, m.grazeK || 0, m.staticK || 0, m.parryK || 0],  // …、群戰的敵人數、逆襲剩幾秒、無傷連殺層數、專注／分散／擦彈層數  // 灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）
-        gr: m.L.growth,  // 這個隊友各晶片的累積用量（隊友那邊照這個升級）
+        pk: m.L.playKills,  // 這個隊友各晶片的玩法擊殺數（隊友那邊的紀錄用）
         b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
           ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
         eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r, b.col ? ci(b.col) : -1, b.mine ? r2(b.life) : 0]),  // 盾衛反彈的原本顏色、地雷剩幾秒（0 = 不是地雷）
@@ -1156,11 +1156,8 @@ const Net = {
       P.crowdK = num(s.me[14], 0); P.revengeT = num(s.me[15], 0); P.streak = num(s.me[16], 0);  // 群戰、逆襲、無傷連殺（畫左上小條用）
       P.focusK = num(s.me[17], 0); P.spreadK = num(s.me[18], 0); P.grazeK = num(s.me[19], 0); P.staticK = num(s.me[20], 0); P.parryK = num(s.me[21], 0);  // 專注、分散、擦彈、靜電、格擋流
     }
-    if (s.gr && typeof s.gr === 'object') {  // 用量成長：房主算好的累積量，這邊只增不減，到了就升級
-      let up = false;
-      for (const k in s.gr) if (CHIPS[k] && CHIPS[k].grow && num(s.gr[k]) > (G.growth[k] || 0)) { G.growth[k] = num(s.gr[k]); up = true; }
-      if (up) G.checkGrowth();
-    }
+    if (s.pk && typeof s.pk === 'object')  // 玩法擊殺：房主算好的次數，這邊只增不減
+      for (const k in s.pk) if (hasLv(k) && num(s.pk[k]) > (G.playKills[k] || 0)) G.playKills[k] = Math.floor(num(s.pk[k]));
     G.enemies = arr(s.e).map(a => {
       const t = ENEMY_TYPES[a[1]];
       if (!t) return null;

@@ -18,10 +18,12 @@ const NO_ECHO = ['orbit', 'charge', 'dashfire', 'stand'];
 const STICKY_NOW = ['pierce', 'ov_pierce', 'ov_seek'];
 
 // chain：電路格（武器、玩法晶片、觸發器、空格）；socks[i]：插在第 i 格晶片上的組件（由左到右）；attrs[i]：第 i 格的黑洞屬性（只強化那一格的晶片）
-//   ops.info[i]：每一格的狀態（role 'host'、seg 在第幾層觸發、idle 沒有作用、why 原因、nopow 因為沒電）；ops.info.socks[i][k]：第 i 格第 k 個插座的狀態
+//   ops.info[i]：每一格的狀態（role 'host'、seg 在第幾層觸發、idle 沒有作用、why 原因、nopow 因為沒電、lv 玩法晶片的等級）；ops.info.socks[i][k]：第 i 格第 k 個插座的狀態（lvOnly 只升級、沒有效果）
 // 供電（2026-10-10，取代超載扣射速）：從武器往右一格一格輪，晶片 → 它插座上的組件 → 下一格晶片…；
 //   第一個電不夠的和它右邊全部沒有作用（不跳過）；本來就沒作用的（放錯、插座不夠…）不吃電
+//   例外：玩法晶片上放錯的組件照樣吃電、算等級（只升級，沒有效果）
 //   ops.info.need = 全部有電要多少、used = 實際用掉、off = 沒電的晶片＋組件數、cap = 容量
+// 等級（組件升級）：玩法晶片 = 1 ＋ 有電的組件數 × LV_PER_COMP（超過插座數的不算），最多 MAX_CHIP_LV；放在 info[i].lv
 function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || [], cap = Game.energyCap()) {
   const info = chain.map(() => ({ role: null, idle: false, why: '', seg: 0, trig: false }));
   info.socks = chain.map(() => []);
@@ -50,19 +52,23 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
       });
       return;
     }
-    const o = { id, pw: def.lvMul || 1, lv: levelOf(id), slot: i, key: baseOf(id), comps: [], am, flaky,
+    const o = { id, pw: 1, lv: 1, slot: i, key: baseOf(id), comps: [], am, flaky,
       wlike: id === 'weapon' || def.type === 'trigger' };  // wlike：武器、觸發器（回響）的插座 → 武器層
     if (OVERLOADS.includes(at)) o.comps.push({ id: at, m: 1, slot: i, key: at, hidden: true });  // 奇異點的超載：這格的晶片多插一個（不佔插座）
     ops.push(o);
     if (def.type === 'trigger') { I.trig = true; seg++; }
-    const nSock = socketsOf(id), base = baseOf(id);
+    const nSock = socketsOf(id), base = baseOf(id), leveled = hasLv(id);
+    let up = 0;  // 讓這個玩法晶片升級的組件數
     S.forEach((cid, k) => {  // 插座上的組件（強化只看晶片那一格，組件本身不吃屬性）
       const J = info.socks[i][k], cb = baseOf(cid);
       if (k >= nSock) return idle(J, `插座不夠：${CHIPS[id].name}只有 ${nSock} 個插座`);
-      if (cb === 'overclock' && id !== 'weapon') return idle(J, '超頻是整條電路的射速，只能插在武器上');
-      if (cb === 'focus' && id !== 'weapon') return idle(J, '收束看武器每次射出幾發，只能插在武器上');
-      if (base === 'pull' && cb !== 'bigshot') return idle(J, '吸引的產物是拉力，只能插巨彈（範圍 ×1.5）');
+      const wrong = cb === 'overclock' && id !== 'weapon' ? '超頻是整條電路的射速，只能插在武器上'
+        : cb === 'focus' && id !== 'weapon' ? '收束看武器每次射出幾發，只能插在武器上'
+        : base === 'pull' && cb !== 'bigshot' ? '吸引的產物是拉力，只有巨彈有效果（範圍 ×1.5）' : '';
+      if (wrong && !leveled) return idle(J, wrong);
       if (!power(CHIPS[cid].cost)) return noPow(J);  // 供電：晶片之後輪到它的組件（由左到右）
+      if (leveled) up++;
+      if (wrong) return Object.assign(J, { lvOnly: true, why: wrong + '；插在這裡只升級，沒有效果' });  // 不算沒作用（編輯器不擋）
       if (cb === 'mirror') {  // 鏡像 = 再來一次（插在哪個插座都一樣）
         if (o.wlike) {  // 武器（或觸發器）多射一次（回響也一樣；兩個鏡像 = 射 3 次）
           (o.extra = o.extra || []).push({ slot: i, key: 'mirror' });
@@ -76,6 +82,10 @@ function compileChain(chain, attrs = Game.slotAttr || [], socks = Game.socks || 
       }
       o.comps.push({ id: cid, m: am, slot: i, key: cb });  // 效果 ×1.5／×0.7：那一格晶片上的組件跟著放大
     });
+    if (leveled) {
+      o.lv = I.lv = Math.min(CFG.MAX_CHIP_LV, 1 + up * CFG.LV_PER_COMP);
+      o.pw = lvMulOf(o.lv);
+    }
   });
   Object.assign(info, { need, used, off, cap });
   ops.info = info;

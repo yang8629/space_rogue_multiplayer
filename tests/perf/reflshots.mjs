@@ -18,7 +18,7 @@ const SCENES = {
     Input.down = true; Input.mx = (e.x - Game.cam.x) * ZOOM; Input.my = (e.y - Game.cam.y) * ZOOM;
     window.__c = [q.x + 100, q.y];`,
   反射鏡: `Game.newRun('sandbox', 'vanguard', 'laser'); const q = Game.player; q.hp = q.maxHp = 1e9; q.invuln = true; Game.enemies = []; Game.objs = []; Game.eBullets = [];
-    Game.chain = ['weapon', chipId('intercept', 3, 0), null]; Game.socks = [[], [], []]; Game.recalc();
+    Game.chain = ['weapon', chipId('intercept', 0), null]; Game.socks = [[], [], []]; Game.recalc();
     const e = new Enemy('gunboat', q.x + 260, q.y, 1); e.spawnT = 0; e.t = { ...e.t, dmg: 0, speed: 0 }; e.hp = e.maxHp = 1e9; e.cd = 0.2; Game.enemies.push(e);
     Input.down = true; Input.mx = (e.x - Game.cam.x) * ZOOM; Input.my = (e.y - Game.cam.y) * ZOOM;
     window.__c = [q.x + 130, q.y];`,

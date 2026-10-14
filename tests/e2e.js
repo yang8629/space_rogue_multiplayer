@@ -10,7 +10,7 @@ function make(name) {
     performance: { now: () => now }, navigator: {} };
   vm.createContext(ctx);
   runFiles((code, opt) => vm.runInContext(code, ctx, opt));
-  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, WEAPONS, CFG, Arena };', ctx);
+  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena };', ctx);
   return {
     T: ctx.__T,
     adv(ms) { now += ms; const due = timers.filter(x => x.t <= now); timers.splice(0, timers.length, ...timers.filter(x => x.t > now)); due.forEach(x => x.f()); },
@@ -71,10 +71,16 @@ HB.Game.earn(10); pump(); step(1);
 ok(HB.Game.credits === 20 && HA.Game.credits === 100, 'skip/recycle income is own only');
 paid = false; HB.Game.pay(30, () => { paid = true; });
 ok(!paid && HB.Game.credits === 20, 'cannot overspend own wallet');
-// ---- 插座（晶片 id 帶等級、插座數）、黑洞強化的格子與配裝同步 ----
-const sk = HB.chipId('sticky', 2, 2);
+// ---- 插座（晶片 id 帶插座數）、黑洞強化的格子與配裝同步；隊友電路上的等級（組件升級）房主照插座算 ----
+const sk = HB.chipId('sticky', 2);
 HB.Game.inventory[0] = sk; HB.Game.socks = [['amp']]; HB.Game.wSock = 2; HB.Game.slotAttr = [null, 'eff', 'flaky']; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
-ok(HA.Game.mates[0].L.inventory[0] === sk && HA.CHIPS[sk] && HA.CHIPS[sk].sk === 2 && HA.CHIPS[sk].lv === 2, `socketed chip registered on host (${sk})`);
+ok(HA.Game.mates[0].L.inventory[0] === sk && HA.CHIPS[sk] && HA.CHIPS[sk].sk === 2, `socketed chip registered on host (${sk})`);
+{
+  HB.Game.chain[1] = HB.chipId('rear', 2); HB.Game.socks = [['amp'], ['split', 'pierce']]; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
+  const L = HA.Game.mates[0].L, lv = HA.compileChain(L.chain, L.slotAttr, L.socks, 99).info[1].lv;
+  ok(lv === 3, `mate chip level from its sockets on host (rear + 2 comps → Lv${lv})`);
+  HB.Game.chain[1] = null; HB.Game.socks = [['amp']]; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
+}
 ok(JSON.stringify(HA.Game.mates[0].L.socks[0]) === '["amp"]' && HA.Game.mates[0].L.slotAttr[1] === 'eff' && HA.Game.mates[0].L.slotAttr[2] === 'flaky', 'slot attributes synced to host');
 ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mates[0].L.wSock})`);
 

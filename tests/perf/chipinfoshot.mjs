@@ -7,7 +7,7 @@ p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 1500));
 const txt = await p.evaluate(() => {
   Game.newRun('run', 'vanguard', 'laser');
-  Game.inventory[0] = chipId('orbit', 1, 2); Game.inventory[1] = chipId('orbit', 2, 2); Game.recalc();
+  Game.inventory[0] = chipId('orbit', 2); Game.inventory[1] = chipId('orbit', 2); Game.recalc();
   Game.toggleEditor(); Editor.showInfo(Game.inventory[0]);
   Editor.infoEl.scrollIntoView({ block: 'center' });
   return Editor.infoEl.innerText;

@@ -1,5 +1,6 @@
 // 自動對戰模擬：電腦用手機操作（自動瞄準、自動攻擊、搖桿走位、危險時衝刺）打真正的戰鬥（波次、會動會攻擊的敵人、地圖物件）
-// 量每個玩法晶片的「成長速度（每分鐘）」、清場時間、掉血。晶片固定 Lv1（量的時候不升級）。
+// 量每個玩法晶片的「玩法擊殺（每分鐘）」、清場時間、掉血。晶片固定 Lv1（沒插組件）。
+// 配裝裡的等級：玩法晶片的等級 = 1 ＋ 插在它上面的組件數（遊戲的組件升級），隨機配裝不另外抽 Lv2。
 // 用法：node botsim.js                  所有玩法晶片 × 5 把武器，各打 N 場（預設 3）
 //       node botsim.js --chips=stasis,graze --w=laser --n=5 --level=3
 'use strict';
@@ -12,7 +13,7 @@ const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('
 if (arg('tweak')) require('vm').runInThisContext(process.argv.find(a => a.startsWith('--tweak=')).slice(8));
 const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃' };
 const WPN = arg('w') ? arg('w').split(',') : Object.keys(WN);
-const PLAY = Object.keys(CH).filter(id => CH[id].grow);
+const PLAY = Object.keys(CH).filter(id => CH[id].kill);
 const CHIPS = arg('chips') ? arg('chips').split(',') : PLAY;
 const N = +(arg('n') || 3), LEVEL = +(arg('level') || 3), dt = 1 / 60, CAP = 150;
 
@@ -23,7 +24,6 @@ if (process.argv.includes('--nolock')) PARTS.sensor.t2.id = 'nolock';
 // 固定亂數：同樣的程式跑出同樣的數字；敵人用另一串亂數（見 rng.js）
 const { seed, splitEnemyRng, noFx } = require('./rng');
 splitEnemyRng(T_); noFx();
-const saved = {};
 // 飛船不會死（2026-10-09）：用真的最大 HP 打（衝撞、裝甲供能、修復無人機、厚甲都照最大 HP 算；以前設成 10 萬會失真），
 //   HP 會掉到 0 以下的那一下補滿一條、記進 BANK.lost；總掉血 = 開打的 HP − 現在的 HP + BANK.lost
 const BANK = { on: false, lost: 0 };
@@ -37,17 +37,7 @@ const BANK = { on: false, lost: 0 };
 }
 function immortal(p) { BANK.on = true; BANK.lost = 0; p.hp = p.maxHp; return p.hp; }
 const lostSince = (hp0, hpNow) => hp0 - hpNow + BANK.lost;
-const DEBUG = process.argv.includes('--debug'), calls = {};
-{ // 量「照玩法打」的成長：打爆小行星給的成長不算
-  const og = G.grow;
-  G.grow = function (o, id, n = 1) {
-    const where = new Error().stack.split('\n')[2].trim().slice(3, 70);
-    if (DEBUG) { const k = id + ' <- ' + where; calls[k] = (calls[k] || 0) + n; }
-    if (where.includes('hitRock')) return;
-    return og.call(this, o, id, n);
-  };
-}
-for (const id of PLAY) { saved[id] = CH[id].grow.need; CH[id].grow.need = [1e9, 1e9]; }  // 量的時候不升級
+const DEBUG = process.argv.includes('--debug');
 
 const T_A = () => (typeof Arena !== 'undefined' ? Arena : T_.Arena);
 // 區域出口：自己這一區沒有敵人、出口出現時，直接飛進去（不開火、不衝刺）
@@ -101,13 +91,13 @@ function fight(w, chip, s) {
   seed(1000 + s);
   G.newRun('run', 'vanguard', w);
   G.chain = ['weapon', chip, null, null]; G.recalc();
-  G.growth = {};
+  G.playKills = {};
   G.node = { type: 'combat', L: 2, id: 'sim' };
   G.startCombat({ level: LEVEL, wavesTotal: 3, elites: 0 });
   const p = G.player, hp0 = immortal(p);
   let t = 0, hpNow = p.hp;
   while (G.state === 'play' && t < CAP) { bot(p); G.update(dt); t += dt; if (G.state === 'play') hpNow = p.hp; }
-  return { t, hp: lostSince(hp0, hpNow), grow: (chip && G.growth[chip]) || 0, kills: G.kills };
+  return { t, hp: lostSince(hp0, hpNow), pk: (chip && G.playKills[chip]) || 0, kills: G.kills };
 }
 
 // --weapons：只比較武器（不裝晶片），打很多種戰鬥：一般戰（不同難度）、精英戰、三隻旗艦
@@ -145,7 +135,7 @@ if (process.argv.includes('--weapons')) {
 function run1(w, chain, s, cfg, setup, real, botFn = bot) {  // botFn：電腦（預設這個檔案的；--value／--upval 用 bot/ 的熟練玩家）
   seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {};
   if (T_.splitChain) {  // 組件寫在晶片後面 = 插在它的插座上；沒有插座數的晶片給 2 個
-    const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(String(id).split(/[#~]/)[0], T_.levelOf(id), 2) : id));
+    const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(T_.baseOf(id), 2) : id));
     G.chain = r.chain; G.socks = r.socks;
   } else G.chain = chain.slice();
   G.wSock = (cfg.level || 0) < 7 ? 0 : cfg.level < 14 ? 1 : 2;  // 武器插座照難度（打完幾隻王）
@@ -171,11 +161,11 @@ function run1(w, chain, s, cfg, setup, real, botFn = bot) {  // botFn：電腦�
 if (process.argv.includes('--routeval')) {
   const B = require('./bot/load').loadBot(code => require('vm').runInThisContext(code));
   const fs = require('fs');
-  const TIER = { 1: { chips: 1, lv2: 0, parts: 0 }, 3: { chips: 3, lv2: 0.2, parts: 1 }, 6: { chips: 5, lv2: 0.5, parts: 3 }, 8: { chips: 6, lv2: 0.5, parts: 4 } };
+  const TIER = { 1: { chips: 1, parts: 0 }, 3: { chips: 3, parts: 1 }, 6: { chips: 5, parts: 3 }, 8: { chips: 6, parts: 4 } };
   const POOL = NORMAL_IDS.filter(id => !CH[id].comp);  // 基本配裝的晶片（組件由 sortChain 插）
-  const PLAY = NORMAL_IDS.filter(id => CH[id].grow);
+  const PLAY = NORMAL_IDS.filter(id => CH[id].kill);
   const ITEMS_ROUTE = [...PLAY, ...PART_IDS.flatMap(k => [1, 2, 4].map(n => `part:${k}:${n}`))];
-  const ITEMS_NONE = [...NORMAL_IDS.filter(id => !CH[id].grow), ...ITEMS_ROUTE];
+  const ITEMS_NONE = [...NORMAL_IDS.filter(id => !CH[id].kill), ...ITEMS_ROUTE];
   const SOFF = +(arg('seedoff') || 0);  // --seedoff=6：換一批配裝和亂數（量雜訊用）
   const only = arg('items') ? arg('items').split(',') : null, onlyR = arg('routes') ? arg('routes').split(',') : null;
   for (const w of WPN) {
@@ -204,7 +194,7 @@ if (process.argv.includes('--routeval')) {
             seed(6000 + s * 41 + L);
             const chip = CH[it] ? it : null, ids = [];
             while (ids.length < Math.max(0, tier.chips - 1)) { const id = pick(POOL); if (!ids.includes(id) && id !== chip) ids.push(id); }
-            const base = ['weapon', ...ids.map(id => Math.random() < tier.lv2 ? leveledId(id, 2) : id)];
+            const base = ['weapon', ...ids];
             const parts = {}; for (let k = 0; k < tier.parts; k++) { const q = pick(PART_IDS); parts[q] = (parts[q] || 0) + 1; }
             const key = base.join() + '|' + JSON.stringify(parts) + '|' + s;
             if (!baseCache.has(key)) baseCache.set(key, fight(base, parts, s));
@@ -244,7 +234,7 @@ if (process.argv.includes('--routeval')) {
 if (process.argv.includes('--upval')) {
   const B = require('./bot/load').loadBot(code => require('vm').runInThisContext(code));
   const TIERS = (arg('tiers') || '3,6,10').split(',').map(Number);
-  const TIER = { 3: { chips: 3, lv2: 0.2, parts: 1 }, 6: { chips: 5, lv2: 0.5, parts: 3 }, 10: { chips: 6, lv2: 0.5, parts: 4 }, 17: { chips: 7, lv2: 0.6, parts: 6 } };
+  const TIER = { 3: { chips: 3, parts: 1 }, 6: { chips: 5, parts: 3 }, 10: { chips: 6, parts: 4 }, 17: { chips: 7, parts: 6 } };
   const POOL = NORMAL_IDS.filter(id => !T_.isComp || !T_.isComp(id));
   //   2026-10-09 改：每一組各自比（跟同一組的「沒升級」），掉血用「最大 HP 的 %」＋底數 20、合併 3 個難度算（雜訊大），速度照每個難度
   //   存 { 難度: { 'A0': { speed, dmg, s: [[時間, 掉血%, 沒升級時間, 沒升級掉血%], ...] } } }；speed、dmg 是算好的倍數（bot/value.js 直接用）
@@ -255,11 +245,11 @@ if (process.argv.includes('--upval')) {
     const out = {}, file = (process.env.TABLE_DIR || __dirname) + '/' + (arg('out') ? arg('out').replace('%w', w) : 'upgradevalue_' + w + '.json');
     for (const L of TIERS) {
       // --full：電路裝滿（7 顆、全部 Lv2，能量高、射速慢；量連殺裝填這類「冷卻越長越有用」的升級）
-      const tier = process.argv.includes('--full') ? { ...(TIER[L] || TIER[6]), chips: 7, lv2: 1 } : TIER[L] || TIER[6], groups = {};
+      const tier = process.argv.includes('--full') ? { ...(TIER[L] || TIER[6]), chips: 7 } : TIER[L] || TIER[6], groups = {};
       for (let s = SOFF; s < SOFF + N; s++) {
         seed(5000 + s * 37 + L);
         const ids = []; while (ids.length < tier.chips) { const id = pick(POOL); if (!ids.includes(id)) ids.push(id); }
-        const chain = ['weapon', ...ids.map(id => Math.random() < tier.lv2 ? leveledId(id, 2) : id)];
+        const chain = ['weapon', ...ids];
         const parts = {}; for (let k = 0; k < tier.parts; k++) { const q = pick(Object.keys(PARTS)); parts[q] = (parts[q] || 0) + 1; }
         let base = null;
         for (const [key, path, fi] of combos) {
@@ -302,7 +292,7 @@ if (process.argv.includes('--upval')) {
 if (process.argv.includes('--combo')) {
   const B = require('./bot/load').loadBot(code => require('vm').runInThisContext(code));
   const TIERS = (arg('tiers') || '6,10').split(',').map(Number);
-  const TIER = { 3: { chips: 3, lv2: 0.2, parts: 1 }, 6: { chips: 5, lv2: 0.5, parts: 3 }, 10: { chips: 6, lv2: 0.5, parts: 4 }, 17: { chips: 7, lv2: 0.6, parts: 6 } };
+  const TIER = { 3: { chips: 3, parts: 1 }, 6: { chips: 5, parts: 3 }, 10: { chips: 6, parts: 4 }, 17: { chips: 7, parts: 6 } };
   const w = WPN[0], RT = arg('route'), ADD = arg('add') ? arg('add').split(',') : [], EMPTY = process.argv.includes('--empty');
   const PA = arg('parts') ? arg('parts').split(',').map(x => x.split(':')) : [];
   const POOL = NORMAL_IDS.filter(id => (!T_.isComp || !T_.isComp(id)) && !ADD.includes(id));
@@ -315,8 +305,7 @@ if (process.argv.includes('--combo')) {
     for (let s = 0; s < N; s++) {
       seed(5000 + s * 37 + L);
       const ids = []; while (ids.length < tier.chips) { const id = pick(POOL); if (!ids.includes(id)) ids.push(id); }
-      const lv = id => Math.random() < tier.lv2 ? leveledId(id, 2) : id;
-      const chain = ['weapon', ...ids.map(lv)];
+      const chain = ['weapon', ...ids];
       const parts = {}; for (let k = 0; k < tier.parts; k++) { const q = pick(Object.keys(PARTS)); parts[q] = (parts[q] || 0) + 1; }
       // 組合：指定的非組件晶片換掉最後幾顆隨機的；組件插在武器插座上（插在別的晶片上只影響那顆晶片的產物）；--empty 全部留空
       const hostAdd = ADD.filter(id => !T_.isComp(id)), compAdd = ADD.filter(id => T_.isComp(id));
@@ -348,6 +337,8 @@ if (process.argv.includes('--combo')) {
 }
 
 // --levels：每個玩法晶片 Lv1／Lv2／Lv3（進化）的輸出，跟只有武器比（清場時間倍數，越大越強）
+//   升級用收束透鏡：插在玩法晶片上沒有效果、只升級（見 compileChain）
+const lvChain = (chip, lv) => [chip, ...Array(T_.compsFor(lv)).fill('focus')];
 if (process.argv.includes('--levels')) {
   const cfg = { level: LEVEL, wavesTotal: 3, elites: 0 };
   const avgT = chain => WPN.map(w => { let t = 0; for (let s = 0; s < N; s++) t += run1(w, chain(w), s, cfg).t; return t / N; });
@@ -356,7 +347,7 @@ if (process.argv.includes('--levels')) {
   console.log('晶片'.padEnd(10) + ['Lv1', 'Lv2', 'Lv3（進化）'].map(s => s.padStart(22)).join(''));
   for (const chip of CHIPS) {
     const cells = [1, 2, 3].map(lv => {
-      const t = avgT(() => ['weapon', leveledId(chip, lv), null, null]), r = t.map((x, i) => base[i] / x);
+      const t = avgT(() => ['weapon', ...lvChain(chip, lv), null, null]), r = t.map((x, i) => base[i] / x);
       const avg = r.reduce((a, b) => a + b, 0) / r.length, hi = r.indexOf(Math.max(...r)), lo = r.indexOf(Math.min(...r));
       return `${avg.toFixed(2)}x（${WN[WPN[hi]]}${r[hi].toFixed(1)}／${WN[WPN[lo]]}${r[lo].toFixed(1)}）`.padStart(22);
     });
@@ -374,11 +365,11 @@ if (process.argv.includes('--value')) {
   const fs = require('fs');
   const B = require('./bot/load').loadBot(code => require('vm').runInThisContext(code));  // bot/：跟整局模擬同一套電腦
   const RSB = { bot: B.bot, sortChain: B.sortChain, reset: B.resetBot };
-  // 各難度的配裝：晶片數（含要測的那格）、Lv2／Lv3 機率、武器升了幾段、零件層數（難度 10 ≈ 第 2 星區，17 ≈ 第 3 星區）
+  // 各難度的配裝：晶片數（含要測的那格）、武器升了幾段、零件層數（難度 10 ≈ 第 2 星區，17 ≈ 第 3 星區）
   const TIER = {
-    1: { chips: 1, lv2: 0, lv3: 0, stage: 0, parts: 0 }, 3: { chips: 3, lv2: 0.2, lv3: 0, stage: 1, parts: 1 },
-    6: { chips: 5, lv2: 0.5, lv3: 0, stage: 2, parts: 3 }, 10: { chips: 6, lv2: 0.5, lv3: 0.1, stage: 2, parts: 4 },
-    17: { chips: 7, lv2: 0.5, lv3: 0.3, stage: 2, parts: 6 } };
+    1: { chips: 1, stage: 0, parts: 0 }, 3: { chips: 3, stage: 1, parts: 1 },
+    6: { chips: 5, stage: 2, parts: 3 }, 10: { chips: 6, stage: 2, parts: 4 },
+    17: { chips: 7, stage: 2, parts: 6 } };
   // 以前存檔後把兩張表整理成遊戲裡的落點圖（multiplayer/js/data/chipvalue.js）；2026-10-13 數值圖表改放武器升級價值表、路線價值表（exportvalue.js），這裡不再匯出
   const exportGame = () => {}, exportOld = () => {
     const rd = f => { try { return JSON.parse(fs.readFileSync(__dirname + '/' + f, 'utf8')); } catch (e) { return null; } };
@@ -420,8 +411,7 @@ if (process.argv.includes('--value')) {
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const ids = Array.from({ length: k }, (_, i) => pool[(s * k + i) % pool.length]);
     seed(9500 + s * 31 + lvl);
-    const T = TIER[lvl], chain = ids.map(id => { const r = Math.random(); return r < T.lv3 ? leveledId(id, 3) : r < T.lv3 + T.lv2 ? leveledId(id, 2) : id; });
-    return { ids, chain };
+    return { ids, chain: ids };
   };
   // 玩法晶片（含觸發器）＋組件的組合：另外量「組件插在那個晶片上」（onHost）；超頻只能插武器、吸引只能插巨彈
   const hostComp = cs => { if (cs.length !== 2) return null;
@@ -517,7 +507,7 @@ if (process.argv.includes('--value')) {
       if (!cs.length) continue;
       const ns = cs.flatMap(c => W.map(w => val[c][w][L].n)), tos = cs.reduce((a, c) => a + W.reduce((b, w) => b + val[c][w][L].to, 0), 0);
       const T = TIER[L];
-      console.log(`\n── 難度 ${L}（電路 ${T.chips} 個晶片${T.lv2 ? `、其他晶片 Lv2 ${T.lv2 * 100}%` : ''}${T.lv3 ? `、進化 ${T.lv3 * 100}%` : ''}、武器升 ${T.stage} 段、零件 ${T.parts} 層）每格 ${Math.min(...ns)}～${Math.max(...ns)} 場${tos ? `，${tos} 場超過 240 秒` : ''}`);
+      console.log(`\n── 難度 ${L}（電路 ${T.chips} 個晶片、武器升 ${T.stage} 段、零件 ${T.parts} 層）每格 ${Math.min(...ns)}～${Math.max(...ns)} 場${tos ? `，${tos} 場超過 240 秒` : ''}`);
       console.log('晶片'.padEnd(8) + W.map(w => WN[w].padStart(13)).join('') + '       平均');
       const avg = (c, k) => mean(W.map(w => val[c][w][L][k]));
       for (const c of cs.sort((a, b) => avg(b, 'speed') / avg(b, 'dmg') - avg(a, 'speed') / avg(a, 'dmg')))
@@ -558,13 +548,13 @@ if (process.argv.includes('--value')) {
   process.exit(0);
 }
 
-// --build：依難度隨機產生「那個時候玩家大概會有的配裝」（晶片數、Lv2 比例、武器升級、零件），用真的 HP 打，比較武器
+// --build：依難度隨機產生「那個時候玩家大概會有的配裝」（晶片數、武器升級、零件；組件插在左邊的晶片上 = 升級），用真的 HP 打，比較武器
 //   --force=orbit,intercept 每組配裝都一定包含這些晶片（測組合）；搭 --hold 測一直按住
 if (process.argv.includes('--build')) {
   const TIERS = [
-    { name: '難度1（開頭）', level: 1, chips: 1, lv2: 0, stage: 0, parts: 0 },
-    { name: '難度3（中段）', level: 3, chips: 3, lv2: 0.2, stage: 1, parts: 1 },
-    { name: '難度6（後段）', level: 6, chips: 5, lv2: 0.5, stage: 2, parts: 3 }];
+    { name: '難度1（開頭）', level: 1, chips: 1, stage: 0, parts: 0 },
+    { name: '難度3（中段）', level: 3, chips: 3, stage: 1, parts: 1 },
+    { name: '難度6（後段）', level: 6, chips: 5, stage: 2, parts: 3 }];
   const FORCE = arg('force') ? arg('force').split(',') : [];
   const POOL = NORMAL_IDS.filter(id => !FORCE.includes(id));
   const build = (w, tier, s) => {  // 用 s 決定這組配裝（每把武器同一個 s 拿到同樣的晶片，比較公平）
@@ -572,14 +562,14 @@ if (process.argv.includes('--build')) {
     const ids = [...FORCE];
     while (ids.length < Math.max(tier.chips, FORCE.length)) { const id = pick(POOL); if (!ids.includes(id)) ids.push(id); }
     for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
-    const chain = ['weapon', ...ids.map(id => Math.random() < tier.lv2 ? leveledId(id, 2) : id)];
+    const chain = ['weapon', ...ids];
     const path = tier.stage >= 1 ? pick(['A', 'B', 'C']) : null, fin = tier.stage >= 2 ? randInt(0, 1) : null;
     const parts = {}; for (let k = 0; k < tier.parts; k++) { const p = pick(Object.keys(PARTS)); parts[p] = (parts[p] || 0) + 1; }
     return { chain, setup: () => { G.weapon = { id: w, path, final: fin }; G.refreshWeapon(); G.parts = parts; } };
   };
   if (process.argv.includes('--curve')) {  // 武器強度曲線：整局 9 個階段的隨機配裝，量清場速度（不會死），輸出 JSON 給圖表用
     const STAGES = [[1, 1, 1], [1, 3, 3], [1, 6, 3], [2, 8, 4], [2, 10, 4], [2, 13, 5], [3, 15, 5], [3, 17, 6], [3, 20, 6]].map(([sec, level, chips]) =>
-      ({ name: `星區${sec} 難度${level}`, level, chips, lv2: Math.min(0.7, (level - 1) * 0.05), stage: level >= 8 ? 2 : level >= 3 ? 1 : 0, parts: Math.min(6, Math.floor(level / 3)) }));
+      ({ name: `星區${sec} 難度${level}`, level, chips, stage: level >= 8 ? 2 : level >= 3 ? 1 : 0, parts: Math.min(6, Math.floor(level / 3)) }));
     const out = { stages: STAGES.map(s => s.name), weapons: {} };
     for (const w of WPN) out.weapons[WN[w]] = [];
     for (const tier of STAGES) {
@@ -660,15 +650,15 @@ for (const chip of [null, ...CHIPS]) {
   const per = {};
   for (const w of WPN) {
     let t = 0, hp = 0, gr = 0;
-    for (let s = 0; s < N; s++) { const r = fight(w, chip, s); t += r.t; hp += r.hp; gr += r.grow; }
+    for (let s = 0; s < N; s++) { const r = fight(w, chip, s); t += r.t; hp += r.hp; gr += r.pk; }
     per[w] = { t: t / N, hp: hp / N, gpm: gr / (t / 60) };
   }
   rows.push({ chip, per });
 }
 const base = rows[0].per;
-console.log(`每場：星區難度 ${LEVEL}、3 波，${N} 場平均。欄位：清場秒數／掉血（只有武器的對照）｜成長每分鐘`);
+console.log(`每場：星區難度 ${LEVEL}、3 波，${N} 場平均。欄位：清場秒數／掉血（只有武器的對照）｜玩法擊殺每分鐘`);
 const med = a => { const v = [...a].sort((x, y) => x - y); return v[v.length >> 1]; };
-console.log('晶片'.padEnd(10) + WPN.map(w => WN[w].padStart(16)).join('') + '   成長條件（目前門檻）');
+console.log('晶片'.padEnd(10) + WPN.map(w => WN[w].padStart(16)).join('') + '   玩法擊殺');
 for (const { chip, per } of rows) {
   const name = chip ? CH[chip].name : '（只有武器）';
   const cells = WPN.map(w => {
@@ -676,7 +666,6 @@ for (const { chip, per } of rows) {
     return (chip ? `${Math.round(r.t)}s/${Math.round(r.hp)}｜${r.gpm.toFixed(0)}` : `${Math.round(r.t)}s/${Math.round(r.hp)}`).padStart(16);
   }).join('');
   const m = chip ? med(WPN.map(w => per[w].gpm)) : 0;
-  const g = chip ? `   中位數 ${m.toFixed(0)}/分｜${CH[chip].grow.what}（${saved[chip].join(' / ')}，Lv2 約 ${(saved[chip][0] / Math.max(0.1, m)).toFixed(1)} 分）` : '';
+  const g = chip ? `   中位數 ${m.toFixed(1)}/分｜${CH[chip].kill}` : '';
   console.log(name.padEnd(10) + cells + g);
 }
-if (DEBUG) console.log(calls);

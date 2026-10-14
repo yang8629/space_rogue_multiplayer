@@ -144,8 +144,8 @@ function oneRun(w, s) {
 }
 
 // ---- --replay=紀錄檔：照玩家遊玩紀錄的「取得」那行拿東西，電腦只負責打（分出差距在配裝還是操作）----
-//   晶片（名稱後面的數字 = 等級）、零件（數字 = 層數）、背包模組、武器升級、插槽；每打完一層就把配裝設成「紀錄在這一層拿完之後」
-//   進化預設照電腦自己的成長；--replay-evo：進化也照紀錄的時間。飛船、武器、起始晶片照紀錄
+//   晶片、零件（數字 = 層數）、背包模組、武器升級、插槽；每打完一層就把配裝設成「紀錄在這一層拿完之後」
+//   等級不照紀錄（玩法晶片的等級由電腦插的組件決定）。飛船、武器、起始晶片照紀錄
 function parseReplay(txt) {
   const L = txt.split(/\r?\n/), get = k => L.find(l => l.startsWith(k)) || '';
   const ship = Object.keys(SHIPS).find(id => L[0] && L[0].includes(SHIPS[id].name)) || 'vanguard';
@@ -157,7 +157,7 @@ function parseReplay(txt) {
   return { ship, weapon, steps, inv };  // inv：最後放在倉庫的晶片（電路滿了時優先放倉庫）
 }
 function replayState(R, s, L) {  // 打完 s-L 之後應該有的東西
-  const st = { order: [], lv: {}, parts: {}, path: null, final: null, extra: 0 };
+  const st = { order: [], parts: {}, path: null, final: null, extra: 0 };
   const W = WEAPONS[R.weapon];
   for (const q of R.steps) {
     if (q.s > s || (q.s === s && q.L > L)) break;
@@ -166,11 +166,7 @@ function replayState(R, s, L) {  // 打完 s-L 之後應該有的東西
     const part = Object.keys(PARTS).find(id => PARTS[id].name.startsWith(name));
     const path = Object.keys(W.paths).find(p => W.paths[p].name === name), fin = st.path ? W.paths[st.path].next.findIndex(n => n.name === name) : -1;
     if (chip && part && !mk) chip = null;  // 同名（加速＝晶片／加速器零件）：沒有「（插座 N）」的算零件
-    if (chip) {  // 已經有的晶片再拿到一次、又沒寫數字 = 合成升一級（例如 3-6 的「倍增」→ 倍增2）
-      if (!st.order.includes(chip)) { st.order.push(chip); st.lv[chip] = k; }
-      else st.lv[chip] = m[2] ? Math.max(st.lv[chip] || 1, k) : Math.min(3, (st.lv[chip] || 1) + 1);
-    }
-    else if (evo) { if (!st.order.includes(evo)) st.order.push(evo); if (process.argv.includes('--replay-evo')) st.lv[evo] = 3; }
+    if (chip || evo) { if (!st.order.includes(chip || evo)) st.order.push(chip || evo); }  // 等級不照紀錄：玩法晶片的等級由電腦插的組件決定（組件升級）
     else if (part) st.parts[part] = k;
     else if (path) st.path = path;
     else if (fin >= 0) st.final = fin;
@@ -180,9 +176,8 @@ function replayState(R, s, L) {  // 打完 s-L 之後應該有的東西
 }
 function applyReplay(log) {
   const R = globalThis.__REPLAY, st = replayState(R, G.sector, log.enteredS === G.sector ? log.layer : 0);
-  const cur = {}; for (const id of [...G.chain.slice(1), ...G.inventory]) if (id && CH[id]) cur[bOf(id)] = Math.max(cur[bOf(id)] || 1, T_.levelOf(id));
   const ord = [...st.order.filter(id => !R.inv.includes(id)), ...st.order.filter(id => R.inv.includes(id))];  // 紀錄裡放倉庫的排最後（電路滿了就是它們進倉庫）
-  const ids = ord.map(id => CH[id].comp ? id : T_.leveledId(id, Math.max(st.lv[id] || 1, cur[id] || 1)));  // 電腦自己長到的等級（進化）保留
+  const ids = ord;
   const slots = Math.min(CFG.MAX_SLOTS - 1, CFG.START_SLOTS - 1 + (G.sector - 1) + st.extra);
   G.chain = ['weapon', ...ids.slice(0, slots), ...Array(Math.max(0, slots - ids.length)).fill(null)];
   G.inventory = [...ids.slice(slots), ...Array(Math.max(0, CFG.INV_SLOTS - Math.max(0, ids.length - slots))).fill(null)].slice(0, CFG.INV_SLOTS);
@@ -194,7 +189,7 @@ if (arg('replay')) {
   globalThis.__REPLAY = parseReplay(require('fs').readFileSync(arg('replay'), 'utf8'));
   const R = globalThis.__REPLAY, first = R.steps.find(q => q.s === 1 && q.L === 1);
   WPN.length = 0; WPN.push(R.weapon);
-  console.log(`照紀錄拿東西：${SHIPS[R.ship].name}・${WEAPONS[R.weapon].name}，${R.steps.length} 項${process.argv.includes('--replay-evo') ? '（進化也照紀錄）' : '（進化照電腦自己的成長）'}`);
+  console.log(`照紀錄拿東西：${SHIPS[R.ship].name}・${WEAPONS[R.weapon].name}，${R.steps.length} 項（等級照電腦插的組件）`);
   const origNew = G.newRun.bind(G);  // 飛船、起始晶片照紀錄（紀錄的第一項 = 1-1 拿到的，當成起始晶片）
   G.newRun = (mode, ship, w, start) => origNew(mode, R.ship, R.weapon, first ? NORMAL_IDS.find(id => CH[id].short === first.t.replace(/\d+$/, '') || CH[id].name === first.t.replace(/\d+$/, '')) || start : start);
 }
