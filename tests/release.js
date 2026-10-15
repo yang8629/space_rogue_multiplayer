@@ -1,9 +1,9 @@
 'use strict';
 // 上傳前檢查（雙人版）：只印摘要，失敗才印細節
 //   node release.js               只檢查（不改檔、不提交）
-//   node release.js 0.6.3         把版號改成 mp-0.6.3（今天日期＋時間）、README「（下一版）」改名，然後檢查
+//   node release.js 0.6.3         把版號改成 mp-0.6.3（今天日期＋時間）、README 目前版本、docs/版本紀錄.md「（下一版）」改名，然後檢查
 //   node release.js 0.6.3 --push  同上，全部通過才提交並推上 GitHub
-// 檢查項目：所有測試、機制檢查（含插座檢查）、要上傳的內容沒有私人資訊、版號跟 GitHub 上不同、README 版本紀錄
+// 檢查項目：所有測試、機制檢查（含插座檢查）、要上傳的內容沒有私人資訊、版號跟 GitHub 上不同、README 目前版本、docs/版本紀錄.md
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -39,6 +39,7 @@ const git = (...a) => {
 };
 const read = f => fs.readFileSync(path.join(REPO, f), 'utf8');
 const write = (f, t) => fs.writeFileSync(path.join(REPO, f), t);
+const VLOG = 'docs/版本紀錄.md';  // 版本紀錄（README 只放目前版本＋連結）
 const verOf = src => (src.match(/VERSION: *'([^']+)'/) || [])[1];
 
 // ---- 1. 版號（有指定才改） ----
@@ -47,7 +48,8 @@ if (newVer) {
   const day = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;  // 版號戳記：日期＋時間
   const full = `mp-${newVer}（${day}）`, old = verOf(read('js/core/config.js'));
   write('js/core/config.js', read('js/core/config.js').replace(/VERSION: *'[^']+'/,`VERSION: '${full}'`));
-  write('README.md', read('README.md').split(`**${old}**`).join(`**${full}**`).replace('| （下一版） |', `| mp-${newVer} |`));
+  write('README.md', read('README.md').split(`**${old}**`).join(`**${full}**`));
+  write(VLOG, read(VLOG).replace('| （下一版） |', `| mp-${newVer} |`));
   console.log(`版號 ${old} → ${full}`);
 }
 
@@ -112,9 +114,10 @@ ok(!hasChanges || verLocal !== verRemote, `版號 ${verLocal}（GitHub 上是 ${
   '有改動但版號沒變：用 node release.js <新版號>');
 const readme = read('README.md');
 ok(readme.includes(`**${verLocal}**`), 'README 目前版本和 VERSION 一致');
-ok(!readme.includes('| （下一版） |'), 'README 版本紀錄沒有未命名的「（下一版）」');
+const vlog = read(VLOG);
+ok(!vlog.includes('| （下一版） |'), '版本紀錄沒有未命名的「（下一版）」');
 const tag = (verLocal || '').split('（')[0];
-ok(new RegExp(`\\| ${tag.replace(/\./g, '\\.')} \\|`).test(readme), `README 版本紀錄有 ${tag} 這一行`);
+ok(new RegExp(`\\| ${tag.replace(/\./g, '\\.')} \\|`).test(vlog), `版本紀錄有 ${tag} 這一行`);
 
 // ---- 5. 提交＋上傳 ----
 console.log(fails ? `\n${fails} 項沒通過，不上傳` : '\n全部通過');
