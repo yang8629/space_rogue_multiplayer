@@ -15,6 +15,7 @@ const NODE_META = {
   repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP。` },
   blackhole: { label: '奇異點', icon: '◐', color: '#b388ff', desc: () => `投入 1 個晶片：隨機一個還沒強化過的電路格（武器格也可能）得到一個屬性（好結果 70%～90%，看晶片等級；也可能是壞的）。也可以不投入直接離開。一條路線最多一個黑洞。` },
   armory: { label: '軍械台', icon: '⚒', color: '#ff9f1c', desc: () => `武器升級（每張圖只有 1 個）。武器升滿後改選「插槽 +1」或 ◆${CFG.ARMORY_BONUS.credits}＋HP ${CFG.ARMORY_BONUS.hp}。` },
+  event:  { label: '事件', icon: '?', color: '#f4a6ff', desc: () => `隨機事件，進去才知道是哪一種：${EVENT_IDS.map(k => EVENTS[k].name).join('、')}。大多是用血量、晶體或風險換晶片和好處，也可以直接離開。每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（通常 2 個，在第 2～5 層）。` },
   boss:   { label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場可能有行星、小行星帶、彗星；旗艦的子彈會削掉行星、打碎小行星）。勝利後 ◆50，電路插槽 +1／零件格 +1 二選一；進入下一關時修復 30% HP。' },
 };
 
@@ -22,6 +23,7 @@ const NODE_META = {
 //   精英、黑洞、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
 //   每個精英的下一步至少有一條路通維修站；黑洞之後的路上走得到維修站；
 //   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
+//   ？事件至少 CFG.EVENT.count[0] 個（第 2～5 層）；
 //   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站；
 //   同一個分岔的選項不重複：不會兩個都是同一種重要房間，也不會兩個選項一模一樣（同種、接到同樣的下一步）
 const NEED_REPAIR_AFTER = ['elite'];  // 下一步就要有維修站的節點
@@ -36,15 +38,20 @@ function descendants(n, byId) {
   }
   return [...seen].map(byId);
 }
+// 從起點到旗艦，戰鬥（一般、精英）最少的那條路線打幾場
+function fewestFights(m, byId) {
+  const memo = {};
+  const f = n => n.type === 'boss' ? 0 : memo[n.id] != null ? memo[n.id]
+    : (memo[n.id] = (['combat', 'elite'].includes(n.type) ? 1 : 0) + Math.min(...n.next.map(id => f(byId(id)))));
+  return Math.min(...m[0].map(f));
+}
 function mapOk(m) {
   const has = (from, to, type) => m.slice(from, to).flat().some(n => n.type === type);
   const all = m.flat(), byId = id => all.find(n => n.id === id);
   const armories = all.filter(n => n.type === 'armory'), holes = all.filter(n => n.type === 'blackhole');
-  const pre = m[m.length - 2], memo = {};
-  const minFights = n => n.type === 'boss' ? 0 : memo[n.id] != null ? memo[n.id]
-    : (memo[n.id] = (['combat', 'elite'].includes(n.type) ? 1 : 0) + Math.min(...n.next.map(id => minFights(byId(id)))));
-  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && has(1, 5, 'workshop') &&
-    pre.some(n => n.type === 'shop') && pre.some(n => n.type === 'repair') && m[0].every(n => minFights(n) >= 3) &&
+  const pre = m[m.length - 2];
+  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && has(1, 5, 'workshop') && all.filter(n => n.type === 'event').length >= CFG.EVENT.count[0] &&
+    pre.some(n => n.type === 'shop') && pre.some(n => n.type === 'repair') && fewestFights(m, byId) >= 3 &&
     armories.length === 1 && armories[0].L >= 1 && armories[0].L <= 4 &&
     all.filter(n => NEED_REPAIR_AFTER.includes(n.type)).every(n => n.next.some(id => byId(id).type === 'repair')) &&
     holes.every(h => descendants(h, byId).some(d => d.type === 'repair')) &&
@@ -68,13 +75,18 @@ function fixBranches(m) {
     for (const o of opts) { if (o.type !== 'combat' && o.type !== 'boss' && seen.has(o.type)) o.type = 'combat'; seen.add(o.type); }
   }
 }
+// ？事件：符合保底的航圖裡，事件有 2 個以上的先用（每條路線要 3 場戰鬥，事件常常放不下；只有 1 個的當備用）
 function genMap() {
-  let m;
-  for (let i = 0; i < 1000; i++) {  // 保底規則多，單次生成符合的機率低（約 2%），多試幾次
+  let m, spare = null;
+  for (let i = 0; i < 1000; i++) {  // 保底規則多，單次生成符合的機率低（約 4%），多試幾次
     m = genMapOnce();
     fixBranches(m);
-    if (mapOk(m)) break;
+    if (!mapOk(m)) continue;
+    if (m.flat().filter(n => n.type === 'event').length >= 2) { spare = null; break; }
+    spare = spare || m;
   }
+  if (spare) m = spare;
+  assignEvents(m);  // 每個 ？事件節點抽一種事件（data/events.js）
   return m;
 }
 function genMapOnce() {
@@ -180,6 +192,16 @@ function genMapOnce() {
     const c = path.find(x => x.L >= 1 && x.L <= LAYERS - 3 && spare(x));
     if (!c) break;
     c.type = 'combat';
+  }
+  // ？事件：最後才放，第 2～5 層最多 count[1] 個：改戰鬥（改了每條路線還有 3 場以上才改）或多出來的補給站、改裝廠、維修站、奇異點（spare）
+  //   同一個分岔不放兩個事件
+  const sibs = n => [n.L === 0 ? layers[0] : [], ...parentsOf(n).map(p => p.next.map(byId))];
+  for (const c of pickN(layers.slice(1, 5).flat(), 99)) {
+    if (count('event', 1, 5) >= CFG.EVENT.count[1]) break;
+    if (!(c.type === 'combat' || spare(c)) || sibs(c).some(opts => opts.some(o => o.type === 'event'))) continue;
+    const was = c.type;
+    c.type = 'event';
+    if (fewestFights(layers, byId) < 3) c.type = was;
   }
   return layers;
 }

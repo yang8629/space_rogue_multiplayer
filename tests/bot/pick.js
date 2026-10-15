@@ -254,7 +254,7 @@ const closeEditor = () => { if (G.state === 'editor') G.toggleEditor(); };
 function chooseNode() {
   const p = G.player, hp = p.hp / p.maxHp, opts = G.reachable();
   const base = n => ({
-    repair: hp < 0.6 ? 10 : 1, shop: G.credits >= 60 ? 5 : 2, combat: 4, elite: hp > 0.6 ? 5 : 0.5,
+    repair: hp < 0.6 ? 10 : 1, shop: G.credits >= 60 ? 5 : 2, combat: n.hoard ? 8 : 4, elite: hp > 0.6 ? 5 : 0.5, event: 5,
     armory: G.weaponStage() < 2 ? 12 : 1, workshop: 4, blackhole: 0.3, boss: 9 })[n.type];
   const memo = new Map();
   const future = n => {
@@ -268,6 +268,15 @@ function chooseNode() {
   return opts.reduce((a, b) => total.get(b) > total.get(a) ? b : a);
 }
 
+
+// ？事件選哪個選項（EVENTS 的 opts 順序；最後一個是離開）：血夠才冒險
+const EV_PICK = {
+  wreck: hp => hp > 0.5 ? 0 : 1,
+  market: hp => hp > 0.5 && G.credits >= G.marketPrice() ? 0 : 1,
+  sos: hp => hp > 0.6 ? 0 : 1,
+  ward: () => 0,
+  chart: () => 0,
+};
 
 // 非戰鬥畫面（單人、雙人共用）：獎勵三選一、精英獎勵、補給站、改裝廠、軍械台、維修站／黑洞、編輯器；
 //   旗艦勝利畫面只做二選一（前往下一星區由呼叫的人決定）。回傳 true = 有處理
@@ -294,7 +303,8 @@ function handle() {
     const W = WEAPONS[G.weapon.id];
     if (G.weaponStage() < 2) G.upgradeWeapon(pickUpgrade());  // 試裝挑最好的路線（第一段往後看一步）（bot/value.js；以前隨機）
     else G.armoryBonus();
-  } else if (st === 'blackhole' || st === 'repair') G.showMap();
+  } else if (st === 'event') G.evChoose(EV_PICK[G.ev.id](G.player.hp / G.player.maxHp));
+  else if (st === 'blackhole' || st === 'repair') G.showMap();
   else if (st === 'victory') bossPick();
   else if (st === 'editor') closeEditor();
   else return false;

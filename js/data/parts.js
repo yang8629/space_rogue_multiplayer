@@ -48,7 +48,8 @@ const PART_SWAP_PRICE = 30;  // 改裝廠：把 1 層零件換成另一種
 // wp：目前的武器參數（玻璃砲自帶受到的傷害 +10%）
 // 疊法：同一項屬性「增加」的百分比全部相加，「減少」的各自相乘（疊再多也不會變成 0 或負的），最後 =（1 ＋ 增加的總和）× 減少的乘積
 //   rate＝1 ＋ 射速增加（開火時再加上疾風、急冷、裝甲供能、架設），rateMul＝射速減少；dashUp＝衝刺冷卻增加（最後乘進 dashCd）
-function mechStats(parts, wp) {
+// boons：？事件拿到的這一局效果（Game.boons：黑市 hp 次、終焉護殼 taken 次）
+function mechStats(parts, wp, boons) {
   const n = id => (parts && parts[id]) || 0;
   const T = {};
   for (const id of PART_IDS) { T[PARTS[id].t2.id] = n(id) >= 2; T[PARTS[id].t4.id] = n(id) >= 4; }
@@ -63,6 +64,7 @@ function mechStats(parts, wp) {
   s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashUp += 0.05 * n('sensor');
   if (wp && wp.glass) s.taken += wp.glass.self;  // 玻璃砲（相位刃升級）
   if (wp && wp.weight) s.speed *= 1 - wp.weight.self;  // 重量砲（電漿升級）：自帶變慢
+  if (boons) { s.hpMul *= Math.pow(1 - CFG.EVENT.market.hpCut, boons.hp || 0); s.taken += CFG.EVENT.ward.taken * (boons.taken || 0); }  // 減少的相乘、增加的相加
   s.dashCd *= 1 + s.dashUp;
   s.maxHp = Math.round(s.maxHp);
   return s;
