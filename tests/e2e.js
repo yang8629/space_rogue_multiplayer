@@ -86,7 +86,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 
 // ---- 跑完整個星區：投票 → 進節點 → 處理 → 回航圖 ----
 const both = f => { f(HA); f(HB); };
-let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false;
+let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
   const G = H.Game;
@@ -111,6 +111,8 @@ while (!sector2 && guard++ < 40) {
   if (['combat', 'elite', 'boss'].includes(type)) {
     fights++;
     HA.Game.player.hp = HA.Game.player.maxHp = 1e6; HA.Game.mates[0].hp = HA.Game.mates[0].maxHp = 1e6;
+    const treas = type === 'combat' && !treasChecked;  // 第一場一般戰：寶藏無人機一定出現在最後一區（打掉 → 兩邊的三選一都保證稀有）
+    if (treas) { HA.Game.combat.treasure = HA.Game.combat.wavesTotal; treasChecked = true; }
     if (!pausedChecked) {  // Tab：隊友編輯電路 → 房主整個暫停
       step(200);
       HB.Game.toggleEditor(); pump(); step(1);
@@ -164,6 +166,10 @@ while (!sector2 && guard++ < 40) {
     const gA = HA.Game.credits - cA0, gB = HB.Game.credits - cB0;
     ok(gA === gB && gA > rw, `drops shared: host +${gA}, client +${gB}`);
     ok(!HA.Game.inArena && !HB.Game.inArena, `${type} won on both sides (host ${HA.Game.state}, client ${HB.Game.state})`);
+    if (treas) {
+      const rare = H => H.Game.state === 'reward' && H.Game.reward.options.some(id => H.CHIPS[id] && H.CHIPS[id].rare);
+      ok(HA.Game.combat.treasureGot && HB.Game.combat.treasureGot && rare(HA) && rare(HB), `treasure drone killed: both get a rare chip (host ${!!HA.Game.combat.treasureGot}/${rare(HA)}, client ${!!HB.Game.combat.treasureGot}/${rare(HB)})`);
+    }
     if (type === 'boss') {
       // 擊沉旗艦：先各自三選一（保證一格稀有），選完才到勝利畫面
       const RA = HA.Game.reward, RB = HB.Game.reward;

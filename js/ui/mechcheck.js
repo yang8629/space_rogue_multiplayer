@@ -1838,6 +1838,44 @@ const MechCheck = {
       Game.playKills = {}; Game.tagPlay(k, null, 'rear'); k.hurt(9999, 0, 0, 'direct', null);
       return { ok: kids.length === 8 && !(Game.playKills.rear > 0) && moved < 0.01, got: '生了 ' + kids.length + ' 隻；打死一隻玩法擊殺 +' + (Game.playKills.rear || 0) + '；被擊退＋拉之後移動 ' + moved.toFixed(2) + '（要 0）' };
     }],
+    ['敵人', '寶藏無人機：出現、逃跑、打掉保證稀有', `只在指定的那一區出場；往離玩家的反方向逃；打掉：這場的三選一保證稀有晶片（刷新也保證）、不掉晶體`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0, treasure: 2 });
+      Game.startWave(1); const w1 = Game.combat.pending.includes('treasure');
+      Game.startWave(2); const w2 = Game.combat.pending.filter(x => x === 'treasure').length;
+      Arena.reset();  // 逃跑量在方形場地：大地圖是隨機的，玩家擺的位置可能貼牆，寶藏被牆擋住跑不遠（約 1/50）
+      const p = Game.player, e = M.targets([[200, 0]], 'treasure', false, 1)[0], d0 = Math.hypot(e.x - p.x, e.y - p.y);
+      for (let f = 0; f < 120; f++) { Game.time += 1 / 60; e.update(1 / 60, p); }
+      const d1 = Math.hypot(e.x - p.x, e.y - p.y);
+      Game.pickups = []; e.hurt(1e6, 0, 0, 'direct', null);
+      const drops = Game.pickups.length, got = !!Game.combat.treasureGot;
+      Game.inArena = true; Game.state = 'play'; Game.credits = 1e6; Game.combatWon();
+      const has = () => Game.state === 'reward' && Game.reward.options.some(rareOf);
+      let re = 0; const first = has();
+      for (let i = 0; i < 30; i++) { Game.rerollReward(); if (has()) re++; }
+      return { ok: !w1 && w2 === 1 && d1 > d0 + 250 && got && drops === 0 && first && re === 30,
+        got: `第 1 區${w1 ? '有（錯誤）' : '沒有'}、第 2 區 ${w2} 隻；2 秒內距離 ${Math.round(d0)} → ${Math.round(d1)}；打掉${got ? '' : '沒'}記下、掉晶體 ${drops}；三選一${first ? '有' : '沒有'}稀有、刷新 ${re}/30 有` };
+    }],
+    ['敵人', '寶藏無人機：逃走', `出場 ${CFG.TREASURE.life} 秒沒打掉就躍遷離開：不算擊殺、不掉晶體，三選一不保證稀有`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0, treasure: 1 });
+      const p = Game.player, e = M.targets([[200, 0]], 'treasure', false, 1)[0], k0 = Game.kills;
+      let tGone = null;
+      for (let f = 0; f < 60 * (CFG.TREASURE.life + 1) && tGone == null; f++) { Game.time += 1 / 60; e.update(1 / 60, p); if (e.dead) tGone = f / 60; }
+      const alive = tGone == null ? '沒有離開' : `${tGone.toFixed(1)} 秒離開`;
+      Game.inArena = true; Game.state = 'play'; Game.combatWon();
+      const add = Game.reward.rareAdd || 0;
+      return { ok: tGone != null && Math.abs(tGone - CFG.TREASURE.life) < 0.1 && Game.kills === k0 && Game.pickups.length === 0 && !Game.combat.treasureGot && add === 0,
+        got: `${alive}；擊殺 +${Game.kills - k0}、晶體 ${Game.pickups.length}；三選一多保證 ${add} 格` };
+    }],
+    ['敵人', '寶藏無人機：不傷人', '不開火、撞到也不扣血、不給無敵時間', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player; Game.state = 'play'; p.iframe = 0; p.dashT = 0;
+      const e = M.targets([[0, 0]], 'treasure', false, 1)[0], hp0 = p.hp;
+      let touch = 0;
+      for (let f = 0; f < 120; f++) { Game.time += 1 / 60; e.x = p.x; e.y = p.y; Game.updateEnemies(1 / 60); if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + p.r) touch++; }
+      return { ok: touch > 0 && p.hp === hp0 && !(p.iframe > 0) && Game.eBullets.length === 0, got: `貼著 ${touch} 幀：HP ${hp0} → ${p.hp}、無敵 ${(p.iframe || 0).toFixed(2)}、敵彈 ${Game.eBullets.length}` };
+    }],
     ['敵人', '主題小兵隨進度增加', '第 1 星區前半 0～1 種、第 3 星區 2～3 種；母巢第 3 星區才出現', M => {
       const avg = (s, late) => { let n = 0, hive = 0; for (let i = 0; i < 200; i++) { const T = Game.pickThemes(s, late); n += T.list.length; if (T.list.includes('hive')) hive++; } return [n / 200, hive]; };
       const [a1, h1] = avg(1, false), [a2] = avg(2, false), [a3, h3] = avg(3, false);

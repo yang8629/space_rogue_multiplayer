@@ -195,7 +195,11 @@ const Game = {
     this.logNodeStart(node);
     switch (node.type) {
       // 一般戰：第 1 星區前 3 層 2 波，之後都是 3 波（新星區開頭不會比上一個星區結尾少）
-      case 'combat': this.startCombat({ level, wavesTotal: 2 + (L >= 3 || this.sector > 1 ? 1 : 0), elites: 0 }); break;
+      case 'combat': {  // treasure：寶藏無人機在第幾區出現（0 = 這場沒有）
+        const n = 2 + (L >= 3 || this.sector > 1 ? 1 : 0);
+        this.startCombat({ level, wavesTotal: n, elites: 0, treasure: Math.random() < CFG.TREASURE.chance ? randInt(1, n) : 0 });
+        break;
+      }
       case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1 }); break;
       case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
       case 'shop':   this.openShop(); break;
@@ -265,6 +269,7 @@ const Game = {
       else { list.push('swarmer'); budget -= 1; }
     }
     if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift('elite');  // 精英最先出場
+    if (C.treasure === n) list.splice(Math.floor(list.length / 2), 0, 'treasure');  // 寶藏無人機：混在這一區的敵人中間出場
     // 沙盒：每 10 波輪流出現三隻旗艦
     const sbBoss = C.sandbox && n % 10 === 0 ? CFG.BOSS_ORDER[(n / 10 - 1) % CFG.BOSS_ORDER.length] : null;
     if (sbBoss) list.push(sbBoss);
@@ -309,6 +314,7 @@ const Game = {
     if (!Arena.rect) e.zone = zone;
     if (type === 'elite') e.setAffixes((C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
     this.enemies.push(e);
+    if (e.t.treasure) { bannerFx(`✦ ${e.t.name}`, `${CFG.TREASURE.life} 秒內打掉：這場的三選一保證稀有晶片`, 2.5); Events.emit('treasureArrive', e); }
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
     if (type === 'worm') {  // 列隊蟲：再往外排 5 節，每節跟著前一節
       const ux = (x - p.x) / (Math.hypot(x - p.x, y - p.y) || 1), uy = (y - p.y) / (Math.hypot(x - p.x, y - p.y) || 1);
@@ -406,13 +412,14 @@ const Game = {
       this.view();
       return;
     }
-    this.openReward(type === 'elite' ? 'elite' : 'combat');
+    const tr = this.combat.treasureGot;  // 打掉寶藏無人機：多保證稀有晶片
+    this.openReward(type === 'elite' ? 'elite' : 'combat', tr ? { rareAdd: CFG.TREASURE.rare, note: '✦ 寶藏到手：保證稀有晶片' } : {});
     this.view();
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
   // 保底：電路有空格時，零件只會出現在最後一格；上一次三選一沒有玩法晶片，這一次一定有（刷新也算一次）
-  // 稀有晶片：見 withRare（kind = CFG.REWARDS 的種類，決定保證幾格稀有）
-  rewardOptions(kind = 'combat') {
+  // 稀有晶片：見 withRare（kind = CFG.REWARDS 的種類，決定保證幾格稀有；rareAdd = 再多保證幾格，打掉寶藏無人機）
+  rewardOptions(kind = 'combat', rareAdd = 0) {
     const offers = this.chipOffers(), chips = pickN(offers, 3), parts = pickN(PART_IDS, 3), empty = this.chain.includes(null);
     const out = this.withComp([0, 1, 2].map(i => (!empty || i === 2) && Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i])));  // 晶片的插座數在這裡決定
     const isPlay = id => !String(id).startsWith('part:') && hasLv(id);
@@ -421,7 +428,7 @@ const Game = {
       const nComp = out.filter(isComp).length, k = out.findIndex(id => !isComp(id) || nComp > 1);  // 換掉零件、觸發器（或多出來的組件）；保底的那個組件留著
       if (pool.length && k >= 0) out[k] = newChip(pick(pool));
     }
-    this.withRare(out, CFG.REWARDS[kind].rare);
+    this.withRare(out, CFG.REWARDS[kind].rare + rareAdd);
     this.playDry = !out.some(isPlay);
     return out;
   },
@@ -467,14 +474,14 @@ const Game = {
   // 打開三選一：每種三選一（出發前、戰鬥、精英）的差別都在 CFG.REWARDS（刷新價格、有沒有電路擴充卡）
   openReward(kind, extra = {}) {
     const K = CFG.REWARDS[kind];
-    this.reward = { kind, options: this.rewardOptions(kind), reroll: this.shopPrice(K.reroll), slot: K.slotCard && this.chain.length < CFG.MAX_SLOTS, after: K.after || null, ...extra };
+    this.reward = { kind, options: this.rewardOptions(kind, extra.rareAdd || 0), reroll: this.shopPrice(K.reroll), slot: K.slotCard && this.chain.length < CFG.MAX_SLOTS, after: K.after || null, ...extra };
     this.state = 'reward';
   },
   // 花晶體刷新三選一（價格見 CFG.REWARDS：每刷一次就更貴）
   rerollReward() {
     const R = this.reward;
     if (!R || this.credits < R.reroll) return;
-    this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(R.kind); R.revealed = false; this.view(); });  // 刷新：稀有那格重新演揭曉
+    this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(R.kind, R.rareAdd || 0); R.revealed = false; this.view(); });  // 刷新：稀有那格重新演揭曉
   },
   // 獎勵、商店可以出現的晶片：已經有的玩法晶片不再出現（同一種只有一個；升級靠插組件）
   chipOffers() {
@@ -900,6 +907,7 @@ const Game = {
     }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     Events.emit('enemyKilled', { e, big });
+    if (e.t.treasure) this.treasureGot(e);
     if (big) this.shake(e.type === 'elite' ? 14 : 6);
     if (e.t.boss) {  // 母艦爆炸：清除所有小怪與敵彈
       this.shake(28);
@@ -918,6 +926,21 @@ const Game = {
       const i = this.inventory.indexOf(null), id = pick(COMPOSITE_IDS);
       if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
     }
+  },
+  // 寶藏無人機：打掉 → 這場的三選一多保證 CFG.TREASURE.rare 格稀有（combatWon；多人時房主在 'won' 告訴隊友）
+  treasureGot(e) {
+    this.combat.treasureGot = true;
+    burst(e.x, e.y, '#ffd166', 60, 380, 1, 3); ringFx(e.x, e.y, 120, '#ffd166');
+    this.shake(8);
+    bannerFx('✦ 寶藏到手', '這場的三選一保證稀有晶片', 2);
+    Events.emit('treasureGot', e);
+  },
+  // 寶藏無人機：時間到躍遷離開（不算擊殺、不掉東西）
+  treasureEscape(e) {
+    e.dead = true;
+    burst(e.x, e.y, '#ffd166', 24, 260, 0.5, 2); ringFx(e.x, e.y, 60, '#bfefff');
+    bannerFx('寶藏逃走了', '', 1.6);
+    Events.emit('treasureLost', e);
   },
   hurtPlayer(dmg, cause = '', p = this.player, sx = null, sy = null) {
     if (p.dead || p.invuln || this.state !== 'play') return;
@@ -1317,6 +1340,7 @@ const Game = {
           floatText(e.x, e.y - e.r, rd, '#ffd166', true);
           continue;
         }
+        if (!e.t.dmg) continue;  // 沒有撞擊傷害的（寶藏無人機、標靶）：碰到不算被打
         this.hurtPlayer(e.t.dmg, e.t.name + '（撞擊）', p, e.x, e.y);
       }
     }

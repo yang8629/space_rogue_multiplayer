@@ -34,6 +34,9 @@ const CFG = {
   // 稀有晶片（玩法晶片＋詞條，見 RARE）：三選一每一格玩法晶片 chance 機率變稀有；詞條等級 Lv1／Lv2／Lv3 的機率 lv
   RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
   ELITE_ESCORT: 0.3,         // 精英戰最後一區（精英的場子）的護衛：一般一波預算的幾倍
+  // 寶藏無人機（ENEMY_TYPES.treasure）：一般戰鬥 chance 機率在隨機一區出現；不攻擊、往離玩家的反方向逃，life 秒沒打掉就躍遷離開
+  //   離最近的玩家超過 near 時速度 ×farMul（跑太遠追不到）；打掉：這場的三選一多保證 rare 格稀有晶片
+  TREASURE: { chance: 0.2, life: 15, near: 450, farMul: 0.55, rare: 1 },
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
   MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限

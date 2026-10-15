@@ -60,7 +60,7 @@ const GLActors = {
   enemy(e) {
     const G = Game, t = G.time, ty = e.type, T = ENEMY_TYPES[ty] || e.t, sp = e.spawnT > 0 ? 1 - e.spawnT / e.spawnMax : 1;
     const alpha = (0.3 + 0.7 * sp) * (1 - 0.9 * (e.cloak || 0)), k = (e.r / T.radius) * sp;
-    let rot = ['swarmer', 'worm', 'splitling', 'lurker', 'spitter'].includes(ty) ? Math.atan2(e.vy, e.vx) : e.rot || 0;
+    let rot = ['swarmer', 'worm', 'splitling', 'lurker', 'spitter', 'treasure'].includes(ty) ? Math.atan2(e.vy, e.vx) : e.rot || 0;
     if (ty === 'spitter') rot = spitterFace(e);
     if (ty === 'elite' || ty === 'boss2') rot = enemyFace(e);  // 船頭朝目標（不自己一直轉）
     const base = (name, n, period, scaleRes = 2) => this.spr(this.frame(name, Math.floor(t / period * n) % n), e.x, e.y, k / scaleRes, rot);
@@ -82,6 +82,7 @@ const GLActors = {
       case 'splitling': main = this.spr(this.frame('splitling', 0), e.x, e.y, k / 3, rot); break;
       case 'lurker': main = base('lurker', 4, TAU / 9); break;
       case 'hive': { const ph = e.cd != null ? clamp(4 - e.cd, 0, 3.999) : t % 4; main = this.spr(this.frame('hive', Math.floor(ph / 4 * 16)), e.x, e.y, k / 2, 0); break; }
+      case 'treasure': this.glowAt(this.pE, e.x, e.y, e.r * 2.6, 0xffd166, (0.35 + 0.2 * Math.sin(t * 8)) * alpha); main = base('treasure', 8, 0.8); break;  // 金色光暈（遠遠就看得到）
       case 'dummy': main = this.spr(this.frame('dummy', 0), e.x, e.y, k / 2, 0); break;
       case 'boss': {
         const ring = this.spr(this.frame('boss_ring', 0), e.x, e.y, k / 2, t * 0.6); ring.alpha = alpha;

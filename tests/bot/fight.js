@@ -22,6 +22,13 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (hd < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (hive.x - p.x) / hd * 60, y: (hive.y - p.y) / hd * 60 };
     if (!E.some(e => e !== hive && Math.hypot(e.x - p.x, e.y - p.y) < 150)) { near = hive; nd = hd; }
   }
+  // 寶藏無人機會逃、15 秒後躍遷離開：真人看到會去追。身邊 150 內沒有其他敵人時，瞄準和走位都以它為準
+  const tre = E.find(e => e.t.treasure);
+  if (tre && !E.some(e => e !== tre && Math.hypot(e.x - p.x, e.y - p.y) < 150)) {
+    const td = Math.hypot(tre.x - p.x, tre.y - p.y) || 1;
+    if (td < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (tre.x - p.x) / td * 60, y: (tre.y - p.y) / td * 60 };
+    near = tre; nd = td;
+  }
   // 保持在射程七成的距離；散彈 close：四成（扇形的彈丸越遠打中越少）；
   //   加速：射程 ×1.5、越遠越痛，站遠一點（最多 700，一般最多 360）
   //   佈雷：站在地雷停住的距離（射程一半），地雷才會落在敵人附近
