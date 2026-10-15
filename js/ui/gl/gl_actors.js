@@ -82,7 +82,12 @@ const GLActors = {
       case 'splitling': main = this.spr(this.frame('splitling', 0), e.x, e.y, k / 3, rot); break;
       case 'lurker': main = base('lurker', 4, TAU / 9); break;
       case 'hive': { const ph = e.cd != null ? clamp(4 - e.cd, 0, 3.999) : t % 4; main = this.spr(this.frame('hive', Math.floor(ph / 4 * 16)), e.x, e.y, k / 2, 0); break; }
-      case 'treasure': this.glowAt(this.pE, e.x, e.y, e.r * 2.6, 0xffd166, (0.35 + 0.2 * Math.sin(t * 8)) * alpha); main = base('treasure', 8, 0.8); break;  // 金色光暈（遠遠就看得到）
+      case 'treasure': {  // 金色光暈（遠遠就看得到）；快逃走了（剩 CFG.TREASURE.blink 秒）光暈和船身快閃
+        const end = e.modeT != null && e.modeT < CFG.TREASURE.blink, fl = end ? 0.5 + 0.5 * Math.sin(t * 30) : 1;
+        this.glowAt(this.pE, e.x, e.y, e.r * 2.6, end ? 0xbfefff : 0xffd166, (end ? 0.25 + 0.45 * fl : 0.35 + 0.2 * Math.sin(t * 8)) * alpha);
+        main = base('treasure', 8, 0.8); if (end) main.alpha = 0.45 + 0.55 * fl;
+        break;
+      }
       case 'dummy': main = this.spr(this.frame('dummy', 0), e.x, e.y, k / 2, 0); break;
       case 'boss': {
         const ring = this.spr(this.frame('boss_ring', 0), e.x, e.y, k / 2, t * 0.6); ring.alpha = alpha;

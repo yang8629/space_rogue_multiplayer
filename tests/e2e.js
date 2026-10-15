@@ -168,7 +168,7 @@ while (!sector2 && guard++ < 40) {
     ok(!HA.Game.inArena && !HB.Game.inArena, `${type} won on both sides (host ${HA.Game.state}, client ${HB.Game.state})`);
     if (treas) {
       const rare = H => H.Game.state === 'reward' && H.Game.reward.options.some(id => H.CHIPS[id] && H.CHIPS[id].rare);
-      ok(HA.Game.combat.treasureGot && HB.Game.combat.treasureGot && rare(HA) && rare(HB), `treasure drone killed: both get a rare chip (host ${!!HA.Game.combat.treasureGot}/${rare(HA)}, client ${!!HB.Game.combat.treasureGot}/${rare(HB)})`);
+      ok((HA.Game.combat.bonus || []).includes('treasure') && (HB.Game.combat.bonus || []).includes('treasure') && rare(HA) && rare(HB), `treasure drone killed: both get a rare chip (host ${(HA.Game.combat.bonus || []).includes('treasure')}/${rare(HA)}, client ${(HB.Game.combat.bonus || []).includes('treasure')}/${rare(HB)})`);
     }
     if (type === 'boss') {
       // 擊沉旗艦：先各自三選一（保證一格稀有），選完才到勝利畫面

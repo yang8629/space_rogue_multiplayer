@@ -1848,7 +1848,7 @@ const MechCheck = {
       for (let f = 0; f < 120; f++) { Game.time += 1 / 60; e.update(1 / 60, p); }
       const d1 = Math.hypot(e.x - p.x, e.y - p.y);
       Game.pickups = []; e.hurt(1e6, 0, 0, 'direct', null);
-      const drops = Game.pickups.length, got = !!Game.combat.treasureGot;
+      const drops = Game.pickups.length, got = (Game.combat.bonus || []).join() === 'treasure';
       Game.inArena = true; Game.state = 'play'; Game.credits = 1e6; Game.combatWon();
       const has = () => Game.state === 'reward' && Game.reward.options.some(rareOf);
       let re = 0; const first = has();
@@ -1865,8 +1865,47 @@ const MechCheck = {
       const alive = tGone == null ? '沒有離開' : `${tGone.toFixed(1)} 秒離開`;
       Game.inArena = true; Game.state = 'play'; Game.combatWon();
       const add = Game.reward.rareAdd || 0;
-      return { ok: tGone != null && Math.abs(tGone - CFG.TREASURE.life) < 0.1 && Game.kills === k0 && Game.pickups.length === 0 && !Game.combat.treasureGot && add === 0,
+      return { ok: tGone != null && Math.abs(tGone - CFG.TREASURE.life) < 0.1 && Game.kills === k0 && Game.pickups.length === 0 && !(Game.combat.bonus || []).length && add === 0,
         got: `${alive}；擊殺 +${Game.kills - k0}、晶體 ${Game.pickups.length}；三選一多保證 ${add} 格` };
+    }],
+    ['敵人', '蟲潮', `那一區全是蟲群：數量 ×${CFG.SWARM.count}（照一般一波的預算）、血量 ×${CFG.SWARM.hp}；每 ${CFG.SWARM.clump} 隻從同一個地方湧出，出場間隔 ${CFG.SWARM.gap} 秒；其他區照常`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, swarm: 2 });
+      const C = Game.combat;
+      Game.startWave(1); const w1 = C.swarmArea;
+      Game.startWave(2);
+      const want = Math.round((5 + 2 * 3 + 3 * 3) * CFG.WAVE_MUL * CFG.SWARM.count), L = [...C.pending], allBug = L.every(x => x === 'swarmer');
+      Game.enemies = []; C.spawnClock = 0;
+      for (let i = 0; i < 100; i++) Game.updateWaves(0.01);  // 1 秒
+      const per1s = Game.enemies.length, E = Game.enemies;
+      const tight = E.slice(1, CFG.SWARM.clump).every(e => Math.hypot(e.x - E[0].x, e.y - E[0].y) < CFG.SWARM.jitter * 1.5 + 1);
+      C.swarmArea = false; Game.spawnEnemy('swarmer'); const normal = Game.enemies[Game.enemies.length - 1].maxHp;
+      const k = E[0].maxHp / normal;
+      return { ok: !w1 && allBug && L.length === want && Math.abs(per1s - 1 / CFG.SWARM.gap) <= 2 && tight && Math.abs(k - CFG.SWARM.hp) < 0.01,
+        got: `第 1 區${w1 ? '是蟲潮（錯誤）' : '照常'}；第 2 區 ${L.length} 隻（應為 ${want}）${allBug ? '全是蟲群' : '混了別的（錯誤）'}；1 秒出場 ${per1s} 隻；前 ${CFG.SWARM.clump} 隻${tight ? '擠在一起' : '散開（錯誤）'}；血量 ×${k.toFixed(2)}` };
+    }],
+    ['敵人', '精英亂入', `3 區的一般戰鬥、第 2 區以後：這一區都出場、剩 ${CFG.INTRUDE.at * 100}% 以下時闖進一隻帶詞綴的精英（只闖一次）；分裂的兩隻都打掉：這場的三選一保證稀有`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
+      Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, intrude: 2 });
+      const C = Game.combat, els = () => Game.enemies.filter(e => e.intruder);
+      Game.startWave(1); C.pending = []; Game.enemies = []; Game.updateWaves(0.01); const w1 = els().length;
+      Game.startWave(2); const inList = C.pending.includes('elite');
+      C.pending.push('worm');  // 列隊蟲名單上一隻、場上 6 節：「剩一半」要照場上的數量算
+      while (C.pending.length) Game.spawnEnemy(C.pending.shift());
+      const spawned = Game.enemies.length;
+      Game.updateWaves(0.01); const early = els().length;
+      Game.enemies = Game.enemies.slice(0, Math.floor(spawned * CFG.INTRUDE.at));
+      Game.updateWaves(0.01); Game.updateWaves(0.01);
+      const L = els(), e = L[0], nAff = e ? (e.affixes || []).length : 0;
+      if (!e) return { ok: false, got: `還很多時闖進 ${early} 隻；剩一半時場上沒有亂入的精英` };
+      e.setAffixes(['split']); e.doSplit();
+      const k = Game.enemies[Game.enemies.length - 1];
+      e.hurt(1e9, 0, 0, 'direct', null); const after1 = (C.bonus || []).length;
+      k.hurt(1e9, 0, 0, 'direct', null); const after2 = (C.bonus || []).join();
+      Game.inArena = true; Game.state = 'play'; Game.combatWon();
+      const rare = Game.state === 'reward' && Game.reward.options.some(rareOf) && Game.reward.rareAdd === CFG.BONUS.intrude.rare;
+      return { ok: w1 === 0 && !inList && early === 0 && L.length === 1 && nAff === affixCount(Game.sector) && k.intruder === e.intruder && after1 === 0 && after2 === 'intrude' && rare,
+        got: `第 1 區闖進 ${w1} 隻；第 2 區出場名單${inList ? '有精英（錯誤）' : '沒有精英'}、出場 ${spawned} 隻、還很多時 ${early} 隻、剩一半時 ${L.length} 隻（${nAff} 個詞綴）；分裂後打掉一隻${after1 ? '就給了（錯誤）' : '還沒給'}、兩隻都打掉：${after2 || '沒給'}；三選一${rare ? '保證稀有' : '沒有保證（錯誤）'}` };
     }],
     ['敵人', '寶藏無人機：不傷人', '不開火、撞到也不扣血、不給無敵時間', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
