@@ -23,7 +23,9 @@ const RARE = {
     desc: v => `發動時充能，照常使用約 ${v} 秒充滿：用整條電路朝四周 ${RARE.burst.dirs} 個方向開槍`,
     fx: (p, st, v, x, y, base, owner) => Game.withLoadout(owner, () => {
       const list = runOps(Game.stats.ops, 0).map(s => ({ ...s, orbit: 0, src: base }));  // 環繞的子彈不進圈，直接射出去
+      const n0 = Game.bullets.length;
       for (let i = 0; i < RARE.burst.dirs; i++) spawnShots(list, p.x, p.y, i / RARE.burst.dirs * TAU, 0, null);
+      Game.markRareFx(n0);  // 射出去的子彈之後不再觸發詞條（加速、反彈、折返…）
       ringFx(p.x, p.y, 60, '#ffd166');
     }) },
   retort: { name: '反擊', on: 'hurt', cd: 2,

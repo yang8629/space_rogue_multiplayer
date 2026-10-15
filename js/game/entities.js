@@ -274,7 +274,7 @@ class Bullet {
   setMul() {
     const p = Math.min(1, this.dist / this.R), was = this.accelMul;
     this.accelMul = clamp(this.mul0 + accelAdd(this.accel, p, this.accFull), 0.5, SPD_CAP);
-    if (this.accel && was < 2 && this.accelMul >= 2) Game.rareAct('accel', this.x, this.y, this.owner);  // 稀有晶片：加速發動（越過 2 倍速，跟玩法擊殺的條件一樣）
+    if (this.accel && was < 2 && this.accelMul >= 2) Game.rareAct('accel', this.x, this.y, this.owner, this);  // 稀有晶片：加速發動（越過 2 倍速，跟玩法擊殺的條件一樣）
     this.speed = this.baseSpeed * this.accelMul;
     // 加速的產物：速度 1.5 倍以上（武器插座的傷害加成不算；掉回 1.5 倍以下時加回來）
     if (this.accelMul >= CFG.HOST_SPEED) stripW(this); else if (this.wsbOff) restoreW(this);
@@ -285,7 +285,7 @@ class Bullet {
     const P = this.payload, Q = Game.triggerQueue;
     if (!P || P[0].trig !== 'end' || this.endDone || Q.length >= CFG.MAX_TRIGGERS_PER_FRAME) return;
     this.endDone = true;
-    Q.push({ payload: P, x, y, angle, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept });
+    Q.push({ payload: P, x, y, angle, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept, rf: this.rareFx });
   }
   // 定時觸發器：飛行中每 0.3 秒往左右兩側各射一次回響（每顆最多 5 次；停住的地雷不算）
   tickTimer(dt) {
@@ -295,7 +295,7 @@ class Bullet {
     this.tAcc -= CFG.TIMER_TRIG; this.tN++;
     const Q = Game.triggerQueue;
     for (const sd of [-1, 1]) if (Q.length < CFG.MAX_TRIGGERS_PER_FRAME)
-      Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle + sd * Math.PI / 2, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept });
+      Q.push({ payload: P, x: this.x, y: this.y, angle: this.angle + sd * Math.PI / 2, depth: this.depth + 1, ignore: null, owner: this.owner, fi: this.fromIntercept, rf: this.rareFx });
   }
   // 複製一顆（稜鏡、迴旋風暴用），放進場上的子彈清單
   copy(dAngle) {
@@ -315,7 +315,7 @@ class Bullet {
     this.flyAge = 0; this.setMul();
     stripW(this);
     hostFire(this, 'stasis');  // 插在佈雷上的組件：衝出去的地雷
-    Game.rareAct('stasis', this.x, this.y, this.owner);  // 稀有晶片：佈雷發動（衝出去）
+    Game.rareAct('stasis', this.x, this.y, this.owner, this);  // 稀有晶片：佈雷發動（衝出去）
   }
   // 迴旋：去程穿甲用完（先穿過去再折返，回程會再打牠一次）、撞到牆（或行星、小行星）、飛到盡頭都會折返，追著射出它的飛船飛回來
   startReturn() {
@@ -329,7 +329,7 @@ class Bullet {
     stripW(this);  // 產物：武器插座的傷害加成只算直擊
     const cs = this.boom >= 3 ? [-0.7, 0.7].map(off => this.copy(off)) : [];  // 迴旋風暴：折返時分裂成 3 發（打中、撞牆、飛到盡頭都一樣）
     for (const b of [this, ...cs]) hostFire(b, 'boomerang');  // 插在迴旋上的組件：折返之後的每一發（風暴＋分裂 = 9 發）
-    Game.rareAct('boomerang', this.x, this.y, this.owner);  // 稀有晶片：迴旋發動（折返）
+    Game.rareAct('boomerang', this.x, this.y, this.owner, this);  // 稀有晶片：迴旋發動（折返）
   }
   update(dt) {
     this.px = this.x; this.py = this.y;  // 記住這一幀的起點，碰撞用整段路徑判定
@@ -350,7 +350,7 @@ class Bullet {
         this.orbit = 0;
         stripW(this);
         hostFire(this, 'orbit');  // 插在環繞上的組件：放出的那一波
-        Game.rareAct('orbit', this.x, this.y, this.owner);  // 稀有晶片：環繞發動（放出）
+        Game.rareAct('orbit', this.x, this.y, this.owner, this);  // 稀有晶片：環繞發動（放出）
         return;
       }
       (o.orbV || (o.orbV = new Set())).add(this.vid);
@@ -463,7 +463,7 @@ class Bullet {
     const c = this.prism ? this.copy(0.4) : null;  // 稜鏡：反彈時分裂
     if (c) this.angle -= 0.2;
     for (const b of c ? [this, c] : [this]) hostFire(b, 'wallbounce');  // 插在牆反彈上的組件：第一次反彈之後（兩發都套用）
-    Game.rareAct('wallbounce', this.x, this.y, this.owner);  // 稀有晶片：牆反彈發動（反彈）
+    Game.rareAct('wallbounce', this.x, this.y, this.owner, this);  // 稀有晶片：牆反彈發動（反彈）
   }
   // 無限穿透：迴旋的回程、超音速（加速 Lv3 且 2 倍速以上）
   get infPierce() { return (!!this.boom && this.mode === 'return') || (this.accel >= 3 && this.accelMul >= 2); }

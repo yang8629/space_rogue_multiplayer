@@ -1260,7 +1260,15 @@ const MechCheck = {
         M => {  // 爆發不連鎖：蓄力發動 1 次就充滿，爆發射出的蓄滿子彈不再充能（以前會一直爆發到當掉）
           const p = rig('charge', 'burst', 1), per = runOps(Game.stats.ops, 0).length;
           Game.bullets = []; Game.chargeC = 1; Game.rareAct('charge', p.x, p.y, null); Game.chargeC = 0;  // 開火那一刻蓄滿：爆發射出的也是蓄滿的子彈
-          return { ok: Game.bullets.length === RARE.burst.dirs * per, got: `蓄力的爆發：${Game.bullets.length} 發（應為 ${RARE.burst.dirs} × ${per}，只爆一次）` };
+          const one = Game.bullets.length;
+          // 加速：爆發射出的子彈之後在飛行中加速到 2 倍（= 加速發動），不能再充能（以前隔幾幀又爆發，越爆越多到記憶體用光）
+          const q = rig('accel', 'burst', 1), st = Game.rareSt(q, 'accel');
+          Game.bullets = []; st.c = 1 - 1e-6; Game.rareAct('accel', q.x, q.y, null);
+          const shot = Game.bullets.length, fast = () => Game.bullets.filter(b => b.accelMul >= 2).length;
+          for (let f = 0; f < 120; f++) for (const b of Game.bullets) b.update(1 / 60);
+          const sped = fast(), c = st.c || 0;
+          return { ok: one === RARE.burst.dirs * per && shot > 0 && sped > 0 && c === 0,
+            got: `蓄力的爆發：${one} 發（應為 ${RARE.burst.dirs} × ${per}，只爆一次）；加速的爆發 ${shot} 發、之後 ${sped} 發加速到 2 倍，充能 ${c.toFixed(2)}（應為 0）` };
         },
         M => {  // 反擊（蓄力：強制發動 = 下一發蓄滿）
           const p = rig('charge', 'retort', 1), hit = () => { p.chargeC = 0; p.iframe = 0; Game.hurtPlayer(1, 'test'); return p.chargeC; };

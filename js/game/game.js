@@ -1543,7 +1543,7 @@ const Game = {
           // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
           const wb = b.wsb || 0, sd = wb > 0 ? dmg * Math.max(0.1, b.bonus - wb + (b.accelMul || 1)) / Math.max(0.1, b.bonus + (b.accelMul || 1)) : dmg;
           (e.stuck = e.stuck || []).push({ dmg: sd, att, lv: b.sticky, owner: own, hm: b.hm && b.hm.sticky, hb: b.hb, color: b.color, angle: b.angle,
-            end: P && { payload: P, depth: b.depth + 1 }, fi: b.fromIntercept });
+            end: P && { payload: P, depth: b.depth + 1 }, fi: b.fromIntercept, rf: b.rareFx });
           if (!(e.stickT > 0)) e.stickT = 2;
           dmg *= 0.3;
         }
@@ -1559,7 +1559,7 @@ const Game = {
         if (b.lifesteal && this.shipOf(b.owner)) this.healPlayer(b.lifesteal, this.shipOf(b.owner));
         if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
         if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
-          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner, fi: b.fromIntercept });  // 回響可以打到被命中的這一隻
+          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner, fi: b.fromIntercept, rf: b.rareFx });  // 回響可以打到被命中的這一隻
         if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
         else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
@@ -1574,6 +1574,7 @@ const Game = {
       const ang = t.angle;
       const n0 = B.length;
       this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, ang, t.depth, t.ignore));
+      if (t.rf) this.markRareFx(n0);  // 爆發射出的子彈觸發的回響：一樣不觸發詞條
       if (t.fi) for (let i = n0; i < B.length; i++) B[i].fromIntercept = true;  // 攔截重射的子彈觸發的回響：一樣算攔截重射（不能再攔截）
       burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
     }
@@ -1689,7 +1690,7 @@ const Game = {
       this.tagPlay(o, b.owner, 'pull');
       n++;
     }
-    if (n) this.rareAct('pull', cx, cy, b.owner);  // 稀有晶片：吸引發動（拉到敵人）
+    if (n) this.rareAct('pull', cx, cy, b.owner, b);  // 稀有晶片：吸引發動（拉到敵人）
     if (b.pull >= 3) {
       const L = b.owner || this;
       L.pullHits = (L.pullHits || 0) + 1;
@@ -1754,7 +1755,7 @@ const Game = {
     const x = e.x, y = e.y, H = this.stickyHost(S, total, att);  // 插在黏著上的組件
     total = H.total; att = H.att;
     this.tagPlay(e, S[0].owner, 'sticky');
-    this.rareAct('sticky', x, y, S[0].owner);  // 稀有晶片：黏著發動（爆炸）
+    this.rareAct('sticky', x, y, S[0].owner, S[0].att);  // 稀有晶片：黏著發動（爆炸）
     const ring = (r, c) => ringFx(x, y, r, c);
     ring(e.r + 20 + n * 3, '#f78cff');
     e.hurt(total, 0, 0, 'explode', att);
@@ -1787,7 +1788,7 @@ const Game = {
     }
     const T = S.find(q => q.end);  // 消失觸發器：黏住的子彈引爆時才算消失（一次爆炸觸發一次）
     if (T && this.triggerQueue.length < CFG.MAX_TRIGGERS_PER_FRAME)
-      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: null, owner: T.owner, fi: T.fi });
+      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: null, owner: T.owner, fi: T.fi, rf: T.rf });
   },
   // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片；鏡像 → 再爆一次（傷害、碎片都多一份）
   stickyHost(S, total, att) {
@@ -1826,8 +1827,10 @@ const Game = {
     if (comps) tpl.hm = { ...tpl.hm, infect: undefined };
     let list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
     if (comps) list = runComps(list, comps, 'h');  // 插在感染上的組件：爆出來的子彈
+    const n0 = this.bullets.length;
     this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
-    this.rareAct('infect', e.x, e.y, A.owner);  // 稀有晶片：感染發動（爆出子彈）
+    if (A.rareFx) this.markRareFx(n0);
+    this.rareAct('infect', e.x, e.y, A.owner, A);  // 稀有晶片：感染發動（爆出子彈）
   },
   // 攔截：帶攔截的子彈碰到敵彈就把它打掉（自己照常飛），從那裡用整條電路朝最近的敵人回射；反射鏡（Lv3）把敵彈反彈回去
   interceptHit(eb, I) {
@@ -1840,7 +1843,7 @@ const Game = {
       if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
       if (b.parry) this.parryHit(b.ownerP);  // 格擋流（相位刃升級）：砍掉敵彈疊傷害
       if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 格擋（相位刃・格擋流）：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
-      this.rareAct('intercept', eb.x, eb.y, b.owner);  // 稀有晶片：攔截發動（擋下敵彈）
+      this.rareAct('intercept', eb.x, eb.y, b.owner, b);  // 稀有晶片：攔截發動（擋下敵彈）
       // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
       //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
       const p = this.shipOf(b.owner) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
@@ -1941,7 +1944,10 @@ const Game = {
     try { D.fx(p, st, v, x ?? p.x, y ?? p.y, base, owner); } finally { this.rareIn = false; }
   },
   // 晶片發動了（迴旋折返、環繞放出、地雷衝出去…；發動點寫在各晶片的程式裡）：發動時的詞條＋充能
-  rareAct(base, x, y, owner) { this.rareRun('act', base, owner, x, y); this.rareRun('charge', base, owner, x, y); },
+  //   b = 發動的子彈（或黏著、感染的傷害歸屬）：詞條效果（爆發）射出的不算，不然會一直連鎖（爆發 → 子彈發動 → 充能 → 爆發…）
+  rareAct(base, x, y, owner, b = null) { if (b && b.rareFx) return; this.rareRun('act', base, owner, x, y); this.rareRun('charge', base, owner, x, y); },
+  // 第 n0 顆以後的子彈是詞條效果射出的：之後（飛行中、觸發的回響、感染爆出的）都不觸發詞條
+  markRareFx(n0) { for (let i = n0; i < this.bullets.length; i++) { const b = this.bullets[i]; b.rareFx = true; b.att.rareFx = true; } },
   // 受傷了：這個人電路上「受傷時」的詞條（反擊）
   rareHurt(p) {
     const owner = p === this.player ? null : p.L || null, S = owner ? owner.stats : this.stats;
