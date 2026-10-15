@@ -69,6 +69,7 @@ const ENEMIES = [
   { id: 'splitling', name: '碎裂體', col: '#ffb347', n: 3, r: 10, note: '就是分裂體的其中一塊：斷面發光', face: true },
   { id: 'lurker', name: '潛伏者', col: '#9d8cff', n: 3, r: 12, note: '光學迷彩：幾乎透明、折射的彩色輪廓、一對發光的眼、兩把前伸的利爪', face: true },
   { id: 'hive', name: '母巢', col: '#e05d2e', n: 9, r: 30, note: '活的巢穴：觸根抓地、脈動血管、4 個孵化口輪流張開（看得到蟲群）、中央跳動的心臟' },
+  { id: 'treasure', name: '寶藏無人機', col: '#ffd166', n: 4, r: 14, note: '金色運輸艇：兩側推進器、中間載著發光的晶體貨艙、周圍閃光', face: true },
   { id: 'dummy', name: '標靶', col: '#9fb4ff', n: 8, r: 18, note: '練習用無人機：靶面＋三腳支架＋彈痕' },
   { id: 'boss', name: '星噬母艦', col: '#ff4d6d', n: 8, r: 50, note: '有機機械母艦：機庫艙門輪流打開（看得到蟲群）、外圈螺旋砲環、中央豎瞳大眼', boss: 4 },
   { id: 'boss2', name: '裂界獵艦', col: '#b388ff', n: 3, r: 42, note: '刀刃狀戰艦：中線發光的裂界縫、長狙擊炮管、兩側推進器和吊艙', boss: 3 },
@@ -82,7 +83,7 @@ function artEnemy(ctx, E, t) {
     return;
   }
   const c = E.col;
-  const NEWDRAW = { swarmer: drawSwarmer, spitter: drawSpitter, gunboat: drawGunboat, worm: drawWorm, worm_cut: drawWormCut, lurker: drawLurker, dummy: drawDummy, boss: drawBoss1, boss2: drawBoss2, boss3: drawBoss3 };
+  const NEWDRAW = { swarmer: drawSwarmer, spitter: drawSpitter, gunboat: drawGunboat, worm: drawWorm, worm_cut: drawWormCut, lurker: drawLurker, treasure: drawTreasure, dummy: drawDummy, boss: drawBoss1, boss2: drawBoss2, boss3: drawBoss3 };
   if (NEWDRAW[E.id]) { ctx.save(); if (E.id !== 'boss3') ctx.rotate(E.id === 'boss' || E.id === 'gunboat' ? 0 : rot); NEWDRAW[E.id](ctx, c, E.r, spin); ctx.restore(); return; }
   if (E.id === 'worm') {  // 6 節：後面的跟著前一節蛇行
     for (let i = 5; i >= 0; i--) {
@@ -435,6 +436,29 @@ function drawDummy(ctx, c, r, t) {
   for (const [rr, col] of [[0.78, '#f2f4fa'], [0.6, '#ff6b6b'], [0.42, '#f2f4fa'], [0.24, '#ff6b6b']]) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, r * rr, 0, TAU); ctx.fill(); }
   ctx.strokeStyle = '#03050c'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, 0, r * 0.78, 0, TAU); ctx.stroke();
   ctx.fillStyle = '#1a1c22'; for (const [x, y] of [[0.3, -0.2], [-0.15, 0.35], [0.05, 0.05], [-0.4, -0.25]]) { ctx.beginPath(); ctx.arc(x * r, y * r, 1.3, 0, TAU); ctx.fill(); }  // 彈痕
+}
+// 寶藏無人機：金色運輸艇（兩側推進器、中間載著發光的晶體貨艙、周圍閃光）；t = 0～0.8 一輪（晶體脈動、閃光轉一圈）
+function drawTreasure(ctx, c, r, t) {
+  const u = t / 0.8, p = 0.5 + 0.5 * Math.sin(u * TAU);
+  for (const sg of [-1, 1]) {  // 推進器：噴焰（加法）＋金屬吊艙
+    ADD(ctx, () => { ctx.fillStyle = rgba('#fff1b8', 0.55 + 0.35 * p); ctx.beginPath(); ctx.moveTo(-r * 0.75, sg * r * 0.72 - 3); ctx.lineTo(-r * (1.35 + 0.25 * p), sg * r * 0.72); ctx.lineTo(-r * 0.75, sg * r * 0.72 + 3); ctx.closePath(); ctx.fill(); });
+    ctx.save(); ctx.translate(-r * 0.2, sg * r * 0.72);
+    const g = ctx.createLinearGradient(0, -4, 0, 4); g.addColorStop(0, '#b4bfd9'); g.addColorStop(1, '#2a3150');
+    ctx.fillStyle = g; ctx.strokeStyle = '#03050c'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.roundRect(-r * 0.55, -4, r * 0.95, 8, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = c; ctx.fillRect(r * 0.32, -4, 2, 8);
+    ctx.restore();
+  }
+  faceted(ctx, [[r * 1.1, 0], [r * 0.15, -r * 0.62], [-r * 0.85, -r * 0.48], [-r * 0.6, 0], [-r * 0.85, r * 0.48], [r * 0.15, r * 0.62]], c, { outline: 3 });  // 船身
+  glow(ctx, 0, 0, r * (1.1 + 0.3 * p), '#ffe08a', 0.5 + 0.4 * p);  // 貨艙的晶體
+  faceted(ctx, polyPts(4, r * 0.42, 0), mix('#fff3c4', c, 0.2), { outline: 2, bright: 0.6 });
+  ADD(ctx, () => { ctx.fillStyle = rgba('#ffffff', 0.4 + 0.5 * p); ctx.beginPath(); ctx.arc(-r * 0.08, -r * 0.1, r * 0.1, 0, TAU); ctx.fill(); });
+  ADD(ctx, () => {  // 周圍的四角閃光（輪流亮）
+    for (let i = 0; i < 3; i++) {
+      const a = u * TAU + i / 3 * TAU, x = Math.cos(a) * r * 1.35, y = Math.sin(a) * r * 1.35, s = r * 0.28 * (0.5 + 0.5 * Math.sin(u * TAU * 2 + i * 2));
+      ctx.fillStyle = rgba('#fff6d0', 0.9); ctx.beginPath();
+      ctx.moveTo(x + s, y); ctx.lineTo(x + s * 0.2, y + s * 0.2); ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.2, y + s * 0.2); ctx.lineTo(x - s, y); ctx.lineTo(x - s * 0.2, y - s * 0.2); ctx.lineTo(x, y - s); ctx.lineTo(x + s * 0.2, y - s * 0.2); ctx.closePath(); ctx.fill();
+    }
+  });
 }
 // 星噬母艦：有機機械母艦（機庫艙門開合看得到蟲群、外圈螺旋砲環會轉、中央大眼）
 function drawBoss1(ctx, c, r, t) {

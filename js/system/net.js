@@ -674,6 +674,7 @@ const Net = {
           P.dead = false; P.hp = clamp(num(m.hp, P.hp), 1, P.maxHp);
           this.applyLoot(m.lt);
           Game.credits += clamp(num(m.loot), 0, 999);
+          Game.combat.treasureGot = !!m.tr;
           Game.combatWon();
         }
         break;
@@ -961,7 +962,8 @@ const Net = {
       for (const q of this.peers) q.editing = false;
       for (const p of Game.allShips()) revive(p);
       if (Game.mates.length) this.sendDmg();
-      for (const q of this.peers) { const m = this.mateOf(q); if (m) this.sendTo(q, { t: 'won', hp: m.hp, loot: left, lt: this.lootTotal }); }  // loot：地上沒吸完的晶體，隊友也拿
+      const tr = Game.combat && Game.combat.treasureGot ? 1 : 0;  // 打掉寶藏無人機：每個人的三選一都保證稀有
+      for (const q of this.peers) { const m = this.mateOf(q); if (m) this.sendTo(q, { t: 'won', hp: m.hp, loot: left, lt: this.lootTotal, tr }); }  // loot：地上沒吸完的晶體，隊友也拿
     }
   },
   // 房主：全滅了，告訴每個隊友（帶上他自己最後被什麼打倒）

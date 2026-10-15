@@ -548,6 +548,8 @@ const ENEMY_TYPES = {
   splitling:{ name: '碎裂體', hp: 30, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },  // 每隻掉 1 顆（一隻分裂體總共 3 顆，跟以前一樣）
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
   hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true },      // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不算玩法擊殺）
+  // 寶藏無人機（CFG.TREASURE）：不攻擊、沒有撞擊傷害、不掉晶體，往離玩家的反方向逃；打掉這場的三選一保證稀有晶片
+  treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 14, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true },
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
@@ -1114,6 +1116,25 @@ const THEME_AI = {
     if (this.mode === 'stalk' && d < 140 && this.cloak >= 1 && !Objects.inHole(this)) { this.mode = 'windup'; this.modeT = 0.4; this.chargeA = Math.atan2(dy, dx); return true; }
     const [mx, my] = this.chaseDir(p, dx, dy, d);
     this.steerMove(dt, mx, my, this.t.speed);
+    return true;
+  },
+  treasure(dt, p, dx, dy, d) {  // 寶藏無人機：往離最近玩家的反方向逃、左右閃；出場 CFG.TREASURE.life 秒沒打掉就躍遷離開
+    const T = CFG.TREASURE;
+    if ((this.age = (this.age || 0) + dt) >= T.life) { Game.treasureEscape(this); return true; }
+    if (!((this.fleeT -= dt) > 0)) {  // 每 0.25 秒重選方向：8 個方向裡最背向玩家、前面 90 沒被牆和物件擋住的（被逼到牆角就跑不掉，這時最好打）
+      this.fleeT = 0.25;
+      const ux = -dx / d, uy = -dy / d, [ox, oy] = this.fleeDir || [ux, uy];
+      let best = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const cx = Math.cos(i / 8 * TAU), cy = Math.sin(i / 8 * TAU), tx = this.x + cx * 90, ty = this.y + cy * 90;
+        if (tx < this.r || ty < this.r || tx > CFG.WORLD_W - this.r || ty > CFG.WORLD_H - this.r) continue;
+        if (Arena.losBlocked(this.x, this.y, tx, ty, this.r) || (Game.objs.length && Objects.losBlocked(this.x, this.y, tx, ty, this.r))) continue;
+        const s = cx * ux + cy * uy + 0.3 * (cx * ox + cy * oy);  // 偏好原本的方向，不會每次重選就左右抖
+        if (s > best) { best = s; this.fleeDir = [cx, cy]; }
+      }
+    }
+    const [fx, fy] = this.fleeDir || [-dx / d, -dy / d], w = Math.sin(Game.time * 3 + this.phase) * 0.5;
+    this.steerMove(dt, fx - fy * w, fy + fx * w, this.t.speed * (d < T.near ? 1 : T.farMul));
     return true;
   },
   hive(dt) {  // 不會動（擊退、吸引都推不動）；每 4 秒生 2 隻蟲群（同時最多 8 隻）
