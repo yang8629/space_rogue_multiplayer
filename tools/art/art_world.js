@@ -69,7 +69,7 @@ const ENEMIES = [
   { id: 'splitling', name: '碎裂體', col: '#ffb347', n: 3, r: 10, note: '就是分裂體的其中一塊：斷面發光', face: true },
   { id: 'lurker', name: '潛伏者', col: '#9d8cff', n: 3, r: 12, note: '光學迷彩：幾乎透明、折射的彩色輪廓、一對發光的眼、兩把前伸的利爪', face: true },
   { id: 'hive', name: '母巢', col: '#e05d2e', n: 9, r: 30, note: '活的巢穴：觸根抓地、脈動血管、4 個孵化口輪流張開（看得到蟲群）、中央跳動的心臟' },
-  { id: 'treasure', name: '寶藏無人機', col: '#ffd166', n: 4, r: 14, note: '金色運輸艇：兩側推進器、中間載著發光的晶體貨艙、周圍閃光', face: true },
+  { id: 'treasure', name: '寶藏無人機', col: '#ffd166', n: 4, r: 18, note: '金色運輸艇：兩側推進器、中間載著發光的晶體貨艙、周圍閃光', face: true },
   { id: 'dummy', name: '標靶', col: '#9fb4ff', n: 8, r: 18, note: '練習用無人機：靶面＋三腳支架＋彈痕' },
   { id: 'boss', name: '星噬母艦', col: '#ff4d6d', n: 8, r: 50, note: '有機機械母艦：機庫艙門輪流打開（看得到蟲群）、外圈螺旋砲環、中央豎瞳大眼', boss: 4 },
   { id: 'boss2', name: '裂界獵艦', col: '#b388ff', n: 3, r: 42, note: '刀刃狀戰艦：中線發光的裂界縫、長狙擊炮管、兩側推進器和吊艙', boss: 3 },

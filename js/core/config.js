@@ -35,8 +35,14 @@ const CFG = {
   RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
   ELITE_ESCORT: 0.3,         // 精英戰最後一區（精英的場子）的護衛：一般一波預算的幾倍
   // 寶藏無人機（ENEMY_TYPES.treasure）：一般戰鬥 chance 機率在隨機一區出現；不攻擊、往離玩家的反方向逃，life 秒沒打掉就躍遷離開
-  //   離最近的玩家超過 near 時速度 ×farMul（跑太遠追不到）；打掉：這場的三選一多保證 rare 格稀有晶片
-  TREASURE: { chance: 0.2, life: 15, near: 450, farMul: 0.55, rare: 1 },
+  //   離最近的玩家超過 near 時速度 ×farMul（跑太遠追不到）；blink：剩幾秒開始閃（快逃走了）；打掉的獎勵見 BONUS.treasure
+  TREASURE: { chance: 0.2, life: 15, near: 450, farMul: 0.55, blink: 3 },
+  // 蟲潮：一般戰鬥 chance 機率有一區全是蟲群：數量 ×count（照一般一波的預算）、血量 ×hp；每 clump 隻從同一個地方湧出（散開 jitter），間隔 gap 秒
+  SWARM: { chance: 0.15, count: 1.6, hp: 0.5, gap: 0.05, clump: 8, jitter: 70 },
+  // 精英亂入：3 區的一般戰鬥 chance 機率在第 2 區以後的隨機一區，敵人剩 at 以下（照這一區出場的數量）時闖進一隻帶詞綴的精英；打掉的獎勵見 BONUS.intrude
+  INTRUDE: { chance: 0.15, at: 0.5 },
+  // 戰鬥中額外打到的稀有晶片保證：這場的三選一多保證 rare 格（同一場可以疊），note 寫在三選一上
+  BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' } },
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
   MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限

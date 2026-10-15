@@ -549,7 +549,7 @@ const ENEMY_TYPES = {
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
   hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true },      // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不算玩法擊殺）
   // 寶藏無人機（CFG.TREASURE）：不攻擊、沒有撞擊傷害、不掉晶體，往離玩家的反方向逃；打掉這場的三選一保證稀有晶片
-  treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 14, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true },
+  treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 18, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true },
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
@@ -647,6 +647,7 @@ class Enemy {
     k.setAffixes(keep, this.x, this.y);
     if (this.shieldA != null && k.shieldA != null) k.shieldA = this.shieldA;
     if (this.enraged) k.enraged = true;
+    if (this.intruder) { k.intruder = this.intruder; this.intruder.left++; }  // 精英亂入：兩隻都打掉才算（Game.onEnemyKilled）
     this.affixes = keep.length ? keep : null; this.splitDone = true;
     this.push(ux * 260, uy * 260); k.push(-ux * 260, -uy * 260);
     Game.enemies.push(k);
@@ -1121,6 +1122,7 @@ const THEME_AI = {
   treasure(dt, p, dx, dy, d) {  // 寶藏無人機：往離最近玩家的反方向逃、左右閃；出場 CFG.TREASURE.life 秒沒打掉就躍遷離開
     const T = CFG.TREASURE;
     if ((this.age = (this.age || 0) + dt) >= T.life) { Game.treasureEscape(this); return true; }
+    this.modeT = T.life - this.age;  // 還剩幾秒（同步給隊友：畫面最後幾秒閃）
     if (!((this.fleeT -= dt) > 0)) {  // 每 0.25 秒重選方向：8 個方向裡最背向玩家、前面 90 沒被牆和物件擋住的（被逼到牆角就跑不掉，這時最好打）
       this.fleeT = 0.25;
       const ux = -dx / d, uy = -dy / d, [ox, oy] = this.fleeDir || [ux, uy];

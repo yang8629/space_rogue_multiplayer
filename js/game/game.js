@@ -195,9 +195,9 @@ const Game = {
     this.logNodeStart(node);
     switch (node.type) {
       // 一般戰：第 1 星區前 3 層 2 波，之後都是 3 波（新星區開頭不會比上一個星區結尾少）
-      case 'combat': {  // treasure：寶藏無人機在第幾區出現（0 = 這場沒有）
-        const n = 2 + (L >= 3 || this.sector > 1 ? 1 : 0);
-        this.startCombat({ level, wavesTotal: n, elites: 0, treasure: Math.random() < CFG.TREASURE.chance ? randInt(1, n) : 0 });
+      case 'combat': {  // 第幾區有：treasure 寶藏無人機、swarm 蟲潮、intrude 精英亂入（0 = 這場沒有；亂入只在 3 區的戰鬥、第 2 區以後）
+        const n = 2 + (L >= 3 || this.sector > 1 ? 1 : 0), roll = (p, lo = 1) => lo <= n && Math.random() < p ? randInt(lo, n) : 0;
+        this.startCombat({ level, wavesTotal: n, elites: 0, treasure: roll(CFG.TREASURE.chance), swarm: roll(CFG.SWARM.chance), intrude: n >= 3 ? roll(CFG.INTRUDE.chance, 2) : 0 });
         break;
       }
       case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1 }); break;
@@ -258,6 +258,8 @@ const Game = {
     const eliteArea = !C.sandbox && C.elites > 0 && n === C.wavesTotal;  // 精英戰的最後一區是精英的場子：只帶少量護衛
     if (eliteArea) budget *= CFG.ELITE_ESCORT;
     const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
+    C.swarmArea = C.swarm === n && !eliteArea; C.clumpN = 0;  // 蟲潮：這一區全是蟲群（數量照預算 ×count，spawnEnemy 成群放、血量打折）
+    if (C.swarmArea) { for (let i = Math.round(budget * CFG.SWARM.count); i > 0; i--) list.push('swarmer'); budget = 0; }
     while (budget > 0) {
       if (TH.list.length && Math.random() < TH.share) {  // 主題小兵
         const k = pick(TH.list), c = THEMES[k];
@@ -278,12 +280,15 @@ const Game = {
     // 精英詞綴先抽好（出場橫幅要寫名字）：第 1 星區 1 個、第 2 星區 2 個、第 3 星區以後 3 個；沙盒照波次（第 5 波 1 個、第 15 波 3 個）
     const nAff = affixCount(C.sandbox ? Math.floor(n / 5) : this.sector);
     C.eliteRolls = list.filter(x => x === 'elite').map(() => rollAffixes(nAff));
+    C.waveN = 0;  // 這一區實際出場幾隻（spawnEnemy 加；列隊蟲一隻 6 節）：精英亂入照這個算「剩一半」
+    if (C.intrude === n) C.intrudeRoll = rollAffixes(nAff);
     const bText = C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`;
-    Events.emit('waveStart', { n, boss: !!sbBoss });
+    Events.emit('waveStart', { n, boss: !!sbBoss, swarm: C.swarmArea });
     if (C.eliteRolls.length && !sbBoss) {  // 精英出場：名字＋詞綴說明
       const R = C.eliteRolls[0];
       bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, R.map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　'), 3);
-    } else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : '', 2);
+    } else if (C.swarmArea) bannerFx('⚠ 蟲潮', `${bText}：大群脆弱的蟲群湧過來`, 2.5);
+    else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : '', 2);
   },
   // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
   pickThemes(sector, late) {
@@ -293,10 +298,15 @@ const Game = {
     const pool = Object.keys(THEMES).filter(k => THEMES[k].from <= Math.min(s, 3));
     return { list: pickN(pool, Math.min(n, pool.length)), share };
   },
-  spawnEnemy(type) {
-    const C = this.combat, p = this.player, zone = Math.max(0, C.wave - 1);
+  // o.intruder：精英亂入（o.affixes = 先抽好的詞綴）
+  spawnEnemy(type, o = {}) {
+    const C = this.combat, p = this.player, zone = Math.max(0, C.wave - 1), S = CFG.SWARM, swarm = C.swarmArea && type === 'swarmer', n0 = this.enemies.length;
     let x, y;
-    for (let t = 0; t < 30; t++) {
+    if (swarm && C.clumpN > 0) {  // 蟲潮：跟同一群的第一隻擠在一起（散開 jitter）；落在行星、小行星上就生在第一隻那裡
+      C.clumpN--;
+      [x, y] = Arena.clampIn(C.clumpAt[0] + rand(-S.jitter, S.jitter), C.clumpAt[1] + rand(-S.jitter, S.jitter), 20);
+      if (Objects.inHole({ x, y, r: 10 }, OBJ.HOLE_NOESC) || Objects.onSolid({ x, y, r: 10 }, 40)) [x, y] = C.clumpAt;
+    } else for (let t = 0; t < 30; t++) {
       const a = rand(0, TAU), d = rand(520, 780);
       x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
       y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
@@ -310,11 +320,18 @@ const Game = {
       (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
       (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - this.lastSector()) : 1) *  // 無盡：每個星區血量再 ×1.2（乘算）
       (C.sandbox ? 1 : this.chapter().hp);  // 章節：敵人血量再 ×（第一章 1）
+    if (swarm && !(C.clumpN > 0)) { C.clumpAt = [x, y]; C.clumpN = S.clump - 1; }  // 新的一群從這裡湧出
     const e = new Enemy(type, x, y, scale);
     if (!Arena.rect) e.zone = zone;
-    if (type === 'elite') e.setAffixes((C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
+    if (swarm) e.hp = e.maxHp *= S.hp;
+    if (type === 'elite') e.setAffixes(o.affixes || (C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
     this.enemies.push(e);
     if (e.t.treasure) { bannerFx(`✦ ${e.t.name}`, `${CFG.TREASURE.life} 秒內打掉：這場的三選一保證稀有晶片`, 2.5); Events.emit('treasureArrive', e); }
+    if (o.intruder) {
+      e.intruder = { left: 1 };  // 分裂詞綴：分出來的那隻共用這個（left = 還沒打掉幾隻）
+      bannerFx(`⚠ 精英亂入：${eliteName(e)}`, `打掉：這場的三選一保證稀有晶片　${(e.affixes || []).map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　')}`, 3);
+      Events.emit('eliteIntrude', e);
+    }
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
     if (type === 'worm') {  // 列隊蟲：再往外排 5 節，每節跟著前一節
       const ux = (x - p.x) / (Math.hypot(x - p.x, y - p.y) || 1), uy = (y - p.y) / (Math.hypot(x - p.x, y - p.y) || 1);
@@ -325,6 +342,7 @@ const Game = {
         w.ahead = prev; prev = w; this.enemies.push(w);
       }
     }
+    C.waveN = (C.waveN || 0) + this.enemies.length - n0;
   },
   updateWaves(dt) {
     const C = this.combat;
@@ -335,9 +353,14 @@ const Game = {
       if (C.clearT <= 0) this.combatWon();
       return;
     }
+    // 精英亂入：這一區的敵人都出場了、剩不到一半時闖進來（先於「清完」判斷：同一幀清完也照樣闖進來）
+    if (C.intrude === C.wave && !C.intruded && !C.pending.length && this.enemies.length <= C.waveN * CFG.INTRUDE.at) {
+      C.intruded = true;
+      this.spawnEnemy('elite', { affixes: C.intrudeRoll, intruder: true });
+    }
     if (C.pending.length) {
       C.spawnClock -= dt;
-      if (C.spawnClock <= 0) { C.spawnClock = 0.22; this.spawnEnemy(C.pending.shift()); }
+      if (C.spawnClock <= 0) { C.spawnClock = C.swarmArea ? CFG.SWARM.gap : 0.22; this.spawnEnemy(C.pending.shift()); }
     } else if (this.enemies.length === 0) {
       for (const c of this.pickups) c.vacuum = true;  // 每一波清完就把地上的晶體全部吸過來
       if (C.wave >= C.wavesTotal) {
@@ -412,8 +435,8 @@ const Game = {
       this.view();
       return;
     }
-    const tr = this.combat.treasureGot;  // 打掉寶藏無人機：多保證稀有晶片
-    this.openReward(type === 'elite' ? 'elite' : 'combat', tr ? { rareAdd: CFG.TREASURE.rare, note: '✦ 寶藏到手：保證稀有晶片' } : {});
+    const B = this.combat.bonus || [], add = B.reduce((n, k) => n + CFG.BONUS[k].rare, 0);  // 戰鬥中打到的稀有保證（寶藏無人機、精英亂入）
+    this.openReward(type === 'elite' ? 'elite' : 'combat', add ? { rareAdd: add, note: `✦ ${B.map(k => CFG.BONUS[k].note).join('、')}：保證 ${add} 格稀有晶片` } : {});
     this.view();
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
@@ -907,7 +930,8 @@ const Game = {
     }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     Events.emit('enemyKilled', { e, big });
-    if (e.t.treasure) this.treasureGot(e);
+    if (e.t.treasure) this.bonusRare(e, 'treasure');
+    if (e.intruder && --e.intruder.left === 0) this.bonusRare(e, 'intrude');
     if (big) this.shake(e.type === 'elite' ? 14 : 6);
     if (e.t.boss) {  // 母艦爆炸：清除所有小怪與敵彈
       this.shake(28);
@@ -927,13 +951,13 @@ const Game = {
       if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
     }
   },
-  // 寶藏無人機：打掉 → 這場的三選一多保證 CFG.TREASURE.rare 格稀有（combatWon；多人時房主在 'won' 告訴隊友）
-  treasureGot(e) {
-    this.combat.treasureGot = true;
+  // 戰鬥中額外拿到稀有晶片保證（k = CFG.BONUS 的種類：寶藏無人機、精英亂入）：記在 combat.bonus，combatWon 時加進三選一；多人時房主在 'won' 告訴隊友
+  bonusRare(e, k) {
+    (this.combat.bonus = this.combat.bonus || []).push(k);
     burst(e.x, e.y, '#ffd166', 60, 380, 1, 3); ringFx(e.x, e.y, 120, '#ffd166');
     this.shake(8);
-    bannerFx('✦ 寶藏到手', '這場的三選一保證稀有晶片', 2);
-    Events.emit('treasureGot', e);
+    bannerFx(`✦ ${CFG.BONUS[k].note}`, '這場的三選一保證稀有晶片', 2);
+    Events.emit('bonusRare', { e, k });
   },
   // 寶藏無人機：時間到躍遷離開（不算擊殺、不掉東西）
   treasureEscape(e) {
