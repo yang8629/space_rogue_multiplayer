@@ -101,8 +101,12 @@ function finishNode(H) {
 {
   const evs = H => H.Game.map.flat().filter(n => n.type === 'event').map(n => `${n.id}:${n.ev}:${n.evArg || ''}`).join(',');
   ok(evs(HA) && evs(HA) === evs(HB), `events synced on the map (${evs(HB)})`);
-  HB.Game.acceptSos(); pump();
-  ok(HA.Game.sos === true && HB.Game.sos === true, `client answered the SOS: host knows (${HA.Game.sos})`);
+  HB.Game.addSos('full'); pump();
+  ok(HA.Game.sos && HA.Game.sos.team === 'full' && HA.Game.sos.mul === HA.CFG.EVENT.sos.full.mul && HB.Game.sos.mine === 'full', `client answered the SOS: host knows (${JSON.stringify(HA.Game.sos)})`);
+  const hc = HA.Game.map.flat().find(n => n.type === 'combat' && n.L >= 1);
+  HB.Game.markHoard([hc.id]); pump();
+  ok(hc.hoard && HB.Game.nodeById(hc.id).hoard, `client marked a treasure zone: host sees it (${hc.id})`);
+  hc.hoard = HB.Game.nodeById(hc.id).hoard = false;
   HB.Game.boons.ward = 1; HB.Net.sendLoadout(); pump();
   ok(HA.Game.mates[0].L.boons.ward === 1, 'client ward synced to host');
 }
@@ -159,6 +163,9 @@ while (!sector2 && guard++ < 40) {
       M.iframe = 0; M.hp = 10; GA.hurtPlayer(1e9, 'e2e', M); pump();
       ok(!M.dead && M.hp === 1 && M.L.boons.ward === 0 && HB.Game.boons.ward === 0, `ward saved the client (hp ${M.hp}, host ${M.L.boons.ward}, client ${HB.Game.boons.ward})`);
       wardChecked = true;
+      GA.boons.ward = 1; step(3);
+      ok(HB.Game.mates[0].ward === 1 && HB.Game.wardOf(HB.Game.mates[0]) === 1, `host ward shown on client's HUD (${HB.Game.mates[0].ward})`);
+      GA.boons.ward = 0;
       P.iframe = M.iframe = 0;
       P.hp = P.maxHp = 1e6; M.hp = M.maxHp = 1e6;
     }
@@ -182,7 +189,9 @@ while (!sector2 && guard++ < 40) {
     ok(!HA.Game.inArena && !HB.Game.inArena, `${type} won on both sides (host ${HA.Game.state}, client ${HB.Game.state})`);
     if (!sosChecked && type !== 'boss') {
       sosChecked = true;
-      ok(HA.Game.combat.sos && (HA.Game.combat.bonus || []).includes('sos') && (HB.Game.combat.bonus || []).includes('sos') && !HA.Game.sos, `SOS fight: both get the rare bonus (host ${(HA.Game.combat.bonus || []).join()}, client ${(HB.Game.combat.bonus || []).join()})`);
+      const RA = HA.Game.reward || {}, RB = HB.Game.reward || {}, B = HA.CFG.BONUS;
+      ok(HA.Game.combat.sos === HA.CFG.EVENT.sos.full.mul && HA.Game.combat.sosKey === 'full' && HB.Game.combat.sosKey === 'full' && !HA.Game.sos && RA.rareAdd >= B.sos.rare && RB.rareAdd >= B.sos.rare,
+        `SOS fight: harder, both get the rare bonus (host ×${HA.Game.combat.sos} +${RA.rareAdd}, client +${RB.rareAdd})`);
     }
     if (treas) {
       const rare = H => H.Game.state === 'reward' && H.Game.reward.options.some(id => H.CHIPS[id] && H.CHIPS[id].rare);

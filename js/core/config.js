@@ -31,6 +31,7 @@ const CFG = {
     elite:  { reroll: 30, rerollUp: 20, slotCard: true, rare: 1 },
     boss:   { reroll: 30, rerollUp: 20, slotCard: false, rare: 1, after: 'victory' },  // 擊沉旗艦：先三選一，再到勝利畫面
     event:  { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },  // ？事件節點給的三選一（漂流殘骸、黑市）
+    eventPart: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0, parts: true },  // 黑市的走私零件：三格都是零件
   },
   // 稀有晶片（玩法晶片＋詞條，見 RARE）：三選一每一格玩法晶片 chance 機率變稀有；詞條等級 Lv1／Lv2／Lv3 的機率 lv
   RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
@@ -45,9 +46,19 @@ const CFG = {
   // 戰鬥中額外打到的稀有晶片保證：這場的三選一多保證 rare 格（同一場可以疊），note 寫在三選一上
   BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' }, sos: { rare: 1, note: '回應求救訊號' } },
   // ？事件節點（EVENTS，見 data/events.js）的數字：每張航圖 count 個（第 2～5 層；最少 count[0]、最多 count[1]，產生時優先挑有 2 個以上的；每條路線還是要有 3 場戰鬥）
-  //   wreck 漂流殘骸：扣最大 HP 的 hp 換一次晶片三選一；market 黑市：◆price（隨星區上漲）換保證 rare 格稀有的三選一（三選一一定留一格組件，所以最多 2），這一局最大 HP ×(1 − hpCut)
-  //   sos 求救訊號：下一場一般戰鬥或精英戰敵人數量 ×mul，打贏保證稀有（BONUS.sos）；ward 終焉護殼：這一局一次受到致命傷害時留 1 HP、無敵 iframe 秒，受到的傷害 +taken
-  EVENT: { count: [1, 3], wreck: { hp: 0.15 }, market: { price: 60, rare: 2, hpCut: 0.1 }, sos: { mul: 1.3 }, ward: { taken: 0.1, iframe: 2 } },
+  //   wreck 漂流殘骸：搜刮扣最大 HP 的 hp 換晶片三選一；core 拆反應爐 chance 機率三選一保證 rare 格稀有，不然扣 hp
+  //   market 黑市（價格都隨星區上漲）：◆price 換保證 rare 格稀有的三選一（三選一一定留一格組件，所以最多 2），這一局最大 HP ×(1 − hpCut)；◆part 零件三選一；
+  //     box 神祕包裹 ◆price：rare 機率稀有晶片、chip 機率一般晶片、其他空包
+  //   sos 下一場一般戰鬥或精英戰變難（全隊）：敵人數量 ×mul；打贏 bonus（CFG.BONUS 的稀有保證）或 again 多幾次三選一（每個人照自己選的）
+  //     full 全力救援、escort 只護送（求救訊號）、caught 被發現（星圖情報強行破解失敗，沒有獎勵）
+  //   ward 終焉護殼：裝上 = 這一局一次受到致命傷害時留 1 HP、無敵 iframe 秒，受到的傷害 +taken；拆下核心 = 回復最大 HP 的 heal
+  //   chart 星圖情報：強行破解 chance 機率標出 2 個寶藏星域
+  EVENT: { count: [1, 3],
+    wreck: { hp: 0.15, core: { chance: 0.5, rare: 2, hp: 0.25 } },
+    market: { price: 60, rare: 2, hpCut: 0.1, part: 40, box: { price: 30, rare: 0.3, chip: 0.5 } },
+    sos: { full: { mul: 1.3, bonus: 'sos' }, escort: { mul: 1.15, again: 1 }, caught: { mul: 1.3 } },
+    ward: { taken: 0.1, iframe: 2, heal: 0.4 },
+    chart: { chance: 0.6 } },
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
   MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限

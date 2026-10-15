@@ -12,6 +12,8 @@ const MechCheck = {
   results: null,
 
   // ---------- 測試用工具 ----------
+  // 這段期間 Math.random 固定回傳 v（測賭運氣的結果：0 = 一定成功，0.99 = 一定失敗）
+  luck(v, fn) { const r = Math.random; Math.random = () => v; try { return fn(); } finally { Math.random = r; } },
   setup(mode, ship, weapon, path, final, chain, inv = []) {
     Game.chapterId = 1;  // 既有檢查都假設從第一章的星區 1 開始（玩家選了別章也一樣）
     Game.newRun(mode, ship, weapon);
@@ -1921,7 +1923,7 @@ const MechCheck = {
       return { ok: touch > 0 && p.hp === hp0 && !(p.iframe > 0) && Game.eBullets.length === 0, got: `貼著 ${touch} 幀：HP ${hp0} → ${p.hp}、無敵 ${(p.iframe || 0).toFixed(2)}、敵彈 ${Game.eBullets.length}` };
     }],
     // ---------- ？事件節點（EVENTS，data/events.js） ----------
-    ['事件', '航圖：？事件節點', `每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（大多 2 個）、只在第 2～5 層、同一個分岔不會有兩個；每個都有事件種類；星圖情報標的是走得到的一般戰鬥；雙人同步航圖時事件和寶藏星域都帶著`, M => {
+    ['事件', '航圖：？事件節點', `每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（大多 2 個）、只在第 2～5 層、同一個分岔不會有兩個；每個都有事件種類；星圖情報的 2 個目標是走得到的一般戰鬥；雙人同步航圖時事件和寶藏星域都帶著`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       let bad = [], two = 0, N = 60;
       for (let i = 0; i < N; i++) {
@@ -1931,80 +1933,105 @@ const MechCheck = {
         if (ev.some(n => n.L < 1 || n.L > 4)) bad.push('層數');
         if (ev.some(n => !EVENTS[n.ev])) bad.push('沒有種類');
         if ([m[0], ...all.map(n => n.next.map(byId))].some(o => o.filter(n => n.type === 'event').length > 1)) bad.push('同一分岔兩個');
-        for (const n of ev.filter(n => n.ev === 'chart')) { const t = byId(n.evArg); if (!t || t.type !== 'combat' || !descendants(n, byId).includes(t)) bad.push('星圖情報的目標'); }
+        for (const n of ev.filter(n => n.ev === 'chart')) { const T = hoardIds(n).map(byId); if (T.length !== 2 || T[0] === T[1] || T.some(t => !t || t.type !== 'combat' || !descendants(n, byId).includes(t))) bad.push('星圖情報的目標'); }
         if (!mapOk(m)) bad.push('保底規則');
       }
-      const m = genMap(), e = m.flat().find(n => n.type === 'event');
-      e.ev = 'chart'; e.evArg = m[m.length - 2][0].id; m[m.length - 2][0].hoard = true;
+      const m = genMap(), e = m.flat().find(n => n.type === 'event'), t = m[m.length - 2][0];
+      e.ev = 'chart'; e.evArg = t.id + '|' + m[m.length - 2][1].id; t.hoard = true;
       const back = Net.unpackMap(JSON.parse(JSON.stringify(Net.packMap(m)))).flat(), e2 = back.find(n => n.id === e.id);
-      const sync = e2.ev === 'chart' && e2.evArg === e.evArg && back.find(n => n.id === e.evArg).hoard && back.filter(n => n.hoard).length === 1;
+      const sync = e2.ev === 'chart' && e2.evArg === e.evArg && back.find(n => n.id === t.id).hoard && back.filter(n => n.hoard).length === 1;
       return { ok: !bad.length && two >= N * 0.9 && sync, got: `${N} 張：${bad.length ? '問題 ' + [...new Set(bad)].join('、') : '都符合'}；2 個以上的 ${two} 張；同步${sync ? '帶著事件和寶藏星域' : '少了東西（錯誤）'}` };
     }],
-    ['事件', '漂流殘骸', `搜刮：HP −最大 HP 的 ${CFG.EVENT.wreck.hp * 100}%（最少留 1）、晶片三選一；離開：什麼都不變`, M => {
+    ['事件', '漂流殘骸', `搜刮：HP −最大 HP 的 ${CFG.EVENT.wreck.hp * 100}%（最少留 1）、晶片三選一；拆反應爐 ${CFG.EVENT.wreck.core.chance * 100}%：先揭曉，再三選一保證 ${CFG.EVENT.wreck.core.rare} 格稀有，失敗 HP −${CFG.EVENT.wreck.core.hp * 100}%；離開：什麼都不變`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, node = { id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'wreck' };
       Game.openEvent(node); const st0 = Game.state, hp0 = p.hp;
-      Game.evChoose(1); const leave = Game.state === 'map' && p.hp === hp0;
+      Game.evChoose(2); const leave = Game.state === 'map' && p.hp === hp0;
       Game.openEvent(node); Game.evChoose(0);
       const lost = hp0 - p.hp, rew = Game.state === 'reward' && Game.reward.kind === 'event';
       p.hp = 3; Game.openEvent(node); Game.evChoose(0); const low = p.hp;
-      return { ok: st0 === 'event' && leave && lost === Math.round(p.maxHp * CFG.EVENT.wreck.hp) && rew && low === 1,
-        got: `進去是${st0}；離開${leave ? '沒變' : '有變（錯誤）'}；搜刮扣 ${lost}（最大 HP ${p.maxHp}）、${rew ? '三選一' : '沒有三選一（錯誤）'}；HP 3 時搜刮剩 ${low}` };
+      p.hp = p.maxHp; Game.openEvent(node); M.luck(0, () => Game.evChoose(1));
+      const wait = Game.state === 'event' && !!Game.ev.res && p.hp === p.maxHp;
+      Game.evNext(); const win = Game.state === 'reward' ? Game.reward.options.filter(rareOf).length : -1;
+      Game.openEvent(node); M.luck(0.99, () => Game.evChoose(1)); const boom = p.maxHp - p.hp; Game.evNext(); const back = Game.state;
+      return { ok: st0 === 'event' && leave && lost === Math.round(p.maxHp * CFG.EVENT.wreck.hp) && rew && low === 1 && wait && win === CFG.EVENT.wreck.core.rare && boom === Math.round(p.maxHp * CFG.EVENT.wreck.core.hp) && back === 'map',
+        got: `進去是${st0}；離開${leave ? '沒變' : '有變（錯誤）'}；搜刮扣 ${lost}（最大 HP ${p.maxHp}）、${rew ? '三選一' : '沒有三選一（錯誤）'}；HP 3 時搜刮剩 ${low}；拆反應爐成功：${wait ? '先揭曉' : '沒停在揭曉（錯誤）'}、稀有 ${win} 格；失敗扣 ${boom}、之後回到 ${back}` };
     }],
-    ['事件', '黑市商人', `◆${CFG.EVENT.market.price}（隨星區上漲）換三選一保證 ${CFG.EVENT.market.rare} 格稀有，這一局最大 HP ×${1 - CFG.EVENT.market.hpCut}（可以疊）；錢不夠不能交易`, M => {
+    ['事件', '黑市商人', `改造晶片 ◆${CFG.EVENT.market.price}：三選一保證 ${CFG.EVENT.market.rare} 格稀有、這一局最大 HP ×${1 - CFG.EVENT.market.hpCut}（可以疊）；走私零件 ◆${CFG.EVENT.market.part}：零件三選一；神祕包裹 ◆${CFG.EVENT.market.box.price}：稀有／一般晶片／空包（價格都隨星區上漲）；錢不夠不能選`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
-      const p = Game.player, node = { id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'market' }, hp0 = p.maxHp;
-      Game.credits = Game.marketPrice() - 1; Game.openEvent(node); Game.evChoose(0); const poor = Game.state === 'event' && Game.boons.hp === 0;
+      const p = Game.player, node = { id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'market' }, hp0 = p.maxHp, K = CFG.EVENT.market, price = Game.shopPrice(K.price);
+      Game.credits = price - 1; Game.openEvent(node); Game.evChoose(0); const poor = Game.state === 'event' && Game.boons.hp === 0;
       Game.credits = 1000; Game.evChoose(0);
       const paid = 1000 - Game.credits, hp1 = p.maxHp, nRare = Game.state === 'reward' ? Game.reward.options.filter(rareOf).length : -1;
-      Game.takeReward(null); Game.credits = 1000; Game.openEvent(node); Game.evChoose(0); const hp2 = p.maxHp;
-      const k = CFG.EVENT.market.hpCut, want1 = Math.round(hp0 * (1 - k)), want2 = Math.round(hp0 * (1 - k) ** 2);
-      return { ok: poor && paid === Game.marketPrice() && nRare === CFG.EVENT.market.rare && Math.abs(hp1 - want1) <= 1 && Math.abs(hp2 - want2) <= 1,
-        got: `錢不夠${poor ? '不能交易' : '還是交易了（錯誤）'}；付 ◆${paid}；稀有 ${nRare} 格；最大 HP ${hp0} → ${hp1} → ${hp2}（應為 ${want1} → ${want2}）` };
+      Game.takeReward(null); Game.credits = 1000; Game.openEvent(node); Game.evChoose(0); const hp2 = p.maxHp; Game.takeReward(null);
+      const k = K.hpCut, want1 = Math.round(hp0 * (1 - k)), want2 = Math.round(hp0 * (1 - k) ** 2);
+      Game.credits = 1000; Game.openEvent(node); Game.evChoose(1);
+      const parts = Game.state === 'reward' && Game.reward.options.every(id => id.startsWith('part:')) && 1000 - Game.credits === Game.shopPrice(K.part);
+      Game.rerollReward(); const parts2 = Game.reward.options.every(id => id.startsWith('part:')); Game.takeReward(null);
+      const box = v => { Game.inventory = Game.inventory.map(() => null); Game.openEvent(node); M.luck(v, () => Game.evChoose(2)); const got = Game.inventory.filter(Boolean); Game.evNext(); return got; };
+      const b1 = box(0), b2 = box(K.box.rare + 0.01), b3 = box(0.99);
+      const boxOk = b1.length === 1 && !!rareOf(b1[0]) && b2.length === 1 && !rareOf(b2[0]) && b3.length === 0;
+      return { ok: poor && paid === price && nRare === K.rare && Math.abs(hp1 - want1) <= 1 && Math.abs(hp2 - want2) <= 1 && parts && parts2 && boxOk,
+        got: `錢不夠${poor ? '不能交易' : '還是交易了（錯誤）'}；改造晶片付 ◆${paid}、稀有 ${nRare} 格、最大 HP ${hp0} → ${hp1} → ${hp2}（應為 ${want1} → ${want2}）；走私零件${parts ? '' : '不對（錯誤）'}、刷新${parts2 ? '還是零件' : '變了（錯誤）'}；包裹：${[b1, b2, b3].map(b => b.length ? (rareOf(b[0]) ? '稀有' : '一般') : '空').join('／')}` };
     }],
-    ['事件', '求救訊號', `回應：下一場一般戰鬥或精英戰敵人 ×${CFG.EVENT.sos.mul}（照一波的預算）、打贏保證 ${CFG.BONUS.sos.rare} 格稀有；只算一場`, M => {
+    ['事件', '求救訊號', `全力救援：下一場一般戰鬥或精英戰敵人 ×${CFG.EVENT.sos.full.mul}（照一波的預算）、打贏保證 ${CFG.BONUS.sos.rare} 格稀有；只護送：敵人 ×${CFG.EVENT.sos.escort.mul}、打贏多一次三選一；只算一場`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const COST = { brute: 6, spitter: 3, swarmer: 1, elite: 0 }, cost = () => Game.combat.pending.reduce((a, k) => a + COST[k], 0);
-      const fight = sos => { Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, sos }); Game.combat.themes = { list: [], share: 0 }; Game.startWave(1); return cost(); };
-      const base = (5 + 3 + 3 * 3) * CFG.WAVE_MUL, c0 = fight(false);
-      Game.node = null; Game.openEvent({ id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'sos' }); Game.evChoose(0);
-      const flag = Game.sos;
+      const fight = cfg => { Game.node = { type: 'combat', L: 3, id: 'mc', next: [] }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, ...cfg }); Game.combat.themes = { list: [], share: 0 }; Game.startWave(1); return cost(); };
+      const ev = i => { Game.node = null; Game.openEvent({ id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'sos' }); Game.evChoose(i); };
+      const base = (5 + 3 + 3 * 3) * CFG.WAVE_MUL, c0 = fight({});
+      ev(0); const flag = Game.sos && Game.sos.mine === 'full';
       Game.map = [[{ id: 'mce', L: 0, k: 0, n: 1, type: 'elite', next: [] }]]; Game.node = null; Game.enterNode(Game.map[0][0]);
-      const elite = Game.combat.sos === true && !Game.sos;
-      const c1 = fight(true);
+      const elite = Game.combat.sos === CFG.EVENT.sos.full.mul && Game.combat.sosKey === 'full' && !Game.sos;
+      const c1 = fight({ sos: CFG.EVENT.sos.full.mul, sosKey: 'full' });
       Game.inArena = true; Game.state = 'play'; Game.combatWon();
       const add = Game.state === 'reward' ? Game.reward.rareAdd || 0 : -1, rare = Game.state === 'reward' && Game.reward.options.some(rareOf);
-      return { ok: flag && elite && c0 === Math.ceil(base) && c1 === Math.ceil(base * CFG.EVENT.sos.mul) && add === CFG.BONUS.sos.rare && rare,
-        got: `回應後${flag ? '記下' : '沒記下（錯誤）'}；下一場精英戰${elite ? '帶著、用掉了' : '沒帶到（錯誤）'}；一波的預算 ${c0} → ${c1}（應為 ${Math.ceil(base)} → ${Math.ceil(base * CFG.EVENT.sos.mul)}）；打贏多保證 ${add} 格${rare ? '' : '、沒有稀有（錯誤）'}` };
+      Game.takeReward(null);
+      ev(1); const esc = Game.takeSos(); const c2 = fight(esc);
+      Game.inArena = true; Game.state = 'play'; Game.combatWon(); Game.takeReward(null);
+      const again = Game.state === 'reward' && Game.reward.kind === 'combat'; Game.takeReward(null); const done = Game.state === 'map';
+      // 隊友回應（fromNet）：倍數取大的；自己選了沒獎勵的（被發現）→ 照隊友的獎勵
+      Game.sos = null; Game.addSos('escort'); Game.addSos('full', true); const team = Game.takeSos();
+      Game.sos = null; Game.addSos('caught'); Game.addSos('escort', true); const team2 = Game.takeSos();
+      const want = m => Math.ceil(base * m), sc = CFG.EVENT.sos;
+      return { ok: flag && elite && c0 === Math.ceil(base) && c1 === want(sc.full.mul) && add === CFG.BONUS.sos.rare && rare && c2 === want(sc.escort.mul) && again && done &&
+          team.sos === sc.full.mul && team.sosKey === 'escort' && team2.sos === sc.caught.mul && team2.sosKey === 'escort',
+        got: `全力救援${flag ? '記下' : '沒記下（錯誤）'}；下一場精英戰${elite ? '帶著、用掉了' : '沒帶到（錯誤）'}；一波的預算 ${c0} → ${c1}（應為 ${want(sc.full.mul)}）；打贏多保證 ${add} 格${rare ? '' : '、沒有稀有（錯誤）'}；` +
+          `只護送：預算 ${c2}（應為 ${want(sc.escort.mul)}）、${again ? '多一次三選一' : '沒有多一次（錯誤）'}、${done ? '之後回航圖' : '沒回航圖（錯誤）'}；隊友全力＋自己護送：×${team.sos}、拿${team.sosKey}；自己被發現＋隊友護送：×${team2.sos}、拿${team2.sosKey}` };
     }],
-    ['事件', '終焉護殼', `這一局一次：受到致命傷害時留 1 HP、無敵 ${CFG.EVENT.ward.iframe} 秒；受到的傷害 +${CFG.EVENT.ward.taken * 100}%；用掉之後再受到致命傷害就會被擊墜`, M => {
+    ['事件', '終焉護殼', `裝上：這一局一次受到致命傷害時留 1 HP、無敵 ${CFG.EVENT.ward.iframe} 秒，受到的傷害 +${CFG.EVENT.ward.taken * 100}%，用掉之後再受到致命傷害就會被擊墜；拆下核心：回復最大 HP 的 ${CFG.EVENT.ward.heal * 100}%`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
-      Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 });
-      const p = Game.player, t0 = Game.mech.taken;
-      Game.node = null; Game.openEvent({ id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'ward' }); Game.evChoose(0);
-      const t1 = Game.mech.taken, w0 = Game.boons.ward;
+      Game.node = { type: 'combat', L: 1, id: 'mc', next: [] }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 });
+      const p = Game.player, t0 = Game.mech.taken, node = { id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'ward' };
+      Game.node = null; p.hp = 10; Game.openEvent(node); Game.evChoose(1); const healed = p.hp - 10;
+      Game.openEvent(node); Game.evChoose(0);
+      const t1 = Game.mech.taken, w0 = Game.boons.ward, hud = Game.wardOf(p);
       Game.state = 'play'; Game.inArena = true; p.iframe = 0; p.hp = 5; Game.hurtPlayer(500, 'mc');
-      const saved = Game.state === 'play' && p.hp === 1 && p.iframe >= CFG.EVENT.ward.iframe - 0.01 && Game.boons.ward === 0;
+      const saved = Game.state === 'play' && p.hp === 1 && p.iframe >= CFG.EVENT.ward.iframe - 0.01 && Game.boons.ward === 0 && Game.wardOf(p) === 0;
       p.iframe = 0; Game.hurtPlayer(500, 'mc');
       const died = Game.state === 'dead';
-      return { ok: w0 === 1 && Math.abs(t1 - t0 - CFG.EVENT.ward.taken) < 1e-9 && saved && died,
-        got: `裝上後免死 ${w0} 次、受到的傷害 ×${t0.toFixed(2)} → ×${t1.toFixed(2)}；第一次致命傷害${saved ? '留 1 HP、無敵' : `沒擋下（HP ${p.hp}）`}；第二次${died ? '被擊墜' : '沒死（錯誤）'}` };
+      return { ok: healed === Math.round(p.maxHp * CFG.EVENT.ward.heal) && w0 === 1 && hud === 1 && Math.abs(t1 - t0 - CFG.EVENT.ward.taken) < 1e-9 && saved && died,
+        got: `拆下核心回 ${healed}；裝上後免死 ${w0} 次（血條旁顯示 ${hud}）、受到的傷害 ×${t0.toFixed(2)} → ×${t1.toFixed(2)}；第一次致命傷害${saved ? '留 1 HP、無敵、標示消失' : `沒擋下（HP ${p.hp}）`}；第二次${died ? '被擊墜' : '沒死（錯誤）'}` };
     }],
-    ['事件', '星圖情報：寶藏星域', '一進來就把產生航圖時決定的那場一般戰鬥標成寶藏星域；那場每一區都有一架寶藏無人機，打掉幾架三選一就多保證幾格稀有（最多 2 格：一定留一格組件）', M => {
+    ['事件', '星圖情報：寶藏星域', `解讀座標：標出產生航圖時決定的第 1 場；強行破解 ${CFG.EVENT.chart.chance * 100}%：標出 2 場，失敗：下一場敵人 ×${CFG.EVENT.sos.caught.mul}、什麼都沒標；寶藏星域每一區都有一架寶藏無人機，打掉幾架三選一就多保證幾格稀有（最多 2 格：一定留一格組件）`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
       let m, e;
       for (let i = 0; i < 50 && !e; i++) { m = genMap(); e = m.flat().find(n => n.type === 'event' && n.ev === 'chart'); }
       if (!e) return { ok: false, got: '50 張圖都沒有星圖情報' };
-      Game.map = m; const t = Game.nodeById(e.evArg), before = !!t.hoard;
-      Game.openEvent(e); const marked = !!t.hoard && m.flat().filter(n => n.hoard).length === 1;
-      Game.evChoose(0);
-      Game.node = t; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, hoard: true });
+      const nH = () => m.flat().filter(n => n.hoard).length, clear = () => m.flat().forEach(n => { n.hoard = false; });
+      Game.map = m; const [a, b] = hoardIds(e).map(id => Game.nodeById(id));
+      Game.openEvent(e); const before = nH();
+      Game.evChoose(0); const one = nH() === 1 && a.hoard && Game.state === 'map';
+      clear(); Game.openEvent(e); M.luck(0, () => Game.evChoose(1)); Game.evNext(); const two = nH() === 2 && a.hoard && b.hoard && !Game.sos;
+      clear(); Game.openEvent(e); M.luck(0.99, () => Game.evChoose(1)); Game.evNext(); const fail = nH() === 0 && Game.sos && Game.sos.mul === CFG.EVENT.sos.caught.mul && Game.sosPay(Game.sos) === null;
+      Game.sos = null;
+      Game.node = a; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, hoard: true });
       const per = [1, 2, 3].map(n => { Game.startWave(n); return Game.combat.pending.filter(k => k === 'treasure').length; });
       for (let i = 0; i < 3; i++) { Game.spawnEnemy('treasure'); Game.enemies[Game.enemies.length - 1].hurt(1e9, 0, 0, 'direct', null); }
       Game.inArena = true; Game.state = 'play'; Game.combatWon();
       const nRare = Game.state === 'reward' ? Game.reward.options.filter(rareOf).length : -1;
-      return { ok: !before && marked && per.join() === '1,1,1' && nRare === 2,
-        got: `進來前${before ? '已經標了（錯誤）' : '沒標'}、進來後${marked ? '標了 1 格' : '沒標好（錯誤）'}；每一區寶藏無人機 ${per.join('／')}；打掉 3 架 → 稀有 ${nRare} 格（最多 2 格：三選一一定留一格組件）` };
+      return { ok: before === 0 && one && two && fail && per.join() === '1,1,1' && nRare === 2,
+        got: `進來時標了 ${before} 格；解讀${one ? '標 1 格' : '不對（錯誤）'}；破解成功${two ? '標 2 格' : '不對（錯誤）'}；失敗${fail ? '沒標、下一場變難、沒有獎勵' : '不對（錯誤）'}；每一區寶藏無人機 ${per.join('／')}；打掉 3 架 → 稀有 ${nRare} 格（最多 2 格：三選一一定留一格組件）` };
     }],
     ['敵人', '主題小兵隨進度增加', '第 1 星區前半 0～1 種、第 3 星區 2～3 種；母巢第 3 星區才出現', M => {
       const avg = (s, late) => { let n = 0, hive = 0; for (let i = 0; i < 200; i++) { const T = Game.pickThemes(s, late); n += T.list.length; if (T.list.includes('hive')) hive++; } return [n / 200, hive]; };
