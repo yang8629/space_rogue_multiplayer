@@ -29,6 +29,7 @@ const REWARD_TITLE = {
   combat: () => '⚔ 戰鬥勝利：三選一（晶片或零件）',
   elite: () => '☠ 精英擊破：三選一（或電路擴充）',
   boss: () => '♛ 旗艦擊沉：三選一（選完再領旗艦獎勵）',
+  event: () => '? 事件：三選一（晶片或零件）',
 };
 const REVEAL_MS = 1600;  // 揭曉動畫：有稀有晶片時，其他卡先翻開，稀有那格醞釀到這時候才翻開
 // 稀有版本、身上已經有這個晶片：身上那個變稀有。已有不同詞條時兩個按鈕：替換（新詞條從 1 級）／增強（原本的 +1 級）
@@ -78,6 +79,7 @@ const Screen = {
     return `<div class="row"><span class="pill">${statIcon('hp')}${Math.ceil(p.hp)} / ${p.maxHp}</span>
       <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體每人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
       <span class="pill" title="零件已用／零件格">${statIcon('slots')}零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>
+      ${Game.boons && Game.boons.ward ? `<span class="pill" style="color:${EVENTS.ward.color}" title="終焉護殼：受到致命傷害時留 1 HP">${EVENTS.ward.icon} 免死 ${Game.boons.ward}</span>` : ''}
       <button data-act="editor">整理電路 (Tab)</button></div>`;
   },
   // 所有畫面按鈕用 data-act 委派，不使用 inline onclick
@@ -128,6 +130,7 @@ const Screen = {
       case 'armorybonus': Game.armoryBonus(); break;
       case 'slot': Game.expandSlot(arg); break;
       case 'bhpick': Game.bhToggle(arg); break;
+      case 'evopt': Game.evChoose(+arg); break;
       case 'bhfuse': Game.bhFuse(); break;
       case 'bossslot': Game.pickBossSlot(arg); break;
       case 'next': {
@@ -287,6 +290,25 @@ const Screen = {
       <div class="toast" style="text-align:center">${W.msg || ''}</div></div>`);
   },
 
+  // ？事件：情境＋選項（EVENTS，data/events.js）
+  event() {
+    const V = Game.ev, E = V && EVENTS[V.id];
+    if (!E) return;
+    const btns = E.opts.map((o, i) => `<button class="${i === 0 ? 'big ' : ''}ev-opt" data-act="evopt" data-arg="${i}" ${o.can && !o.can(Game) ? 'disabled' : ''}>${o.txt(Game)}</button>`).join('');
+    this.show(`<div class="scr">
+      <div class="between"><div><h2 style="color:${E.color}">${E.icon} ${E.name}</h2><div class="sub">? 事件</div></div>${this.status()}</div>
+      <div class="ev-text" style="border-color:${E.color}">${E.text(Game, V.node)}</div>
+      <div class="ev-opts">${btns}</div>${this.boonLine()}</div>`);
+  },
+  // 這一局拿到的事件效果（事件畫面下方）
+  boonLine() {
+    const B = Game.boons || {}, t = [];
+    if (B.ward) t.push(`${EVENTS.ward.icon} 終焉護殼：還能免死 ${B.ward} 次`);
+    if (B.taken) t.push(`受到的傷害 +${Math.round(CFG.EVENT.ward.taken * B.taken * 100)}%`);
+    if (B.hp) t.push(`最大 HP ×${+Math.pow(1 - CFG.EVENT.market.hpCut, B.hp).toFixed(2)}`);
+    return t.length ? `<div class="sub" style="text-align:center;margin-top:10px">這一局的事件效果：${t.join('　·　')}</div>` : '';
+  },
+
   blackhole() {
     const B = Game.bh, owned = Game.ownedFusable(), free = Game.bhFreeSlots(), A = Game.slotAttr || [];
     const attrTag = k => `<b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}" title="${SLOT_ATTRS[k].desc.replace(/<[^>]+>/g, '')}">${SLOT_ATTRS[k].name}</b>`;
@@ -389,15 +411,17 @@ const Screen = {
         lines += `<line x1="${a.x}%" y1="${a.y}%" x2="${b.x}%" y2="${b.y}%" stroke="${walked ? '#4cc9f0' : '#26336a'}" stroke-width="${walked ? 3 : 2}"/>`;
       }
       const meta = NODE_META[n.type];
-      const cls = ['node', reach.includes(n) && 'reach', Game.visited.includes(n.id) && 'visited', Game.node === n && 'current']
+      const cls = ['node', reach.includes(n) && 'reach', Game.visited.includes(n.id) && 'visited', Game.node === n && 'current', n.hoard && 'hoard']
         .filter(Boolean).join(' ');
       nodes += `<button class="${cls}" ${reach.includes(n) ? `data-act="node" data-arg="${n.id}"` : ''} style="left:${a.x}%;top:${a.y}%;color:${meta.color};border-color:${meta.color}"
-        title="${meta.label}：${meta.desc()}">${meta.icon}<small>${meta.label}</small>${marks(n)}</button>`;
+        title="${meta.label}：${meta.desc()}${n.hoard ? `
+${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i class="hoard-tag">✦ 寶藏</i>' : ''}${marks(n)}</button>`;
     }
     // 節點介紹：列出這張圖上有出現的節點種類
     const types = Object.keys(NODE_META).filter(t => layers.flat().some(n => n.type === t));
     const legend = types.map(t => { const M = NODE_META[t];
-      return `<div class="nleg"><span class="nleg-ic" style="color:${M.color};border-color:${M.color}">${M.icon}</span><div><b style="color:${M.color}">${M.label}</b>　${M.desc()}</div></div>`; }).join('');
+      return `<div class="nleg"><span class="nleg-ic" style="color:${M.color};border-color:${M.color}">${M.icon}</span><div><b style="color:${M.color}">${M.label}</b>　${M.desc()}</div></div>`; }).join('')
+      + (layers.flat().some(n => n.hoard) ? `<div class="nleg"><span class="nleg-ic" style="color:#ffd166;border-color:#ffd166">✦</span><div><b style="color:#ffd166">寶藏星域</b>　${HOARD_TXT}</div></div>` : '');
     this.show(`<div class="scr">
       <div class="between"><div><h2>${Game.isEndless() ? `無盡模式 · 星區 ${Game.sector}` : `${Game.chapter().name} · 星區 ${Game.sector} / ${Game.lastSector()}`} · 航圖</h2>
         <div class="sub">選擇下一個發光的節點。最右側是守關旗艦：<b style="color:${ENEMY_TYPES[Game.bossId].color}">♛ ${ENEMY_TYPES[Game.bossId].name}</b></div></div>${this.status()}</div>
@@ -409,6 +433,7 @@ const Screen = {
           　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　${others.length > 1 ? '選不同就照票數比例抽籤' : '兩人選不同就各 50% 抽籤'}；時間到沒投的不算</div>`;
       })() : ''}
       <div class="map"><svg>${lines}</svg>${nodes}</div>
+      ${Game.sos ? `<div class="sub" style="color:${EVENTS.sos.color}">${EVENTS.sos.icon} 已回應求救訊號：下一場一般戰鬥或精英戰敵人 +${Math.round((CFG.EVENT.sos.mul - 1) * 100)}%，打贏保證稀有晶片</div>` : ''}
       <div class="toast">${toast}</div>
       <details class="nlegs" open><summary>節點介紹</summary><div class="nleg-grid">${legend}</div></details></div>`);
   },

@@ -103,6 +103,9 @@ function oneRun(s) {
         if (own.length && Math.random() < 0.6) { G.bhToggle(pickR(own).key); G.bhFuse(); }
         if (G.state === 'blackhole') G.showMap();
         randomEquip();
+      } else if (st === 'event') {
+        G.evChoose(Math.floor(Math.random() * require('vm').runInThisContext('EVENTS')[G.ev.id].opts.length));
+        if (G.state === 'event') G.showMap();  // 選不了（黑市錢不夠）：離開
       } else if (st === 'repair') G.showMap();
       else if (st === 'victory') {
         if (G.victory && !G.victory.pick) G.pickBossSlot(Math.random() < 0.5 ? 'chain' : 'part');

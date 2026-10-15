@@ -30,6 +30,7 @@ const CFG = {
     combat: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },
     elite:  { reroll: 30, rerollUp: 20, slotCard: true, rare: 1 },
     boss:   { reroll: 30, rerollUp: 20, slotCard: false, rare: 1, after: 'victory' },  // 擊沉旗艦：先三選一，再到勝利畫面
+    event:  { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },  // ？事件節點給的三選一（漂流殘骸、黑市）
   },
   // 稀有晶片（玩法晶片＋詞條，見 RARE）：三選一每一格玩法晶片 chance 機率變稀有；詞條等級 Lv1／Lv2／Lv3 的機率 lv
   RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
@@ -42,7 +43,11 @@ const CFG = {
   // 精英亂入：3 區的一般戰鬥 chance 機率在第 2 區以後的隨機一區，敵人剩 at 以下（照這一區出場的數量）時闖進一隻帶詞綴的精英；打掉的獎勵見 BONUS.intrude
   INTRUDE: { chance: 0.15, at: 0.5 },
   // 戰鬥中額外打到的稀有晶片保證：這場的三選一多保證 rare 格（同一場可以疊），note 寫在三選一上
-  BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' } },
+  BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' }, sos: { rare: 1, note: '回應求救訊號' } },
+  // ？事件節點（EVENTS，見 data/events.js）的數字：每張航圖 count 個（第 2～5 層；最少 count[0]、最多 count[1]，產生時優先挑有 2 個以上的；每條路線還是要有 3 場戰鬥）
+  //   wreck 漂流殘骸：扣最大 HP 的 hp 換一次晶片三選一；market 黑市：◆price（隨星區上漲）換保證 rare 格稀有的三選一（三選一一定留一格組件，所以最多 2），這一局最大 HP ×(1 − hpCut)
+  //   sos 求救訊號：下一場一般戰鬥或精英戰敵人數量 ×mul，打贏保證稀有（BONUS.sos）；ward 終焉護殼：這一局一次受到致命傷害時留 1 HP、無敵 iframe 秒，受到的傷害 +taken
+  EVENT: { count: [1, 3], wreck: { hp: 0.15 }, market: { price: 60, rare: 2, hpCut: 0.1 }, sos: { mul: 1.3 }, ward: { taken: 0.1, iframe: 2 } },
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
   MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限

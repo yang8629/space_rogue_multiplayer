@@ -94,9 +94,19 @@ function finishNode(H) {
     case 'reward':
       G.takeReward(G.reward.options.find(id => G.canAcquire(id)) || null); if (G.state === 'editor') G.toggleEditor(); break;
     case 'workshop': G.wsPick(G.ws.options[0]); G.showMap(); break;
-    case 'shop': case 'blackhole': case 'armory': G.showMap(); break;
+    case 'shop': case 'blackhole': case 'armory': case 'event': G.showMap(); break;
   }
 }
+// ？事件：航圖上的事件兩邊一樣；隊友回應求救訊號 → 房主也記下（第一場戰鬥變難、兩邊都保證稀有）；隊友的終焉護殼傳到房主
+{
+  const evs = H => H.Game.map.flat().filter(n => n.type === 'event').map(n => `${n.id}:${n.ev}:${n.evArg || ''}`).join(',');
+  ok(evs(HA) && evs(HA) === evs(HB), `events synced on the map (${evs(HB)})`);
+  HB.Game.acceptSos(); pump();
+  ok(HA.Game.sos === true && HB.Game.sos === true, `client answered the SOS: host knows (${HA.Game.sos})`);
+  HB.Game.boons.ward = 1; HB.Net.sendLoadout(); pump();
+  ok(HA.Game.mates[0].L.boons.ward === 1, 'client ward synced to host');
+}
+let sosChecked = false, wardChecked = false;
 while (!sector2 && guard++ < 40) {
   step(2);
   if (HA.Game.state !== 'map' || HB.Game.state !== 'map') { console.error('not both on map', HA.Game.state, HB.Game.state); fails++; break; }
@@ -145,6 +155,10 @@ while (!sector2 && guard++ < 40) {
       ok(P.dead && HB.Game.mates[0].dead, 'revive: host downed, client sees it');
       HB.Game.player.x = P.x + 20; HB.Game.player.y = P.y; step(130);
       ok(!P.dead && !HB.Game.mates[0].dead && Math.abs(P.hp - 20) < 0.01, `revive: client rescues host (host ${P.hp})`);
+      // 終焉護殼（隊友的由房主判定）：致命傷害留 1 HP，用掉之後隊友那邊也少一次
+      M.iframe = 0; M.hp = 10; GA.hurtPlayer(1e9, 'e2e', M); pump();
+      ok(!M.dead && M.hp === 1 && M.L.boons.ward === 0 && HB.Game.boons.ward === 0, `ward saved the client (hp ${M.hp}, host ${M.L.boons.ward}, client ${HB.Game.boons.ward})`);
+      wardChecked = true;
       P.iframe = M.iframe = 0;
       P.hp = P.maxHp = 1e6; M.hp = M.maxHp = 1e6;
     }
@@ -166,6 +180,10 @@ while (!sector2 && guard++ < 40) {
     const gA = HA.Game.credits - cA0, gB = HB.Game.credits - cB0;
     ok(gA === gB && gA > rw, `drops shared: host +${gA}, client +${gB}`);
     ok(!HA.Game.inArena && !HB.Game.inArena, `${type} won on both sides (host ${HA.Game.state}, client ${HB.Game.state})`);
+    if (!sosChecked && type !== 'boss') {
+      sosChecked = true;
+      ok(HA.Game.combat.sos && (HA.Game.combat.bonus || []).includes('sos') && (HB.Game.combat.bonus || []).includes('sos') && !HA.Game.sos, `SOS fight: both get the rare bonus (host ${(HA.Game.combat.bonus || []).join()}, client ${(HB.Game.combat.bonus || []).join()})`);
+    }
     if (treas) {
       const rare = H => H.Game.state === 'reward' && H.Game.reward.options.some(id => H.CHIPS[id] && H.CHIPS[id].rare);
       ok((HA.Game.combat.bonus || []).includes('treasure') && (HB.Game.combat.bonus || []).includes('treasure') && rare(HA) && rare(HB), `treasure drone killed: both get a rare chip (host ${(HA.Game.combat.bonus || []).includes('treasure')}/${rare(HA)}, client ${(HB.Game.combat.bonus || []).includes('treasure')}/${rare(HB)})`);
@@ -206,6 +224,7 @@ const np = P => ["armor", "larmor", "booster", "sink", "sensor"].map(k => (P && 
 ok(np(HA.Game.mates[0].L.parts) === np(HB.Game.parts) && HA.Game.mates[0].L.partSlots === HB.Game.partSlots,
   `client parts synced to host (client ${JSON.stringify(HB.Game.parts)} / ${HB.Game.partSlots}; host sees ${JSON.stringify(HA.Game.mates[0].L.parts)} / ${HA.Game.mates[0].L.partSlots})`);
 ok(sector2, `reached sector 2 (${fights} fights, ${drawn} drawn votes)`);
+ok(sosChecked && wardChecked, `event checks ran (SOS ${sosChecked}, ward ${wardChecked})`);
 const dA = Object.values(HA.Game.runStats.dmg).reduce((x, y) => x + y, 0), dM = Object.values(HA.Game.mates[0].L.R.dmg).reduce((x, y) => x + y, 0);
 const dB = Object.values(HB.Game.runStats.dmg).reduce((x, y) => x + y, 0);
 ok(dA > 0 && dM > 0 && Math.abs(dB - dM) < 2, `per-player damage: host ${Math.round(dA)}, mate ${Math.round(dM)}, client sees ${Math.round(dB)}`);
@@ -292,7 +311,7 @@ ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.ma
 // ---- 房主選「自己繼續」，之後隊友再回來 ----
 {
   if (HA.Game.inArena) { for (let i = 0; i < 400 && HA.Game.inArena; i++) { killAll(); step(5); } }
-  const finish = H => { const G = H.Game; if (G.state === 'reward') G.takeReward(null); else if (['shop', 'blackhole', 'armory', 'workshop', 'victory'].includes(G.state) && G.state !== 'victory') G.showMap(); };
+  const finish = H => { const G = H.Game; if (G.state === 'reward') G.takeReward(null); else if (['shop', 'blackhole', 'event', 'armory', 'workshop', 'victory'].includes(G.state) && G.state !== 'victory') G.showMap(); };
   finish(HA); step(3);
   HA.Net.lost('測試斷線');
   ok(HA.Net.waiting, 'host waiting again');

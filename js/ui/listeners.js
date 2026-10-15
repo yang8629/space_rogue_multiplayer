@@ -10,6 +10,7 @@
     reward: () => Screen.reward(),
     shop: m => Screen.shop(m),
     blackhole: () => Screen.blackhole(),
+    event: () => Screen.event(),
     armory: () => Screen.armory(Game.armorySource || 'armory'),
     workshop: () => Screen.workshop(),
     victory: () => Screen.victory(),

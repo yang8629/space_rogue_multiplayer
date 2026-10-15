@@ -103,6 +103,7 @@ const Game = {
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
+    this.boons = cleanBoons(); this.sos = false;  // ？事件拿到的這一局效果（黑市、終焉護殼的次數，見 mechStats）；sos：回應了求救訊號（下一場戰鬥變難）
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
     if (this.freePlay()) this.chapterId = 1;  // 靶場、沙盒用不到章節（雙人的章號由 Net 在開局前設好）
@@ -197,10 +198,12 @@ const Game = {
       // 一般戰：第 1 星區前 3 層 2 波，之後都是 3 波（新星區開頭不會比上一個星區結尾少）
       case 'combat': {  // 第幾區有：treasure 寶藏無人機、swarm 蟲潮、intrude 精英亂入（0 = 這場沒有；亂入只在 3 區的戰鬥、第 2 區以後）
         const n = 2 + (L >= 3 || this.sector > 1 ? 1 : 0), roll = (p, lo = 1) => lo <= n && Math.random() < p ? randInt(lo, n) : 0;
-        this.startCombat({ level, wavesTotal: n, elites: 0, treasure: roll(CFG.TREASURE.chance), swarm: roll(CFG.SWARM.chance), intrude: n >= 3 ? roll(CFG.INTRUDE.chance, 2) : 0 });
+        this.startCombat({ level, wavesTotal: n, elites: 0, treasure: roll(CFG.TREASURE.chance), swarm: roll(CFG.SWARM.chance), intrude: n >= 3 ? roll(CFG.INTRUDE.chance, 2) : 0,
+          hoard: !!node.hoard, sos: this.takeSos() });  // hoard：星圖情報標出的寶藏星域（每一區都有寶藏無人機）
         break;
       }
-      case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1 }); break;
+      case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1, sos: this.takeSos() }); break;
+      case 'event':  this.openEvent(node); break;
       case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
       case 'shop':   this.openShop(); break;
       case 'blackhole': this.openBlackhole(); break;  // 航圖節點「奇異點」（程式代號沿用 blackhole）
@@ -219,6 +222,7 @@ const Game = {
   startCombat(cfg) {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
+    if (this.combat.sos) this.combat.bonus = ['sos'];  // 求救訊號：打贏保證稀有（跟寶藏無人機一樣記在 bonus）
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 灰血（堡壘號）每場重算
     this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.decoys = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
@@ -255,6 +259,7 @@ const Game = {
       return;
     }
     let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopMul(CFG.COOP_COUNT, C.level) : 1);  // 雙人：敵人數量 ×2 → ×2.5（隨難度）
+    if (C.sos) budget *= CFG.EVENT.sos.mul;  // 求救訊號：敵人變多
     const eliteArea = !C.sandbox && C.elites > 0 && n === C.wavesTotal;  // 精英戰的最後一區是精英的場子：只帶少量護衛
     if (eliteArea) budget *= CFG.ELITE_ESCORT;
     const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
@@ -271,7 +276,7 @@ const Game = {
       else { list.push('swarmer'); budget -= 1; }
     }
     if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift('elite');  // 精英最先出場
-    if (C.treasure === n) list.splice(Math.floor(list.length / 2), 0, 'treasure');  // 寶藏無人機：混在這一區的敵人中間出場
+    if (C.treasure === n || C.hoard) list.splice(Math.floor(list.length / 2), 0, 'treasure');  // 寶藏無人機：混在這一區的敵人中間出場
     // 沙盒：每 10 波輪流出現三隻旗艦
     const sbBoss = C.sandbox && n % 10 === 0 ? CFG.BOSS_ORDER[(n / 10 - 1) % CFG.BOSS_ORDER.length] : null;
     if (sbBoss) list.push(sbBoss);
@@ -288,7 +293,7 @@ const Game = {
       const R = C.eliteRolls[0];
       bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, R.map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　'), 3);
     } else if (C.swarmArea) bannerFx('⚠ 蟲潮', `${bText}：大群脆弱的蟲群湧過來`, 2.5);
-    else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : '', 2);
+    else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : n === 1 ? [C.sos && `📡 求救訊號：敵人 +${Math.round((CFG.EVENT.sos.mul - 1) * 100)}%`, C.hoard && '✦ 寶藏星域：每一區都有寶藏無人機'].filter(Boolean).join('　') : '', 2);
   },
   // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
   pickThemes(sector, late) {
@@ -814,6 +819,42 @@ const Game = {
       traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
       playKills: Object.fromEntries(Object.entries(this.playKills).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, v])) };
   },
+  // ---------- ？事件節點（EVENTS，data/events.js）：看情境、選一個選項 ----------
+  openEvent(node) {
+    const E = EVENTS[node.ev];
+    if (!E) { this.showMap(); return; }
+    if (E.enter) E.enter(this, node);
+    this.ev = { id: node.ev, node };
+    this.state = 'event';
+    this.view();
+  },
+  // 選第 i 個選項：選項的 go 回傳 true = 已經打開下一個畫面（三選一），回傳文字 = 回到航圖顯示這段提示
+  evChoose(i) {
+    const V = this.ev, E = V && EVENTS[V.id], o = E && E.opts[i];
+    if (this.state !== 'event' || !o || (o.can && !o.can(this))) return;
+    if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}`);
+    this.ev = null;
+    const r = o.go(this, V.node);
+    if (r === true) this.view(); else this.showMap(r || '');
+  },
+  wreckHp() { return Math.round(this.player.maxHp * CFG.EVENT.wreck.hp); },  // 漂流殘骸：搜刮扣多少 HP
+  marketPrice() { return this.shopPrice(CFG.EVENT.market.price); },  // 黑市：價格隨星區上漲
+  // 求救訊號：全隊下一場一般戰鬥或精英戰變難（雙人：誰回應都算，告訴所有人；敵人由房主產生）
+  acceptSos() { this.sos = true; if (this.mode === 'coop') Net.sendSos(); },
+  takeSos() { const s = !!this.sos; this.sos = false; return s; },
+  // 終焉護殼：受到致命傷害時留 1 HP、無敵一下，用掉一次（隊友的由房主判定，用掉時告訴那個隊友）
+  wardSave(p) {
+    const B = p.L ? p.L.boons : this.boons;
+    if (!B || !(B.ward > 0)) return false;
+    B.ward--;
+    p.hp = 1; p.iframe = Math.max(p.iframe, CFG.EVENT.ward.iframe);
+    burst(p.x, p.y, '#ffd166', 50, 320, 0.8, 3); ringFx(p.x, p.y, 110, '#ffd166');
+    bannerFx('⛨ 終焉護殼', `${this.mode === 'coop' ? this.tagOf(p) + ' ' : ''}撐住了致命的一擊（無敵 ${CFG.EVENT.ward.iframe} 秒）`, 2);
+    if (p.L) Net.sendWard(p);
+    Events.emit('wardSave', p);
+    return true;
+  },
+
   // ---------- 奇異點：投入 1 個晶片，隨機一個還沒強化過的電路格（武器格也可以）抽一個屬性 ----------
   //   好結果的機率照投入晶片的插座數（BH_GOOD）；屬性留在格子上（換晶片也還在），每格只能強化一次
   ownedFusable() {  // 電路、倉庫、插座中可以投入奇異點的晶片
@@ -858,7 +899,7 @@ const Game = {
 
   // ---------- 共用 ----------
   recalc() {
-    this.mech = mechStats(this.parts, this.wp);  // 先算機體：估算 DPS 會用到（玻璃砲看受到的傷害、重量砲看移動速度）
+    this.mech = mechStats(this.parts, this.wp, this.boons);  // 先算機體：估算 DPS 會用到（玻璃砲看受到的傷害、重量砲看移動速度）
     this.stats = analyzeChain(this.chain);
     this.passives = computePassives(this.inventory);
     const p = this.player;
@@ -883,7 +924,7 @@ const Game = {
       }
       if (this.state === 'blackhole') this.bh.sel = [];
       this.view();
-    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'armory', 'workshop'].includes(this.state)) {
+    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'event', 'armory', 'workshop'].includes(this.state)) {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
@@ -983,6 +1024,7 @@ const Game = {
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
     if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
+    if (p.hp <= 0 && this.wardSave(p)) return;  // 終焉護殼（？事件）：免死一次
     if (dmg > 0) { this.onRevenge(p); p.streak = 0; this.rareHurt(p); }  // 逆襲開始；無傷連殺歸零；稀有晶片的反擊
     if (p.ship.ability === 'gray' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.GRAY.cap, (p.drRec || 0) + dmg * CFG.GRAY.share);  // 堡壘號・灰血：這次傷害的一部分之後可以回來
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
@@ -1855,7 +1897,7 @@ const Game = {
   rareSt(p, base) { const R = p.rare || (p.rare = {}); return R[base] || (R[base] = {}); },
   // on 符合這個詞條的時機才跑：冷卻照 RARE[k].cd；充能照晶片平常的發動頻率（CHIPS[晶片].actRate 次／秒）算，約 v 秒充滿
   rareRun(on, base, owner, x, y) {
-    if (this.isClient()) return;
+    if (this.isClient() || this.rareIn) return;  // 詞條的效果裡（爆發射出的子彈…）不再觸發詞條：蓄力的爆發每發動一次就充滿，射出的蓄滿子彈又會充滿，一直連鎖
     const r = this.rareOf(base, owner), D = r && RARE[r.k];
     if (!D || D.on !== on) return;
     const p = this.shipOf(owner);
@@ -1864,7 +1906,8 @@ const Game = {
     if (D.cd) { if (this.time < (st.cd || 0)) return; st.cd = this.time + D.cd; }
     if (on === 'charge') { st.c = (st.c || 0) + 1 / (CHIPS[base].actRate * v); if (st.c < 1) return; st.c = 0; }
     Events.emit('rare', { k: r.k, x: x ?? p.x, y: y ?? p.y });
-    D.fx(p, st, v, x ?? p.x, y ?? p.y, base, owner);
+    this.rareIn = true;
+    try { D.fx(p, st, v, x ?? p.x, y ?? p.y, base, owner); } finally { this.rareIn = false; }
   },
   // 晶片發動了（迴旋折返、環繞放出、地雷衝出去…；發動點寫在各晶片的程式裡）：發動時的詞條＋充能
   rareAct(base, x, y, owner) { this.rareRun('act', base, owner, x, y); this.rareRun('charge', base, owner, x, y); },
