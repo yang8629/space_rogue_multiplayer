@@ -1,6 +1,6 @@
 // 星環電路 整局模擬的電腦（做選擇）
 //   在遊戲的全域範圍裡執行（runsim／botsim／qasim 用 vm.runInThisContext，coopsim 每份遊戲各一份 vm context），由 bot/load.js 載入
-//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、socketsOf、chipId、hasLv、compsFor、rareOf、mergeRare、pick、randInt
+//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、EVENTS、socketsOf、chipId、hasLv、compsFor、rareOf、mergeRare、pick、randInt
 
 // 倉庫裡的晶片填進電路的空格（中等玩家：有空格就裝上）
 // 晶片分數：晶片價值表（botsim --value：chipvalue_base.json）裡這把武器、最接近現在難度的「速度 ÷ √掉血」
@@ -270,13 +270,19 @@ function chooseNode() {
 
 
 // ？事件選哪個選項（EVENTS 的 opts 順序；最後一個是離開）：血夠才冒險
+//   回傳選項順序（第一個選得了的就選）
 const EV_PICK = {
-  wreck: hp => hp > 0.5 ? 0 : 1,
-  market: hp => hp > 0.5 && G.credits >= G.marketPrice() ? 0 : 1,
-  sos: hp => hp > 0.6 ? 0 : 1,
-  ward: () => 0,
-  chart: () => 0,
+  wreck: hp => hp > 0.75 ? [1, 0, 2] : hp > 0.5 ? [0, 2] : [2],  // 血很多才拆反應爐
+  market: hp => hp > 0.5 ? [0, 1, 2, 3] : [1, 2, 3],
+  sos: hp => hp > 0.7 ? [0] : hp > 0.5 ? [1] : [2],
+  ward: hp => hp < 0.5 ? [1] : [0],
+  chart: hp => hp > 0.6 ? [1, 0] : [0],
 };
+function eventPick() {
+  if (G.ev.res) { G.evNext(); return; }
+  const E = EVENTS[G.ev.id], order = [...EV_PICK[G.ev.id](G.player.hp / G.player.maxHp), ...E.opts.keys()];
+  for (const i of order) { G.evChoose(i); if (G.state !== 'event' || (G.ev && G.ev.res)) return; }
+}
 
 // 非戰鬥畫面（單人、雙人共用）：獎勵三選一、精英獎勵、補給站、改裝廠、軍械台、維修站／黑洞、編輯器；
 //   旗艦勝利畫面只做二選一（前往下一星區由呼叫的人決定）。回傳 true = 有處理
@@ -303,7 +309,7 @@ function handle() {
     const W = WEAPONS[G.weapon.id];
     if (G.weaponStage() < 2) G.upgradeWeapon(pickUpgrade());  // 試裝挑最好的路線（第一段往後看一步）（bot/value.js；以前隨機）
     else G.armoryBonus();
-  } else if (st === 'event') G.evChoose(EV_PICK[G.ev.id](G.player.hp / G.player.maxHp));
+  } else if (st === 'event') eventPick();
   else if (st === 'blackhole' || st === 'repair') G.showMap();
   else if (st === 'victory') bossPick();
   else if (st === 'editor') closeEditor();

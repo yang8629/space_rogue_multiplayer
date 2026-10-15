@@ -103,7 +103,7 @@ const Game = {
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
-    this.boons = cleanBoons(); this.sos = false;  // ？事件拿到的這一局效果（黑市、終焉護殼的次數，見 mechStats）；sos：回應了求救訊號（下一場戰鬥變難）
+    this.boons = cleanBoons(); this.sos = null;  // ？事件拿到的這一局效果（黑市、終焉護殼的次數，見 mechStats）；sos：下一場戰鬥變難（見 addSos）
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
     if (this.freePlay()) this.chapterId = 1;  // 靶場、沙盒用不到章節（雙人的章號由 Net 在開局前設好）
@@ -199,10 +199,10 @@ const Game = {
       case 'combat': {  // 第幾區有：treasure 寶藏無人機、swarm 蟲潮、intrude 精英亂入（0 = 這場沒有；亂入只在 3 區的戰鬥、第 2 區以後）
         const n = 2 + (L >= 3 || this.sector > 1 ? 1 : 0), roll = (p, lo = 1) => lo <= n && Math.random() < p ? randInt(lo, n) : 0;
         this.startCombat({ level, wavesTotal: n, elites: 0, treasure: roll(CFG.TREASURE.chance), swarm: roll(CFG.SWARM.chance), intrude: n >= 3 ? roll(CFG.INTRUDE.chance, 2) : 0,
-          hoard: !!node.hoard, sos: this.takeSos() });  // hoard：星圖情報標出的寶藏星域（每一區都有寶藏無人機）
+          hoard: !!node.hoard, ...this.takeSos() });  // hoard：星圖情報標出的寶藏星域（每一區都有寶藏無人機）
         break;
       }
-      case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1, sos: this.takeSos() }); break;
+      case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1, ...this.takeSos() }); break;
       case 'event':  this.openEvent(node); break;
       case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
       case 'shop':   this.openShop(); break;
@@ -222,7 +222,6 @@ const Game = {
   startCombat(cfg) {
     this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
       wavesTotal: Infinity, elites: 0 }, cfg);
-    if (this.combat.sos) this.combat.bonus = ['sos'];  // 求救訊號：打贏保證稀有（跟寶藏無人機一樣記在 bonus）
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 灰血（堡壘號）每場重算
     this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.decoys = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
@@ -259,7 +258,7 @@ const Game = {
       return;
     }
     let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopMul(CFG.COOP_COUNT, C.level) : 1);  // 雙人：敵人數量 ×2 → ×2.5（隨難度）
-    if (C.sos) budget *= CFG.EVENT.sos.mul;  // 求救訊號：敵人變多
+    if (C.sos) budget *= C.sos;  // 求救訊號、星圖情報被發現：敵人變多（倍數）
     const eliteArea = !C.sandbox && C.elites > 0 && n === C.wavesTotal;  // 精英戰的最後一區是精英的場子：只帶少量護衛
     if (eliteArea) budget *= CFG.ELITE_ESCORT;
     const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
@@ -293,7 +292,7 @@ const Game = {
       const R = C.eliteRolls[0];
       bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, R.map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　'), 3);
     } else if (C.swarmArea) bannerFx('⚠ 蟲潮', `${bText}：大群脆弱的蟲群湧過來`, 2.5);
-    else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : n === 1 ? [C.sos && `📡 求救訊號：敵人 +${Math.round((CFG.EVENT.sos.mul - 1) * 100)}%`, C.hoard && '✦ 寶藏星域：每一區都有寶藏無人機'].filter(Boolean).join('　') : '', 2);
+    else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : n === 1 ? [C.sos && `⚠ 追兵：敵人 +${Math.round((C.sos - 1) * 100)}%`, C.hoard && '✦ 寶藏星域：每一區都有寶藏無人機'].filter(Boolean).join('　') : '', 2);
   },
   // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
   pickThemes(sector, late) {
@@ -440,14 +439,16 @@ const Game = {
       this.view();
       return;
     }
-    const B = this.combat.bonus || [], add = B.reduce((n, k) => n + CFG.BONUS[k].rare, 0);  // 戰鬥中打到的稀有保證（寶藏無人機、精英亂入）
-    this.openReward(type === 'elite' ? 'elite' : 'combat', add ? { rareAdd: add, note: `✦ ${B.map(k => CFG.BONUS[k].note).join('、')}：保證 ${add} 格稀有晶片` } : {});
+    // 稀有保證：戰鬥中打到的（寶藏無人機、精英亂入，房主告訴大家）＋自己回應求救訊號的獎勵（每個人照自己選的，見 addSos）
+    const S = CFG.EVENT.sos[this.combat.sosKey] || {}, B = [...(this.combat.bonus || []), ...(S.bonus ? [S.bonus] : [])], add = B.reduce((n, k) => n + CFG.BONUS[k].rare, 0);
+    this.openReward(type === 'elite' ? 'elite' : 'combat', { again: S.again || 0, ...(add ? { rareAdd: add, note: `✦ ${B.map(k => CFG.BONUS[k].note).join('、')}：保證 ${add} 格稀有晶片` } : {}) });
     this.view();
   },
   // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
   // 保底：電路有空格時，零件只會出現在最後一格；上一次三選一沒有玩法晶片，這一次一定有（刷新也算一次）
   // 稀有晶片：見 withRare（kind = CFG.REWARDS 的種類，決定保證幾格稀有；rareAdd = 再多保證幾格，打掉寶藏無人機）
   rewardOptions(kind = 'combat', rareAdd = 0) {
+    if (CFG.REWARDS[kind].parts) return pickN(PART_IDS, 3).map(k => 'part:' + k);  // 黑市的走私零件
     const offers = this.chipOffers(), chips = pickN(offers, 3), parts = pickN(PART_IDS, 3), empty = this.chain.includes(null);
     const out = this.withComp([0, 1, 2].map(i => (!empty || i === 2) && Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i])));  // 晶片的插座數在這裡決定
     const isPlay = id => !String(id).startsWith('part:') && hasLv(id);
@@ -598,6 +599,7 @@ const Game = {
   afterReward(msg) {
     const R = this.reward;
     this.reward = null;
+    if (R && R.again > 0) { this.openReward('combat', { again: R.again - 1, note: `${msg || ''}<br>📡 護送的謝禮：再選一次` }); this.view(); return; }  // 求救訊號「只護送」：打贏多一次三選一
     if (!R || R.after !== 'victory') return this.showMap(msg);
     const V = this.victory;
     V.rew = true;
@@ -823,25 +825,54 @@ const Game = {
   openEvent(node) {
     const E = EVENTS[node.ev];
     if (!E) { this.showMap(); return; }
-    if (E.enter) E.enter(this, node);
     this.ev = { id: node.ev, node };
     this.state = 'event';
     this.view();
   },
-  // 選第 i 個選項：選項的 go 回傳 true = 已經打開下一個畫面（三選一），回傳文字 = 回到航圖顯示這段提示
+  // 選第 i 個選項（回傳值見 data/events.js 開頭）：賭運氣的結果先留在事件畫面揭曉（ev.res），按「繼續」才到 evNext
   evChoose(i) {
     const V = this.ev, E = V && EVENTS[V.id], o = E && E.opts[i];
-    if (this.state !== 'event' || !o || (o.can && !o.can(this))) return;
-    if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}`);
-    this.ev = null;
+    if (this.state !== 'event' || !o || V.res || (o.can && !o.can(this, V.node))) return;
     const r = o.go(this, V.node);
+    if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}${r && typeof r === 'object' ? ' → ' + r.msg : ''}`);
+    if (r && typeof r === 'object') { V.res = r; this.view(); return; }
+    this.ev = null;
     if (r === true) this.view(); else this.showMap(r || '');
   },
-  wreckHp() { return Math.round(this.player.maxHp * CFG.EVENT.wreck.hp); },  // 漂流殘骸：搜刮扣多少 HP
-  marketPrice() { return this.shopPrice(CFG.EVENT.market.price); },  // 黑市：價格隨星區上漲
-  // 求救訊號：全隊下一場一般戰鬥或精英戰變難（雙人：誰回應都算，告訴所有人；敵人由房主產生）
-  acceptSos() { this.sos = true; if (this.mode === 'coop') Net.sendSos(); },
-  takeSos() { const s = !!this.sos; this.sos = false; return s; },
+  evNext() {
+    const r = this.ev && this.ev.res;
+    if (this.state !== 'event' || !r) return;
+    this.ev = null;
+    if (r.then && r.then(this)) this.view(); else this.showMap(r.msg);
+  },
+  evHp(k) { return Math.round(this.player.maxHp * k); },  // 事件：最大 HP 的 k 是多少
+  evHurt(k) { const p = this.player, hp = this.evHp(k); p.hp = Math.max(1, p.hp - hp); return hp; },  // 事件扣血：最少留 1 HP
+  // 下一場一般戰鬥或精英戰變難（CFG.EVENT.sos 的 key）：全隊一起（雙人：誰觸發都告訴所有人；敵人由房主產生）
+  //   sos.mul = 全隊最大的倍數；sos.mine = 自己選的、sos.team = 隊友選的裡面倍數最大的；打贏的獎勵照自己選的，自己沒選（或選的沒獎勵）就照隊友的
+  addSos(key, fromNet = false) {
+    const S = CFG.EVENT.sos[key], cur = this.sos || { mul: 1, mine: null, team: null };
+    if (!S) return;
+    cur.mul = Math.max(cur.mul, S.mul);
+    if (fromNet) { if (!cur.team || S.mul > CFG.EVENT.sos[cur.team].mul) cur.team = key; } else cur.mine = key;
+    this.sos = cur;
+    if (!fromNet && this.mode === 'coop') Net.sendSos(key);
+  },
+  // 進下一場戰鬥：帶上變難的倍數（sos）和自己的獎勵（sosKey），用掉
+  takeSos() {
+    const S = this.sos;
+    this.sos = null;
+    return S ? { sos: S.mul, sosKey: this.sosPay(S) } : {};
+  },
+  // 打贏拿哪一種獎勵（CFG.EVENT.sos 的 key）：自己選的有獎勵就照自己的，不然照隊友的；都沒有 = null
+  sosPay(S) { const pays = k => k && (CFG.EVENT.sos[k].bonus || CFG.EVENT.sos[k].again); return pays(S.mine) ? S.mine : pays(S.team) ? S.team : null; },
+  // 星圖情報：把這幾場一般戰鬥標成寶藏星域（全隊：雙人時告訴所有人）
+  markHoard(ids, fromNet = false) {
+    const L = ids.map(id => this.nodeById(id)).filter(n => n && n.type === 'combat');
+    for (const n of L) n.hoard = true;
+    if (!fromNet && this.mode === 'coop' && L.length) Net.sendHoard(L.map(n => n.id));
+  },
+  wardOf(p) { const B = p === this.player ? this.boons : p.L ? p.L.boons : null; return B ? B.ward : p.ward || 0; },  // 還能免死幾次（隊友那邊看別人的：同步來的 p.ward）
+
   // 終焉護殼：受到致命傷害時留 1 HP、無敵一下，用掉一次（隊友的由房主判定，用掉時告訴那個隊友）
   wardSave(p) {
     const B = p.L ? p.L.boons : this.boons;

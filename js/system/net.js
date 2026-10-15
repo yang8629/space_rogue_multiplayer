@@ -667,8 +667,15 @@ const Net = {
         break;
       case 'lo': if (host) this.applyMateLoadout(m, q); break;
       case 'sos':
-        Game.sos = true;
-        if (host) for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'sos' });
+        if (typeof m.k !== 'string' || !Object.prototype.hasOwnProperty.call(CFG.EVENT.sos, m.k)) break;
+        Game.addSos(m.k, true);
+        if (host) for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'sos', k: m.k });
+        if (Game.state === 'map') Screen.map();
+        break;
+      case 'hoard':
+        if (!Array.isArray(m.ids) || !Game.map) break;
+        Game.markHoard(m.ids.filter(id => typeof id === 'string').slice(0, 4), true);
+        if (host) for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'hoard', ids: m.ids });
         if (Game.state === 'map') Screen.map();
         break;
       case 'ward':
@@ -843,8 +850,9 @@ const Net = {
       return map.flat().every(n => n.next.every(id => ids.has(id))) ? map : null;
     } catch (e) { return null; }
   },
-  // 求救訊號（？事件）：誰回應都算全隊的；房主轉告其他隊友
-  sendSos() { if (this.linked) this.send({ t: 'sos' }); },
+  // 下一場變難（？事件的求救訊號、星圖情報被發現）、寶藏星域：誰觸發都算全隊的；房主轉告其他隊友
+  sendSos(k) { if (this.linked) this.send({ t: 'sos', k }); },
+  sendHoard(ids) { if (this.linked) this.send({ t: 'hoard', ids }); },
   // 終焉護殼（？事件）：房主判定隊友 p 用掉了，告訴那個隊友
   sendWard(p) { this.sendTo(this.peers.find(q => q.slot === p.slot), { t: 'ward' }); },
   sendSector() { this.send({ t: 'sector', map: this.packMap(Game.map), bossId: Game.bossId }); },
@@ -1054,7 +1062,7 @@ const Net = {
     const row = (p, slot, parts, magnet) => [slot, r(p.x), r(p.y), r2(p.aim), r2(p.hp), p.maxHp, r2(Math.max(0, p.dashT)), r2(Math.max(0, p.iframe)),
       p.overdrive > 0 ? 1 : 0, p.moving ? 1 : 0, p.dead ? 1 : 0, r(p.vx), r(p.vy), r2(p.reviveT),
       0, p.shield || 0, p.frostT > 0 ? 1 : 0, p.revengeT > 0 ? 1 : 0,  // （空位）、護盾層數、被凍住、逆襲中
-      PART_IDS.map(id => parts[id] || 0), r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0];  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
+      PART_IDS.map(id => parts[id] || 0), r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0, Game.wardOf(p)];  // 最後：終焉護殼還能免死幾次  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
     const rows = [row(P, 1, G.parts, G.passives.magnet), ...G.mates.map(m => row(m, m.slot, m.L.parts, m.L.passives.magnet))];
     const shared = {
       ob: Objects.pack(),         // 地圖物件
@@ -1151,7 +1159,7 @@ const Net = {
       m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
       m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0; m.revengeT = p[16] ? 0.2 : 0;  // 逆襲中（畫那艘船發紅光）
       const pp = arr(p[17]); m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(pp[i]), 0, 20)]));
-      m.magnet = num(p[18], CFG.MAGNET_RANGE); m.gone = !!p[19];
+      m.magnet = num(p[18], CFG.MAGNET_RANGE); m.gone = !!p[19]; m.ward = clamp(Math.floor(num(p[20])), 0, 9);
     }
     const P = G.player;
     if (Array.isArray(s.me)) {  // 自己的血量以房主為準

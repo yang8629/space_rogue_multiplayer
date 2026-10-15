@@ -105,6 +105,7 @@ function oneRun(s) {
         randomEquip();
       } else if (st === 'event') {
         G.evChoose(Math.floor(Math.random() * require('vm').runInThisContext('EVENTS')[G.ev.id].opts.length));
+        if (G.state === 'event' && G.ev && G.ev.res) G.evNext();  // 賭運氣的結果：繼續
         if (G.state === 'event') G.showMap();  // 選不了（黑市錢不夠）：離開
       } else if (st === 'repair') G.showMap();
       else if (st === 'victory') {

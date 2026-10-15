@@ -233,6 +233,12 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(176, 186, 206, 0.55)';  // 灰色
     ctx.fillRect(22 + hpW * Math.max(0, p.hp) / p.maxHp, 22, hpW * Math.min(p.drRec, p.maxHp - Math.max(0, p.hp)) / p.maxHp, 14);
   }
+  const ward = Game.wardOf(p);
+  if (ward > 0) {  // 終焉護殼（？事件）還能免死：血條金框＋右邊 ⛨
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.strokeRect(19, 19, hpW + 6, 20);
+    ctx.font = 'bold 15px Segoe UI Symbol'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffd166';
+    ctx.fillText('⛨' + (ward > 1 ? '×' + ward : ''), hpW + 32, 35);
+  }
   ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
   ctx.fillText(`HP ${Math.ceil(p.hp)} / ${p.maxHp}`, 28, 33);
   // 衝刺冷卻
@@ -284,7 +290,7 @@ function drawHUD() {
     ctx.fillStyle = m.dead ? '#555' : Game.colorOf(m); ctx.fillRect(22, y + 2, mw * Math.max(0, m.hp) / m.maxHp, 8);
     ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = m.dead ? '#ff4d6d' : '#cfe8ff';
     ctx.fillText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
-      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}`, mw + 32, y + 11);
+      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`, mw + 32, y + 11);  // ⛨：還有終焉護殼
   });
 
   ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;

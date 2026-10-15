@@ -30,6 +30,7 @@ const REWARD_TITLE = {
   elite: () => '☠ 精英擊破：三選一（或電路擴充）',
   boss: () => '♛ 旗艦擊沉：三選一（選完再領旗艦獎勵）',
   event: () => '? 事件：三選一（晶片或零件）',
+  eventPart: () => '⚖ 黑市：零件三選一',
 };
 const REVEAL_MS = 1600;  // 揭曉動畫：有稀有晶片時，其他卡先翻開，稀有那格醞釀到這時候才翻開
 // 稀有版本、身上已經有這個晶片：身上那個變稀有。已有不同詞條時兩個按鈕：替換（新詞條從 1 級）／增強（原本的 +1 級）
@@ -131,6 +132,7 @@ const Screen = {
       case 'slot': Game.expandSlot(arg); break;
       case 'bhpick': Game.bhToggle(arg); break;
       case 'evopt': Game.evChoose(+arg); break;
+      case 'evnext': Game.evNext(); break;
       case 'bhfuse': Game.bhFuse(); break;
       case 'bossslot': Game.pickBossSlot(arg); break;
       case 'next': {
@@ -294,7 +296,8 @@ const Screen = {
   event() {
     const V = Game.ev, E = V && EVENTS[V.id];
     if (!E) return;
-    const btns = E.opts.map((o, i) => `<button class="${i === 0 ? 'big ' : ''}ev-opt" data-act="evopt" data-arg="${i}" ${o.can && !o.can(Game) ? 'disabled' : ''}>${o.txt(Game)}</button>`).join('');
+    const btns = V.res ? `<div class="ev-res" style="color:${V.res.color}">${V.res.msg}</div><button class="big" data-act="evnext">繼續</button>`  // 賭運氣的結果
+      : E.opts.map((o, i) => `<button class="${i === 0 ? 'big ' : ''}ev-opt" data-act="evopt" data-arg="${i}" ${o.can && !o.can(Game, V.node) ? 'disabled' : ''}>${o.txt(Game, V.node)}</button>`).join('');
     this.show(`<div class="scr">
       <div class="between"><div><h2 style="color:${E.color}">${E.icon} ${E.name}</h2><div class="sub">? 事件</div></div>${this.status()}</div>
       <div class="ev-text" style="border-color:${E.color}">${E.text(Game, V.node)}</div>
@@ -433,7 +436,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
           　·　<span id="voteTimer">${left != null ? `剩 ${left} 秒` : ''}</span>　·　${others.length > 1 ? '選不同就照票數比例抽籤' : '兩人選不同就各 50% 抽籤'}；時間到沒投的不算</div>`;
       })() : ''}
       <div class="map"><svg>${lines}</svg>${nodes}</div>
-      ${Game.sos ? `<div class="sub" style="color:${EVENTS.sos.color}">${EVENTS.sos.icon} 已回應求救訊號：下一場一般戰鬥或精英戰敵人 +${Math.round((CFG.EVENT.sos.mul - 1) * 100)}%，打贏保證稀有晶片</div>` : ''}
+      ${Game.sos ? `<div class="sub" style="color:${EVENTS.sos.color}">⚠ 追兵：下一場一般戰鬥或精英戰敵人 +${Math.round((Game.sos.mul - 1) * 100)}%${(k => k ? `；${sosTxt(k).split('，').slice(1).join('，')}` : '')(Game.sosPay(Game.sos))}</div>` : ''}
       <div class="toast">${toast}</div>
       <details class="nlegs" open><summary>節點介紹</summary><div class="nleg-grid">${legend}</div></details></div>`);
   },
