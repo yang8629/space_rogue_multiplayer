@@ -22,6 +22,13 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (hd < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (hive.x - p.x) / hd * 60, y: (hive.y - p.y) / hd * 60 };
     if (!E.some(e => e !== hive && Math.hypot(e.x - p.x, e.y - p.y) < 150)) { near = hive; nd = hd; }
   }
+  // 警報艇被打到、正在倒數（CFG.ALARM）：真人會先集火打掉（響完整區都醒）。瞄準它；身邊 150 內沒有其他敵人時走位也以它為準
+  const alm = E.find(e => e.t.alarm && e.ringT > 0);
+  if (alm) {
+    const ad = Math.hypot(alm.x - p.x, alm.y - p.y) || 1;
+    if (ad < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (alm.x - p.x) / ad * 60, y: (alm.y - p.y) / ad * 60 };
+    if (!E.some(e => e !== alm && Math.hypot(e.x - p.x, e.y - p.y) < 150)) { near = alm; nd = ad; }
+  }
   // 寶藏無人機會逃、15 秒後躍遷離開：真人看到會去追。身邊 150 內沒有其他敵人時，瞄準和走位都以它為準
   const tre = E.find(e => e.t.treasure);
   if (tre && !E.some(e => e !== tre && Math.hypot(e.x - p.x, e.y - p.y) < 150)) {
@@ -190,8 +197,17 @@ function goExit(p) {
   let dx = d ? d[0] : X.x - p.x, dy = d ? d[1] : X.y - p.y;
   if (d && AR.f(p.x, p.y) < 24) { const [gx, gy] = AR.grad(p.x, p.y); dx += gx; dy += gy; }  // 貼著牆（離牆不到 24 的格子算走不到，出口方向會指進牆角、沿牆來回滑；2026-10-10）：先往外退
   const S = exitStuck;
-  if (!S.t0 || G.time < S.t0 || Math.hypot(p.x - S.x, p.y - S.y) > 20) { S.x = p.x; S.y = p.y; S.t0 = G.time; }
-  else if (G.time - S.t0 > 1.5) {
+  // 進度：照繞牆路線離閘門還有幾格（Arena.exitFlow），4 秒沒有更接近也算卡住（2026-10-16：貼牆的格子算不到步數，出口方向在兩格之間來回跳，
+  //   飛船來回擺 40、只看位移抓不到，卡 278 秒）
+  if (d) {
+    const F = AR.exitFlow, C = OBJ.FLOW_CELL, st = F ? F.dist[Math.floor(p.y / C) * F.W + Math.floor(p.x / C)] : -1;
+    if (S.bk !== p.zone || G.time < S.bt) { S.bk = p.zone; S.best = Infinity; S.bt = G.time; }
+    if (st >= 0 && st < S.best) { S.best = st; S.bt = G.time; }
+  }
+  const noGain = !!d && G.time - S.bt > 4, moved = !S.t0 || G.time < S.t0 || Math.hypot(p.x - S.x, p.y - S.y) > 20;
+  if (moved) { S.x = p.x; S.y = p.y; S.t0 = G.time; }
+  if ((!moved && G.time - S.t0 > 1.5) || noGain) {
+    S.bt = G.time;
     // 連續卡住就閃久一點（2026-10-10：出口方向指進牆角，閃 0.6 秒只離開 20 又飛回去，卡 200 秒）；離開卡住的地方 5 秒以上歸零
     S.k = G.time - (S.last || -99) < 5 ? (S.k || 0) + 1 : 0; S.last = G.time;
     S.until = G.time + Math.min(2, 0.6 * (1 + S.k)); S.side = Math.random() < 0.5 ? 1 : -1; S.t0 = G.time;
@@ -240,6 +256,8 @@ function flankShield(p) {
 //   （第一版只看 threat、100 內沒敵人：站著被打，4 局全死在第 1 星區，不停的 4 局都到第 2 星區）
 function standBot(p) {
   if (!hasChip('stand') || threat > 0 || navOn || Input.dash) return;
+  // 久打不到（stalled）就不站：讓 baseBot 壓過去的移動生效（2026-10-16：停在黑洞旁邊架設，最後一隻蟲群繞著黑洞外圈打不到、子彈被黑洞吞掉，卡 278 秒）
+  if (stalled()) return;
   const wp = G.wp, reach = Math.min(wp.speed * wp.life * (hasChip('accel') ? 1.5 : 1) + 40, CFG.AUTO_RANGE);
   for (const b of G.eBullets) {
     const rx = p.x - b.x, ry = p.y - b.y, d = Math.hypot(rx, ry), v = Math.hypot(b.vx, b.vy) || 1;

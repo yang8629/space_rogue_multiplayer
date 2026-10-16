@@ -547,9 +547,13 @@ const ENEMY_TYPES = {
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 0, shape: 5 },   // 死掉時分成 3 隻碎裂體（本體不掉晶體，晶體都在碎裂體身上）
   splitling:{ name: '碎裂體', hp: 30, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },  // 每隻掉 1 顆（一隻分裂體總共 3 顆，跟以前一樣）
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
-  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true },      // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不算玩法擊殺）
+  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true, idleAct: true },  // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不算玩法擊殺）；待機時也照生（生出來的在旁邊晃，idleAct）
   // 寶藏無人機（CFG.TREASURE）：不攻擊、沒有撞擊傷害、不掉晶體，往離玩家的反方向逃；打掉這場的三選一保證稀有晶片
-  treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 18, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true },
+  //   awake：沒有待機（出場就逃，見 CFG.ALERT）
+  treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 18, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true, awake: true },
+  // 警報艇（CFG.ALARM）：不攻擊、沒有撞擊傷害，一直在出生點附近晃；被打到開始響，響完叫醒這一區所有待機的敵人
+  //   idleAct：待機時也照自己的行為（THEME_AI）動
+  alarm:   { name: '警報艇', hp: 54, speed: 60, radius: 15, dmg: 0, color: '#ff3b3b', credits: 3, shape: 4, alarm: true, idleAct: true },
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
@@ -588,6 +592,7 @@ class Enemy {
     this.burnT = 0; this.burnDps = 0; this.burnAcc = 0; this.slowT = 0; this.slowAmt = 0; this.slows = null; this.burnL = null; this.shredT = 0; this.shredAmt = 0;
     this.mode = type === 'lurker' ? 'stalk' : 'chase'; this.skillCd = 2.5; this.nextSkill = 'charge'; this.modeT = 0; this.chargeA = 0;
     this.affixes = null;  // 精英詞綴（affixes.js）：出生時由 setAffixes 設定
+    this.alert = true; this.home = null; this.alertT = 0;  // 警戒（CFG.ALERT）：分區的戰鬥由 spawnEnemy 改成待機（alert = false、home = 出生點）；alertT = 頭上「!」還顯示幾秒
     this.dead = false;
   }
   has(id) { return !!this.affixes && this.affixes.includes(id); }
@@ -726,6 +731,7 @@ class Enemy {
     }
     if (this.slows) this.slowTick(dt);
     if (this.markT > 0) this.markT -= dt;
+    if (this.alertT > 0) this.alertT -= dt;
     if (this.shredT > 0) this.shredT -= dt;
     this.spdMul = this.slowT > 0 ? 1 - this.slowAmt : 1;
     if (this.ledT > 0) { this.ledT -= dt; this.spdMul *= AFFIX.command.speed; }  // 精英「統帥」身邊的小兵
@@ -746,6 +752,7 @@ class Enemy {
     }
     const dx = p.x - this.x, dy = p.y - this.y, d = Math.hypot(dx, dy) || 1;
     this.rot += dt * (this.type === 'brute' ? 0.8 : this.type === 'elite' ? 1.5 : this.type === 'boss' ? 0.4 : this.type === 'gunboat' ? 0.5 : 0);
+    if (!this.alert && this.idle(dt, d)) return;
     if (t.boss) { this.updateBoss(dt, dx, dy, d); return; }
     if (this.type === 'brute' && this.updateBrute(dt, dx, dy, d)) return;
     if (THEME_AI[this.type] && THEME_AI[this.type].call(this, dt, p, dx, dy, d)) return;
@@ -793,7 +800,7 @@ class Enemy {
       this.losBlk = !!((Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) || Arena.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8));
     }
     const blocked = this.losBlk;
-    if (blocked) { const f = Objects.flowDir(this, p); if (f) [bx, by] = f; }
+    if (blocked) { const f = Objects.flowDir(this, p); if (f) [bx, by] = f; } else this.flowEsc = false;
     let mx = bx, my = by;
     if (this.type === 'swarmer') {
       const w = Math.sin(Game.time * 6 + this.phase) * (blocked ? 0.25 : 0.6);
@@ -821,6 +828,24 @@ class Enemy {
     this.vy += (my / ml * t.speed * this.spdMul * endlessSpd() - this.vy) * k;
     this.move(dt);
   }
+  // 待機（CFG.ALERT）：d = 離目標（最近的玩家或殘影）多遠。看到了就醒、回傳 false（這一幀照常行動）
+  //   列隊蟲的身體照舊跟著前一節走（頭待機就一起晃）；idleAct 的（母巢、警報艇）照自己的行為；其他在出生點附近晃
+  idle(dt, d) {
+    if (d < CFG.ALERT.see) { Game.wakeEnemy(this); return false; }
+    if (this.ahead || this.t.idleAct) return false;
+    this.wander(dt);
+    return true;
+  }
+  // 在 home 附近 CFG.ALERT.wander 內慢慢晃：到了（或 1.5～3 秒）換下一個點
+  wander(dt) {
+    const A = CFG.ALERT, h = this.home || (this.home = [this.x, this.y]);
+    if (!this.wanderTo || (this.wanderT -= dt) <= 0 || dist2(this.x, this.y, this.wanderTo[0], this.wanderTo[1]) < 100) {
+      const a = rand(0, TAU), r = rand(0, A.wander);
+      this.wanderTo = [h[0] + Math.cos(a) * r, h[1] + Math.sin(a) * r]; this.wanderT = rand(1.5, 3);
+    }
+    if (this.t.speed > 0) this.steerMove(dt, this.wanderTo[0] - this.x, this.wanderTo[1] - this.y, this.t.speed * A.slow);
+    else this.vx = this.vy = 0;
+  }
   // 往 (mx, my) 方向走（繞開黑洞），速度 sp；主題小兵共用
   steerMove(dt, mx, my, sp, k = 4) {
     if (Game.objs.length) [mx, my] = Objects.steer(this, mx, my);
@@ -831,6 +856,7 @@ class Enemy {
   // 追向 p 的方向：看不到（中間有行星、小行星）時照尋路方向
   chaseDir(p, dx, dy, d) {
     if ((Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) || Arena.losBlocked(this.x, this.y, p.x, p.y, this.r * 0.8)) { const f = Objects.flowDir(this, p); if (f) return f; }
+    this.flowEsc = false;
     return [dx / d, dy / d];
   }
   // ---------- 刺殼：平常慢慢走；靠近時縮成球（有預警線）→ 高速滾向玩家（撞牆反彈一次）→ 暈眩 ----------
@@ -1053,6 +1079,8 @@ class Enemy {
     if (vul > 0) dmg *= 1 + vul;
     if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
+    if (!this.alert) Game.wakeEnemy(this);  // 待機中被打到：醒來，叫醒身邊的同伴
+    if (this.t.alarm && this.ringT == null) this.ringT = CFG.ALARM.delay;  // 警報艇：開始響（倒數完叫醒整區，見 THEME_AI.alarm）
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
     this.hp -= dmg; this.flash = 0.08;
@@ -1139,6 +1167,12 @@ const THEME_AI = {
     this.steerMove(dt, fx - fy * w, fy + fx * w, this.t.speed * (d < T.near ? 1 : T.farMul));
     return true;
   },
+  alarm(dt) {  // 警報艇：一直在出生點附近晃（不追、不逃、不攻擊）；被打到（hurt 設 ringT）倒數 CFG.ALARM.delay 秒，響完叫醒這一區（只響一次）
+    if (this.ringT > 0 && (this.ringT -= dt) <= 0) Game.alarmRing(this);
+    this.modeT = this.ringT > 0 ? this.ringT : 0;  // 還剩幾秒響（同步給隊友：畫面閃紅）
+    this.wander(dt);
+    return true;
+  },
   hive(dt) {  // 不會動（擊退、吸引都推不動）；每 4 秒生 2 隻蟲群（同時最多 8 隻）
     this.vx = 0; this.vy = 0;
     this.cd -= dt * endlessAtk();
@@ -1148,6 +1182,7 @@ const THEME_AI = {
     for (let i = 0; i < 2 && this.kids.length < 8; i++) {
       const a = rand(0, TAU), k = new Enemy('swarmer', ...Arena.clampIn(this.x + Math.cos(a) * 45, this.y + Math.sin(a) * 45, 40), this.hpScale);
       k.summoned = true; k.noPlay = true;  // 不掉晶體、不算玩法擊殺（不然可以一直刷）
+      k.zone = this.zone; k.alert = this.alert; if (!k.alert) k.home = [this.x, this.y];  // 母巢待機：生出來的在母巢旁邊晃，母巢醒了一起醒（Game.wakeEnemy）
       this.kids.push(k); Game.enemies.push(k);
     }
     burst(this.x, this.y, this.t.color, 10, 120, 0.4, 2);

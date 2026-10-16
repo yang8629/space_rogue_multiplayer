@@ -37,6 +37,7 @@ function enemyFrames() {
   anim('lurker', 3.3, 4, TAU / 9, (c, col, r, t) => drawLurker(c, col, r, t));
   anim('hive', 1.7, 16, 4, (c, col, r, t) => drawHiveNest(c, col, r, t));
   anim('treasure', 2.2, 8, 0.8, (c, col, r, t) => drawTreasure(c, col, r, t));
+  anim('alarm', 2.4, 8, 1, (c, col, r, t) => drawAlarm(c, col, r, t));
   anim('dummy', 1.6, 1, 1, (c, col, r) => drawDummy(c, col, r, 0));
   anim('boss', 1.05, 16, 2, (c, col, r, t) => artBoss1Body(c, col, r, t));
   sq('e/boss_ring/0', E('boss').r * 1.27, R, c => artBoss1Ring(c, E('boss').col, E('boss').r));

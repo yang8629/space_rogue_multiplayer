@@ -70,6 +70,7 @@ const ENEMIES = [
   { id: 'lurker', name: '潛伏者', col: '#9d8cff', n: 3, r: 12, note: '光學迷彩：幾乎透明、折射的彩色輪廓、一對發光的眼、兩把前伸的利爪', face: true },
   { id: 'hive', name: '母巢', col: '#e05d2e', n: 9, r: 30, note: '活的巢穴：觸根抓地、脈動血管、4 個孵化口輪流張開（看得到蟲群）、中央跳動的心臟' },
   { id: 'treasure', name: '寶藏無人機', col: '#ffd166', n: 4, r: 18, note: '金色運輸艇：兩側推進器、中間載著發光的晶體貨艙、周圍閃光', face: true },
+  { id: 'alarm', name: '警報艇', col: '#ff3b3b', n: 6, r: 15, note: '偵察艇：金屬藍灰六角機身、兩根天線（紅燈）、中央紅色警示燈，燈光旋轉掃過（被打到時轉得很快）' },
   { id: 'dummy', name: '標靶', col: '#9fb4ff', n: 8, r: 18, note: '練習用無人機：靶面＋三腳支架＋彈痕' },
   { id: 'boss', name: '星噬母艦', col: '#ff4d6d', n: 8, r: 50, note: '有機機械母艦：機庫艙門輪流打開（看得到蟲群）、外圈螺旋砲環、中央豎瞳大眼', boss: 4 },
   { id: 'boss2', name: '裂界獵艦', col: '#b388ff', n: 3, r: 42, note: '刀刃狀戰艦：中線發光的裂界縫、長狙擊炮管、兩側推進器和吊艙', boss: 3 },
@@ -83,7 +84,7 @@ function artEnemy(ctx, E, t) {
     return;
   }
   const c = E.col;
-  const NEWDRAW = { swarmer: drawSwarmer, spitter: drawSpitter, gunboat: drawGunboat, worm: drawWorm, worm_cut: drawWormCut, lurker: drawLurker, treasure: drawTreasure, dummy: drawDummy, boss: drawBoss1, boss2: drawBoss2, boss3: drawBoss3 };
+  const NEWDRAW = { swarmer: drawSwarmer, spitter: drawSpitter, gunboat: drawGunboat, worm: drawWorm, worm_cut: drawWormCut, lurker: drawLurker, treasure: drawTreasure, alarm: drawAlarm, dummy: drawDummy, boss: drawBoss1, boss2: drawBoss2, boss3: drawBoss3 };
   if (NEWDRAW[E.id]) { ctx.save(); if (E.id !== 'boss3') ctx.rotate(E.id === 'boss' || E.id === 'gunboat' ? 0 : rot); NEWDRAW[E.id](ctx, c, E.r, spin); ctx.restore(); return; }
   if (E.id === 'worm') {  // 6 節：後面的跟著前一節蛇行
     for (let i = 5; i >= 0; i--) {
@@ -428,6 +429,29 @@ function drawLurker(ctx, c, r, t) {
     ctx.fillStyle = 'rgba(220,215,255,0.75)'; ctx.fill(); ctx.strokeStyle = '#03050c'; ctx.lineWidth = 1; ctx.stroke();
   }
   for (const sg of [-1, 1]) { glow(ctx, r * 0.55, sg * r * 0.2, 7, '#c9bfff', 0.9); ctx.fillStyle = '#f0ecff'; ctx.beginPath(); ctx.ellipse(r * 0.55, sg * r * 0.2, 2.2, 1, sg * 0.4, 0, TAU); ctx.fill(); }
+}
+// 警報艇：金屬藍灰六角機身、兩根天線、中央紅色警示燈；t（0～1）= 燈光轉到哪（掃過的光束用加法）
+function drawAlarm(ctx, c, r, t) {
+  const a = t * TAU;
+  for (const sg of [-1, 1]) {  // 天線：金屬桿＋紅燈
+    const ax = sg * r * 0.55, ay = -r * 0.95, tx = sg * r * 0.9, ty = -r * 1.45;
+    ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(tx, ty); ctx.strokeStyle = '#03050c'; ctx.lineWidth = 4; ctx.stroke(); ctx.strokeStyle = '#7d89a8'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineCap = 'butt';
+    glow(ctx, tx, ty, 6, c, 0.8); ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.arc(tx, ty, 2.8, 0, TAU); ctx.fill(); ctx.fillStyle = '#ff9a9a'; ctx.beginPath(); ctx.arc(tx, ty, 1.8, 0, TAU); ctx.fill();
+  }
+  const g = ctx.createLinearGradient(-r, -r, r, r); g.addColorStop(0, '#b4bfd9'); g.addColorStop(1, '#2a3150');
+  faceted(ctx, polyPts(6, r, Math.PI / 6), '#6a7896', { outline: 3 });  // 機身（金屬藍灰）
+  ctx.save(); ctx.globalAlpha = 0.35; ctx.fillStyle = g; ctx.beginPath(); polyPts(6, r * 0.96, Math.PI / 6).forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); ctx.restore();
+  ctx.strokeStyle = '#03050c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, TAU); ctx.stroke();  // 燈座
+  ctx.strokeStyle = c; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, TAU); ctx.stroke();
+  ADD(ctx, () => {  // 旋轉的光束（兩道相對）
+    for (const k of [0, Math.PI]) {
+      const b = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.3); b.addColorStop(0, rgba('#ff6b6b', 0.55)); b.addColorStop(1, rgba('#ff6b6b', 0));
+      ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 2.3, a + k - 0.32, a + k + 0.32); ctx.closePath(); ctx.fill();
+    }
+  });
+  glow(ctx, 0, 0, r * 1.1, c, 0.7);
+  faceted(ctx, polyPts(8, r * 0.46, a), c, { outline: 2, bright: 0.6 });  // 警示燈罩
+  ADD(ctx, () => { ctx.fillStyle = rgba('#ffffff', 0.75); ctx.beginPath(); ctx.arc(-r * 0.12, -r * 0.12, r * 0.13, 0, TAU); ctx.fill(); });
 }
 // 標靶：練習用無人機（靶面＋三腳支架＋彈痕）
 function drawDummy(ctx, c, r, t) {

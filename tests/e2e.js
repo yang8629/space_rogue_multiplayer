@@ -87,6 +87,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 // ---- 跑完整個星區：投票 → 進節點 → 處理 → 回航圖 ----
 const both = f => { f(HA); f(HB); };
 let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
+let alertChecked = false;  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
   const G = H.Game;
@@ -168,6 +169,14 @@ while (!sector2 && guard++ < 40) {
       GA.boons.ward = 0;
       P.iframe = M.iframe = 0;
       P.hp = P.maxHp = 1e6; M.hp = M.maxHp = 1e6;
+    }
+    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
+      alertChecked = true;
+      HA.Game.spawnEnemy('alarm'); const al = HA.Game.enemies[HA.Game.enemies.length - 1]; al.spawnT = 0;
+      const idle = !al.alert;
+      al.hurt(1, 0, 0, 'direct', null); step(3);
+      const cb = HB.Game.enemies.find(e => e.id === al.id);
+      ok(idle && cb && cb.alertT > 0 && cb.modeT > 0, `alert: idle on spawn, client sees "!" and the alarm ringing (${idle} ${cb && cb.alertT} / ${cb && cb.modeT})`);
     }
     step(10);
     ok(HB.Game.objs.length === HA.Game.objs.filter(o => o.type !== 'cometgen').length, `map objects synced (${HB.Game.objs.map(o => o.type).join(',') || 'none'})`);

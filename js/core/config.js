@@ -43,6 +43,12 @@ const CFG = {
   SWARM: { chance: 0.15, count: 1.6, hp: 0.5, gap: 0.05, clump: 8, jitter: 70 },
   // 精英亂入：3 區的一般戰鬥 chance 機率在第 2 區以後的隨機一區，敵人剩 at 以下（照這一區出場的數量）時闖進一隻帶詞綴的精英；打掉的獎勵見 BONUS.intrude
   INTRUDE: { chance: 0.15, at: 0.5 },
+  // 警戒（分區的一般戰、精英戰）：敵人出場後在出生點附近 wander 內慢慢晃（速度 ×slow），不追、不開火；
+  //   離最近的玩家 see 以內、或被打到就開始追，並叫醒身邊 call 以內還在待機的同伴（被叫醒的不再往外叫）；
+  //   mark：剛發現玩家時頭上「!」顯示幾秒。不待機的：表上 awake（寶藏無人機）、精英亂入、旗艦戰、沙盒、靶場
+  ALERT: { see: 450, call: 250, wander: 70, slow: 0.35, mark: 1 },
+  // 警報艇（ENEMY_TYPES.alarm）：分區的戰鬥第 from 區以後每一區 chance 機率放 1 隻；被打到開始響 delay 秒，響完叫醒這一區所有待機的敵人（倒數內打掉就不會響）
+  ALARM: { chance: 0.3, from: 2, delay: 1.5 },
   // 戰鬥中額外打到的稀有晶片保證：這場的三選一多保證 rare 格（同一場可以疊），note 寫在三選一上
   BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' }, sos: { rare: 1, note: '回應求救訊號' } },
   // ？事件節點（EVENTS，見 data/events.js）的數字：每張航圖 count 個（第 2～5 層；最少 count[0]、最多 count[1]，產生時優先挑有 2 個以上的；每條路線還是要有 3 場戰鬥）

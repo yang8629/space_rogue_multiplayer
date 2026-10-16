@@ -274,6 +274,8 @@ const Game = {
       else if (lv >= 2 && r < 0.45 && budget >= 3) { list.push('spitter'); budget -= 3; }
       else { list.push('swarmer'); budget -= 1; }
     }
+    // 警報艇（CFG.ALARM）：分區的戰鬥第 from 區以後，混在這一區的敵人裡（在精英放進來之前插：精英照舊最先出場）（蟲潮那一區不放：全是蟲群）
+    if (this.usesAreas() && !C.swarmArea && n >= CFG.ALARM.from && Math.random() < CFG.ALARM.chance) list.splice(randInt(0, list.length), 0, 'alarm');
     if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift('elite');  // 精英最先出場
     if (C.treasure === n || C.hoard) list.splice(Math.floor(list.length / 2), 0, 'treasure');  // 寶藏無人機：混在這一區的敵人中間出場
     // 沙盒：每 10 波輪流出現三隻旗艦
@@ -327,6 +329,8 @@ const Game = {
     if (swarm && !(C.clumpN > 0)) { C.clumpAt = [x, y]; C.clumpN = S.clump - 1; }  // 新的一群從這裡湧出
     const e = new Enemy(type, x, y, scale);
     if (!Arena.rect) e.zone = zone;
+    // 警戒（CFG.ALERT）：分區的戰鬥出場先待機；表上 awake 的（寶藏無人機）、精英亂入照舊直接行動
+    if (this.usesAreas() && !e.t.awake && !o.intruder) { e.alert = false; e.home = [x, y]; }
     if (swarm) e.hp = e.maxHp *= S.hp;
     if (type === 'elite') e.setAffixes(o.affixes || (C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
     this.enemies.push(e);
@@ -343,6 +347,7 @@ const Game = {
       for (let i = 1; i < 6; i++) {
         const w = new Enemy('worm', ...Arena.clampIn(x + ux * 22 * i, y + uy * 22 * i, 20), scale);
         if (!Arena.rect) w.zone = zone;
+        w.alert = e.alert;
         w.ahead = prev; prev = w; this.enemies.push(w);
       }
     }
@@ -1022,6 +1027,25 @@ const Game = {
       const i = this.inventory.indexOf(null), id = pick(COMPOSITE_IDS);
       if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
     }
+  },
+  // 警戒（CFG.ALERT）：叫醒一隻待機的敵人。call：也叫醒同一區、身邊 call 以內待機的同伴（被叫醒的不再往外叫，不會一路傳遍整區）
+  //   母巢醒了，牠生的蟲群一起醒
+  wakeEnemy(e, call = true) {
+    if (e.alert || e.dead) return;
+    e.alert = true; e.alertT = CFG.ALERT.mark;
+    Events.emit('enemyAlert', e);
+    for (const k of e.kids || []) this.wakeEnemy(k, false);
+    if (!call) return;
+    const R2 = CFG.ALERT.call ** 2;
+    for (const o of this.enemies) if (!o.alert && !o.dead && o.zone === e.zone && dist2(o.x, o.y, e.x, e.y) < R2) this.wakeEnemy(o, false);
+  },
+  // 警報艇響完（CFG.ALARM）：叫醒同一區所有待機的敵人
+  alarmRing(e) {
+    e.rang = true;
+    for (const o of this.enemies) if (!o.alert && !o.dead && o.zone === e.zone) this.wakeEnemy(o, false);
+    ringFx(e.x, e.y, 260, '#ff3b3b'); this.shake(6);
+    bannerFx('⚠ 警報', '這一區的敵人全部被叫醒了', 2);
+    Events.emit('alarm', e);
   },
   // 戰鬥中額外拿到稀有晶片保證（k = CFG.BONUS 的種類：寶藏無人機、精英亂入）：記在 combat.bonus，combatWon 時加進三選一；多人時房主在 'won' 告訴隊友
   bonusRare(e, k) {
