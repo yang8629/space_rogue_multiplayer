@@ -88,6 +88,12 @@ const GLActors = {
         main = base('treasure', 8, 0.8); if (end) main.alpha = 0.45 + 0.55 * fl;
         break;
       }
+      case 'alarm': {  // 警報艇：燈光慢慢轉；被打到開始響（modeT = 還剩幾秒）燈轉很快、紅光大閃
+        const ring = e.modeT > 0;
+        this.glowAt(this.pE, e.x, e.y, e.r * (ring ? 5 : 2.2), 0xff3b3b, (ring ? 0.35 + 0.35 * Math.abs(Math.sin(t * 18)) : 0.18) * alpha);
+        main = this.spr(this.frame('alarm', Math.floor(t * (ring ? 24 : 6)) % 8), e.x, e.y, k / 2, 0);
+        break;
+      }
       case 'dummy': main = this.spr(this.frame('dummy', 0), e.x, e.y, k / 2, 0); break;
       case 'boss': {
         const ring = this.spr(this.frame('boss_ring', 0), e.x, e.y, k / 2, t * 0.6); ring.alpha = alpha;
@@ -117,6 +123,11 @@ const GLActors = {
       if (stuck) { const n = Math.min(stuck, 16); for (let i = 0; i < n; i++) { const a = i / n * TAU + t * 2; g.circle(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5).fill({ color: 0xf78cff, alpha: cv }); } }
     }
     if (e.ledT > 0 && cv > 0.05) g.circle(e.x, e.y, e.r + 4).stroke({ width: 2, color: 0xffd400, alpha: 0.7 * cv });  // 被精英「統帥」加成的小兵
+    if (e.alertT > 0 && cv > 0.5) {  // 剛發現玩家（CFG.ALERT.mark 秒）：頭上「!」，先跳出來再淡掉
+      const u = e.alertT / CFG.ALERT.mark, a = Math.min(1, u * 2), x = e.x, y = e.y - e.r - 26 - (1 - Math.min(1, (1 - u) * 6)) * 6;
+      g.roundRect(x - 3.5, y - 9, 7, 13, 2).fill({ color: 0xff3b3b, alpha: a }).stroke({ width: 1.5, color: 0x03050c, alpha: a });
+      g.circle(x, y + 9, 3.2).fill({ color: 0xff3b3b, alpha: a }).stroke({ width: 1.5, color: 0x03050c, alpha: a });
+    }
     if (e.affixes && sp >= 1) this.affixFx(e, cv);
     if (e.spawnT > 0) g.circle(e.x, e.y, e.r * (2.2 - sp)).stroke({ width: 1, color: glColor(T.color), alpha: 0.8 });
     if (e.hp < e.maxHp && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !(e.cloak > 0.5)) {

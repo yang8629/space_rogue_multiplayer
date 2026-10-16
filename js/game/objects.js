@@ -258,6 +258,17 @@ const Objects = {
       const d = dist[y * W + x];
       if (d >= 0 && d < bd) { bd = d; best = y * W + x; }
     }
+    // 自己站在走不到的格子（障礙物外擴 12 的範圍裡）、旁邊也都走不到：朝 4 格內最近的可走格子走出來
+    //   （2026-10-16：蟲群貼著兩顆小行星卡進凹洞，以前回傳 null → 直接朝玩家撞小行星，卡死不動，子彈也被小行星擋住）
+    e.flowEsc = !(dist[cy * W + cx] >= 0);  // 脫困中（站在走不到的格子）：steer 不繞黑洞（繞黑洞的轉向會把往外走的方向轉回凹洞裡）
+    if (best < 0 && e.flowEsc) {
+      let bq = Infinity;
+      for (let oy = -4; oy <= 4; oy++) for (let ox = -4; ox <= 4; ox++) {
+        const x = cx + ox, y = cy + oy, q = ox * ox + oy * oy;
+        if (x < 0 || y < 0 || x >= W || y >= H || q >= bq || !(dist[y * W + x] >= 0)) continue;
+        bq = q; best = y * W + x;
+      }
+    }
     if (best < 0) return null;
     const tx = (best % W + 0.5) * C - e.x, ty = (Math.floor(best / W) + 0.5) * C - e.y, l = Math.hypot(tx, ty) || 1;
     return [tx / l, ty / l];
@@ -265,6 +276,7 @@ const Objects = {
   // 敵人繞開黑洞：(mx, my) 是敵人想走的方向；在引力範圍（外加 30）內時，拿掉朝核心的分量改往旁邊繞，再加上往外的力（越近越強）
   // 只影響敵人自己走路：被擊退、被減速、精英衝鋒時還是可能被吸進核心
   steer(e, mx, my) {
+    if (e.flowEsc) return [mx, my];  // 正在從走不到的格子走出來（flowDir）：只走幾十，不會進到核心
     for (const o of Game.objs) {
       if (o.type !== 'hole') continue;
       const dx = e.x - o.x, dy = e.y - o.y, d = Math.hypot(dx, dy), zone = o.R + 30;

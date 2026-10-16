@@ -1622,6 +1622,32 @@ const MechCheck = {
           got: `走路${w.through ? '鑽過去了' : '過不去'}（最多陷進 ${w.deep.toFixed(1)}）；衝刺${d.through ? '鑽過去了' : '過不去'}（最多陷進 ${d.deep.toFixed(1)}）` };
       },
     ])],
+    ['地圖物件', '小行星凹洞：敵人鑽得出來', '敵人被擠進小行星中間的凹洞（站在尋路走不到的格子）時，先朝最近走得到的格子走出來；出口朝著黑洞也一樣（繞黑洞的轉向不會把牠轉回凹洞）', M => {
+      // pocket(rocks, hole, player)：蟲群從 (ex, ey) 出發，1.5 秒內要離開 30 以上、站到走得到的格子，而且沒穿進小行星
+      const pocket = (ex, ey, rocks, hole, pp) => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const p = Game.player; p.x = ex + pp[0]; p.y = ey + pp[1];
+        const e = M.targets([[-pp[0], -pp[1]]], 'swarmer', false, 1)[0]; e.t = { ...e.t, dmg: 0 };
+        Game.objs = rocks.map(([dx, dy, r]) => ({ type: 'rock', x: ex + dx, y: ey + dy, r, hp: 999, maxHp: 999 }));
+        Game.objs.push({ type: 'hole', x: ex + hole[0], y: ey + hole[1], r: OBJ.HOLE_CORE, R: OBJ.HOLE_R, tick: 0 });
+        Objects.flowT = 0;
+        const free = () => { const F = Objects.fields && Objects.fields.get(p), C = OBJ.FLOW_CELL; return !!F && F.dist[Math.floor(e.y / C) * F.W + Math.floor(e.x / C)] >= 0; };
+        let inside = false, tOut = null;
+        for (let f = 0; f < 90 && tOut == null; f++) {
+          Game.time += 1 / 60; Objects.update(1 / 60); e.update(1 / 60, p);
+          p.x = ex + pp[0]; p.y = ey + pp[1];  // 玩家不動（不被黑洞拉走）
+          if (Game.objs.some(o => o.type === 'rock' && dist2(e.x, e.y, o.x, o.y) < (o.r + e.r - 3) ** 2)) inside = true;
+          if (f > 0 && Math.hypot(e.x - ex, e.y - ey) > 30 && free()) tOut = f / 60;
+        }
+        return { ok: !inside && tOut != null, got: `${tOut != null ? `${tOut.toFixed(2)} 秒離開凹洞` : `1.5 秒還在凹洞（離起點 ${Math.round(Math.hypot(e.x - ex, e.y - ey))}）`}${inside ? '、穿進小行星了' : ''}` };
+      };
+      return M.all([
+        // 2026-10-16 整局模擬（相刃第 74 局）卡住的地形：蟲群貼著 3 顆小行星，右上 330 有黑洞，玩家在右下 80；以前一直撞小行星、刃片也被擋住，212 秒打不完（格子對齊照原本那局）
+        () => pocket(556, 800, [[46, -1, 27], [34, 11, 24], [-11, 38, 22], [119, -61, 24], [160, -84, 18], [259, -174, 18], [316, -213, 32], [346, -230, 21]], [291, -154], [78, 22]),
+        // 出口朝著黑洞：左右、下面是小行星，上面 330 是黑洞，玩家在下面
+        () => pocket(1200, 900, [[-35, 0, 24], [35, 0, 24], [0, 36, 24], [-60, 30, 24], [60, 30, 24]], [0, -330], [0, 160]),
+      ]);
+    }],
     ['地圖物件', '黑洞', '把附近的敵人往中心拉（不能動的靶被拉過去），核心吞掉子彈；會走路的敵人繞開黑洞追過來', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, e = M.targets([[400, 150]], 'brute', true, 60)[0];
@@ -1929,6 +1955,70 @@ const MechCheck = {
       let touch = 0;
       for (let f = 0; f < 120; f++) { Game.time += 1 / 60; e.x = p.x; e.y = p.y; Game.updateEnemies(1 / 60); if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + p.r) touch++; }
       return { ok: touch > 0 && p.hp === hp0 && !(p.iframe > 0) && Game.eBullets.length === 0, got: `貼著 ${touch} 幀：HP ${hp0} → ${p.hp}、無敵 ${(p.iframe || 0).toFixed(2)}、敵彈 ${Game.eBullets.length}` };
+    }],
+    ['敵人', '警戒：待機、看到才追、打到會叫醒同伴', `分區的戰鬥出場先待機（在出生點 ${CFG.ALERT.wander} 內晃、不開火）；玩家 ${CFG.ALERT.see} 以內或被打到才追，並叫醒身邊 ${CFG.ALERT.call} 以內的同伴（被叫醒的不再往外叫）；精英亂入、寶藏無人機、不分區的戰鬥不待機；母巢待機時照生蟲群（在旁邊晃），醒了一起醒`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 }); Arena.reset();
+      const p = Game.player, dt = 1 / 60;
+      p.x = 500; p.y = 900;  // 方形場地（2400×1600）左邊：右邊、上面擺的敵人都在場地裡
+      const sp = (type, o) => { Game.spawnEnemy(type, o); const e = Game.enemies[Game.enemies.length - 1]; e.spawnT = 0; return e; };
+      Game.enemies = [];
+      const put = (e, dx, dy) => { e.x = p.x + dx; e.y = p.y + dy; e.home = [e.x, e.y]; e.zone = 0; return e; };
+      // a、b 相距 100（各晃 70，最遠 240 < call）；c 離 a 420（最近 280 > call）
+      const a = put(sp('spitter'), 600, 0), b = put(sp('spitter'), 700, 0), c = put(sp('spitter'), 600, -420);
+      const idle0 = !a.alert && !b.alert && !c.alert;
+      const step = (n, L = Game.enemies) => { for (let f = 0; f < n; f++) { Game.time += dt; for (const e of L) if (!e.dead) e.update(dt, p); } };
+      step(120, [a, b, c]);
+      const drift = Math.max(...[a, b, c].map(e => Math.hypot(e.x - e.home[0], e.y - e.home[1])));
+      const still = !a.alert && !b.alert && !c.alert && Game.eBullets.length === 0 && drift <= CFG.ALERT.wander + 20;
+      a.hurt(1, 0, 0, 'direct', null);
+      const bCall = b.alert, cCall = c.alert, called = a.alert && a.alertT > 0 && bCall && !cCall;
+      p.x = c.x - CFG.ALERT.see + 30; p.y = c.y; step(1, [c]);
+      const seen = c.alert;
+      // 不待機的：精英亂入、寶藏無人機、不分區的戰鬥
+      const intr = sp('elite', { intruder: true }), tre = sp('treasure');
+      Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 }); Arena.reset(); Game.enemies = [];
+      const one = sp('spitter');
+      const awake = intr.alert && tre.alert && one.alert;
+      // 母巢：待機時照生，生出來的在旁邊晃、也待機；母巢醒了一起醒
+      Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 }); Arena.reset(); Game.enemies = [];
+      p.x = 500; p.y = 900;
+      const h = put(sp('hive'), 700, 0); h.cd = 0;
+      step(60 * 5);
+      const kids = Game.enemies.filter(e => e.type === 'swarmer'), kIdle = kids.length > 0 && kids.every(k => !k.alert && Math.hypot(k.x - h.x, k.y - h.y) < 45 + CFG.ALERT.wander + 30);
+      h.hurt(1, 0, 0, 'direct', null);
+      const kWake = kids.every(k => k.alert);
+      return { ok: idle0 && still && called && seen && awake && kIdle && kWake,
+        got: `出場${idle0 ? '待機' : '就追（錯誤）'}；2 秒內離出生點最遠 ${Math.round(drift)}、敵彈 ${Game.eBullets.length}；打 a：a ${a.alert ? '醒' : '沒醒'}、100 外的 b ${bCall ? '醒' : '沒醒（錯誤）'}、420 外的 c ${cCall ? '醒（錯誤）' : '沒醒'}；靠近 c 到 ${CFG.ALERT.see - 30}：${seen ? '醒' : '沒醒'}；精英亂入／寶藏／不分區：${[intr, tre, one].map(e => e.alert ? '醒' : '待機').join('／')}；母巢 5 秒生 ${kids.length} 隻${kIdle ? '、在旁邊待機' : '（沒待機或跑遠，錯誤）'}、打母巢後${kWake ? '全醒' : '沒全醒'}` };
+    }],
+    ['敵人', '警報艇', `分區的戰鬥第 ${CFG.ALARM.from} 區以後每區 ${CFG.ALARM.chance * 100}% 放 1 隻（蟲潮那區不放）；不攻擊、撞到不扣血；被打到開始響 ${CFG.ALARM.delay} 秒，響完叫醒這一區所有待機的敵人；倒數內打掉就不會響`, M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, swarm: 3 }); Arena.reset();
+      const p = Game.player, dt = 1 / 60, ch0 = CFG.ALARM.chance;
+      p.x = 1200; p.y = 800;  // 方形場地正中間（左右各擺到 1000 內）
+      CFG.ALARM.chance = 1;
+      let n1, n2, n3;
+      try { Game.startWave(1); n1 = Game.combat.pending.filter(x => x === 'alarm').length; Game.startWave(2); n2 = Game.combat.pending.filter(x => x === 'alarm').length; Game.startWave(3); n3 = Game.combat.pending.filter(x => x === 'alarm').length; }
+      finally { CFG.ALARM.chance = ch0; }
+      const sp = (type, dx, dy) => { Game.spawnEnemy(type); const e = Game.enemies[Game.enemies.length - 1]; e.spawnT = 0; e.x = p.x + dx; e.y = p.y + dy; e.home = [e.x, e.y]; e.zone = 0; return e; };
+      const run = kill => {
+        Game.enemies = [];
+        const al = sp('alarm', 550, 0), far = [sp('spitter', 1000, 300), sp('spitter', 1000, -300), sp('brute', -900, 0)];
+        const step = n => { for (let f = 0; f < n; f++) { Game.time += dt; for (const e of Game.enemies) if (!e.dead) e.update(dt, p); } };
+        al.hurt(1, 0, 0, 'direct', null);
+        step(Math.round(60 * (CFG.ALARM.delay - 0.2)));
+        const before = far.filter(e => e.alert).length, ringing = al.modeT > 0;
+        if (kill) al.hurt(1e9, 0, 0, 'direct', null);
+        step(30);
+        return { before, after: far.filter(e => e.alert).length, ringing, n: far.length };
+      };
+      const r1 = run(false), r2 = run(true);
+      // 撞到不扣血
+      Game.enemies = []; Game.state = 'play'; p.iframe = 0;
+      const al = sp('alarm', 0, 0), hp0 = p.hp;
+      for (let f = 0; f < 30; f++) { al.x = p.x; al.y = p.y; Game.updateEnemies(dt); }
+      return { ok: n1 === 0 && n2 === 1 && n3 === 0 && r1.ringing && r1.before === 0 && r1.after === r1.n && r2.after === 0 && p.hp === hp0 && Game.eBullets.length === 0,
+        got: `機率 100% 時：第 1／2／3（蟲潮）區 ${n1}／${n2}／${n3} 隻；打到後 ${CFG.ALARM.delay - 0.2} 秒${r1.ringing ? '還在響' : '沒在響'}、醒了 ${r1.before} 隻，響完 ${r1.after}/${r1.n} 隻醒；倒數內打掉：${r2.after} 隻醒；撞到 HP ${hp0} → ${p.hp}` };
     }],
     // ---------- ？事件節點（EVENTS，data/events.js） ----------
     ['事件', '航圖：？事件節點', `每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（大多 2 個）、只在第 2～5 層、同一個分岔不會有兩個；每個都有事件種類；星圖情報的 2 個目標是走得到的一般戰鬥；雙人同步航圖時事件和寶藏星域都帶著`, M => {

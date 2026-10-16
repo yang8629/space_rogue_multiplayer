@@ -22,6 +22,9 @@ module.exports = function installProbe(G) {
   wrap('startWave', (o, n) => { const r = o(n); if (G.combat.swarmArea) inc('蟲潮區'); return r; });
   wrap('treasureEscape', (o, e) => { inc('寶藏逃走'); return o(e); });
   wrap('bonusRare', (o, e, k) => { inc('稀有保證' + k); return o(e, k); });
+  // 警戒、警報艇（2026-10-16）：響了幾次、倒數中被打掉幾次、沒響就被打掉幾次
+  wrap('alarmRing', (o, e) => { inc('警報響'); return o(e); });
+  wrap('onEnemyKilled', (o, e) => { if (e.t.alarm) inc(e.rang ? '警報艇響完才打掉' : e.ringT >= vm.runInThisContext('CFG').ALARM.delay ? '警報艇一擊打掉' : '警報艇倒數中打掉');  /* 一擊：hurt 剛設好倒數就死了 */ return o(e); });
   wrap('evChoose', (o, i) => { const V = G.ev, E = V && vm.runInThisContext('EVENTS')[V.id]; const r = o(i); if (E && (G.ev !== V || V.res)) inc(  /* 選成功才算（選不了的會原封不動） */'事件' + E.name + '：' + E.opts[i].lab); return r; });
   wrap('mineBlast', (o, b) => { inc('地雷爆炸'); return o(b); });
   wrap('onEnemyKilled', (o, e) => { if (e.t.elite) inc('精英擊殺'); return o(e); });

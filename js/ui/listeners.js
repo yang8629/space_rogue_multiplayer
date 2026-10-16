@@ -34,6 +34,7 @@
   S('enemyShot', 'eshot');
   S('bossSkill', 'boss');
   S('bossArrive', 'boss');
+  S('alarm', 'boss');  // 警報艇響了（整區被叫醒）
   S('cometIncoming', 'boss');
   S('areaClear', 'clear');
   S('revive', 'clear');
