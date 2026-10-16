@@ -16,7 +16,13 @@ module.exports = function installProbe(G) {
   wrap('spreadHit', (o, P) => { if (P && (P.L ? P.L.wp : G.wp).spreadUp) inc('分散疊層'); return o(P); });
   wrap('grazeHit', (o, p) => { inc('擦彈'); return o(p); });
   // 精英詞綴（2026-10-13）：出場幾隻、各詞綴出現幾次、擊殺、地雷爆炸
-  wrap('spawnEnemy', (o, type) => { const r = o(type); if (type === 'elite') { const e = G.enemies[G.enemies.length - 1]; inc('精英出場'); for (const id of e.affixes || []) inc('詞綴' + id); } return r; });
+  //   第二個以後的參數照傳（精英亂入的 { intruder } 在第二個）
+  wrap('spawnEnemy', (o, type, ...a) => { const r = o(type, ...a); if (type === 'elite') { const e = G.enemies[G.enemies.length - 1]; inc('精英出場'); if (e.intruder) inc('精英亂入'); for (const id of e.affixes || []) inc('詞綴' + id); } if (type === 'treasure') inc('寶藏出現'); return r; });
+  // mp-2.18.0（2026-10-16）：寶藏無人機、蟲潮、？事件、稀有保證
+  wrap('startWave', (o, n) => { const r = o(n); if (G.combat.swarmArea) inc('蟲潮區'); return r; });
+  wrap('treasureEscape', (o, e) => { inc('寶藏逃走'); return o(e); });
+  wrap('bonusRare', (o, e, k) => { inc('稀有保證' + k); return o(e, k); });
+  wrap('evChoose', (o, i) => { const V = G.ev, E = V && vm.runInThisContext('EVENTS')[V.id]; const r = o(i); if (E && (G.ev !== V || V.res)) inc(  /* 選成功才算（選不了的會原封不動） */'事件' + E.name + '：' + E.opts[i].lab); return r; });
   wrap('mineBlast', (o, b) => { inc('地雷爆炸'); return o(b); });
   wrap('onEnemyKilled', (o, e) => { if (e.t.elite) inc('精英擊殺'); return o(e); });
   wrap('shareLink', (o, e, d, a) => { if (e.link && e.link.t > 0) inc('共鳴分傷'); return o(e, d, a); });
