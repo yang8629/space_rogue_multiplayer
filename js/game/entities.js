@@ -551,7 +551,7 @@ const ENEMY_TYPES = {
   // 寶藏無人機（CFG.TREASURE）：不攻擊、沒有撞擊傷害、不掉晶體，往離玩家的反方向逃；打掉這場的三選一保證稀有晶片
   //   awake：沒有待機（出場就逃，見 CFG.ALERT）
   treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 18, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true, awake: true },
-  // 警報艇（CFG.ALARM）：不攻擊、沒有撞擊傷害，一直在出生點附近晃；被打到開始響，響完叫醒這一區所有待機的敵人
+  // 警報艇（CFG.ALARM）：不攻擊、沒有撞擊傷害，平常在出生點附近晃；被打到開始響、往遠離玩家的方向逃，邊逃邊叫醒身邊待機的敵人
   //   idleAct：待機時也照自己的行為（THEME_AI）動
   alarm:   { name: '警報艇', hp: 54, speed: 60, radius: 15, dmg: 0, color: '#ff3b3b', credits: 3, shape: 4, alarm: true, idleAct: true },
   // 靶場標靶：不會動、不攻擊、打不死（血量歸零就補滿），被擊退後會慢慢回到原位
@@ -846,6 +846,24 @@ class Enemy {
     if (this.t.speed > 0) this.steerMove(dt, this.wanderTo[0] - this.x, this.wanderTo[1] - this.y, this.t.speed * A.slow);
     else this.vx = this.vy = 0;
   }
+  // 逃離玩家（寶藏無人機、響著的警報艇）：(dx, dy, d) = 往玩家的向量和距離；sp = 速度；wob = 左右閃的幅度
+  //   每 0.25 秒重選方向：8 個方向裡最背向玩家、前面 90 沒被牆和物件擋住的（被逼到牆角就跑不掉，這時最好打）
+  flee(dt, dx, dy, d, sp, wob) {
+    if (!((this.fleeT -= dt) > 0)) {
+      this.fleeT = 0.25;
+      const ux = -dx / d, uy = -dy / d, [ox, oy] = this.fleeDir || [ux, uy];
+      let best = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const cx = Math.cos(i / 8 * TAU), cy = Math.sin(i / 8 * TAU), tx = this.x + cx * 90, ty = this.y + cy * 90;
+        if (tx < this.r || ty < this.r || tx > CFG.WORLD_W - this.r || ty > CFG.WORLD_H - this.r) continue;
+        if (Arena.losBlocked(this.x, this.y, tx, ty, this.r) || (Game.objs.length && Objects.losBlocked(this.x, this.y, tx, ty, this.r))) continue;
+        const s = cx * ux + cy * uy + 0.3 * (cx * ox + cy * oy);  // 偏好原本的方向，不會每次重選就左右抖
+        if (s > best) { best = s; this.fleeDir = [cx, cy]; }
+      }
+    }
+    const [fx, fy] = this.fleeDir || [-dx / d, -dy / d], w = Math.sin(Game.time * 3 + this.phase) * wob;
+    this.steerMove(dt, fx - fy * w, fy + fx * w, sp);
+  }
   // 往 (mx, my) 方向走（繞開黑洞），速度 sp；主題小兵共用
   steerMove(dt, mx, my, sp, k = 4) {
     if (Game.objs.length) [mx, my] = Objects.steer(this, mx, my);
@@ -1080,7 +1098,7 @@ class Enemy {
     if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
     if (!this.alert) Game.wakeEnemy(this);  // 待機中被打到：醒來，叫醒身邊的同伴
-    if (this.t.alarm && this.ringT == null) this.ringT = CFG.ALARM.delay;  // 警報艇：開始響（倒數完叫醒整區，見 THEME_AI.alarm）
+    if (this.t.alarm && this.ringT == null) this.ringT = CFG.ALARM.delay;  // 警報艇：開始響（倒數完開始叫人，見 THEME_AI.alarm）
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）
     if (Game.mode === 'range') Range.hit(dmg, source);  // 靶場（標靶或實戰）的傷害都算進數據
     this.hp -= dmg; this.flash = 0.08;
@@ -1151,26 +1169,16 @@ const THEME_AI = {
     const T = CFG.TREASURE;
     if ((this.age = (this.age || 0) + dt) >= T.life) { Game.treasureEscape(this); return true; }
     this.modeT = T.life - this.age;  // 還剩幾秒（同步給隊友：畫面最後幾秒閃）
-    if (!((this.fleeT -= dt) > 0)) {  // 每 0.25 秒重選方向：8 個方向裡最背向玩家、前面 90 沒被牆和物件擋住的（被逼到牆角就跑不掉，這時最好打）
-      this.fleeT = 0.25;
-      const ux = -dx / d, uy = -dy / d, [ox, oy] = this.fleeDir || [ux, uy];
-      let best = -Infinity;
-      for (let i = 0; i < 8; i++) {
-        const cx = Math.cos(i / 8 * TAU), cy = Math.sin(i / 8 * TAU), tx = this.x + cx * 90, ty = this.y + cy * 90;
-        if (tx < this.r || ty < this.r || tx > CFG.WORLD_W - this.r || ty > CFG.WORLD_H - this.r) continue;
-        if (Arena.losBlocked(this.x, this.y, tx, ty, this.r) || (Game.objs.length && Objects.losBlocked(this.x, this.y, tx, ty, this.r))) continue;
-        const s = cx * ux + cy * uy + 0.3 * (cx * ox + cy * oy);  // 偏好原本的方向，不會每次重選就左右抖
-        if (s > best) { best = s; this.fleeDir = [cx, cy]; }
-      }
-    }
-    const [fx, fy] = this.fleeDir || [-dx / d, -dy / d], w = Math.sin(Game.time * 3 + this.phase) * 0.5;
-    this.steerMove(dt, fx - fy * w, fy + fx * w, this.t.speed * (d < T.near ? 1 : T.farMul));
+    this.flee(dt, dx, dy, d, this.t.speed * (d < T.near ? 1 : T.farMul), 0.5);
     return true;
   },
-  alarm(dt) {  // 警報艇：一直在出生點附近晃（不追、不逃、不攻擊）；被打到（hurt 設 ringT）倒數 CFG.ALARM.delay 秒，響完叫醒這一區（只響一次）
-    if (this.ringT > 0 && (this.ringT -= dt) <= 0) Game.alarmRing(this);
-    this.modeT = this.ringT > 0 ? this.ringT : 0;  // 還剩幾秒響（同步給隊友：畫面閃紅）
-    this.wander(dt);
+  alarm(dt, p, dx, dy, d) {  // 警報艇：沒被打到時在出生點附近晃（不追、不攻擊）；被打到（hurt 設 ringT）開始響、往遠離玩家的方向逃，
+    //   倒數 CFG.ALARM.delay 秒後每 every 秒叫醒身邊 r 以內待機的敵人（Game.alarmPulse），一直響到被打掉
+    const A = CFG.ALARM;
+    if (this.ringT == null) { this.modeT = 0; this.wander(dt); return true; }
+    if ((this.ringT -= dt) <= 0) { this.ringT += A.every; Game.alarmPulse(this); }
+    this.modeT = this.rang ? 0.01 : Math.max(0.01, this.ringT);  // 響著（同步給隊友：畫面閃紅）；還沒叫過人 = 倒數剩幾秒
+    this.flee(dt, dx, dy, d, A.flee, 0.3);
     return true;
   },
   hive(dt) {  // 不會動（擊退、吸引都推不動）；每 4 秒生 2 隻蟲群（同時最多 8 隻）

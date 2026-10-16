@@ -47,8 +47,9 @@ const CFG = {
   //   離最近的玩家 see 以內、或被打到就開始追，並叫醒身邊 call 以內還在待機的同伴（被叫醒的不再往外叫）；
   //   mark：剛發現玩家時頭上「!」顯示幾秒。不待機的：表上 awake（寶藏無人機）、精英亂入、旗艦戰、沙盒、靶場
   ALERT: { see: 450, call: 250, wander: 70, slow: 0.35, mark: 1 },
-  // 警報艇（ENEMY_TYPES.alarm）：分區的戰鬥第 from 區以後每一區 chance 機率放 1 隻；被打到開始響 delay 秒，響完叫醒這一區所有待機的敵人（倒數內打掉就不會響）
-  ALARM: { chance: 0.3, from: 2, delay: 1.5 },
+  // 警報艇（ENEMY_TYPES.alarm）：分區的戰鬥第 from 區以後每一區 chance 機率放 1 隻；被打到開始響、往遠離玩家的方向逃（速度 flee），
+  //   delay 秒後開始每 every 秒叫醒身邊 r 以內待機的敵人（邊逃邊叫），一直響到被打掉；倒數內打掉就完全不會叫
+  ALARM: { chance: 0.3, from: 2, delay: 1.5, every: 0.5, r: 400, flee: 170 },
   // 戰鬥中額外打到的稀有晶片保證：這場的三選一多保證 rare 格（同一場可以疊），note 寫在三選一上
   BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' }, sos: { rare: 1, note: '回應求救訊號' } },
   // ？事件節點（EVENTS，見 data/events.js）的數字：每張航圖 count 個（第 2～5 層；最少 count[0]、最多 count[1]，產生時優先挑有 2 個以上的；每條路線還是要有 3 場戰鬥）

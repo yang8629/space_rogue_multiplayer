@@ -139,7 +139,9 @@ const Objects = {
         for (const e of G.enemies) {
           if (e.dead || e.spawnT > 0 || e.t.boss) continue;
           const d = Math.hypot(o.x - e.x, o.y - e.y);
-          if (d > o.R || d < 1) continue;
+          if (d > o.R) continue;
+          // 正中間（離中心不到 1）：不拉（方向算不出來），血照扣（2026-10-16：以前整個跳過，蟲群被拉到正中間又自己走出一點、來回擺，永遠不扣血，戰鬥卡住）
+          if (d < 1) { if (hurt) e.hurt(Math.max(10, e.maxHp * OBJ.HOLE_PCT * 0.25), 0, 0, 'explode', e.lastAtt || null); continue; }
           const sp = e.frozen || e.t.dummy ? 0 : e.t.speed * endlessSpd();  // 不會動的（標靶、母巢）照原本的拉力
           const [e0, e1] = OBJ.HOLE_ESCAPE, k = 1 - d / o.R;
           const pull = Math.min(60 + 160 * k, sp > 0 ? sp * (e0 + e1 * k * k) : Infinity);

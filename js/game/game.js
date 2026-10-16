@@ -1039,12 +1039,14 @@ const Game = {
     const R2 = CFG.ALERT.call ** 2;
     for (const o of this.enemies) if (!o.alert && !o.dead && o.zone === e.zone && dist2(o.x, o.y, e.x, e.y) < R2) this.wakeEnemy(o, false);
   },
-  // 警報艇響完（CFG.ALARM）：叫醒同一區所有待機的敵人
-  alarmRing(e) {
-    e.rang = true;
-    for (const o of this.enemies) if (!o.alert && !o.dead && o.zone === e.zone) this.wakeEnemy(o, false);
-    ringFx(e.x, e.y, 260, '#ff3b3b'); this.shake(6);
-    bannerFx('⚠ 警報', '這一區的敵人全部被叫醒了', 2);
+  // 警報艇叫人（CFG.ALARM，響著時每 every 秒一次）：叫醒同一區、身邊 r 以內待機的敵人；第一次出橫幅、震動、警報聲
+  alarmPulse(e) {
+    const A = CFG.ALARM, R2 = A.r * A.r;
+    for (const o of this.enemies) if (!o.alert && !o.dead && o.zone === e.zone && dist2(o.x, o.y, e.x, e.y) < R2) this.wakeEnemy(o, false);
+    ringFx(e.x, e.y, A.r, '#ff3b3b');
+    if (e.rang) return;
+    e.rang = true; this.shake(6);
+    bannerFx('⚠ 警報', '警報艇邊逃邊叫醒附近的敵人：快打掉它', 2);
     Events.emit('alarm', e);
   },
   // 戰鬥中額外拿到稀有晶片保證（k = CFG.BONUS 的種類：寶藏無人機、精英亂入）：記在 combat.bonus，combatWon 時加進三選一；多人時房主在 'won' 告訴隊友
