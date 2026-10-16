@@ -1826,12 +1826,14 @@ const MechCheck = {
       W[0].dead = true; W[1].update(1 / 60, p);
       return { ok: gap < 40 && W[1].ahead === null, got: '最大間距 ' + Math.round(gap) + '；頭死後第 2 節' + (W[1].ahead === null ? '變成頭' : '還在跟') };
     }],
-    ['敵人', '盾衛', '打到盾（朝固定方向）的子彈反彈回去變成敵彈，不扣血；從背面打照常受傷', M => {
+    ['敵人', '盾衛', '打到盾（朝固定方向）的子彈反彈回去變成敵彈，不扣血；從背面打照常受傷；待機的被打在盾上也會醒', M => {
       const shoot = ang => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
         const e = M.targets([[150, 0]], 'shield', true, 1)[0]; e.shieldA = ang; const hp = e.hp;
-        M.run(10);
-        return { dmg: hp - e.hp, eb: Game.eBullets.length };
+        e.alert = false; e.home = [e.x, e.y];  // 待機（警戒）：發現距離暫時設 0，只看被子彈打到會不會醒
+        const see = CFG.ALERT.see; CFG.ALERT.see = 0;
+        try { M.run(10); } finally { CFG.ALERT.see = see; }
+        return { dmg: hp - e.hp, eb: Game.eBullets.length, woke: e.alert };
       };
       const front = shoot(Math.PI), back = shoot(0);
       // 擦到盾的外緣（沒碰到身體，離中心 r + 9）也要反彈
@@ -1841,7 +1843,7 @@ const MechCheck = {
       Game.bullets = [b];
       for (let f = 0; f < 20 && !b.dead; f++) Game.updateBullets(1 / 60);
       const edge = Game.eBullets.length;
-      return { ok: front.dmg === 0 && front.eb > 0 && back.dmg > 0 && back.eb === 0 && edge > 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發；擦到盾外緣：反彈 ' + edge + ' 發' };
+      return { ok: front.dmg === 0 && front.eb > 0 && front.woke && back.dmg > 0 && back.eb === 0 && back.woke && edge > 0, got: '正面：扣 ' + Math.round(front.dmg) + '、反彈 ' + front.eb + ' 發、' + (front.woke ? '醒了' : '沒醒（錯誤）') + '；背面：扣 ' + Math.round(back.dmg) + '、反彈 ' + back.eb + ' 發、' + (back.woke ? '醒了' : '沒醒（錯誤）') + '；擦到盾外緣：反彈 ' + edge + ' 發' };
     }],
     ['敵人', '盾衛的盾是實心的', '飛船撞到盾（盾那一側）會被推到盾外、往外彈開並受撞擊傷害；背面同樣距離沒事；靠牆時不會被推進牆裡（改推盾衛、飛船照樣能操控）', M => {
       const bump = ang => {

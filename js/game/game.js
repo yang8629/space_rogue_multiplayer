@@ -1535,7 +1535,7 @@ const Game = {
         b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
         if (e.shieldA != null) {  // 盾衛：從盾的那一側（±60°）打過來的子彈反彈回去
           const ca = Math.atan2(b.py - e.y, b.px - e.x);
-          if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.reflectShot(e, b, ca); break; }
+          if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.wakeEnemy(e); this.reflectShot(e, b, ca); break; }  // 打在盾上不扣血，待機的也會醒（CFG.ALERT）
         }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
         // 玩法擊殺：照著晶片的玩法打中敵人 → 在牠身上貼標記（1 秒），牠死掉時每個標記各算一次（見 tagPlay）
