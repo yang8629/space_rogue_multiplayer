@@ -48,6 +48,13 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   if (R < 250 && boss0 && !E.some(e => e !== boss0 && Math.hypot(e.x - p.x, e.y - p.y) < 120)) {
     near = boss0; nd = Math.hypot(boss0.x - p.x, boss0.y - p.y) || 1; want = boss0.r + 75; band = 20;
   }
+  // 偶數段的扇形（相刃 2 段、雷射連發）正中間沒有子彈：越遠兩段之間的空隙越寬，會從小目標兩邊擦過（2026-10-16）
+  //   飛刃（射程 515、2 段夾角 0.35）站 400 打母巢（半徑 30）：兩段各偏開瞄準線約 70，900 秒 0 次命中，整局模擬卡住
+  //   不會亂跑的目標（母巢、旗艦）站到空隙蓋得住牠的距離；會動的小怪不管（貼過去太危險，牠們自己會撞進扇形）
+  if (near && wp.count > 1 && wp.count % 2 === 0 && wp.spread > 0 && (near.type === 'hive' || near.t.boss)) {
+    const half = wp.spread / (wp.count - 1) / 2;
+    want = Math.min(want, Math.max(70, (near.r + wp.radius) * 0.85 / Math.sin(half)));
+  }
   let mx = 0, my = 0;
   if (near) {
     const ux = (near.x - p.x) / nd, uy = (near.y - p.y) / nd, side = Math.sin(G.time * 0.7) > 0 ? 1 : -1;
