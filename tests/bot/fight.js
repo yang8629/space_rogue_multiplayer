@@ -22,8 +22,8 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (hd < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (hive.x - p.x) / hd * 60, y: (hive.y - p.y) / hd * 60 };
     if (!E.some(e => e !== hive && Math.hypot(e.x - p.x, e.y - p.y) < 150)) { near = hive; nd = hd; }
   }
-  // 警報艇被打到、正在倒數（CFG.ALARM）：真人會先集火打掉（響完整區都醒）。瞄準它；身邊 150 內沒有其他敵人時走位也以它為準
-  const alm = E.find(e => e.t.alarm && e.ringT > 0);
+  // 警報艇響著（被打到過，CFG.ALARM）：真人會先集火打掉（它邊逃邊叫醒附近的敵人）。瞄準它；身邊 150 內沒有其他敵人時走位也以它為準
+  const alm = E.find(e => e.t.alarm && e.ringT != null);
   if (alm) {
     const ad = Math.hypot(alm.x - p.x, alm.y - p.y) || 1;
     if (ad < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (alm.x - p.x) / ad * 60, y: (alm.y - p.y) / ad * 60 };
@@ -57,10 +57,11 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   }
   // 偶數段的扇形（相刃 2 段、雷射連發）正中間沒有子彈：越遠兩段之間的空隙越寬，會從小目標兩邊擦過（2026-10-16）
   //   飛刃（射程 515、2 段夾角 0.35）站 400 打母巢（半徑 30）：兩段各偏開瞄準線約 70，900 秒 0 次命中，整局模擬卡住
-  //   不會亂跑的目標（母巢、旗艦）站到空隙蓋得住牠的距離；會動的小怪不管（貼過去太危險，牠們自己會撞進扇形）
-  if (near && wp.count > 1 && wp.count % 2 === 0 && wp.spread > 0 && (near.type === 'hive' || near.t.boss)) {
+  //   站到空隙蓋得住目標的距離（最近 110：小隻的蟲群不貼上去）；以前只對母巢、旗艦，盾衛（半徑 20）也一樣：飛刃站 320、刃片偏開 50，
+  //   相刃整局模擬一區打 400 秒（2026-10-16，警戒之後敵人一群一群來，常常只剩一隻慢慢走的）
+  if (near && wp.count > 1 && wp.count % 2 === 0 && wp.spread > 0) {
     const half = wp.spread / (wp.count - 1) / 2;
-    want = Math.min(want, Math.max(70, (near.r + wp.radius) * 0.85 / Math.sin(half)));
+    want = Math.min(want, Math.max(110, (near.r + wp.radius) * 0.85 / Math.sin(half)));
   }
   let mx = 0, my = 0;
   if (near) {

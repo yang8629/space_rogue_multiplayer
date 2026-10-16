@@ -1648,6 +1648,15 @@ const MechCheck = {
         () => pocket(1200, 900, [[-35, 0, 24], [35, 0, 24], [0, 36, 24], [-60, 30, 24], [60, 30, 24]], [0, -330], [0, 160]),
       ]);
     }],
+    ['地圖物件', '黑洞：正中間也扣血', `敵人在黑洞核心裡每秒扣最大 HP 的 ${OBJ.HOLE_PCT * 100}%（至少每 0.25 秒 10），剛好在正中間也一樣`, M => {
+      // 2026-10-16 整局模擬（散彈第 66 局）：蟲群被拉到正中間（離中心不到 1）又自己走出一點、來回擺，以前那一段整個跳過、永遠不扣血，戰鬥卡住
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const p = Game.player, hx = p.x + 400, hy = p.y;
+      Game.objs = [{ type: 'hole', x: hx, y: hy, r: OBJ.HOLE_CORE, R: OBJ.HOLE_R, tick: 0 }];
+      const e = M.targets([[400, 0]], 'swarmer', true, 1)[0], hp0 = e.hp;
+      for (let f = 0; f < 60; f++) { Game.time += 1 / 60; e.x = hx; e.y = hy; Objects.update(1 / 60); }
+      return { ok: e.hp < hp0 - 10 || e.dead, got: `正中間 1 秒：HP ${Math.round(hp0)} → ${e.dead ? '死了' : Math.round(e.hp)}` };
+    }],
     ['地圖物件', '黑洞', '把附近的敵人往中心拉（不能動的靶被拉過去），核心吞掉子彈；會走路的敵人繞開黑洞追過來', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, e = M.targets([[400, 150]], 'brute', true, 60)[0];
@@ -1991,36 +2000,40 @@ const MechCheck = {
       return { ok: idle0 && still && called && seen && awake && kIdle && kWake,
         got: `出場${idle0 ? '待機' : '就追（錯誤）'}；2 秒內離出生點最遠 ${Math.round(drift)}、敵彈 ${Game.eBullets.length}；打 a：a ${a.alert ? '醒' : '沒醒'}、100 外的 b ${bCall ? '醒' : '沒醒（錯誤）'}、420 外的 c ${cCall ? '醒（錯誤）' : '沒醒'}；靠近 c 到 ${CFG.ALERT.see - 30}：${seen ? '醒' : '沒醒'}；精英亂入／寶藏／不分區：${[intr, tre, one].map(e => e.alert ? '醒' : '待機').join('／')}；母巢 5 秒生 ${kids.length} 隻${kIdle ? '、在旁邊待機' : '（沒待機或跑遠，錯誤）'}、打母巢後${kWake ? '全醒' : '沒全醒'}` };
     }],
-    ['敵人', '警報艇', `分區的戰鬥第 ${CFG.ALARM.from} 區以後每區 ${CFG.ALARM.chance * 100}% 放 1 隻（蟲潮那區不放）；不攻擊、撞到不扣血；被打到開始響 ${CFG.ALARM.delay} 秒，響完叫醒這一區所有待機的敵人；倒數內打掉就不會響`, M => {
+    ['敵人', '警報艇', `分區的戰鬥第 ${CFG.ALARM.from} 區以後每區 ${CFG.ALARM.chance * 100}% 放 1 隻（蟲潮那區不放）；不攻擊、撞到不扣血；被打到開始響、往遠離玩家的方向逃，${CFG.ALARM.delay} 秒後開始每 ${CFG.ALARM.every} 秒叫醒身邊 ${CFG.ALARM.r} 以內待機的敵人（邊逃邊叫）；倒數內打掉就完全不會叫`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, swarm: 3 }); Arena.reset();
-      const p = Game.player, dt = 1 / 60, ch0 = CFG.ALARM.chance;
-      p.x = 1200; p.y = 800;  // 方形場地正中間（左右各擺到 1000 內）
-      CFG.ALARM.chance = 1;
+      Game.objs = [];  // 開戰時隨機放的地圖物件（行星、小行星帶）會擋住逃跑路線
+      const p = Game.player, dt = 1 / 60, A = CFG.ALARM, ch0 = A.chance;
+      A.chance = 1;
       let n1, n2, n3;
       try { Game.startWave(1); n1 = Game.combat.pending.filter(x => x === 'alarm').length; Game.startWave(2); n2 = Game.combat.pending.filter(x => x === 'alarm').length; Game.startWave(3); n3 = Game.combat.pending.filter(x => x === 'alarm').length; }
-      finally { CFG.ALARM.chance = ch0; }
-      const sp = (type, dx, dy) => { Game.spawnEnemy(type); const e = Game.enemies[Game.enemies.length - 1]; e.spawnT = 0; e.x = p.x + dx; e.y = p.y + dy; e.home = [e.x, e.y]; e.zone = 0; return e; };
+      finally { A.chance = ch0; }
+      // 方形場地：玩家 (600, 800)、警報艇在右邊 300；近的（離警報艇約 320）、前方遠的（700，警報艇往右逃才會進到 r 內）、身後的（離玩家 540：晃 70 也還在發現距離外；離警報艇 840）
+      const sp = (type, x, y) => { Game.spawnEnemy(type); const e = Game.enemies[Game.enemies.length - 1]; e.spawnT = 0; e.x = x; e.y = y; e.home = [x, y]; e.zone = 0; return e; };
       const run = kill => {
-        Game.enemies = [];
-        const al = sp('alarm', 550, 0), far = [sp('spitter', 1000, 300), sp('spitter', 1000, -300), sp('brute', -900, 0)];
-        const step = n => { for (let f = 0; f < n; f++) { Game.time += dt; for (const e of Game.enemies) if (!e.dead) e.update(dt, p); } };
+        Game.enemies = []; p.x = 600; p.y = 800;
+        const al = sp('alarm', 900, 800), near = sp('spitter', 1100, 1050), ahead = sp('spitter', 1700, 800), behind = sp('brute', 60, 800);
+        const step = n => { for (let f = 0; f < n; f++) { Game.time += dt; for (const e of Game.enemies) if (!e.dead) e.update(dt, p); p.x = 600; p.y = 800; } };
         al.hurt(1, 0, 0, 'direct', null);
-        step(Math.round(60 * (CFG.ALARM.delay - 0.2)));
-        const before = far.filter(e => e.alert).length, ringing = al.modeT > 0;
+        step(Math.round(60 * (A.delay - 0.2)));
+        const early = [near, ahead, behind].filter(e => e.alert).length, ringing = al.modeT > 0;
         if (kill) al.hurt(1e9, 0, 0, 'direct', null);
-        step(30);
-        return { before, after: far.filter(e => e.alert).length, ringing, n: far.length };
+        step(18);  // 第一次叫人之後
+        const first = { near: near.alert, ahead: ahead.alert };
+        step(60 * 2);
+        return { early, ringing, first, ahead: ahead.alert, behind: behind.alert, fled: al.x - 900 };
       };
       const r1 = run(false), r2 = run(true);
       // 撞到不扣血
-      Game.enemies = []; Game.state = 'play'; p.iframe = 0;
-      const al = sp('alarm', 0, 0), hp0 = p.hp;
+      Game.enemies = []; Game.eBullets = []; Game.state = 'play'; p.iframe = 0;  // 前面叫醒的噴吐者開過火：清掉，只看警報艇自己
+      const al = sp('alarm', p.x, p.y), hp0 = p.hp;
       for (let f = 0; f < 30; f++) { al.x = p.x; al.y = p.y; Game.updateEnemies(dt); }
-      return { ok: n1 === 0 && n2 === 1 && n3 === 0 && r1.ringing && r1.before === 0 && r1.after === r1.n && r2.after === 0 && p.hp === hp0 && Game.eBullets.length === 0,
-        got: `機率 100% 時：第 1／2／3（蟲潮）區 ${n1}／${n2}／${n3} 隻；打到後 ${CFG.ALARM.delay - 0.2} 秒${r1.ringing ? '還在響' : '沒在響'}、醒了 ${r1.before} 隻，響完 ${r1.after}/${r1.n} 隻醒；倒數內打掉：${r2.after} 隻醒；撞到 HP ${hp0} → ${p.hp}` };
+      const yes = b => b ? '醒' : '沒醒';
+      return { ok: n1 === 0 && n2 === 1 && n3 === 0 && r1.ringing && r1.early === 0 && r1.first.near && !r1.first.ahead && r1.ahead && !r1.behind && r1.fled > 150
+          && r2.early === 0 && !r2.first.near && !r2.ahead && p.hp === hp0 && Game.eBullets.length === 0,
+        got: `機率 100% 時：第 1／2／3（蟲潮）區 ${n1}／${n2}／${n3} 隻；打到後 ${A.delay - 0.2} 秒${r1.ringing ? '在響' : '沒在響'}、醒了 ${r1.early} 隻；第一次叫人：近的${yes(r1.first.near)}、前方 700 的${yes(r1.first.ahead)}；再 2 秒：前方的${yes(r1.ahead)}、身後的${yes(r1.behind)}（逃了 ${Math.round(r1.fled)}）；倒數內打掉：近的${yes(r2.first.near)}、前方的${yes(r2.ahead)}；撞到 HP ${hp0} → ${p.hp}` };
     }],
-    // ---------- ？事件節點（EVENTS，data/events.js） ----------
     ['事件', '航圖：？事件節點', `每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（大多 2 個）、只在第 2～5 層、同一個分岔不會有兩個；每個都有事件種類；星圖情報的 2 個目標是走得到的一般戰鬥；雙人同步航圖時事件和寶藏星域都帶著`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       let bad = [], two = 0, N = 60;
