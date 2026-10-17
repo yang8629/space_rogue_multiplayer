@@ -425,8 +425,6 @@ body.detail .card .det { display: flex; flex-direction: column; gap: 8px; flex: 
 .card .det .ds { flex: none; }  /* 詳細說明照內容排，空白留在按鈕上方 */
 .card button { margin-top: auto; }  /* 按鈕貼在卡片底部：同一排的卡片按鈕高度一樣（展開詳細說明時也是） */
 .cards.left { justify-content: flex-start; }
-.scr.wide { max-width: 1220px; }  /* 選飛船、選武器：5 張卡排一排 */
-.scr.wide .card { width: 188px; }
 /* 局外成長：鎖住的卡片、解鎖一覽、結算的新達成 */
 .card.locked { filter: grayscale(0.85); opacity: .55; }
 .card.locked img { opacity: .5; }
