@@ -3,7 +3,7 @@
 // 用法：node runsim.js --n=20 [--w=laser,blade] [--ship=vanguard]
 //   --builds：印每局最後的配裝；--best：每局挑武器升級價值表最高分的終極（預設照局號輪流指定，每把武器 6 個）
 //   --tweak="ENEMY_TYPES.boss.hp=2000"：先試數值再改檔案；--probe：印新機制的觸發次數（probe.js）
-//   --bossdiag：另外印第一星區旗艦那一場（照武器＋第一段分組的陣亡率、進場 HP、打多久、死時旗艦剩血、被什麼打掉多少血）
+//   --bossdiag：另外印第一星區旗艦那一場（照武器＋第一段分組的陣亡率、進場 HP、打多久、死時旗艦剩血、被什麼打掉多少血）；--bossdiag=2：改看第 2 星區的旗艦
 //   一場戰鬥超過 300 秒但最近 60 秒還有打掉血就繼續（最多 900 秒），不然算卡住並寫原因；通關率目標：每把武器各自約 20%
 'use strict';
 const T_ = require('./load_game').loadGame();
@@ -38,10 +38,11 @@ const B = require('./bot/load').loadBot(code => require('vm').runInThisContext(c
 const { bot, resetBot, equip, sortChain, chooseNode, handle, bOf } = B;
 // --probe：每局印新終極升級的觸發次數（probe.js；證明電腦在實戰中真的用到）
 const PROBE = process.argv.includes('--probe') ? require('./probe')(G) : null;
-// --bossdiag：第一星區旗艦（1-7）那一場的紀錄（2026-10-13，查相刃死在 1-7）：進場 HP、打多久、死了沒、死時旗艦剩多少血、被什麼打掉多少血
+// --bossdiag：旗艦那一場的紀錄（預設第一星區 1-7，--bossdiag=2 看第 2 星區）（2026-10-13，查相刃死在 1-7）：進場 HP、打多久、死了沒、死時旗艦剩多少血、被什麼打掉多少血
 //   照武器和當時的第一段分組，全部跑完印一張表
-const BOSSD = process.argv.includes('--bossdiag') ? (() => {
-  let cur = null; const all = {};
+const BOSS_SECTOR = +(arg('bossdiag') || 1);  // 看第幾星區的旗艦
+const BOSSD = process.argv.some(a => a === '--bossdiag' || a.startsWith('--bossdiag=')) ? (() => {
+  let cur = null; const all = {}, byBoss = {};
   // 離旗艦的距離（飛船中心到旗艦中心）分段：每段待了多久、在那段被旗艦打掉多少血 → 看站多遠比較好躲（2026-10-13）
   const DB = [100, 150, 200, 300, 400, 600, Infinity], dist = {};
   const bin = () => { const b = G.enemies.find(e => e.t.boss && !e.dead), p = G.player; if (!b) return -1; const d = Math.hypot(b.x - p.x, b.y - p.y); return DB.findIndex(x => d < x); };
@@ -50,9 +51,14 @@ const BOSSD = process.argv.includes('--bossdiag') ? (() => {
   const oh = G.hurtPlayer.bind(G);
   G.hurtPlayer = function (dmg, cause = '', p = G.player, ...a) {
     const h0 = p.hp, r = oh(dmg, cause, p, ...a);
-    if (cur && p === G.player) { const k = String(cause).replace(/（.*/, '') === cur.bossName ? '旗艦' + (String(cause).match(/（.*）/) || [''])[0] : '小怪' + (String(cause).match(/（.*）/) || [''])[0]; cur.by[k] = (cur.by[k] || 0) + Math.max(0, h0 - p.hp); if (k.startsWith('旗艦')) { const j = bin(); if (j >= 0) { const D = dist[cur.dk] = dist[cur.dk] || DB.map(() => ({ t: 0, hp: 0 })); D[j].hp += Math.max(0, h0 - p.hp) / p.maxHp * 100; } } }
+    if (cur && p === G.player) { const c = String(cause), k = c.startsWith(cur.bossName) ? '旗艦' + c.slice(cur.bossName.length) : '小怪' + (c.match(/（.*）/) || [''])[0]; cur.by[k] = (cur.by[k] || 0) + Math.max(0, h0 - p.hp); if (k.startsWith('旗艦')) { const j = bin(); if (j >= 0) { const D = dist[cur.dk] = dist[cur.dk] || DB.map(() => ({ t: 0, hp: 0 })); D[j].hp += Math.max(0, h0 - p.hp) / p.maxHp * 100; } } }
     return r;
   };
+  // 旗艦的子彈標上是哪一招（from 改成「旗艦名・招式」，被打到時的原因就分得出來；只在這一場、只改模擬裡的子彈）
+  const SKILL = { charge: '衝鋒灑彈', cross: '十字彈流', snipe: '三連狙擊', deploy: '部署', spiral: '螺旋', fan: '扇形', ring: '環形', summon: '召喚',
+    nova: '缺口環形波', twin: '雙向螺旋', wall: '彈牆', guard: '護衛', bomb: '轟炸' };
+  const os = T_.Enemy.prototype.shootAt;
+  T_.Enemy.prototype.shootAt = function (...a) { const r = os.apply(this, a); if (cur && this.t.boss) { const b = G.eBullets[G.eBullets.length - 1]; if (b) b.from = this.t.name + '・' + (SKILL[this.skill] || this.skill || '其他'); } return r; };
   // 打在旗艦身上的傷害照來源分（直接命中、燃燒…）：旗艦的 hurt／update（燃燒在 update 裡扣）期間經過 recordDamage 的都算
   let onBoss = false;
   const wrapE = k => { const o = T_.Enemy.prototype[k]; T_.Enemy.prototype[k] = function (...a) { if (!cur || !this.t.boss) return o.apply(this, a); const was = onBoss; onBoss = true; try { return o.apply(this, a); } finally { onBoss = was; } }; };
@@ -61,8 +67,8 @@ const BOSSD = process.argv.includes('--bossdiag') ? (() => {
   G.recordDamage = function (source, amount, att) { if (cur && onBoss && amount > 0) cur.dmg[source] = (cur.dmg[source] || 0) + amount; return rd(source, amount, att); };
   return {
     start(w) {
-      if (!G.node || G.node.type !== 'boss' || G.sector !== 1) return null;
-      const b = G.enemies.find(e => e.t.boss) || { t: { name: ENEMY_TYPES[CFG.BOSS_ORDER[0]].name } };
+      if (!G.node || G.node.type !== 'boss' || G.sector !== BOSS_SECTOR) return null;
+      const b = G.enemies.find(e => e.t.boss) || { t: { name: ENEMY_TYPES[G.bossId].name } };  // 旗艦還沒出場：照這一關的旗艦（G.bossId）
       return cur = { hp0: G.player.hp / G.player.maxHp, maxHp: G.player.maxHp, w, dk: w + ' ' + (G.weapon.path ? WEAPONS[w].paths[G.weapon.path].name : '沒升級'), bossName: b.t.name, by: {}, dmg: {}, path: G.weapon.path || '沒升級' };
     },
     end(c, w, t) {
@@ -70,6 +76,7 @@ const BOSSD = process.argv.includes('--bossdiag') ? (() => {
       const boss = G.enemies.find(e => e.t.boss);
       c.t = t; c.died = G.state === 'dead'; c.bossMax = boss ? boss.maxHp : null; c.bossLeft = c.died && boss ? boss.hp / boss.maxHp : 0;
       (all[w + ' ' + (c.path === '沒升級' ? c.path : WEAPONS[w].paths[c.path].name)] = all[w + ' ' + (c.path === '沒升級' ? c.path : WEAPONS[w].paths[c.path].name)] || []).push(c);
+      (byBoss[c.bossName] = byBoss[c.bossName] || []).push(c);
     },
     report() {
       console.log('');
@@ -79,13 +86,17 @@ const BOSSD = process.argv.includes('--bossdiag') ? (() => {
       const line = (nm, D) => { const T = D.reduce((s, x) => s + x.t, 0); console.log('  ' + nm.padEnd(9, '　') + D.map((x, i) => lab[i] + ' ' + Math.round(x.t / T * 100) + '%｜' + (x.t > 5 ? (x.hp / x.t).toFixed(2) : '—')).join('　')); };
       for (const [k, D] of Object.entries(dist)) { line(WN[k.split(' ')[0]] + ' ' + k.split(' ')[1], D); D.forEach((x, i) => { tot[i].t += x.t; tot[i].hp += x.hp; }); }
       if (Object.keys(dist).length > 1) line('全部', tot);
-      console.log('第一星區旗艦（1-7）：場數｜陣亡｜進場 HP（最大 HP 的 %）｜最大 HP｜打多久（活下來的）｜死時旗艦剩血｜每場被打掉的血（最大 HP 的 %，前 5）｜打旗艦每秒傷害（照來源）');
-      for (const [k, L] of Object.entries(all)) {
+      console.log(`第 ${BOSS_SECTOR} 星區旗艦（${BOSS_SECTOR}-7）：場數｜陣亡｜進場 HP（最大 HP 的 %）｜最大 HP｜打多久（活下來的）｜死時旗艦剩血｜每場被打掉的血（最大 HP 的 %，前 5）｜打旗艦每秒傷害（照來源）`);
+      const row = (label, L) => {
         const n = L.length, d = L.filter(c => c.died), sv = L.filter(c => !c.died), avg = (a, f) => a.length ? a.reduce((s, c) => s + f(c), 0) / a.length : NaN;
         const by = {}; for (const c of L) for (const [q, v] of Object.entries(c.by)) by[q] = (by[q] || 0) + v / c.maxHp * 100 / n;
         const top = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([q, v]) => q + ' ' + Math.round(v) + '%').join('、');
-        console.log(`  ${(WN[k.split(' ')[0]] + ' ' + k.split(' ')[1]).padEnd(10, '　')} ${n} 場｜陣亡 ${d.length}（${Math.round(d.length / n * 100)}%）｜進場 ${Math.round(avg(L, c => c.hp0) * 100)}%｜${Math.round(avg(L, c => c.maxHp))}｜${Math.round(avg(sv, c => c.t))} 秒｜${d.length ? Math.round(avg(d, c => c.bossLeft) * 100) + '%' : '—'}｜${top}｜${(() => { const tt = L.reduce((s, c) => s + c.t, 0), D = {}; for (const c of L) for (const [q, v] of Object.entries(c.dmg)) D[q] = (D[q] || 0) + v; const tot = Object.values(D).reduce((a, b) => a + b, 0); return '合計 ' + Math.round(tot / tt) + '（' + Object.entries(D).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, v]) => q + ' ' + Math.round(v / tt)).join('、') + '）'; })()}`);
-      }
+        console.log(`  ${label.padEnd(10, '　')} ${n} 場｜陣亡 ${d.length}（${Math.round(d.length / n * 100)}%）｜進場 ${Math.round(avg(L, c => c.hp0) * 100)}%｜${Math.round(avg(L, c => c.maxHp))}｜${Math.round(avg(sv, c => c.t))} 秒｜${d.length ? Math.round(avg(d, c => c.bossLeft) * 100) + '%' : '—'}｜${top}｜${(() => { const tt = L.reduce((s, c) => s + c.t, 0), D = {}; for (const c of L) for (const [q, v] of Object.entries(c.dmg)) D[q] = (D[q] || 0) + v; const tot = Object.values(D).reduce((a, b) => a + b, 0); return '合計 ' + Math.round(tot / tt) + '（' + Object.entries(D).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, v]) => q + ' ' + Math.round(v / tt)).join('、') + '）'; })()}`);
+      };
+      for (const [k, L] of Object.entries(all)) row(WN[k.split(' ')[0]] + ' ' + k.split(' ')[1], L);
+      console.log('照旗艦分（同一個星區每章、每局的旗艦可能不同）：');
+      for (const [k, L] of Object.entries(byBoss)) row(k, L);
+      if (arg('bossout')) require('fs').writeFileSync(arg('bossout'), JSON.stringify({ all, dist }));  // --bossout=檔案：原始紀錄（分好幾個程序跑時合起來算）
     } };
 })() : null;
 
