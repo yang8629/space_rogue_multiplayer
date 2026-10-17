@@ -100,7 +100,8 @@ const Game = {
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
   isClient() { return Net.role === 'client' && this.mode === 'coop'; },
-  coopOn() { return this.mode === 'coop' && this.mates.some(m => !m.gone); },  // 雙人而且有隊友在線（都離線時敵人數量、血量都恢復單人）
+  coopOn() { return this.mode === 'coop' && this.mates.some(m => !m.gone); },
+  onlineN() { return 1 + this.mates.filter(m => !m.gone).length; },  // 在線的人數（含房主；倒下的也算）  // 雙人而且有隊友在線（都離線時敵人數量、血量都恢復單人）
   freePlay() { return this.mode === 'sandbox' || this.mode === 'range'; },  // 沙盒、靶場：晶片無限供應、可以隨意改武器
   // 錢：雙人時每人各自一個錢包。怪物掉落的晶體兩人都拿（見 Net 的 loot），其他收入、花費都是自己的
   pay(price, fn) {
@@ -282,7 +283,7 @@ const Game = {
       Events.emit('bossArrive', this.bossId);
       return;
     }
-    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopMul(CFG.COOP_COUNT, C.level) : 1);  // 雙人：敵人數量 ×2 → ×2.5（隨難度）
+    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopCount(C.level, this.onlineN()) : 1);  // 多人：敵人數量 ×2 → ×2.5（隨難度），三、四人每多一人再 +0.6
     if (C.sos) budget *= C.sos;  // 求救訊號、星圖情報被發現：敵人變多（倍數）
     const eliteArea = !C.sandbox && C.elites > 0 && n === C.wavesTotal;  // 精英戰的最後一區是精英的場子：只帶少量護衛
     if (eliteArea) budget *= CFG.ELITE_ESCORT;

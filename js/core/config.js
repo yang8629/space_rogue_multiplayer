@@ -71,6 +71,7 @@ const CFG = {
     chart: { chance: 0.6 } },
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
+  COOP_EXTRA: 0.6,  // 三、四人：在線的人每多一個（超過 2 人），敵人數量的倍數再 +0.6（血量不變；2026-10-18 使用者定，實際玩過再調）
   MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限
   WEAPON_SOCKETS: 3, START_WSOCK: 0, MAX_SOCKETS: 3,  // 武器插座開局 0 個、每打完一隻王 +1（打第三關的王時是 2 個）、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
   HOST_SPEED: 1.5,          // 加速的產物：速度倍率 1.5 以上
@@ -145,3 +146,5 @@ function mixBlack(c, k) {  // 顏色往黑色混 k（0～1）；只認 #rgb／#r
 function enemyHpMul(level, wave = 1) { return 1 + level * 0.1 + level * level * 0.01 + (wave - 1) * 0.08; }
 // 雙人倍數：[開頭, 第 3 星區最後（難度 20）] 之間照難度線性，超過 20（無盡）停在最後的值
 function coopMul(pair, level) { return pair[0] + (pair[1] - pair[0]) * clamp(level / 20, 0, 1); }
+// 多人的敵人數量倍數：n = 在線的人數（含房主）；2 人照 COOP_COUNT，每多 1 人 +COOP_EXTRA
+function coopCount(level, n) { return coopMul(CFG.COOP_COUNT, level) + CFG.COOP_EXTRA * Math.max(0, n - 2); }
