@@ -45,7 +45,7 @@ const BOSSD = process.argv.some(a => a === '--bossdiag' || a.startsWith('--bossd
   let cur = null; const all = {}, byBoss = {};
   // 離旗艦的距離（飛船中心到旗艦中心）分段：每段待了多久、在那段被旗艦打掉多少血 → 看站多遠比較好躲（2026-10-13）
   const DB = [100, 150, 200, 300, 400, 600, Infinity], dist = {};
-  const bin = () => { const b = G.enemies.find(e => e.t.boss && !e.dead), p = G.player; if (!b) return -1; const d = Math.hypot(b.x - p.x, b.y - p.y); return DB.findIndex(x => d < x); };
+  const bin = () => { const b = G.enemies.find(e => e.t.boss && !e.dead), p = G.player; if (!b) return -1; cur.bossMax = b.maxHp; const d = Math.hypot(b.x - p.x, b.y - p.y); return DB.findIndex(x => d < x); };
   const ou = G.update.bind(G);
   G.update = function (dt) { if (cur) { const k = bin(); if (k >= 0) { const D = dist[cur.dk] = dist[cur.dk] || DB.map(() => ({ t: 0, hp: 0 })); D[k].t += dt; } } return ou(dt); };
   const oh = G.hurtPlayer.bind(G);
@@ -74,7 +74,7 @@ const BOSSD = process.argv.some(a => a === '--bossdiag' || a.startsWith('--bossd
     end(c, w, t) {
       cur = null;
       const boss = G.enemies.find(e => e.t.boss);
-      c.t = t; c.died = G.state === 'dead'; c.bossMax = boss ? boss.maxHp : null; c.bossLeft = c.died && boss ? boss.hp / boss.maxHp : 0;
+      c.t = t; c.died = G.state === 'dead'; c.bossMax = boss ? boss.maxHp : c.bossMax || null; c.bossLeft = c.died && boss ? boss.hp / boss.maxHp : 0;  // 旗艦被打死、已經移出名單：用打的時候記下的血量（以前記成 null，平均旗艦血量被拉低）
       (all[w + ' ' + (c.path === '沒升級' ? c.path : WEAPONS[w].paths[c.path].name)] = all[w + ' ' + (c.path === '沒升級' ? c.path : WEAPONS[w].paths[c.path].name)] || []).push(c);
       (byBoss[c.bossName] = byBoss[c.bossName] || []).push(c);
     },
