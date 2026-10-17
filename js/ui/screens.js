@@ -197,7 +197,7 @@ const Screen = {
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
-        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件）加上專屬能力（灰血、殘影、傳送門），之後的成長靠零件。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
+        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件）加上專屬能力（相位跳躍、灰血、殘影、傳送門），之後的成長靠零件。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
       <div class="cards left">${cards}</div></div>`);
   },

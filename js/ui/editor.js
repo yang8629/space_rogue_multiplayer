@@ -203,7 +203,7 @@ const Editor = {
     const rows = [stat('hp', Game.player.maxHp), SH && stat('speed', Math.round(SH.speed * M.speed), M.speed), SH && stat('dashCd', `${+(SH.dashCd * M.dashCd).toFixed(2)} 秒`, M.dashCd),
       ...[['taken', M.taken], ['rate', M.rate * M.rateMul], ['bspeed', M.bspeed]].filter(([, m]) => Math.round((m - 1) * 100)).map(([id, m]) => stat(id, '', m))].filter(Boolean);
     const on2 = [...traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`)];
-    const ability = SH && SH.ability !== 'slots' ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.skillDesc ? SH.skillDesc() : SH.abilityDesc}</div>` : '';  // 飛船專屬能力（灰血、殘影、傳送門）
+    const ability = SH ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.skillDesc ? SH.skillDesc() : SH.abilityDesc}</div>` : '';  // 飛船專屬能力（相位跳躍、灰血、殘影、傳送門）
     const mech = `<h3 class="between" style="margin-top:4px"><span style="color:${SH ? SH.color : '#8fa3d9'}">${SH ? SH.name : ''}</span><span>零件 ${partsUsed(Game.parts)} / ${Game.partSlots}${free ? '（靶場不受格數限制）' : ''}</span></h3>
       <div class="statl big">${rows.join('')}</div>${ability}
       <div class="sub">已開啟：${on2.length ? on2.join(' · ') : '無'}</div>
