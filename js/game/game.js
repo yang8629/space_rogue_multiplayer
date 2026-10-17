@@ -29,7 +29,7 @@ const Game = {
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mates: [], shooter: null,  // mates：其他玩家的飛船（房主這邊每艘帶 L = 那個人的配裝；slot = 幾號玩家）
   // V2 晶片：各晶片的玩法擊殺數、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
-  parts: {}, partSlots: 6, cap: 4, mech: mechStats({}), objs: [], portals: [], decoys: [],
+  parts: {}, partSlots: 6, cap: 4, mech: mechStats({}), objs: [], portals: [], decoys: [], turrets: [],
   playKills: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
 
   // ---------- 雙人共用 ----------
@@ -61,6 +61,31 @@ const Game = {
   addDecoy(p, x, y) {
     this.decoys = this.decoys.filter(d => d.owner !== p);
     this.decoys.push({ x, y, r: p.r, vx: 0, vy: 0, t: CFG.DECOY.t, owner: p, slot: p === this.player ? Net.mySlot() : p.slot || 0, aim: p.aim, decoy: true });
+  },
+  // 哨兵號・砲台：衝刺起點留一座砲台（CFG.TURRET），同一個人同時只有一座；pl = 放的那艘飛船（開火用 pl.L 的配裝）
+  addTurret(p, x, y) {
+    this.turrets = this.turrets.filter(q => q.pl !== p);
+    this.turrets.push({ x, y, t: CFG.TURRET.t, pl: p, slot: p === this.player ? Net.mySlot() : p.slot || 0, aim: p.aim, cd: 0 });
+  },
+  // 砲台開火：射速照放的人（機體的射速增減；移動、站著不動才有的加成不算），朝射程內（跟自動攻擊一樣）最近的敵人
+  //   用那個人的整條電路（環繞的子彈不進圈），傷害 ×CFG.TURRET.dmg；子彈標 turret（傷害統計另外一類）
+  updateTurrets(dt) {
+    for (const q of this.turrets) {
+      q.t -= dt; q.cd -= dt;
+      if (q.cd > 0 || q.pl.dead) continue;
+      this.withLoadout(q.pl.L, () => {
+        const S = this.stats, w = this.wp, M = this.mech, e = nearestEnemy(q.x, q.y, clamp(w.speed * w.life + 40, 140, CFG.AUTO_RANGE), null, true);
+        if (!e || !S) return;
+        q.aim = Math.atan2(e.y - q.y, e.x - q.x); q.cd = Math.max(q.cd, -dt) + S.interval / (M.rate * M.rateMul);
+        this.fireMode = 'turret';
+        let list;
+        try { list = runOps(S.ops, 0).map(s => ({ ...s, orbit: 0, damage: s.damage * CFG.TURRET.dmg })); } finally { this.fireMode = null; }
+        const n0 = this.bullets.length;
+        if (list.length) spawnShots(list, q.x + Math.cos(q.aim) * 10, q.y + Math.sin(q.aim) * 10, q.aim, 0, null);
+        for (let i = n0; i < this.bullets.length; i++) this.bullets[i].turret = true;
+      });
+    }
+    this.turrets = this.turrets.filter(q => q.t > 0);
   },
   // 暫時把 Game 的配裝換成 L（隊友的），執行完再換回來；L 為 null 時就是房主自己
   withLoadout(L, fn) {
@@ -224,7 +249,7 @@ const Game = {
       wavesTotal: Infinity, elites: 0 }, cfg);
     this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
     for (const q of this.players()) if (q) q.drRec = 0;  // 灰血（堡壘號）每場重算
-    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.decoys = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
+    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.decoys = []; this.turrets = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
     this.kills = 0; this.nextId = 1; this.exit = null;
     // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
     if (this.isClient()) Arena.reset();
@@ -1411,6 +1436,7 @@ const Game = {
       this.updateEnemies(dt);
       for (const p of this.players()) this.withLoadout(p.L, () => { this.tickMech(p, dt); this.tickWeaponFx(p, dt); });
       if (this.decoys.length) { for (const d of this.decoys) d.t -= dt; this.decoys = this.decoys.filter(d => d.t > 0); }  // 殘影
+      if (this.turrets.length) this.updateTurrets(dt);  // 砲台（哨兵號）
       this.updateFlames(dt); this.updateWildfire(dt); this.updateLinksQuakes(dt); this.updateTrails(dt);
       Objects.update(dt);
       this.updatePortals(dt);
@@ -1575,7 +1601,7 @@ const Game = {
         }
         const knock = b.knock, kb = Math.min(220, dmg * 5) * (14 / e.r) * knock;
         if (b.wallhit && !e.t.boss) { if (!(e.whT > 0)) e.whDmg = 0; e.whDmg += dmg; e.whT = b.wallhit.t; e.whAtt = att; e.wh = b.wallhit; }  // 撞牆：記下這波彈丸的傷害
-        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.depth > 0 ? 'echo' : 'direct', att, knock);
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.turret ? 'turret' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         const wid = (b.owner ? b.owner.weapon : this.weapon).id;
         floatText(e.x, e.y - e.r, Math.round(dmg), ...dmgTextStyle(dmg, WEAPONS[wid] && WEAPONS[wid].base.damage));

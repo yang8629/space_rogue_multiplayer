@@ -181,8 +181,21 @@ const GLActors = {
       if (G.player.dead) this.downed(G.player, tagOf(G.player), false);
     }
     if (G.decoys.length && G.state === 'play') this.decoys();
+    if (G.turrets.length && G.state === 'play') this.turrets();
     for (const m of G.mates) if (!m.dead && !m.gone) this.ship(m, tagOf(m));
     if (G.state !== 'dead' && !G.player.dead) this.ship(G.player, tagOf(G.player));
+  },
+  // 哨兵號的砲台：底座＋跟著瞄準轉的砲管、中心玩家色的光（多人用號碼色，單人用船色）；外圈弧線 = 剩下的時間；出現時從小長大、最後 0.5 秒變淡
+  turrets() {
+    const G = Game, g = this.gS, P = this.pS;
+    for (const q of G.turrets) {
+      const col = glColor(G.mates.length ? G.slotColor(q.slot || 1) : SHIPS.sentry.color), k = Math.min(1, q.t / 0.5), grow = Math.min(1, (CFG.TURRET.t - q.t) / 0.15);
+      const sc = (0.6 + 0.4 * grow) * 1.3 / 4;  // 畫大一點（實際大小跟飛船差不多，看起來太小）
+      const b = GLR.sprite(P, GLR.T('s/turret_base')); b.position.set(q.x, q.y); b.scale.set(sc); b.rotation = 0; b.alpha = k; b.tint = 0xffffff; b.blendMode = 'normal';
+      const s = GLR.sprite(P, GLR.T('s/turret_gun')); s.position.set(q.x, q.y); s.scale.set(sc); s.rotation = q.aim || 0; s.alpha = k; s.tint = 0xffffff; s.blendMode = 'normal';
+      this.glowAt(P, q.x, q.y, 26, col, 0.35 * k); this.glowAt(P, q.x, q.y, 10, col, 0.95 * k);
+      glArc(g, q.x, q.y, 21, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0, q.t) / CFG.TURRET.t); g.stroke({ width: 2, color: col, alpha: 0.7 * k });
+    }
   },
   // 幻影號的殘影：半透明的船身一閃一閃＋淡紫光，快消失時變淡；朝向衝刺當下的準星
   decoys() {

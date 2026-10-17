@@ -54,6 +54,7 @@ function enemyFrames() {
 function shipFrames() {
   for (const [id, S] of Object.entries(SHIPS)) for (let a = 0; a <= 4; a++) sq(`s/${id}/${a}`, 26, 4, c => drawShipArt(c, S, { armor: a, noRing: true }));
   sq('s/gate_ring', 9, 4, c => drawGateRing(c, SHIP_ART.get(SHIPS.gate)));  // 星門號船尾的傳送環（遊戲裡轉）
+  sq('s/turret_base', 13, 4, c => drawTurretBase(c)); sq('s/turret_gun', 16, 4, c => drawTurretGun(c));  // 哨兵號的砲台：底座、砲管（遊戲裡跟著瞄準轉）
   sq('s/flame', 1, 32, c => { c.translate(0.5, 0); artFlame(c); });  // 原點在框中間；噴焰從 +0.5 往左畫（遊戲裡錨點設在右邊）
   for (const id of ['shield', 'reactive', 'endshell']) sq(`m/${id}`, 40, 3, c => artModuleFx(c, id, true));
   for (const id of ['gravity', 'thruster']) sq(`m/${id}`, 40, 3, c => artModuleFx(c, id, false));

@@ -425,6 +425,8 @@ body.detail .card .det { display: flex; flex-direction: column; gap: 8px; flex: 
 .card .det .ds { flex: none; }  /* 詳細說明照內容排，空白留在按鈕上方 */
 .card button { margin-top: auto; }  /* 按鈕貼在卡片底部：同一排的卡片按鈕高度一樣（展開詳細說明時也是） */
 .cards.left { justify-content: flex-start; }
+.scr.wide { max-width: 1220px; }  /* 選飛船、選武器：5 張卡排一排 */
+.scr.wide .card { width: 188px; }
 body.detail .card .brief { display: none; }
 .detail-hint { position: fixed; right: 16px; bottom: 12px; font-size: 12px; color: #8fa3d8; opacity: .85; }
 .detail-hint button { font-size: 12px; padding: 3px 10px; margin-left: 4px; }
