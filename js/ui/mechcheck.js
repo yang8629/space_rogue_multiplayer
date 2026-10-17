@@ -1521,7 +1521,7 @@ const MechCheck = {
       return { ok: !!d && tn === d && tf === p && gone && none,
         got: `衝刺：${d ? '留下殘影' : '沒有殘影（錯誤）'}；200 外的敵人追${tn === d ? '殘影' : '玩家（錯誤）'}；500 外的追${tf === p ? '玩家' : '殘影（錯誤）'}；${CFG.DECOY.t} 秒後${gone ? '消失' : '還在（錯誤）'}；先鋒號${none ? '沒有殘影' : '也有殘影（錯誤）'}` };
     }],
-    ['機體', '哨兵號：砲台', `衝刺時在起點留下砲台（${CFG.TURRET.t} 秒，每人同時一座）：用整條電路朝射程內最近的敵人開火，傷害 ×${CFG.TURRET.dmg}，傷害統計記在「砲台」；多人：隊友的砲台用隊友的武器；其他飛船沒有砲台`, M => {
+    ['機體', '哨兵號：砲台', `衝刺時在起點留下砲台（${CFG.TURRET.t} 秒，每人同時一座）：用整條電路朝射程內最近的敵人開火，傷害 ×${CFG.TURRET.dmg}，傷害統計記在「砲台」；多人：隊友的砲台用隊友的武器；砲台在場上時換電路，下一發就照新的；其他飛船沒有砲台`, M => {
       M.setup('sandbox', 'sentry', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, down = Input.down, auto = Input.autoFire;
       Game.startCombat({ sandbox: true, level: 0, wavesTotal: 99 }); Game.combat.waveTimer = 1e9; Game.state = 'play';
@@ -1541,12 +1541,17 @@ const MechCheck = {
       M.targets([[0, 500]], 'brute', true, 999);
       m.dashSX = m.x; m.dashSY = m.y; m.onDash(); Game.updateTurrets(1 / 60);
       const mb = Game.bullets.filter(b => b.turret), mateOk = mb.length === WEAPONS.scatter.base.count && mb.every(b => b.owner === m.L);
+      // 砲台還在時隊友換了電路（房主收到新電路，跟 net.js 一樣重算）：下一發照新的（武器插上鏡像迴路 = 多射一次）
+      const r = splitChain(['weapon', 'mirror'].map(fullChip));
+      m.L.wSock = CFG.WEAPON_SOCKETS; m.L.chain = r.chain; m.L.socks = r.socks; Game.withLoadout(m.L, () => { Game.stats = analyzeChain(Game.chain); });
+      Game.bullets = []; Game.turrets[0].cd = 0; Game.updateTurrets(1 / 60);
+      const swapN = Game.bullets.filter(b => b.turret).length, swapOk = swapN === WEAPONS.scatter.base.count * 2 && Game.turrets.length === 1;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const q = Game.player; Game.turrets = []; q.dashSX = q.x; q.dashSY = q.y; q.onDash();
       const none = !Game.turrets.length;
-      return { ok: one && shots >= 3 && half && aimed && rec > 0 && gone && mateOk && none,
+      return { ok: one && shots >= 3 && half && aimed && rec > 0 && gone && mateOk && swapOk && none,
         got: `衝刺兩次：砲台 ${nT} 座${one ? '' : '（要 1 座）'}；1 秒開火 ${shots} 發、每發 ${dmg1 == null ? '—' : +dmg1.toFixed(2)}（雷射 ${WEAPONS.laser.base.damage} × ${CFG.TURRET.dmg}）、${aimed ? '朝著敵人' : '方向不對'}；傷害統計「砲台」${rec}；${CFG.TURRET.t} 秒後${gone ? '消失' : '還在（錯誤）'}；`
-          + `隊友（散彈）的砲台一次 ${mb.length} 發${mateOk ? '、算隊友的' : '（錯誤）'}；先鋒號${none ? '沒有砲台' : '也有砲台（錯誤）'}` };
+          + `隊友（散彈）的砲台一次 ${mb.length} 發${mateOk ? '、算隊友的' : '（錯誤）'}；砲台還在時換成插鏡像迴路：一次 ${swapN} 發${swapOk ? '' : '（要 ' + WEAPONS.scatter.base.count * 2 + '）'}；先鋒號${none ? '沒有砲台' : '也有砲台（錯誤）'}` };
     }],
     ['機體', '星門號：傳送門','衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送；衝刺途中穿門不會把門越拉越長', M => {
       M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
