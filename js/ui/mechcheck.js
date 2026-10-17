@@ -1863,7 +1863,7 @@ const MechCheck = {
       const d = Math.hypot(e.x - p.x, e.y - p.y);
       return { ok: wind && Game.eBullets.length === 8 && d > 380, got: (wind ? '有預警' : '沒預警') + '，放了 ' + Game.eBullets.length + ' 發，距離 ' + Math.round(d) };
     }],
-    ['敵人', '列隊蟲', '6 節排成一列跟著走；頭被打死，下一節變成頭', M => {
+    ['敵人', '列隊蟲', `6 節排成一列跟著走；頭被打死，下一節變成頭；身體被小行星擋住、離前一節超過 ${CFG.WORM_CUT.gap} 達 ${CFG.WORM_CUT.t} 秒就斷開自己當頭（會尋路繞出來）`, M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const p = Game.player, W = [];
       for (let i = 0; i < 6; i++) { const w = new Enemy('worm', p.x + 600 + i * 22, p.y, 1); w.spawnT = 0; w.t = { ...w.t, dmg: 0 }; w.ahead = W[i - 1] || null; W.push(w); }
@@ -1871,7 +1871,16 @@ const MechCheck = {
       for (let f = 0; f < 120; f++) { Game.time += 1 / 60; for (const w of W) w.update(1 / 60, p); }
       const gap = Math.max(...W.slice(1).map((w, i) => Math.hypot(w.x - W[i].x, w.y - W[i].y)));
       W[0].dead = true; W[1].update(1 / 60, p);
-      return { ok: gap < 40 && W[1].ahead === null, got: '最大間距 ' + Math.round(gap) + '；頭死後第 2 節' + (W[1].ahead === null ? '變成頭' : '還在跟') };
+      // 被擋住：第 2 節在小行星圍成的 U 形裡（開口朝左），頭在右邊 200、不動；直線跟會一直撞小行星
+      Game.objs = [-90, -45, 0, 45, 90].map(a => ({ type: 'rock', x: p.x + 300 + Math.cos(a * Math.PI / 180) * 40, y: p.y + Math.sin(a * Math.PI / 180) * 40, r: 22, hp: 999, maxHp: 999 }));
+      const hd = new Enemy('worm', p.x + 500, p.y, 1), bd = new Enemy('worm', p.x + 300, p.y, 1);
+      hd.spawnT = bd.spawnT = 0; hd.t = { ...hd.t, dmg: 0, speed: 0 }; bd.t = { ...bd.t, dmg: 0 }; bd.ahead = hd; Game.enemies = [hd, bd]; Objects.flowT = 0;
+      p.x += 700;  // 玩家在頭的右邊
+      let cut = null;
+      for (let f = 0; f < 60 * 6; f++) { Game.time += 1 / 60; Objects.update(1 / 60); hd.update(1 / 60, p); bd.update(1 / 60, p); if (cut == null && !bd.ahead) cut = f / 60; }
+      const out = bd.x > p.x - 700 + 300 + 40;
+      return { ok: gap < 40 && W[1].ahead === null && cut != null && out, got: '最大間距 ' + Math.round(gap) + '；頭死後第 2 節' + (W[1].ahead === null ? '變成頭' : '還在跟')
+        + `；被小行星擋住：${cut != null ? cut.toFixed(1) + ' 秒斷開自己當頭' : '一直沒斷開'}、6 秒後${out ? '繞出來了' : `還在凹洞（${Math.round(bd.x - (p.x - 700))}）`}` };
     }],
     ['敵人', '盾衛', '打到盾（朝固定方向）的子彈反彈回去變成敵彈，不扣血；從背面打照常受傷；待機的被打在盾上也會醒', M => {
       const shoot = ang => {
