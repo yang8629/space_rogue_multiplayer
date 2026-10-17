@@ -91,6 +91,30 @@ function drawGateRing(c, A) {  // 星門號的傳送環（原點在環中心）
   c.strokeStyle = A.ring; c.lineWidth = 1.3; c.setLineDash([3, 3]);
   c.beginPath(); c.arc(0, 0, 7.5, 0, TAU); c.stroke(); c.setLineDash([]);
 }
+// 哨兵號的砲台（圖集 s/turret_base、s/turret_gun；原點在砲台中心，砲口朝 +x）：金屬色、切面上色（光從左上）、深色描邊
+//   玩家色不畫在貼圖上：遊戲裡另外加中心的光暈和剩餘時間的弧線
+function drawTurretBase(c) {
+  const R = 11, pts = Array.from({ length: 6 }, (_, i) => [Math.cos(i / 6 * TAU + TAU / 12) * R, Math.sin(i / 6 * TAU + TAU / 12) * R]);
+  for (let i = 0; i < 6; i++) {  // 六片三角形：朝左上的亮、朝右下的暗
+    const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % 6], mx = (ax + bx) / 2, my = (ay + by) / 2;
+    const lit = clamp(0.5 - (mx + my) / (R * 2.4), 0, 1);
+    c.fillStyle = `rgb(${Math.round(42 + lit * 120)},${Math.round(50 + lit * 128)},${Math.round(78 + lit * 128)})`;
+    c.beginPath(); c.moveTo(0, 0); c.lineTo(ax, ay); c.lineTo(bx, by); c.closePath(); c.fill();
+  }
+  c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath();
+  c.strokeStyle = '#03050c'; c.lineWidth = 2.2; c.lineJoin = 'round'; c.stroke();
+  for (const [x, y] of pts) { c.fillStyle = '#1b2238'; c.beginPath(); c.arc(x * 0.72, y * 0.72, 0.9, 0, TAU); c.fill(); }  // 固定腳的螺栓
+}
+function drawTurretGun(c) {
+  const g = c.createLinearGradient(0, -2.4, 0, 2.4);
+  g.addColorStop(0, '#b8c3dc'); g.addColorStop(0.5, '#6a7594'); g.addColorStop(1, '#2a3150');
+  c.beginPath(); c.rect(0, -2.2, 14, 4.4); c.fillStyle = g; c.fill(); c.strokeStyle = '#03050c'; c.lineWidth = 1.2; c.stroke();
+  c.fillStyle = '#dfe7f7'; c.fillRect(12.4, -2.2, 1.6, 4.4);  // 砲口
+  const d = c.createRadialGradient(-1.8, -1.8, 0.5, 0, 0, 6);  // 圓頂：左上亮
+  d.addColorStop(0, '#d6deef'); d.addColorStop(0.55, '#77829f'); d.addColorStop(1, '#2c3452');
+  c.beginPath(); c.arc(0, 0, 5.6, 0, TAU); c.fillStyle = d; c.fill(); c.strokeStyle = '#03050c'; c.lineWidth = 1.4; c.stroke();
+  c.fillStyle = '#0a1430'; c.beginPath(); c.arc(0, 0, 2, 0, TAU); c.fill();  // 中間的感測器（遊戲裡蓋玩家色的光）
+}
 function drawShipArt(c, S, o = {}) {
   const A = SHIP_ART.get(S), col = S.color, t = Game.time, x1 = A.nx - 2.8, x0 = A.nx + 1.5;
   const hull = () => { c.beginPath(); S.hull.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); };
@@ -129,6 +153,14 @@ function drawShipArt(c, S, o = {}) {
   if (A.id === 'vanguard') {  // 先鋒：兩側短砲管
     c.fillStyle = A.trim;
     for (const sg of [-1, 1]) c.fillRect(2, sg * 5 - 0.8, 8, 1.6);
+  }
+  if (A.id === 'sentry') {  // 哨兵：背上一座小砲塔（圓頂＋往前的短砲管）、兩翼的裝甲線
+    c.fillStyle = '#5a6584'; c.fillRect(-4.5, -1.1, 5.5, 2.2); c.strokeStyle = '#03050c'; c.lineWidth = 0.6; c.strokeRect(-4.5, -1.1, 5.5, 2.2);
+    const d = c.createRadialGradient(-5.5, -1.2, 0.3, -4.5, 0, 3.2);
+    d.addColorStop(0, '#d6deef'); d.addColorStop(1, '#3a4566');
+    c.beginPath(); c.arc(-4.5, 0, 3, 0, TAU); c.fillStyle = d; c.fill(); c.strokeStyle = '#03050c'; c.lineWidth = 0.8; c.stroke();
+    c.strokeStyle = A.trim; c.lineWidth = 0.9;
+    for (const sg of [-1, 1]) { c.beginPath(); c.moveTo(-1, sg * 10); c.lineTo(-7, sg * 9); c.stroke(); }
   }
   if (A.id === 'bulwark') {  // 堡壘：機翼上的裝甲板
     c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 0.9;

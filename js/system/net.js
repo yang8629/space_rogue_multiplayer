@@ -1079,6 +1079,7 @@ const Net = {
       fl: G.flames.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 火毯（散彈升級）留在地上的火
       qk: G.quakes.map(q => [r(q.x), r(q.y), q.r, r2(q.t), q.max]),  // 餘震（電漿升級）的預告圈
       dc: G.decoys.map(d => [r(d.x), r(d.y), r2(d.t), d.slot, r2(d.aim)]),  // 殘影（幻影號）
+      tu: G.turrets.map(q => [r(q.x), r(q.y), r2(q.t), q.slot, r2(q.aim)]),  // 砲台（哨兵號）
       tr: G.trails.map(L => [r(L.x1), r(L.y1), r(L.x2), r(L.y2), r2(L.t), L.max]),  // 殘留彈道（軌道升級）的電軌
       lk: G.links.map(L => [r2(L.t), ...L.es.filter(e => !e.dead && e.link === L).map(e => e.id)]),  // 共鳴（電漿升級）：剩幾秒、連結的敵人
       e: live.map(e => trimRow([e.id, ti(e.type), r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
@@ -1229,6 +1230,7 @@ const Net = {
     G.flames = arr(s.fl).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 30), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.quakes = arr(s.qk).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 90), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.decoys = arr(s.dc).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]), r: 12, decoy: true }));
+    G.turrets = arr(s.tu).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]) }));
     G.trails = arr(s.tr).filter(Array.isArray).map(a => ({ x1: num(a[0]), y1: num(a[1]), x2: num(a[2]), y2: num(a[3]), t: num(a[4]), max: num(a[5], 1) || 1 }));
     G.links = arr(s.lk).filter(Array.isArray).map(a => ({ t: num(a[0]), ids: a.slice(1) }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));

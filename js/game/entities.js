@@ -92,6 +92,7 @@ class Player {
   onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：排熱爆發、幻影號的殘影
     if (Net.role === 'client') return;
     if (this.ship.ability === 'decoy') Game.addDecoy(this, this.dashSX != null ? this.dashSX : this.x, this.dashSY != null ? this.dashSY : this.y);
+    if (this.ship.ability === 'turret') Game.addTurret(this, this.dashSX != null ? this.dashSX : this.x, this.dashSY != null ? this.dashSY : this.y);
     if (this.ship.ability === 'phase' && this !== Game.player) this.phaseFx();  // 隊友的瞬移在隊友那邊算：房主畫出來並轉給其他人（自己的在 update 畫）
     if (Game.mech.traits.vent) {  // 排熱爆發（散熱片 4 層）：朝四周放出 12 發
       const w = Game.wp, list = Array.from({ length: 12 }, (_, i) => shot({ angle: i / 12 * TAU, speed: Math.min(700, w.speed), damage: w.damage,

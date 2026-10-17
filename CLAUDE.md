@@ -18,7 +18,7 @@ GitHub Pages 發佈。`v1/` 是 V1（mp-0.6.4）的凍結副本（標籤 `v1-fin
 | `js/data/simvalue.js` | 武器升級價值表、路線價值表（`tests/exportvalue.js` 產生，不要手改） |
 | `js/data/chips.js` | 晶片 `CHIPS`（玩法晶片的 `evo` 進化、`kill` 玩法擊殺、`actRate`、`force`）、組件升級的等級、稀有晶片 id、起始電路 |
 | `js/data/parts.js` | 零件 `PARTS`、`mechStats` |
-| `js/data/ships.js` | 4 艘飛船：開局零件＋專屬能力（堡壘號灰血 `CFG.GRAY`、幻影號殘影 `CFG.DECOY`、星門號傳送門） |
+| `js/data/ships.js` | 5 艘飛船：開局零件＋專屬能力（先鋒號相位跳躍 `CFG.PHASE`、堡壘號灰血 `CFG.GRAY`、幻影號殘影 `CFG.DECOY`、星門號傳送門、哨兵號砲台 `CFG.TURRET`） |
 | `js/data/chapters.js` | 章節、通關進度 |
 | `js/data/affixes.js` | 精英詞綴 `AFFIX` |
 | `js/data/rares.js` | 稀有晶片的詞條 `RARE`（觸發時機、效果；各晶片的反擊寫在 `CHIPS[id].force`） |
@@ -26,7 +26,7 @@ GitHub Pages 發佈。`v1/` 是 V1（mp-0.6.4）的凍結副本（標籤 `v1-fin
 | `js/game/entities.js` | `Player`、`Bullet`、`ENEMY_TYPES`、`Enemy`（精英詞綴 `setAffixes`／`affixTick`） |
 | `js/game/objects.js` | 地圖物件 `Objects` |
 | `js/game/arena.js` | 戰鬥場地 `Arena`（方形場地／大地圖、牆、閘門、尋路 `navTo` 只給模擬電腦用） |
-| `js/game/game.js` | `Game`：流程、戰鬥、晶片效果、玩法擊殺、稀有詞條（`rareAct`）、零件、飛船能力（`tickMech`、`addDecoy`／`enemyTarget`）、三選一（`openReward`）、商店、改裝廠、主更新 |
+| `js/game/game.js` | `Game`：流程、戰鬥、晶片效果、玩法擊殺、稀有詞條（`rareAct`）、零件、飛船能力（`tickMech`、`addDecoy`／`enemyTarget`、`addTurret`／`updateTurrets`）、三選一（`openReward`）、商店、改裝廠、主更新 |
 | `js/game/range.js` | 靶場 |
 | `js/game/effects.js` | 特效事件（只發事件；真正的特效在 `js/ui/fx.js`） |
 | `js/system/input.js`／`audio.js` | 輸入；音效、音樂 |

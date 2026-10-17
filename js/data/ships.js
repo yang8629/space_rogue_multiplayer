@@ -1,10 +1,10 @@
-// 星環電路 雙人版 · ships.js：4 艘飛船（V2：飛船是「開局配置」，成長都走零件）
+// 星環電路 雙人版 · ships.js：5 艘飛船（V2：飛船是「開局配置」，成長都走零件）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // =====================================================================
 // SHIPS — 船體數值相同（HP 100、速度 270、衝刺冷卻 1.8 秒），差別在開局帶的零件和專屬能力：
-//   先鋒號 相位跳躍（CFG.PHASE，零件格多 2 格）、堡壘號 灰血（CFG.GRAY）、幻影號 殘影（CFG.DECOY）、星門號 傳送門
+//   先鋒號 相位跳躍（CFG.PHASE，零件格多 2 格）、堡壘號 灰血（CFG.GRAY）、幻影號 殘影（CFG.DECOY）、星門號 傳送門、哨兵號 砲台（CFG.TURRET）
 // =====================================================================
 const SHIPS = {
   vanguard: { name: '先鋒號', en: 'VANGUARD', color: '#4cc9f0', hp: 100, speed: 270, radius: 12, dashCd: 1.8,
@@ -31,6 +31,12 @@ const SHIPS = {
     brief: '衝刺時開出一對傳送門，子彈和飛船可以穿過。',
     desc: null, ability: 'portal', abilityName: '星門',
     abilityDesc: '衝刺時在起點和落點各開一個門（3 秒，同時只有一對）。自己和隊友的子彈、飛船穿過門會從另一個門出來；敵彈也會穿門，敵人不會。' },
+  sentry: { name: '哨兵號', en: 'SENTRY', color: '#ff8c42', hp: 100, speed: 270, radius: 12, dashCd: 1.8,
+    hull: [[16, 0], [5, -9], [-4, -13], [-11, -9], [-7, 0], [-11, 9], [-4, 13], [5, 9]],
+    parts: {}, partSlots: 6, cap: 7,
+    brief: '衝刺時在起點留下砲台，用你的整條電路幫你開火。',
+    desc: null, ability: 'turret', abilityName: '砲台',
+    skillDesc: () => `衝刺時在起點留下一座砲台（${CFG.TURRET.t} 秒，同時只有一座）：朝射程內最近的敵人，用你的整條電路開火（傷害 ${CFG.TURRET.dmg * 100}%，射速跟飛船一樣）。` },
 };
 
 // desc = 開局零件每種幾層＋總效果（圖示，好綠壞紅；沒有零件 = 空）；abilityDesc = 專屬能力（skillDesc）＋開啟的零件特性。數值直接從 PARTS、CFG 來，改了會跟著變

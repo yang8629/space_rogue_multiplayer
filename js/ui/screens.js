@@ -195,7 +195,7 @@ const Screen = {
         ${shipDescHtml(S)}
         <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
     }).join('');
-    this.show(`<div class="scr pick">
+    this.show(`<div class="scr pick wide">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
         <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：每艘飛船有一個專屬能力。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
@@ -217,7 +217,7 @@ const Screen = {
         <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
-    this.show(`<div class="scr pick">
+    this.show(`<div class="scr pick wide">
       <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
         <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，之後在「⚒ 軍械台」升級。</div></div>
         <button data-act="select" data-arg="${mode}" data-back>返回 (Esc)</button></div>
