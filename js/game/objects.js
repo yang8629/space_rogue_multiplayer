@@ -17,6 +17,7 @@ const OBJ = {
   ROCK_MIN_DMG: 30, ROCK_CREDIT_HP: 32,  // 小行星：單發至少 30 才打得動；打爆掉晶體（耐久每 32 一顆）
   PLANET_HP: 20,  // 行星耐久 = 半徑 × 20（只有旗艦的子彈會扣）；縮到原本一半大小以下就崩解
   FLOW_CELL: 20, FLOW_PAD: 12, FLOW_EVERY: 0.25,  // 敵人尋路：格子大小、障礙物外擴、多久重算一次
+  ESC_GHOST: 1.5,  // 敵人站在尋路走不到的格子超過幾秒（被小行星、牆圍死，脫困方向也被擋住）：之後穿過小行星走出來
   HOLE_ZONE_COST: 8, HOLE_WALL: 350,  // 尋路：黑洞閃避範圍（R + 30）裡的格子算幾步遠（有別條路就繞開，沒有才穿過）；大地圖：黑洞離牆至少多遠（閃避範圍 310 ＋ 40，不堵住通道）
   COMET_EVERY: [9, 14], COMET_WARN: 1.5, COMET_SPEED: 380, COMET_HP: 60, COMET_GRAV: 1.5,  // COMET_GRAV：彗星受引力影響的倍數
   COMET_FROST: { slow: 0.4, t: 2 }, COMET_SHARDS: 12,  // 被彗星打到（撞擊、爆炸、碎片）都會冰凍：減速 40%、2 秒（敵人、玩家一樣）；打爆、撞爆都往四周噴 12 片碎片
@@ -154,12 +155,17 @@ const Objects = {
     // 旗艦、滾動中的刺殼撞到小行星直接撞碎
     for (const e of G.enemies) {
       if (e.dead) continue;
+      // 圍死在凹洞：flowDir 一直判定站在走不到的格子（脫困中）超過 ESC_GHOST 秒 → 小行星不擋，照脫困方向穿出來
+      //   （2026-10-18 整局模擬：列隊蟲被兩顆重疊的小行星擠進牆裡，脫困方向正對小行星，182 秒不動，子彈也被小行星擋住，戰鬥卡住）
+      //   flowAt：最近一次 flowDir 的時間（不追玩家時 flowEsc 不會更新，不能拿舊的值）
+      e.escT = e.flowEsc && G.time - (e.flowAt || -1) < 0.1 ? (e.escT || 0) + dt : 0;
       for (const o of G.objs) {
         if (o.type !== 'planet' && (o.type !== 'rock' || o.dead)) continue;
         if (o.type === 'rock' && (e.t.boss || (e.type === 'brute' && e.mode === 'charge'))) {
           if (dist2(e.x, e.y, o.x, o.y) < (o.r + e.r) ** 2) this.hitRock(o, o.hp, null, o.x, o.y, true);
           continue;
         }
+        if (o.type === 'rock' && e.escT > OBJ.ESC_GHOST) continue;
         if (!this.pushOut(e, o, e.r)) continue;
         if (e.whT > 0) G.wallSlam(e);  // 撞牆（散彈升級）
         if (Math.hypot(e.vx, e.vy) > 300 && G.time > (e.slamT || 0)) {
@@ -262,7 +268,7 @@ const Objects = {
     }
     // 自己站在走不到的格子（障礙物外擴 12 的範圍裡）、旁邊也都走不到：朝 4 格內最近的可走格子走出來
     //   （2026-10-16：蟲群貼著兩顆小行星卡進凹洞，以前回傳 null → 直接朝玩家撞小行星，卡死不動，子彈也被小行星擋住）
-    e.flowEsc = !(dist[cy * W + cx] >= 0);  // 脫困中（站在走不到的格子）：steer 不繞黑洞（繞黑洞的轉向會把往外走的方向轉回凹洞裡）
+    e.flowEsc = !(dist[cy * W + cx] >= 0); e.flowAt = Game.time;  // 脫困中（站在走不到的格子）：steer 不繞黑洞（繞黑洞的轉向會把往外走的方向轉回凹洞裡）
     if (best < 0 && e.flowEsc) {
       let bq = Infinity;
       for (let oy = -4; oy <= 4; oy++) for (let ox = -4; ox <= 4; ox++) {
