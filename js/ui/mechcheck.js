@@ -1666,9 +1666,10 @@ const MechCheck = {
           got: `走路${w.through ? '鑽過去了' : '過不去'}（最多陷進 ${w.deep.toFixed(1)}）；衝刺${d.through ? '鑽過去了' : '過不去'}（最多陷進 ${d.deep.toFixed(1)}）` };
       },
     ])],
-    ['地圖物件', '小行星凹洞：敵人鑽得出來', '敵人被擠進小行星中間的凹洞（站在尋路走不到的格子）時，先朝最近走得到的格子走出來；出口朝著黑洞也一樣（繞黑洞的轉向不會把牠轉回凹洞）', M => {
+    ['地圖物件', '小行星凹洞：敵人鑽得出來', `敵人被擠進小行星中間的凹洞（站在尋路走不到的格子）時，先朝最近走得到的格子走出來；出口朝著黑洞也一樣（繞黑洞的轉向不會把牠轉回凹洞）；被圍死（出口也被小行星擋住）${OBJ.ESC_GHOST} 秒後穿過小行星出來`, M => {
       // pocket(rocks, hole, player)：蟲群從 (ex, ey) 出發，1.5 秒內要離開 30 以上、站到走得到的格子，而且沒穿進小行星
-      const pocket = (ex, ey, rocks, hole, pp) => {
+      //   ghost：被圍死（走得到的格子都在小行星外面）：容許穿過小行星，3 秒內出來
+      const pocket = (ex, ey, rocks, hole, pp, ghost = false) => {
         M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
         const p = Game.player; p.x = ex + pp[0]; p.y = ey + pp[1];
         const e = M.targets([[-pp[0], -pp[1]]], 'swarmer', false, 1)[0]; e.t = { ...e.t, dmg: 0 };
@@ -1677,19 +1678,21 @@ const MechCheck = {
         Objects.flowT = 0;
         const free = () => { const F = Objects.fields && Objects.fields.get(p), C = OBJ.FLOW_CELL; return !!F && F.dist[Math.floor(e.y / C) * F.W + Math.floor(e.x / C)] >= 0; };
         let inside = false, tOut = null;
-        for (let f = 0; f < 90 && tOut == null; f++) {
+        for (let f = 0; f < (ghost ? 180 : 90) && tOut == null; f++) {
           Game.time += 1 / 60; Objects.update(1 / 60); e.update(1 / 60, p);
           p.x = ex + pp[0]; p.y = ey + pp[1];  // 玩家不動（不被黑洞拉走）
           if (Game.objs.some(o => o.type === 'rock' && dist2(e.x, e.y, o.x, o.y) < (o.r + e.r - 3) ** 2)) inside = true;
           if (f > 0 && Math.hypot(e.x - ex, e.y - ey) > 30 && free()) tOut = f / 60;
         }
-        return { ok: !inside && tOut != null, got: `${tOut != null ? `${tOut.toFixed(2)} 秒離開凹洞` : `1.5 秒還在凹洞（離起點 ${Math.round(Math.hypot(e.x - ex, e.y - ey))}）`}${inside ? '、穿進小行星了' : ''}` };
+        return { ok: (ghost || !inside) && tOut != null, got: `${ghost ? '圍死：' : ''}${tOut != null ? `${tOut.toFixed(2)} 秒離開凹洞` : `${ghost ? 3 : 1.5} 秒還在凹洞（離起點 ${Math.round(Math.hypot(e.x - ex, e.y - ey))}）`}${inside && !ghost ? '、穿進小行星了' : ''}` };
       };
       return M.all([
         // 2026-10-16 整局模擬（相刃第 74 局）卡住的地形：蟲群貼著 3 顆小行星，右上 330 有黑洞，玩家在右下 80；以前一直撞小行星、刃片也被擋住，212 秒打不完（格子對齊照原本那局）
         () => pocket(556, 800, [[46, -1, 27], [34, 11, 24], [-11, 38, 22], [119, -61, 24], [160, -84, 18], [259, -174, 18], [316, -213, 32], [346, -230, 21]], [291, -154], [78, 22]),
         // 出口朝著黑洞：左右、下面是小行星，上面 330 是黑洞，玩家在下面
         () => pocket(1200, 900, [[-35, 0, 24], [35, 0, 24], [0, 36, 24], [-60, 30, 24], [60, 30, 24]], [0, -330], [0, 160]),
+        // 圍死：6 顆小行星圍一圈、互相重疊，沒有縫（2026-10-18 整局模擬：列隊蟲被小行星擠進牆裡，182 秒不動）；黑洞放遠一點
+        () => pocket(1200, 900, [0, 1, 2, 3, 4, 5].map(i => [Math.cos(i / 6 * TAU) * 40, Math.sin(i / 6 * TAU) * 40, 24]), [900, 900], [0, 200], true),
       ]);
     }],
     ['地圖物件', '黑洞：正中間也扣血', `敵人在黑洞核心裡每秒扣最大 HP 的 ${OBJ.HOLE_PCT * 100}%（至少每 0.25 秒 10），剛好在正中間也一樣`, M => {
