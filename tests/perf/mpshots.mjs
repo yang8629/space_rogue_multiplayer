@@ -28,10 +28,11 @@ for (const [X, role] of [[H, 'host'], [C, 'client']]) await X.p.evaluate(role =>
   if (role === 'host') { window.__q = { conn, slot: 0, linked: false }; Net.pending.push(window.__q); } else Net.conn = conn;  // 房主：隊友打過招呼才分號碼
   Net.peer = { destroyed: false, destroy() {}, on() {}, reconnect() {} };
   Net.role = role; Net.resetStats(); Net.code = 'TEST';
+  if (role === 'host') Game.state = 'lobby';  // 房主在大廳才收新隊友
 }, role);
 await C.p.evaluate(() => Net.send({ t: 'hello', v: CFG.VERSION })); await wait(500);
 // 大廳 → 選配裝 → 航圖
-await H.p.evaluate(() => Net.beginPick()); await wait(500);
+await H.p.evaluate(() => { Net.mateInRoom = true; Net.beginPick(); }); await wait(500);
 await C.p.evaluate(() => Net.ready('gate', 'railgun', 'split')); await wait(300);
 await H.p.evaluate(() => Net.ready('wraith', 'plasma', 'amp')); await wait(1200);
 console.log('狀態', await H.p.evaluate(() => Game.state), await C.p.evaluate(() => Game.state));

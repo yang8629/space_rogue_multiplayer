@@ -12,12 +12,14 @@ const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapo
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
+const NET_IDLE_EVERY = 5;  // 待機（還沒發現玩家）的敵人每幾次同步才送一次完整資料；中間只送 id（隊友那邊沿用上一次的）
 const NET_VOTE_TIME = 20;  // 兩人都回到航圖後的投票時間（秒）
 const NET_GO_TIME = 3;     // 兩人都選好節點後，倒數幾秒進關卡
 const NET_REJOIN_TIME = 120;  // 斷線後房間保留多久等隊友重連（秒）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
 const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; return a ? a.id : 0; };
+const trimRow = a => { while (a.length && (a[a.length - 1] === 0 || a[a.length - 1] == null)) a.pop(); return a; };  // 尾巴的 0／null 不送（隊友那邊讀不到就當 0／null）
 
 const NET_MAX = 4;  // 一個房間最多幾人（含房主）
 
@@ -39,7 +41,7 @@ const Net = {
   chapter: 1,          // 這個房間選的章節：房主在大廳選，隊友照房主的
   at: {},              // 隊友：其他玩家在不在航圖（slot → 'map'；房主轉告）
   stats: null,         // 這一局的連線數據（寫進遊玩紀錄）
-  fxBuf: [], sendAcc: 0, inAcc: 0, pingT: 0,
+  fxBuf: [], sendAcc: 0, sendN: 0, inAcc: 0, pingT: 0,
   active() { return !!this.role; },
   fx(e) { if ((this.conn || this.peers.some(q => q.conn)) && this.fxBuf.length < 400) this.fxBuf.push(e); },
   // 送訊息：隊友 → 房主；房主 → 所有隊友（只送給某一個用 sendTo）
@@ -1064,6 +1066,12 @@ const Net = {
       0, p.shield || 0, p.frostT > 0 ? 1 : 0, p.revengeT > 0 ? 1 : 0,  // （空位）、護盾層數、被凍住、逆襲中
       PART_IDS.map(id => parts[id] || 0), r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0, Game.wardOf(p)];  // 最後：終焉護殼還能免死幾次  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
     const rows = [row(P, 1, G.parts, G.passives.magnet), ...G.mates.map(m => row(m, m.slot, m.L.parts, m.L.passives.magnet))];
+    // 敵人：種類、mode 這些字串寫成 et 的編號；待機的（蟲潮整區可能幾百隻）每 NET_IDLE_EVERY 次才送完整資料，中間只列 id 在 ei
+    const full = this.sendN++ % NET_IDLE_EVERY === 0, et = [], etIdx = new Map(), ei = [], live = [];
+    const ti = k => { let i = etIdx.get(k); if (i == null) { i = et.length; et.push(k); etIdx.set(k, i); } return i; };
+    for (const e of G.enemies) if (!e.dead) {  // netSent：送過一次完整資料（隊友那邊才有東西可以沿用）
+      if (!full && e.alert === false && e.spawnT <= 0 && e.netSent) ei.push(e.id); else { live.push(e); e.netSent = true; }
+    }
     const shared = {
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
@@ -1073,14 +1081,15 @@ const Net = {
       dc: G.decoys.map(d => [r(d.x), r(d.y), r2(d.t), d.slot, r2(d.aim)]),  // 殘影（幻影號）
       tr: G.trails.map(L => [r(L.x1), r(L.y1), r(L.x2), r(L.y2), r2(L.t), L.max]),  // 殘留彈道（軌道升級）的電軌
       lk: G.links.map(L => [r2(L.t), ...L.es.filter(e => !e.dead && e.link === L).map(e => e.id)]),  // 共鳴（電漿升級）：剩幾秒、連結的敵人
-      e: G.enemies.filter(e => !e.dead).map(e => [e.id, e.type, r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
-        e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, e.mode, r2(e.modeT), r2(e.chargeA),
+      e: live.map(e => trimRow([e.id, ti(e.type), r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
+        e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, ti(e.mode), r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 || e.burnL ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
         e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0),  // 盾衛的盾方向、潛伏者的隱形程度
         e.type === 'spitter' || e.type === 'hive' ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 開火倒數（噴吐者鼓起、母巢脈動）、弱點標記／破甲
         e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
         e.affixes ? e.affixes.join(',') : null, e.r !== e.t.radius ? r2(e.r) : null, e.ledT > 0 ? 1 : 0,  // 精英詞綴、體型（分裂後變小）、被統帥加成
-        e.alertT > 0 ? r2(e.alertT) : 0]),  // 剛發現玩家（頭上「!」還顯示幾秒）
+        e.alertT > 0 ? r2(e.alertT) : 0])),  // 剛發現玩家（頭上「!」還顯示幾秒）
+      et, ei,
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r, G.exit.gate ? 1 : 0] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
       as: Arena.rect ? 0 : [Arena.seed, Arena.n, Arena.bossId || 0, Arena.sc || 1], go: Arena.gates.filter(g => g.open).length,  // 大地圖：種子（隊友照種子產生同一張地圖）、開了幾道閘門
@@ -1185,18 +1194,20 @@ const Net = {
     }
     if (s.kp && typeof s.kp === 'object')  // 玩法擊殺：房主算好的次數，這邊只增不減
       for (const k in s.kp) if (hasLv(k) && num(s.kp[k]) > (G.playKills[k] || 0)) G.playKills[k] = Math.floor(num(s.kp[k]));
+    const et = arr(s.et), prev = new Map(G.enemies.map(e => [e.id, e]));
     G.enemies = arr(s.e).map(a => {
-      const t = ENEMY_TYPES[a[1]];
+      const type = et[a[1]], t = typeof type === 'string' && ENEMY_TYPES[type];
       if (!t) return null;
-      return { id: a[0], type: a[1], t, r: typeof a[25] === 'number' ? clamp(a[25], 4, t.radius) : t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
+      return { id: a[0], type, t, r: typeof a[25] === 'number' ? clamp(a[25], 4, t.radius) : t.radius, x: num(a[2]), y: num(a[3]), vx: num(a[4]), vy: num(a[5]),
         hp: num(a[6]), maxHp: num(a[7], 1), rot: num(a[8]), flash: a[9] ? 0.08 : 0, spawnT: num(a[10]), spawnMax: num(a[11], 1) || 1,
-        mode: a[12], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
+        mode: et[a[12]], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
         shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false,
         cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: a[1] === 'worm' ? num(a[23]) : undefined,
         affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]) };
     }).filter(Boolean);
+    for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
     const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）
-    for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;
+    for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;  // 沿用的那節也要重接（前面那節可能換成新的物件）
     const pal = arr(s.pal);
     G.bullets = arr(s.b).map(a => {
       const ang = num(a[2]), tl = num(a[10]);

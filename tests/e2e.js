@@ -180,6 +180,20 @@ while (!sector2 && guard++ < 40) {
       const pid = Object.keys(HA.CHIPS).find(id => HA.CHIPS[id].lvs);  // 玩法擊殺：房主算的次數同步到隊友（跟晶體同一份快照，欄位名不能撞）
       HA.Game.mates[0].L.playKills[pid] = 7; step(3);
       ok(HB.Game.playKills[pid] === 7, `play kills synced to client (${pid}: ${HB.Game.playKills[pid]})`);
+      // 待機的敵人中間幾次只送 id（ei）：隊友那邊要一直留著、不閃；打掉之後要消失
+      for (let i = 0; i < 3; i++) { HA.Game.spawnEnemy('swarmer'); const w = HA.Game.enemies[HA.Game.enemies.length - 1]; w.spawnT = 0; w.x = HA.Game.player.x + 2000 + i * 30; }
+      const send0 = hostConn.send; let partial = 0, missing = 0, idleN = 0;
+      hostConn.send = m => { if (m.t === 's' && m.ei && m.ei.length) partial++; send0(m); };
+      for (let i = 0; i < 12; i++) {
+        step(1);
+        const ids = new Set(HB.Game.enemies.map(e => e.id));
+        for (const e of HA.Game.enemies) if (!e.dead && e.alert === false && e.spawnT <= 0) { idleN++; if (!ids.has(e.id)) missing++; }
+      }
+      hostConn.send = send0;
+      const idleE = HA.Game.enemies.find(e => !e.dead && e.alert === false && e.spawnT <= 0);
+      if (idleE) { idleE.hurt(1e9, 0, 0, 'direct', null); step(3); }
+      ok(partial > 0 && idleN > 0 && missing === 0 && idleE && !HB.Game.enemies.some(e => e.id === idleE.id),
+        `idle enemies sent as ids only: client keeps them, drops the killed one (partial ${partial}, idle ${idleN}, missing ${missing}, killed ${idleE && idleE.id})`);
     }
     step(10);
     ok(HB.Game.objs.length === HA.Game.objs.filter(o => o.type !== 'cometgen').length, `map objects synced (${HB.Game.objs.map(o => o.type).join(',') || 'none'})`);
