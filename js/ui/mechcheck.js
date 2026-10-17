@@ -1543,18 +1543,19 @@ const MechCheck = {
       if (at == null || Math.abs(at - q.ax) >= 60) return { ok: false, got: `門在 ${Math.round(q.ax - x0)} 與 ${Math.round(q.bx - x0)}，子彈沒有穿門` };
       return { ok: true, got: `子彈從 ${Math.round(q.bx - x0)} 的門進去，從 ${Math.round(at - x0)} 出來` };
     }],
-    ['機體', '先鋒號：相位跳躍', '衝刺變成瞬移（同一幀到，之後不往前滑）；穿過小行星落到另一邊；落點在小行星裡就停在前面；大地圖：穿過同一區的牆、跳過打開的閘門到下一區；關著的閘門、走過的閘門跳不過去；其他飛船照常衝刺', M => {
+    ['機體', '先鋒號：相位跳躍', '衝刺變成瞬移（同一幀到，之後不往前滑）；無敵時間跟一般衝刺一樣；穿過小行星落到另一邊；落點在小行星裡就停在前面；大地圖：穿過同一區的牆、跳過打開的閘門到下一區；關著的閘門、走過的閘門跳不過去；其他飛船照常衝刺', M => {
       const D = CFG.PHASE.dist, keys = new Set(Input.keys);
       const dash = p => { Input.keys = new Set(['d']); Input.dash = true; p.dashCd = 0; try { p.update(1 / 60); } finally { Input.keys = keys; Input.dash = false; } };
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); Game.enemies = []; Game.objs = [];
       const p = Game.player, x0 = p.x, rock = (dx, r) => ({ type: 'rock', x: x0 + dx, y: p.y, r, hp: 999, maxHp: 999 });
       dash(p); const d1 = p.x - x0;
-      for (let f = 0; f < 20; f++) p.update(1 / 60);
+      const invT = s => { let n = 1; for (let f = 0; f < 20; f++) { s.update(1 / 60); if (s.invuln) n++; } return n / 60; };  // 衝刺那一幀起算、無敵幾秒
+      const inv = invT(p);
       const slide = p.x - x0 - d1;
       p.x = x0; Game.objs = [rock(75, 40)]; dash(p); const thru = p.x - x0;
       p.x = x0; Game.objs = [rock(D, 40)]; dash(p); const land = p.x - x0, landFree = Objects.shipFree(p, p.x, p.y);
       M.setup('sandbox', 'wraith', 'laser', null, null, ['weapon', null, null, null]); Game.enemies = []; Game.objs = [];
-      const w = Game.player, wx = w.x; dash(w); const wd = w.x - wx;
+      const w = Game.player, wx = w.x; dash(w); const wd = w.x - wx, winv = invT(w);
       // 大地圖
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
@@ -1581,9 +1582,9 @@ const MechCheck = {
         // 同一個位置，但飛船已經在下一區（這一區走過了）：這一區的落點都不算，現在的地圖區與區之間的牆比瞬移距離厚，只能這樣測
         jump(wall[0], wall[1], wall[2], wall[5] + 1); otherZone = Math.hypot(q.x - wall[3], q.y - wall[4]) > 1;
       }
-      const ok = Math.abs(d1 - D) < 1 && Math.abs(slide) < 1 && Math.abs(thru - D) < 1 && land <= D - 40 - p.r && land > D - 40 - p.r - 6 && landFree && wd < 30
+      const ok = Math.abs(d1 - D) < 1 && Math.abs(slide) < 1 && Math.abs(thru - D) < 1 && land <= D - 40 - p.r && land > D - 40 - p.r - 6 && landFree && wd < 30 && Math.abs(inv - winv) < 0.02
         && closed && opened && noBack && wallOk && otherZone;
-      return { ok, got: `空地 ${d1.toFixed(1)}（之後滑 ${slide.toFixed(1)}）；穿小行星 ${thru.toFixed(1)}；落點在小行星裡 → 停在 ${land.toFixed(1)}${landFree ? '' : '（陷在裡面）'}；幻影號第一幀 ${wd.toFixed(1)}；`
+      return { ok, got: `空地 ${d1.toFixed(1)}（之後滑 ${slide.toFixed(1)}）；穿小行星 ${thru.toFixed(1)}；落點在小行星裡 → 停在 ${land.toFixed(1)}${landFree ? '' : '（陷在裡面）'}；幻影號第一幀 ${wd.toFixed(1)}；無敵 ${inv.toFixed(2)} 秒（幻影號一般衝刺 ${winv.toFixed(2)}）；`
         + `關著的閘門${closed ? '跳不過' : '跳過去了'}；打開的閘門${opened ? '跳到下一區' : '沒過去'}；往回${noBack ? '跳不回去' : '跳回去了'}；同一區的牆${wall ? wallOk ? '穿過去了' : '沒穿過' : '（地圖上找不到）'}；已經在下一區時${otherZone ? '跳不回這一區' : '跳回這一區了'}` };
     }],
     ['地圖物件', '行星', '正對行星的子彈被擋住；從旁邊經過的電漿球被彎過去；旗艦的子彈打到行星會讓它變小、打光崩解；一般敵人的子彈只會被擋住', M => M.all([

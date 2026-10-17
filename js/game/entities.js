@@ -160,7 +160,7 @@ class Player {
         this.dashCd = this.ship.dashCd * (1 - P.dashCd) * M.dashCd;
         this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
         this.dashSX = this.x; this.dashSY = this.y;  // 衝刺起點（星門號的第一個門）：在瞬移之前記
-        if (this.ship.ability === 'phase') { this.phaseJump(); this.dashT = CFG.PHASE.t; this.phaseFx(); }
+        if (this.ship.ability === 'phase') { this.phaseJump(); this.dashT = CFG.PHASE.t; this.iframe = Math.max(this.iframe, CFG.DASH_TIME); this.phaseFx(); }  // 無敵時間跟一般衝刺一樣（停在落點的時間比較短，用 iframe 補足）
         this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
         burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
         if (Game.runStats) Game.runStats.dashes++;
