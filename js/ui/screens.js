@@ -51,7 +51,7 @@ function sockLine(id) {
   if (!isHost(id) || id === 'weapon') return '';
   const n = socketsOf(id), P = HOST_PRODUCT[baseOf(id)] || '';
   // 產物（插在上面的組件作用在哪裡）縮起來時也顯示：選晶片時常常要看
-  return `<div class="ty sockln">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}${P ? `<br>產物：${P}` : ''}</div>`;
+  return `<div class="ty sockln${n ? '' : ' det'}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}${P ? `<br>產物：${P}` : ''}</div>`;
 }
 
 // 零件卡片：名稱＋層數（圓點，4 層開滿）、每層效果（圖示）、2／4 層特性（已開啟的亮起來）
@@ -197,7 +197,7 @@ const Screen = {
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
-        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：飛船是開局配置（帶哪些零件）加上專屬能力（相位跳躍、灰血、殘影、傳送門），之後的成長靠零件。下一步選武器${free ? '' : '，最後三選一起始晶片'}。</div></div>
+        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：每艘飛船有一個專屬能力。</div></div>
         ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
       <div class="cards left">${cards}</div></div>`);
   },
@@ -212,14 +212,14 @@ const Screen = {
       return `<div class="card" style="border-color:${W.color}">
         <div class="ttl" style="color:${W.color}">${W.name}</div>
         <div class="ds brief">${WEAPON_BRIEF[id] || W.desc}</div>
-        <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
         <div class="det"><div class="ds">${W.desc}</div>
+        <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
         <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
-        <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，在「⚒ 軍械台」升級兩段：第一段 3 選 1，第二段 2 選 1。</div></div>
+        <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，之後在「⚒ 軍械台」升級。</div></div>
         <button data-act="select" data-arg="${mode}" data-back>返回 (Esc)</button></div>
       <div class="cards left">${cards}</div></div>`);
   },
@@ -231,7 +231,7 @@ const Screen = {
       chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>
-        <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選好的晶片直接裝在電路第 2 格（武器右邊）；組件開局沒有插座可插，會放進倉庫。</div></div>
+        <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選一個開局晶片，裝在武器右邊。</div></div>
         <button data-act="ship" data-arg="${mode}:${shipId}" data-back>返回 (Esc)</button></div>
       <div class="cards">${cards}</div></div>`);
   },
@@ -438,7 +438,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="map"><svg>${lines}</svg>${nodes}</div>
       ${Game.sos ? `<div class="sub" style="color:${EVENTS.sos.color}">⚠ 追兵：下一場一般戰鬥或精英戰敵人 +${Math.round((Game.sos.mul - 1) * 100)}%${(k => k ? `；${sosTxt(k).split('，').slice(1).join('，')}` : '')(Game.sosPay(Game.sos))}</div>` : ''}
       <div class="toast">${toast}</div>
-      <details class="nlegs" open><summary>節點介紹</summary><div class="nleg-grid">${legend}</div></details></div>`);
+      <details class="nlegs"><summary>節點介紹</summary><div class="nleg-grid">${legend}</div></details></div>`);
   },
 
   reward() {

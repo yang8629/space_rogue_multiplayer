@@ -326,7 +326,8 @@ pump(); step(3);
 const skId = JSON.parse(invB)[0];
 ok(HC.Game.mode === 'coop' && HC.Game.state === 'map' && HA.Net.linked && !HA.Net.mateAway, 'refreshed client resumed the run');
 ok(JSON.stringify(HC.Game.chain) === chainB && JSON.stringify(HC.Game.inventory) === invB, `refreshed: loadout restored from host (${chainB})`);
-ok(HC.CHIPS[skId] && HC.CHIPS[skId].sk === 2 && HC.Game.slotAttr[1] === 'eff', `refreshed: socketed chip ${skId} and slot attributes restored`);
+// 插座數跟房主那邊一樣（一開始放的是 2 插座的黏著；途中拿到稀有版黏著會變稀有、插座數取比較多的，所以不寫死 2）
+ok(HC.CHIPS[skId] && HA.CHIPS[skId] && HC.CHIPS[skId].sk === HA.CHIPS[skId].sk && HC.CHIPS[skId].sk >= 2 && HC.Game.slotAttr[1] === 'eff', `refreshed: socketed chip ${skId} and slot attributes restored`);
 ok(HC.Game.credits === crB, `refreshed: wallet restored (${HC.Game.credits} = ${crB})`);
 ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.map)) === JSON.stringify(HA.Net.packMap(HA.Game.map)), 'refreshed: same sector and map');
 // 繼續玩：一起進下一個節點
