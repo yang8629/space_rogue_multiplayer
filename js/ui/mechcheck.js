@@ -2588,7 +2588,24 @@ const MechCheck = {
       const a = save(m, P), b = save(P, m);
       return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
     }],
-    ['多人', '在場的玩家', '兩人都在：在場 2 人、算多人難度、敵人找最近的那個；隊友離線或倒下：只剩房主、恢復單人難度（離線）', M => {
+    ['多人', '人數和敵人數量', `一波的敵人：單人 ×1、雙人 ×${CFG.COOP_COUNT[0]}（第 1 星區開頭）；三、四人每多一個在線的人再 +${CFG.COOP_EXTRA}；離線的不算`, M => {
+      const wave = () => {  // 第 1 星區開頭的一波（難度 0）；亂數固定 0.99 → 全部是蟲群，數量 = 預算
+        Game.combat = { level: 0, wave: 0, wavesTotal: 3, elites: 0, boss: false, sandbox: false, themes: { list: [], share: 0 }, pending: [] };
+        M.luck(0.99, () => Game.startWave(1));
+        return Game.combat.pending.length;
+      };
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const solo = wave();
+      M.coop();
+      const add = () => { const q = new Player(SHIPS.vanguard); q.L = Game.mates[0].L; q.slot = Game.mates.length + 2; Game.mates.push(q); };
+      const two = wave(); add(); const three = wave(); add(); const four = wave();
+      Game.mates[2].gone = true; const left = wave();  // 四人房、一個人離線 = 三人
+      const b0 = (5 + 3) * CFG.WAVE_MUL, want = n => Math.ceil(b0 * (CFG.COOP_COUNT[0] + CFG.COOP_EXTRA * Math.max(0, n - 2)) - 1e-9);  // 第 1 波、難度 0 的預算（見 Game.startWave）
+      const near = (v, n) => Math.abs(v - want(n)) <= 1;
+      return { ok: near(two, 2) && near(three, 3) && near(four, 4) && left === three,
+        got: `單人 ${solo}、雙人 ${two}（要 ${want(2)}）、三人 ${three}（要 ${want(3)}）、四人 ${four}（要 ${want(4)}）；四人房一人離線 ${left}（${left === three ? '跟三人一樣' : '錯誤'}）` };
+    }],
+    ['多人', '在場的玩家','兩人都在：在場 2 人、算多人難度、敵人找最近的那個；隊友離線或倒下：只剩房主、恢復單人難度（離線）', M => {
       const m = M.coop(), P = Game.player;
       const both = Game.players().length === 2 && Game.coopOn() && Game.nearestPlayer(m.x, m.y) === m && Game.nearestPlayer(P.x, P.y) === P;
       m.gone = true;
