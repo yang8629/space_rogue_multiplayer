@@ -177,21 +177,26 @@ while (!sector2 && guard++ < 40) {
       al.hurt(1, 0, 0, 'direct', null); step(3);
       const cb = HB.Game.enemies.find(e => e.id === al.id);
       ok(idle && cb && cb.alertT > 0 && cb.modeT > 0, `alert: idle on spawn, client sees "!" and the alarm ringing (${idle} ${cb && cb.alertT} / ${cb && cb.modeT})`);
+      const pid = Object.keys(HA.CHIPS).find(id => HA.CHIPS[id].lvs);  // 玩法擊殺：房主算的次數同步到隊友（跟晶體同一份快照，欄位名不能撞）
+      HA.Game.mates[0].L.playKills[pid] = 7; step(3);
+      ok(HB.Game.playKills[pid] === 7, `play kills synced to client (${pid}: ${HB.Game.playKills[pid]})`);
     }
     step(10);
     ok(HB.Game.objs.length === HA.Game.objs.filter(o => o.type !== 'cometgen').length, `map objects synced (${HB.Game.objs.map(o => o.type).join(',') || 'none'})`);
     const sA0 = HA.Game.chain.length, sB0 = HB.Game.chain.length;  // 打之前的插槽數（零件的機體強化也會 +1，所以跟打之前比）
     const cA0 = HA.Game.credits, cB0 = HB.Game.credits, rw = { combat: 0, elite: 15, boss: 50 }[type];
     if (type !== 'boss') ok(!HA.Arena.rect && HB.Arena.seed === HA.Arena.seed && HB.Arena.W === HA.Arena.W && HB.Arena.gates.length === HA.Arena.gates.length, `${type}: client built the same big map (seed ${HB.Arena.seed} / ${HA.Arena.seed})`);
-    let gatesSeen = 0;
+    let gatesSeen = 0, crystalsHost = 0, crystalsSeen = 0;  // 晶體：房主地上有的時候，隊友那邊也要看得到
     for (let i = 0; i < 400 && HA.Game.inArena; i++) {  // 大地圖：閘門打開後，房主直接放到閘門前面一點（穿過去）
       killAll();
       const g = HA.Arena.gates[HA.Game.player.zone];
       step(5);
+      if (HA.Game.pickups.length) { crystalsHost++; if (HB.Game.pickups.length) crystalsSeen++; }
       if (HB.Arena.gates.some(q => q.open)) gatesSeen = 100;
       if (HA.Game.exit && g && g.open) { HA.Game.player.x = g.x + g.nx * 40; HA.Game.player.y = g.y + g.ny * 40; }
     }
     if (type !== 'boss') ok(gatesSeen >= 100, `${type}: client saw the gate open`);
+    if (crystalsHost) ok(crystalsSeen > 0, `${type}: client sees crystals on the ground (${crystalsSeen}/${crystalsHost} steps)`);
     step(5);
     const gA = HA.Game.credits - cA0, gB = HB.Game.credits - cB0;
     ok(gA === gB && gA > rw, `drops shared: host +${gA}, client +${gB}`);
