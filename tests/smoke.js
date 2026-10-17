@@ -65,7 +65,7 @@ Net.conn = { open: true, send: m => sent.push(m), close() {} };
 Net.startClient({ ship: 'bulwark', map: packedMap, bossId: mapBoss }); Game.startCombat({ sandbox: true, level: 0 });
 assert(Game.state === 'play' && Game.mates[0].ship === SHIPS.bulwark, 'client started');
 Net.applySnap(snap);
-assert(Game.enemies.length === snap.e.length && Game.bullets.length === snap.b.length, `client applied snapshot (${Game.enemies.length} enemies, ${Game.bullets.length} bullets)`);
+assert(Game.enemies.length === snap.e.length + snap.ei.length && Game.bullets.length === snap.b.length, `client applied snapshot (${Game.enemies.length} enemies, ${Game.bullets.length} bullets)`);
 for (let i = 0; i < 120; i++) { Game.update(1 / 60); render(); }
 Net.onDmg(dmgMsg);
 assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.runStats.kills === dmgMsg.team[2].kills, 'client got its own damage from host');
@@ -83,7 +83,8 @@ assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.r
 // 精英詞綴同步：詞綴（不認得的丟掉）、分裂後的體型、統帥加成、狂暴、盾的方向；地雷（剩幾秒）
 {
   const s2 = JSON.parse(JSON.stringify(snap));
-  s2.e = [[77777, 'elite', 1000, 800, 0, 0, 400, 800, 0, 0, 0, 1, 'chase', 0, 0, 0, 0, 1, 0, 1.5, 0, null, 0, null, 'shield,split,bogus', 18.2, 1]];
+  s2.et = ['elite', 'chase']; s2.ei = [];  // 種類、mode 用 et 的編號
+  s2.e = [[77777, 0, 1000, 800, 0, 0, 400, 800, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1.5, 0, null, 0, null, 'shield,split,bogus', 18.2, 1]];
   s2.eb = [[1000, 900, 0, 0, 9, -1, 6.5], [1000, 950, 100, 0, 6, -1, 0]];
   Net.applySnap(s2);
   const e = Game.enemies[0], [b, c] = Game.eBullets;
