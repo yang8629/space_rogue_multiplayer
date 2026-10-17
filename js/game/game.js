@@ -125,7 +125,7 @@ const Game = {
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
     this.socks = mode === 'sandbox' ? [['split']] : [];
     this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
-    this.playKills = {}; this.pullHits = 0; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
+    this.playKills = {}; this.pullHits = 0; this.unlockFresh = []; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
@@ -135,7 +135,7 @@ const Game = {
     if (this.freePlay()) this.chapterId = 1;  // 靶場、沙盒用不到章節（雙人的章號由 Net 在開局前設好）
     this.node = null; this.visited = []; this.sector = this.chapter().sectors[0]; this.bossId = this.bossFor(this.sector);
     this.runStats = { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0, time: 0,
-      bosses: [], started: Date.now(), recorded: false,
+      bosses: [], bossIds: [], elites: 0, echoK: 0, started: Date.now(), recorded: false,  // bossIds、elites、echoK：解鎖進度用（打倒的旗艦、精英、回響擊殺）
       // 遊玩紀錄用的判斷資料：受到的傷害來源、被打中次數、衝刺次數、走過的節點、取得的晶片、武器升級、各關摘要
       taken: {}, hits: 0, dashes: 0, path: [], got: [], upgrades: [], sectors: [],
       perf: { worst: 0, worstAt: '', slow: 0 } };  // 效能：戰鬥中最慢的一幀（ms）、在哪裡、超過 100ms 的幀數
@@ -461,7 +461,7 @@ const Game = {
       const ws = (this.wSock || CFG.START_WSOCK) < CFG.WEAPON_SOCKETS;
       if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
       this.recalc();
-      if (this.runStats) this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name);
+      if (this.runStats) { this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name); this.runStats.bossIds.push(this.bossId); }
       if (this.sector === this.lastSector() && !MechCheck.running) markChapterCleared(this.chapterId);  // 打完這章最後一隻王：記下通關、開下一章（雙人兩邊各自記）
       this.victory = { slot, ws, boss: this.bossId, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
       this.victory.rew = false;  // 旗艦的三選一還沒選（選完才回到勝利畫面，見 afterReward）
@@ -802,6 +802,8 @@ const Game = {
     const rec = this.mode === 'coop' ? Net.buildRecord(result) : this.buildRecord(result);
     const list = [rec, ...this.loadRecords()].slice(0, CFG.MAX_RECORDS);
     try { localStorage.setItem(RECORDS_KEY, JSON.stringify(list)); } catch (e) {}
+    // 局外成長：這一局的成績加進解鎖進度；新達成的記在 unlockFresh（結算畫面、回到標題時顯示）
+    this.unlockFresh = unlockAddRun({ sector: this.sector, bossIds: R.bossIds, weapon: this.weapon.id, kills: R.kills, elites: R.elites, echoK: R.echoK, play: this.playKills });
   },
   // 目前這一局的紀錄（結算畫面的「複製這局紀錄」也用它，打完 Boss 還沒結束的局也能複製）
   buildRecord(result) {
@@ -1017,7 +1019,7 @@ const Game = {
   onEnemyKilled(e) {
     this.kills++;
     const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
-    if (KR) KR.kills++;
+    if (KR) { KR.kills++; if (e.type === 'elite') KR.elites = (KR.elites || 0) + 1; if (e.lastSrc === 'echo') KR.echoK = (KR.echoK || 0) + 1; }  // 精英、回響擊殺（解鎖進度）
     const big = e.type === 'brute' || e.type === 'elite';
     if (!this.isClient()) {
       this.infectBurst(e); this.payPlayTags(e); this.onStreakKill(e); this.onReloadKill(e);

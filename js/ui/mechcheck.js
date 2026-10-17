@@ -2588,7 +2588,35 @@ const MechCheck = {
       const a = save(m, P), b = save(P, m);
       return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
     }],
-    ['多人', '人數和敵人數量', `一波的敵人：單人 ×1、雙人 ×${CFG.COOP_COUNT[0]}（第 1 星區開頭）；三、四人每多一個在線的人再 +${CFG.COOP_EXTRA}；離線的不算`, M => {
+    ['局外成長', '解鎖進度', '一局結束把成績加進進度（跨局累計），回傳新達成的；打倒精英、回響擊殺有記；UNLOCK_ALL 時全部能選；關掉時沒達成的飛船變灰、不能選，沙盒照樣全開', M => {
+      const keep = [UNLOCK_KEY, CHAPTER_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL, sh = Screen.show;
+      const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
+      try {
+        localStorage.removeItem(UNLOCK_KEY); localStorage.removeItem(CHAPTER_KEY);
+        const ids = L => L.map(u => u.id).sort().join(',');
+        const a = unlockAddRun({ sector: 2, bossIds: ['boss'], weapon: 'laser', kills: 100, elites: 2, echoK: 5, play: { boomerang: 60 } });
+        const b = unlockAddRun({ sector: 1, bossIds: [], weapon: 'scatter', kills: 50, play: { boomerang: 50 } });
+        const P = unlockLoad(), sum = P.runs === 2 && P.kills === 150 && P.sector === 2 && P.play.boomerang === 110 && P.elites === 2;
+        const firstOk = ids(a) === 'focus,railgun,wraith', secondOk = ids(b) === 'wallbounce';
+        // 精英被回響打死：這一局的精英、回響擊殺各 +1
+        M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const e = M.targets([[100, 0]], 'elite', true, 1)[0]; e.hurt(e.hp + 1, 0, 0, 'echo', null);  // 打死時遊戲自己算擊殺（onEnemyKilled）
+        const killOk = Game.runStats.elites === 1 && Game.runStats.echoK === 1;
+        CFG.UNLOCK_ALL = true;
+        const allOpen = isUnlocked('ship', 'gate') && !html(() => Screen.select('run')).includes('card locked');
+        CFG.UNLOCK_ALL = false;
+        const lockOk = !isUnlocked('ship', 'gate') && isUnlocked('ship', 'wraith') && isUnlocked('ship', 'vanguard') && !isUnlocked('weapon', 'blade');
+        const h = html(() => Screen.select('run')), gray = h.includes('🔒 星門號') && !h.includes('選擇星門號') && h.includes('選擇幻影號');
+        const sb = !html(() => Screen.select('sandbox')).includes('card locked');
+        return { ok: sum && firstOk && secondOk && killOk && allOpen && lockOk && gray && sb,
+          got: `第 1 局新達成 ${ids(a) || '無'}（要 focus,railgun,wraith）、第 2 局 ${ids(b) || '無'}（要 wallbounce）；累計 ${P.runs} 局、擊殺 ${P.kills}、迴旋 ${P.play.boomerang}${sum ? '' : '（錯誤）'}；`
+            + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、選飛船${gray ? '星門號變灰' : '沒變灰（錯誤）'}、沙盒${sb ? '全開' : '也鎖了（錯誤）'}` };
+      } finally {
+        CFG.UNLOCK_ALL = all;
+        for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+      }
+    }],
+    ['多人', '人數和敵人數量',`一波的敵人：單人 ×1、雙人 ×${CFG.COOP_COUNT[0]}（第 1 星區開頭）；三、四人每多一個在線的人再 +${CFG.COOP_EXTRA}；離線的不算`, M => {
       const wave = () => {  // 第 1 星區開頭的一波（難度 0）；亂數固定 0.99 → 全部是蟲群，數量 = 預算
         Game.combat = { level: 0, wave: 0, wavesTotal: 3, elites: 0, boss: false, sandbox: false, themes: { list: [], share: 0 }, pending: [] };
         M.luck(0.99, () => Game.startWave(1));

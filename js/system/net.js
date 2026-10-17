@@ -130,7 +130,7 @@ const Net = {
     if (!R) return null;
     const rd = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v)]));
     const nm = Game.withLoadout(L, () => Object.fromEntries(Object.keys(R.chips).map(k => [k, [dmgKeyName(k), dmgKeyColor(k)]])));
-    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit), nm, downs: R.downs || 0, revives: R.revives || 0 };
+    return { dmg: rd(R.dmg), chips: rd(R.chips), kills: R.kills, maxHit: Math.round(R.maxHit), nm, downs: R.downs || 0, revives: R.revives || 0, el: R.elites || 0, ek: R.echoK || 0 };
   },
   sendDmg() {  // 房主：team = { 幾號: 那個人的傷害 }
     const mates = Game.mates.filter(m => m.L);
@@ -147,12 +147,12 @@ const Net = {
         .filter(([k]) => !mine || CHIPS[k] || k === 'weapon' || k === 'ship')),
       nm: Object.fromEntries(Object.entries(p.nm && typeof p.nm === 'object' ? p.nm : {}).slice(0, 60)
         .map(([k, v]) => [String(k).slice(0, 40), Array.isArray(v) ? [esc(v[0]), /^#[0-9a-f]{3,8}$/i.test(v[1]) ? v[1] : '#8fa3d9'] : [esc(k), '#8fa3d9']])),
-      kills: num(p.kills), maxHit: num(p.maxHit), downs: num(p.downs), revives: num(p.revives) } : null);
+      kills: num(p.kills), maxHit: num(p.maxHit), downs: num(p.downs), revives: num(p.revives), el: num(p.el), ek: num(p.ek) } : null);
     const T = m.team && typeof m.team === 'object' ? m.team : {};
     this.team = {};
     for (let s = 1; s <= NET_MAX; s++) if (T[s]) this.team[s] = clean(T[s], s === this.slot);
     const R = Game.runStats, mine = this.team[this.slot];
-    if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit, downs: mine.downs, revives: mine.revives });
+    if (R && mine) Object.assign(R, { dmg: mine.dmg, chips: mine.chips, kills: mine.kills, maxHit: mine.maxHit, downs: mine.downs, revives: mine.revives, elites: mine.el, echoK: mine.ek });
   },
   // 每個隊友的晶片傷害 [名稱, 顏色, 傷害]，一人一份 { tag, rows, total }（房主直接讀隊友的配裝；隊友這邊用房主傳來的名稱）：傷害分頁與遊玩紀錄用
   mateChipRows() {

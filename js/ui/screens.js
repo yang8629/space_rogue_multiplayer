@@ -144,6 +144,7 @@ const Screen = {
       }
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
+      case 'unlocks': Screen.unlocks(); break;
       case 'refresh': Screen.hardRefresh(); break;
       case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
       case 'clearrecok':
@@ -187,6 +188,7 @@ const Screen = {
       <div style="height:6px;width:${Math.round(v / max * 100)}%;background:${col};border-radius:3px"></div></div></div>`;
     const cards = Object.entries(SHIPS).map(([id, S]) => {
       const pts = S.hull.map(([x, y]) => `${x},${y}`).join(' '), icon = shipIconURL(S);  // 飛船小圖跟戰鬥畫面同一個畫法（畫不出來才用多邊形）
+      if (!free && !isUnlocked('ship', id)) return this.lockedCard(S.name, S.color, unlockEntry('ship', id), icon);
       return `<div class="card" style="border-color:${S.color}">
         ${icon ? `<img src="${icon}" width="72" height="72" alt="${S.name}" style="margin:0 auto;display:block">` : `<svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
           <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>`}
@@ -202,9 +204,19 @@ const Screen = {
       <div class="cards left">${cards}</div></div>`);
   },
 
+  // 還沒解鎖的飛船、武器：灰色卡片，寫解鎖條件和進度，沒有選擇按鈕
+  lockedCard(name, color, u, icon = null) {
+    const st = unlockState(u);
+    return `<div class="card locked" style="border-color:${color}">
+      ${icon ? `<img src="${icon}" width="72" height="72" alt="${name}" style="margin:0 auto;display:block">` : ''}
+      <div class="ttl" style="color:${color};text-align:center">🔒 ${name}</div>
+      <div class="ds">${unlockNeed(u)}</div><div class="ulk-bar"><div style="width:${Math.round(st.cur / st.max * 100)}%"></div></div>
+      <div class="ty" style="text-align:center">${Math.floor(st.cur)} / ${st.max}</div></div>`;
+  },
   weaponSelect(mode, shipId) {
     const S = SHIPS[shipId];
     const cards = Object.entries(WEAPONS).map(([id, W]) => {
+      if (mode !== 'sandbox' && mode !== 'range' && !isUnlocked('weapon', id)) return this.lockedCard(W.name, W.color, unlockEntry('weapon', id));
       const p = weaponParams({ id, path: null, final: null });
       const dps = p.damage * p.count / p.interval;
       const paths = Object.values(W.paths).map(P =>
@@ -361,13 +373,16 @@ const Screen = {
       </div>
       <div class="row"><button data-act="codex">📖 電路總覽</button>
         <button data-act="records">📜 遊玩紀錄</button>
+        <button data-act="unlocks">🔓 解鎖</button>
         <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button>
         <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
       <div class="keys">電腦：WASD 移動　·　滑鼠左鍵 射擊　·　Space / 右鍵 衝刺（無敵）　·　Tab 隨時編輯電路（暫停）　·　M 靜音<br>
       手機：自動攻擊時任意位置拖曳移動；關閉自動攻擊後，左半邊移動、右半邊瞄準射擊　·　「衝刺」「電路」「自動」按鈕　·　建議橫向遊玩</div>
+      ${this.unlockFreshHtml()}
       <div class="ver">版本 ${CFG.VERSION}</div>
     </div>`);
     this.checkVersion();
+    Game.unlockFresh = [];  // 新達成的解鎖在標題只顯示一次
   },
   // 清暫存重新整理：GitHub Pages 的檔案會被瀏覽器暫存，一般重新整理可能還是舊版
   //   開標題畫面時在背景抓一次最新的版號，跟目前的不一樣就讓按鈕亮起來
@@ -517,7 +532,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
         <div class="sum-val">${fmt(v)}<span>${pct.toFixed(0)}%</span></div>`;
     }).join('');
     const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
-    return `<div class="summary">
+    return `${this.unlockFreshHtml()}<div class="summary">
       <div class="sum-head"><span>${Game.mode === 'coop' ? '你的傷害明細' : '本局傷害總計'}</span><b>${fmt(total)}</b></div>
       ${chips ? `<div class="sum-sub">各晶片</div><div class="sum-rows">${chips}</div>` : ''}
       ${rows ? `<div class="sum-sub">傷害方式</div><div class="sum-rows">${rows}</div>` : '<div class="sub">這一局還沒有造成傷害。</div>'}
@@ -599,6 +614,34 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },
 
+  // 局外成長一覽：每一類列出全部，開局就有的、已解鎖的、還沒解鎖的（條件＋進度）
+  unlocks() {
+    const P = unlockLoad();
+    const sec = ([kind, label]) => {
+      const ids = unlockIds(kind), rows = ids.map(id => {
+        const u = unlockEntry(kind, id), name = unlockName(kind, id);
+        if (!u) return `<div class="ulk open"><b>${name}</b><span class="ulk-st">開局就有</span></div>`;
+        const st = unlockState(u, P), pct = Math.round(st.cur / st.max * 100);
+        return `<div class="ulk ${st.done ? 'done' : 'lock'}"><b>${st.done ? '' : '🔒 '}${name}</b><span class="ulk-st">${st.done ? '✓ 已解鎖' : `${Math.floor(st.cur)} / ${st.max}`}</span>
+          <div class="ulk-need">${unlockNeed(u)}</div><div class="ulk-bar"><div style="width:${pct}%"></div></div></div>`;
+      }).join('');
+      const got = ids.filter(id => { const u = unlockEntry(kind, id); return !u || unlockState(u, P).done; }).length;
+      return `<h3>${label}<span class="ty">　${got} / ${ids.length}</span></h3><div class="ulk-grid">${rows}</div>`;
+    };
+    this.show(`<div class="scr ulk-scr">
+      <div class="between"><div><h2>🔓 解鎖</h2>
+        <div class="sub">玩越多，能選的飛船、武器、晶片越多（不會變強，只是選項變多）。進度跨局累計，存在這台裝置的瀏覽器。</div>
+        ${CFG.UNLOCK_ALL ? '<div class="sub" style="color:#ffd166">測試期間全部開放、都能選；下面是之後正式上鎖時的進度（從這一版開始記）。</div>' : ''}</div>
+        <button data-act="title" data-back>返回 (Esc)</button></div>
+      <div class="ulk-tiles"><span>完成 <b>${P.runs}</b> 局</span><span>擊殺 <b>${P.kills.toLocaleString('zh-TW')}</b></span><span>打倒精英 <b>${P.elites}</b></span><span>最遠 <b>第 ${P.sector || '—'} 星區</b></span></div>
+      ${UNLOCK_KINDS.map(sec).join('')}</div>`);
+  },
+  // 這一局新達成的解鎖條件（結算畫面；回到標題時也顯示一次，例如通關後直接回標題）
+  unlockFreshHtml() {
+    const F = Game.unlockFresh || [];
+    if (!F.length) return '';
+    return `<div class="ulk-fresh">🔓 ${CFG.UNLOCK_ALL ? '達成解鎖條件' : '新解鎖'}：${F.map(u => `<b>${unlockName(u.kind, u.id)}</b>`).join('、')}<button data-act="unlocks">看解鎖</button></div>`;
+  },
   records(msg = '', confirmClear = false) {
     const list = Game.loadRecords();
     const RES = { dead: ['飛船已毀', '#ff4d6d'], cleared: ['遠征完成', '#ffd166'], retired: ['中途結束', '#8fa3d9'], disconnect: ['連線中斷', '#ff9f1c'] };
