@@ -31,5 +31,14 @@ await p.evaluate(() => { Input.keys.add('d'); Input.dash = true; setTimeout(() =
 await wait(60);
 await p.screenshot({ path: SHOTS + '相位跳躍_剛跳完.png', clip });
 console.log('跳了', await p.evaluate(() => Math.round(Game.player.x - window.__x0)));
+// 落地後的無敵（iframe，0.14 秒）：船身閃爍；停住遊戲更新，照閃爍的暗、亮兩格各拍一張
+const frozen = async (dim, name) => {
+  await p.evaluate(d => { if (!window.__upd) { window.__upd = Game.update; Game.update = () => {}; } const P = Game.player; P.iframe = 0.08; Game.time = (2 * Math.floor(Game.time * 10) + (d ? 1 : 0) + 0.5) / 20; }, dim);
+  await wait(120);
+  await p.screenshot({ path: SHOTS + name, clip });
+  console.log(name, await p.evaluate(() => ({ iframe: Game.player.iframe, 暗: Math.floor(Game.time * 20) % 2 === 1 })));
+};
+await frozen(true, '相位跳躍_無敵閃爍_暗.png');
+await frozen(false, '相位跳躍_無敵閃爍_亮.png');
 await b.close();
 console.log('done');

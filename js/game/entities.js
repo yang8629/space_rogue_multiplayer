@@ -1170,6 +1170,12 @@ const THEME_AI = {
     }
     let H = A; for (let q = A.ahead; q; q = q.ahead) if (!q.dead) H = q;
     const sp = this.t.speed * (H.wormMul || 1), ax = A.x - this.x, ay = A.y - this.y, ad = Math.hypot(ax, ay) || 1;
+    // 被擋住跟不上（CFG.WORM_CUT）：斷開自己當頭，照頭的走法尋路、脫困（後面的節跟著牠）
+    //   （2026-10-18 整局模擬：身體直線跟前一節，被兩顆小行星擋在凹洞裡，前面的節走遠了也一直卡著）
+    const C = CFG.WORM_CUT;
+    if (ad > C.gap && ((Game.objs.length && Objects.losBlocked(this.x, this.y, A.x, A.y, this.r * 0.8)) || Arena.losBlocked(this.x, this.y, A.x, A.y, this.r * 0.8))) {
+      if ((this.cutT = (this.cutT || 0) + dt) > C.t) { this.ahead = null; this.cutT = 0; return THEME_AI.worm.call(this, dt, p, dx, dy, d); }
+    } else this.cutT = 0;
     this.steerMove(dt, ax, ay, ad > 22 ? sp * Math.min(1.6, ad / 22) : sp * 0.3, 8);
     return true;
   },

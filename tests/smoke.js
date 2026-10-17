@@ -91,6 +91,16 @@ assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.r
   assert(e && e.affixes && e.affixes.join() === 'shield,split' && e.r === 18.2 && e.ledT === 1 && e.enraged && e.shieldA === 1.5 && b && b.mine && b.life === 6.5 && c && !c.mine,
     `client receives elite affixes, size, aura, mines (${e && e.affixes}, r ${e && e.r}, mine ${b && b.mine}/${c && c.mine})`);
 }
+// 列隊蟲：每節帶前一節的 id（a[23]），隊友那邊接回 ahead（以前種類改用編號後還比對文字 'worm'，永遠接不起來）
+{
+  const s2 = JSON.parse(JSON.stringify(snap));
+  s2.et = ['worm', 'chase']; s2.ei = [];
+  const row = (id, ahead) => [id, 0, 1000 + (id - 500) * 22, 800, 0, 0, 35, 35, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, null, 0, null, 0, ahead];
+  s2.e = [row(500, 0), row(501, 500), row(502, 501)];
+  Net.applySnap(s2);
+  const [h, b1, b2] = Game.enemies;
+  assert(h && !h.ahead && b1 && b1.ahead === h && b2 && b2.ahead === b1, `client links worm segments (${b1 && b1.ahead ? b1.ahead.id : '-'}, ${b2 && b2.ahead ? b2.ahead.id : '-'})`);
+}
 const rows = Net.teamRows(); assert(rows[1].me && rows[1].dmg > 0 && rows[0].dmg === 0, 'team rows: 2P is me with damage');
 assert(Net.teamSummaryHtml().includes('多人傷害結算'), 'team summary html');
 assert(sent.some(m => m.t === 'i'), 'client sends input');
