@@ -84,6 +84,20 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     const bdx = boss.x - p.x, bdy = boss.y - p.y, bd = Math.hypot(bdx, bdy) || 1;
     if (bd > reach - 80) { const w = Math.min(2, 0.5 + (bd - reach + 80) / 100), bn = AR.navTo(p, boss.x, boss.y); mx += (bn ? bn[0] : bdx / bd) * w; my += (bn ? bn[1] : bdy / bd) * w; }
   }
+  // 十字彈流（裂界獵艦，2026-10-17）：靠近到 190 內，跟著彈流轉、待在兩條彈流中間（真人會學到「靠近比較好躲」）
+  //   彈流每 0.11 秒轉 0.07（暴走每 0.08 秒），站越遠掃得越快：400 每秒掃 256、跟飛船速度 270 差不多，190 只要 121
+  //   以前照原本的距離（遠程 300～600）邊打邊閃：--bossdiag=2 的 209 場，陣亡的場平均被它打掉 40% HP
+  let slow = 0;
+  const S = boss && boss.stream;
+  if (S && S.t > 0 && boss.skill === 'cross') {
+    const rx = p.x - boss.x, ry = p.y - boss.y, r = Math.hypot(rx, ry) || 1, phi = Math.atan2(ry, rx);
+    const w = S.turn / S.every, gap = TAU / S.arms;
+    const arm = boss.spin - r / S.spd * w;  // 這個半徑上彈流的角度（子彈飛到這裡要 r/spd 秒，那時還沒轉到現在的角度）
+    const err = gap / 2 - mod(phi - arm, gap);  // 離兩條彈流正中間差多少（正的＝要往角度變大的方向走）
+    const vt = (w + err * 3) * r, vr = Math.max(-1, Math.min(1, (r - Math.min(want, 190)) / 40)) * 200;  // 沿圓周、往內（px/秒）
+    mx = -Math.sin(phi) * vt - Math.cos(phi) * vr; my = Math.cos(phi) * vt - Math.sin(phi) * vr;
+    slow = Math.min(1, Math.hypot(mx, my) / p.ship.speed); mx /= p.ship.speed; my /= p.ship.speed;
+  }
   if (G.time < (unstick.until || 0) && near) { const ux = (near.x - p.x) / nd, uy = (near.y - p.y) / nd; mx = -uy * unstick.side + ux * 0.3; my = ux * unstick.side + uy * 0.3; navOn = true; }
   if (AR.rect) {  // 別貼牆（離中心 500 以上往回拉）；但最近的敵人縮在牆邊（150 內）時要追過去，不然打不到角落的彈幕艇
     const cx = W / 2 - p.x, cy = H / 2 - p.y, cd = Math.hypot(cx, cy);
@@ -155,7 +169,8 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   }
   if (!inHole || Math.hypot(p.x - holeStuck.x, p.y - holeStuck.y) > 20) { holeStuck.x = p.x; holeStuck.y = p.y; holeStuck.t = G.time; }
   const l = Math.hypot(mx, my);
-  I.joy = l > 0.01 ? { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 } : null;
+  const m = slow && threat < 0.5 ? slow * 60 : 60;  // 十字彈流跟著轉：沒有子彈要閃時照算出來的速度走（不是一律全速）
+  I.joy = l > 0.01 ? { bx: 0, by: 0, x: mx / l * m, y: my / l * m } : null;
   if (chase) I.dash = true;
   if (inHole && G.time - holeStuck.t > 2 && p.dashCd <= 0) I.dash = true;  // 黑洞裡被拖住：往外衝
   const danger = ramHit || !bait && G.eBullets.some(b => Math.hypot(b.x - p.x, b.y - p.y) < 60 && (b.vx * (p.x - b.x) + b.vy * (p.y - b.y)) > 0) || nd < 40;
