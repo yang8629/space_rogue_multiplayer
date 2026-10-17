@@ -1097,7 +1097,7 @@ const Net = {
         p: rows.filter(a => a[0] !== q.slot),  // 其他人的飛船
         me: [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
         r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), standStacks(m, m.L.stats.stand), m.crowdK || 0, r2(Math.max(0, m.revengeT || 0)), m.streak || 0, m.focusK || 0, m.spreadK || 0, m.grazeK || 0, m.staticK || 0, m.parryK || 0],  // …、群戰的敵人數、逆襲剩幾秒、無傷連殺層數、專注／分散／擦彈層數  // 灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）
-        pk: m.L.playKills,  // 這個隊友各晶片的玩法擊殺數（隊友那邊的紀錄用）
+        kp: m.L.playKills,  // 這個隊友各晶片的玩法擊殺數（隊友那邊的紀錄用；pk 是晶體，名字不能撞）
         b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
           ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
         eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r, b.col ? ci(b.col) : -1, b.mine ? r2(b.life) : 0]),  // 盾衛反彈的原本顏色、地雷剩幾秒（0 = 不是地雷）
@@ -1183,8 +1183,8 @@ const Net = {
       P.crowdK = num(s.me[14], 0); P.revengeT = num(s.me[15], 0); P.streak = num(s.me[16], 0);  // 群戰、逆襲、無傷連殺（畫左上小條用）
       P.focusK = num(s.me[17], 0); P.spreadK = num(s.me[18], 0); P.grazeK = num(s.me[19], 0); P.staticK = num(s.me[20], 0); P.parryK = num(s.me[21], 0);  // 專注、分散、擦彈、靜電、格擋流
     }
-    if (s.pk && typeof s.pk === 'object')  // 玩法擊殺：房主算好的次數，這邊只增不減
-      for (const k in s.pk) if (hasLv(k) && num(s.pk[k]) > (G.playKills[k] || 0)) G.playKills[k] = Math.floor(num(s.pk[k]));
+    if (s.kp && typeof s.kp === 'object')  // 玩法擊殺：房主算好的次數，這邊只增不減
+      for (const k in s.kp) if (hasLv(k) && num(s.kp[k]) > (G.playKills[k] || 0)) G.playKills[k] = Math.floor(num(s.kp[k]));
     G.enemies = arr(s.e).map(a => {
       const t = ENEMY_TYPES[a[1]];
       if (!t) return null;
