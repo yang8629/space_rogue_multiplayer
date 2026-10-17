@@ -55,8 +55,10 @@ class Player {
   // 衝刺相關的晶片（房主執行）：衝刺中的流星、衝刺結束時的衝刺射擊
   tickDash() {
     const dashing = this.dashT > 0, S = Game.stats;
-    if (dashing && !this.wasDash) { this.dashHit.clear(); this.dx0 = this.x; this.dy0 = this.y; }
-    if (dashing && Math.hypot(this.vx, this.vy) > 100) this.dashDir = Math.atan2(this.vy, this.vx);
+    const phase = this.ship.ability === 'phase';  // 相位跳躍：開始衝刺時已經瞬移完，穿過的線段從衝刺起點算
+    if (dashing && !this.wasDash) { this.dashHit.clear(); this.dx0 = phase ? this.dashSX : this.x; this.dy0 = phase ? this.dashSY : this.y; }
+    if (dashing && !this.wasDash && phase) this.dashDir = Math.atan2(this.y - this.dashSY, this.x - this.dashSX);
+    else if (dashing && Math.hypot(this.vx, this.vy) > 100) this.dashDir = Math.atan2(this.vy, this.vx);
     const mul = Game.mech.traits.assault ? 4 : 0;  // 突擊（加速器 4 層）：衝刺穿過的敵人受重擊
     if (dashing && mul) {  // 衝刺穿過的敵人受到重擊
       for (const e of Game.enemies) {
@@ -90,11 +92,31 @@ class Player {
   onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：排熱爆發、幻影號的殘影
     if (Net.role === 'client') return;
     if (this.ship.ability === 'decoy') Game.addDecoy(this, this.dashSX != null ? this.dashSX : this.x, this.dashSY != null ? this.dashSY : this.y);
+    if (this.ship.ability === 'phase' && this !== Game.player) this.phaseFx();  // 隊友的瞬移在隊友那邊算：房主畫出來並轉給其他人（自己的在 update 畫）
     if (Game.mech.traits.vent) {  // 排熱爆發（散熱片 4 層）：朝四周放出 12 發
       const w = Game.wp, list = Array.from({ length: 12 }, (_, i) => shot({ angle: i / 12 * TAU, speed: Math.min(700, w.speed), damage: w.damage,
         radius: w.radius, life: 0.6, color: '#ffb38a', shape: w.shape === 'blade' ? 'dot' : w.shape, src: 'ship' }));
       spawnShots(list, this.x, this.y, 0, 0, null);
     }
+  }
+  // 相位跳躍（先鋒號）：朝 dashA 瞬移 CFG.PHASE.dist；可以穿過牆、行星、小行星，落點在裡面就往回找最遠的空地；
+  //   不能落到別區：只能留在這一區，或穿過這一區打開的閘門到下一區（關著的閘門、走過的區域都跳不過去）
+  phaseJump() {
+    const c = Math.cos(this.dashA), s = Math.sin(this.dashA), x0 = this.x, y0 = this.y, r = this.r;
+    const z = Arena.rect ? 0 : this.zone != null ? this.zone : Arena.zoneOf(x0, y0), g = !Arena.rect && Arena.gates[z];
+    const zoneOk = (x, y) => { const k = Arena.zoneOf(x, y); return k === z || (g && g.open && k === z + 1); };
+    for (let d = CFG.PHASE.dist; d > 0; d -= 4) {
+      const x = x0 + c * d, y = y0 + s * d;
+      if (Arena.rect ? x < r || y < r || x > CFG.WORLD_W - r || y > CFG.WORLD_H - r : x < r || y < r || x > Arena.W - r || y > Arena.H - r || !zoneOk(x, y)) continue;
+      if (!Objects.shipFree(this, x, y)) continue;
+      this.x = x; this.y = y; return;
+    }
+  }
+  phaseFx() {  // 瞬移：起點收縮的圈、落點擴散的圈、中間一道電光
+    const c = this.ship.color, sx = this.dashSX, sy = this.dashSY;
+    ringFx(sx, sy, 28, c, true); ringFx(this.x, this.y, 34, c);
+    zapFx(sx, sy, this.x, this.y, { c, life: 0.25 });
+    burst(sx, sy, c, 12, 120, 0.35, 2); burst(this.x, this.y, c, 14, 200, 0.35, 2);
   }
   get invuln() { return this.iframe > 0 || this.dashT > 0; }
   update(dt) {
@@ -138,6 +160,7 @@ class Player {
         this.dashCd = this.ship.dashCd * (1 - P.dashCd) * M.dashCd;
         this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
         this.dashSX = this.x; this.dashSY = this.y;  // 衝刺起點（星門號的第一個門）：在瞬移之前記
+        if (this.ship.ability === 'phase') { this.phaseJump(); this.dashT = CFG.PHASE.t; this.phaseFx(); }
         this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
         burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
         if (Game.runStats) Game.runStats.dashes++;
@@ -147,7 +170,7 @@ class Player {
     }
     if (this.dashT > 0) {
       this.dashT -= dt;
-      const sp = CFG.DASH_SPEED;
+      const sp = this.ship.ability === 'phase' ? 0 : CFG.DASH_SPEED;  // 相位跳躍：已經瞬移過去，剩下的衝刺時間停在落點
       this.vx = Math.cos(this.dashA) * sp;
       this.vy = Math.sin(this.dashA) * sp;
       trail(this.x, this.y, this.ship.color, 0.25, 5);
