@@ -1121,6 +1121,7 @@ class Enemy {
     if (vul > 0) dmg *= 1 + vul;
     if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
+    this.lastSrc = source;  // 最後一下的傷害方式（回響 echo 擊殺算進解鎖進度）
     if (!this.alert) Game.wakeEnemy(this);  // 待機中被打到：醒來，叫醒身邊的同伴
     if (this.t.alarm && this.ringT == null) this.ringT = CFG.ALARM.delay;  // 警報艇：開始響（倒數完開始叫人，見 THEME_AI.alarm）
     Game.recordDamage(source, this.t.dummy ? dmg : Math.min(dmg, Math.max(0, this.hp)), att);  // 只算實際扣掉的血（標靶算全額）

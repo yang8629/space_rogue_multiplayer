@@ -427,6 +427,25 @@ body.detail .card .det { display: flex; flex-direction: column; gap: 8px; flex: 
 .cards.left { justify-content: flex-start; }
 .scr.wide { max-width: 1220px; }  /* 選飛船、選武器：5 張卡排一排 */
 .scr.wide .card { width: 188px; }
+/* 局外成長：鎖住的卡片、解鎖一覽、結算的新達成 */
+.card.locked { filter: grayscale(0.85); opacity: .55; }
+.card.locked img { opacity: .5; }
+.ulk-bar { height: 5px; background: #141c3a; border-radius: 3px; overflow: hidden; }
+.ulk-bar div { height: 100%; background: #ffd166; }
+.ulk-scr { max-width: 1100px; }
+.ulk-scr h3 { margin: 18px 0 8px; font-size: 15px; color: #c9d4ff; }
+.ulk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.ulk { background: #070b1a; border: 1px solid #22305e; border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 13px; }
+.ulk .ulk-st { font-size: 12px; color: #8fa3d9; }
+.ulk .ulk-need, .ulk .ulk-bar { grid-column: 1 / -1; }
+.ulk .ulk-need { font-size: 12px; color: #9aa6c4; }
+.ulk.done { border-color: #2ee6a6; } .ulk.done .ulk-st { color: #2ee6a6; }
+.ulk.open .ulk-st { color: #6a79ad; }
+.ulk.lock b { color: #8fa3d9; }
+.ulk-tiles { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; color: #9aa6c4; }
+.ulk-tiles b { color: #fff; }
+.ulk-fresh { margin: 10px auto; padding: 8px 14px; border: 1px solid #ffd166; border-radius: 8px; color: #ffd166; background: #1a1608; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 720px; }
+.ulk-fresh b { color: #fff; }
 body.detail .card .brief { display: none; }
 .detail-hint { position: fixed; right: 16px; bottom: 12px; font-size: 12px; color: #8fa3d8; opacity: .85; }
 .detail-hint button { font-size: 12px; padding: 3px 10px; margin-left: 4px; }
