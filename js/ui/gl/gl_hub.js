@@ -173,7 +173,8 @@ const GLHub = {
     const hall = R.hall, hg = R.hangar, ar = R.armory, lab = R.lab, deck = R.deck, rec = R.records;
     const L = Z.find(z => z.kind === 'launch');
     // 每間房上牆一排燈（燈座畫在牆邊，地板的光每幀畫）；信號燈放在大廳四角
-    for (const r of Object.values(R)) for (let x = r.x + 110; x < r.x + r.w - 80; x += 220) D.lamps.push([x, r.y + 4]);
+    const onDoor = (x, y) => HUB.doors.some(d => x > d.x - 20 && x < d.x + d.w + 20 && y > d.y - 10 && y < d.y + d.h + 10);  // 燈不要擺在開口上
+    for (const r of Object.values(R)) for (let x = r.x + 110; x < r.x + r.w - 80; x += 220) if (!onDoor(x, r.y + 4)) D.lamps.push([x, r.y + 4]);
     for (const [x, y] of D.lamps) g.rect(x - 14, y - 6, 28, 8).fill(0xfff2c4).stroke({ width: 2, color: HUB_INK });
     D.beacons = [[hall.x + 14, hall.y + 14], [hall.x + hall.w - 14, hall.y + 14], [hall.x + 14, hall.y + hall.h - 14], [hall.x + hall.w - 14, hall.y + hall.h - 14]];
     for (const [x, y] of D.beacons) g.circle(x, y, 6).fill(0x2a3350).stroke({ width: 2, color: HUB_INK });

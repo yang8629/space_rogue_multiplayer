@@ -54,6 +54,11 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
     { x: R.lab.x + R.lab.w - 30, y: ty - D / 2, w: WT + 60, h: D },            // 晶片實驗室 ↔ 觀景台
     { x: R.deck.x + R.deck.w - 30, y: ty - D / 2, w: WT + 60, h: D },          // 觀景台 ↔ 戰績室
   ];
+  // 大廳每間房都進得去：上排左右兩間跟大廳上牆重疊的那一段也開一個口（重疊太短就不開，機制檢查會抓到）
+  for (const k of ['lab', 'records']) {
+    const r = R[k], x0 = Math.max(r.x, hall.x) + 20, x1 = Math.min(r.x + r.w, hall.x + hall.w) - 20, w = Math.min(D, x1 - x0);
+    if (w >= 80) doors.push({ x: (x0 + x1) / 2 - w / 2, y: r.y + r.h - 30, w, h: WT + 60 });
+  }
   const zones = [];
   // 機庫：停機位沿大圓排一圈（從缺口下緣順時針），船頭朝中間；對著大廳開口（右邊）留缺口
   const hcx = R.hangar.x + R.hangar.w / 2, hcy = midY + midH / 2, step = (TAU - C.RING_GAP) / ns;

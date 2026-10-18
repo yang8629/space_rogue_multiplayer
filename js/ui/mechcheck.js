@@ -2663,7 +2663,7 @@ const MechCheck = {
           got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到起始晶片（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
       } finally { Game.state = st; Net.chapter = ch; }
     }],
-    ['局外成長', '基地配置', '基地（分區太空站）照數量自動排（hubLayout）：每艘飛船、每把武器、每台終端機、每個操作台都有位置；互動點都在房間裡、開得到（不在柱子上）、互動範圍不重疊；每個房間都走得到（從發射台出發經過開口）。現在的數量和假的「8 艘飛船、7 把武器、3 台終端機」都要過', M => {
+    ['局外成長', '基地配置', '基地（分區太空站）照數量自動排（hubLayout）：每艘飛船、每把武器、每台終端機、每個操作台都有位置；互動點都在房間裡、開得到、互動範圍不重疊；每個房間都走得到，而且大廳有開口直接通到每間房。現在的數量和假的「8 艘飛船、7 把武器、3 台終端機」都要過', M => {
       const check = L => {
         const bad = [], Z = L.zones;
         const free = (x, y, r) => hubFree(L, x, y, r);
@@ -2673,6 +2673,9 @@ const MechCheck = {
         const G = 20, seen = new Set(), L0 = Z.find(z => z.kind === 'launch'), q = [[Math.round((L0.x - 170) / G), Math.round(L0.y / G)]];
         while (q.length) { const [i, j] = q.pop(), key = i + ',' + j; if (seen.has(key) || !free(i * G, j * G, 12)) continue; seen.add(key); q.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]); }
         for (const z of Z) { let ok = false; for (let i = -3; i <= 3 && !ok; i++) for (let j = -3; j <= 3 && !ok; j++) ok = seen.has((Math.round(z.x / G) + i) + ',' + (Math.round(z.y / G) + j)); if (!ok) bad.push(`${z.id} 走不到`); }
+        // 大廳每間房都進得去：有一個開口同時碰到大廳和那間房
+        const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+        for (const r of Object.values(L.rooms)) if (r !== L.rooms.hall && !L.doors.some(d => hit(d, r) && hit(d, L.rooms.hall))) bad.push(`${r.id} 沒有直接通大廳`);
         return bad;
       };
       const ships = Object.keys(SHIPS), weapons = Object.keys(WEAPONS);
