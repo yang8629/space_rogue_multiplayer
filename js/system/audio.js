@@ -17,7 +17,7 @@ const SFX = {
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : this.VOLUME;
+      this.master.gain.value = this.gainNow();
       this.master.connect(this.ctx.destination);
       const len = this.ctx.sampleRate * 0.6, buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -25,9 +25,11 @@ const SFX = {
     } catch (e) { this.ctx = null; }
     Music.init();
   },
+  gainNow() { return this.muted ? 0 : this.VOLUME * Settings.vol; },  // 主音量（設定頁）
+  applyVolume() { if (this.master) this.master.gain.value = this.gainNow(); },
   setMuted(m) {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : this.VOLUME;
+    this.applyVolume();
     try { localStorage.setItem('muted', m ? '1' : '0'); } catch (e) {}
     document.querySelectorAll('[data-act="mute"]').forEach(b => b.textContent = m ? '🔇 音效關' : '🔊 音效開');
   },
@@ -138,8 +140,9 @@ const Music = {
   fadeTo(v, sec) {
     if (!this.gain) return;
     const g = this.gain.gain, t = SFX.ctx.currentTime;
-    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(v * this.VOL, t + sec);
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(v * this.VOL * Settings.musicVol, t + sec);
   },
+  applyVolume() { this.fadeTo(this.on && this.track ? 1 : 0, 0.1); },  // 音樂音量（設定頁）
   // 每一幀依遊戲狀態決定要播哪首；換曲時先淡出再換
   update() {
     if (!this.gain) return;

@@ -527,7 +527,16 @@ body.detail .detail-hint button { background: #1c3a6e; }
 .hub-press { font-size: 13px; color: #bdf0ff; }
 .hub-press b, .hub-keys b { display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 4px; border: 1px solid #bdf0ff; border-radius: 4px; text-align: center; }
 .hub-keys { margin-top: 4px; font-size: 12px; color: #8fa3d9; text-shadow: 0 1px 2px #03050c; }
-.scr.base.compact { height: auto; max-width: 680px; }  /* 發射台：選章＋出發，小視窗 */
+.scr.base.compact { height: auto; max-width: 680px; }  /* 發射台、設定：小視窗 */
+/* 設定頁 */
+.set-body h3 { margin: 16px 0 8px; }
+.set-row { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; align-items: center; font-size: 14px; color: #c9d4ff; padding: 6px 0; cursor: pointer; }
+.set-row b { min-width: 44px; text-align: right; color: #fff; font-variant-numeric: tabular-nums; }
+.set-row input[type=range] { accent-color: var(--energy); width: 100%; }
+.set-row input[type=checkbox] { accent-color: var(--energy); width: 18px; height: 18px; justify-self: start; }
+.set-row.chk { grid-template-columns: 150px 18px 1fr; }  /* 勾選框：說明緊跟在框後面 */
+.set-keys .key { color: #bdf0ff; font-weight: 600; }
+.set-body .row { margin-top: 6px; }
 .hub-ui .hub-coop { gap: 8px; padding: 6px 12px; font-size: 13px; white-space: nowrap; flex-wrap: nowrap; }
 .hub-coop button { padding: 3px 10px; font-size: 12px; }
 .hub-coop .me { text-decoration: underline; text-underline-offset: 3px; }

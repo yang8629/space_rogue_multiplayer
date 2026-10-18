@@ -379,8 +379,7 @@ function drawHUD() {
   hudText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34, '#cfe8ff', `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`);
   hudText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54, '#8fa3d9', '12px Microsoft JhengHei');
   // FPS（右上角最上面）：綠 ≥ 55、黃 ≥ 40、紅
-  ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b';
-  ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14);
+  if (Settings.fps) { ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b'; ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14); }  // 設定頁可以關掉
   if (Game.mode === 'range') drawRangePanel();
   if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);

@@ -2712,6 +2712,24 @@ const MechCheck = {
         got: `留下 ${a.recs.length} 筆紀錄（要 2）、章節 ${a.ch.join(',') || '無'}（要 2）、成績 ${P.runs} 局擊殺 ${P.kills}（不變）${keepOk ? '' : '（錯誤）'}；第二次${onceOk ? '不再刪' : '又做了一次（錯誤）'}；${newGot}${newOk ? '' : '（錯誤）'}；`
           + `2.20.0 紀錄換回：王 ${r0.bossIds.join(',')}、武器 ${r0.weapon}、黏著 ${r0.play.sticky}${convOk ? '' : '（錯誤）'}` };
     }],
+    ['介面', '設定', '設定頁的值存在瀏覽器、重新讀回來一樣；壞掉的存檔用預設值；主音量乘在音效上；關掉畫面震動就不會震', M => {
+      const keep = localStorage.getItem(SETTINGS_KEY), old = { vol: Settings.vol, musicVol: Settings.musicVol, shake: Settings.shake, fps: Settings.fps, detail: Settings.detail };
+      try {
+        Settings.set('vol', 0.5); Settings.set('shake', false); Settings.set('fps', false);
+        Settings.vol = 1; Settings.shake = true; Settings.fps = true; Settings.load();  // 重新讀
+        const saved = Settings.vol === 0.5 && !Settings.shake && !Settings.fps && Settings.musicVol === old.musicVol;
+        const m = SFX.muted; SFX.muted = false; const gain = Math.abs(SFX.gainNow() - SFX.VOLUME * 0.5) < 1e-9; SFX.muted = m;
+        FX.shake = 0; Events.emit('shake', 12); const noShake = FX.shake === 0;
+        Settings.set('shake', true); Events.emit('shake', 12); const shakes = FX.shake === 12; FX.shake = 0;
+        localStorage.setItem(SETTINGS_KEY, '{"vol":"大聲","shake":3,"musicVol":9}'); Settings.load();
+        const bad = Settings.vol === 1 && Settings.shake === true && Settings.musicVol === 1;
+        return { ok: saved && gain && noShake && shakes && bad,
+          got: `存了再讀：${saved ? '主音量 0.5、震動關、FPS 關' : '不對（錯誤）'}；音效音量${gain ? '照主音量' : '沒乘（錯誤）'}；震動關掉${noShake ? '不震' : '還在震（錯誤）'}、打開${shakes ? '會震' : '不震（錯誤）'}；壞掉的存檔${bad ? '用預設值' : '沒處理（錯誤）'}` };
+      } finally {
+        if (keep == null) localStorage.removeItem(SETTINGS_KEY); else localStorage.setItem(SETTINGS_KEY, keep);
+        Object.assign(Settings, old);
+      }
+    }],
     ['多人', '人數和敵人數量',`一波的敵人：單人 ×1、雙人 ×${CFG.COOP_COUNT[0]}（第 1 星區開頭）；三、四人每多一個在線的人再 +${CFG.COOP_EXTRA}；離線的不算`, M => {
       const wave = () => {  // 第 1 星區開頭的一波（難度 0）；亂數固定 0.99 → 全部是蟲群，數量 = 預算
         Game.combat = { level: 0, wave: 0, wavesTotal: 3, elites: 0, boss: false, sandbox: false, themes: { list: [], share: 0 }, pending: [] };

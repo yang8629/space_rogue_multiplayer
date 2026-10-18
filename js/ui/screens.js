@@ -103,7 +103,7 @@ const Screen = {
     SFX.init();
     SFX.play('click');
     switch (a) {
-      case 'mute': SFX.setMuted(!SFX.muted); break;
+      case 'mute': SFX.setMuted(!SFX.muted); if (document.getElementById('setPage')) Screen.settings(); break;
       case 'detail': document.body.classList.toggle('detail'); break;
       case 'codex': Codex.open('rules'); break;
       case 'run': this.restart(); break;
@@ -170,7 +170,9 @@ const Screen = {
       case 'wspick': Game.wsPick(arg); break;
       case 'wsfrom': Game.wsFrom(arg); break;
       case 'wsto': Game.wsTo(arg); break;
-      case 'music': Music.toggle(); Screen.title(); break;
+      case 'music': Music.toggle(); Screen.settings(); break;
+      case 'settings': Screen.settings(); break;
+      case 'setback': Screen.settingsBack(); break;
     }
   },
 
@@ -486,7 +488,35 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <h1>${coop ? '選單' : '暫停'}</h1>
       <div class="sub">${coop ? '多人模式不會暫停，隊友那邊照常進行。<br>' : ''}${Game.freePlay() ? '離開 = 回到基地。' : '離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。'}</div>
       <div class="row"><button class="big" data-act="resume" data-back>繼續 (Esc)</button>
-        <button class="big" data-act="quitrun">離開遊戲</button></div></div>`);
+        <button class="big" data-act="quitrun">離開遊戲</button></div>
+      <div class="row"><button data-act="settings">⚙ 設定</button></div></div>`);
+  },
+  // 設定頁：聲音、畫面、操作說明、版本；從基地或戰鬥中的選單打開，返回回到原本的地方
+  settings() {
+    if (!document.getElementById('setPage')) this.settingsFrom = Game.state === 'play' ? 'pause' : 'hub';
+    const pct = v => Math.round(v * 100);
+    const slider = (k, label) => `<label class="set-row"><span>${label}</span><input type="range" min="0" max="100" step="5" value="${pct(Settings[k])}" data-set="${k}"><b data-setv="${k}">${pct(Settings[k])}%</b></label>`;
+    const check = (k, label, note) => `<label class="set-row chk"><span>${label}</span><input type="checkbox" data-set="${k}"${Settings[k] ? ' checked' : ''}><span class="ty">${note}</span></label>`;
+    const keys = [['WASD／方向鍵', '移動'], ['滑鼠左鍵', '射擊'], ['Space／右鍵', '衝刺（無敵）'], ['Tab', '編輯電路（暫停）'], ['E／Enter', '基地：停機坪、門、發射台'],
+      ['Esc', '選單、返回'], ['Shift', '卡片切換完整說明'], ['M', '音效開／關']].map(([k, v]) => `<div class="st-row"><b class="key">${k}</b><span>${v}</span></div>`).join('');
+    this.show(`<div class="scr base compact" id="setPage">
+      <div class="between"><h2>⚙ 設定</h2><button data-act="setback" data-back>返回 (Esc)</button></div>
+      <div class="base-body set-body">
+        <h3>聲音</h3>
+        ${slider('vol', '主音量')}${slider('musicVol', '音樂音量')}
+        <div class="row"><button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button>
+          <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button></div>
+        <h3>畫面</h3>
+        ${check('shake', '畫面震動', '爆炸、撞擊時晃動畫面')}${check('fps', '顯示 FPS', '戰鬥畫面右上角')}${check('detail', '卡片顯示完整說明', '預設精簡；按 Shift 可以臨時切換')}
+        <h3>操作</h3><div class="st-box set-keys">${keys}</div>
+        <h3>版本</h3>
+        <div class="row"><span class="ver">${CFG.VERSION}</span><button data-act="refresh">🔄 清暫存重新整理</button></div>
+      </div></div>`);
+  },
+  settingsBack() {
+    if (this.settingsFrom === 'pause' && Game.state === 'play') this.pauseMenu();
+    else if (Hub.shown()) this.hubView();
+    else this.title();
   },
   // 離開遊戲後的結算（跟死亡畫面一樣的統計，標題是「中途結束」）
   ended() {

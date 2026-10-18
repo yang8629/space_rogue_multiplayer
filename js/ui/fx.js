@@ -66,6 +66,6 @@ Events.on('flash', d => {
   if (FX.flashes.length < 20) FX.flashes.push({ x: d.x, y: d.y, r: d.r, life: 0.35, max: 0.35 });
 });
 Events.on('banner', d => { FX.banner = { text: d.text, sub: d.sub, t: d.t }; });  // 隊友那邊由房主的同步蓋過去（net.js 的 bn）
-Events.on('shake', v => { FX.shake = Math.max(FX.shake, v); });
+Events.on('shake', v => { if (Settings.shake) FX.shake = Math.max(FX.shake, v); });  // 設定頁可以關掉畫面震動
 Events.on('fxTick', dt => FX.update(dt));  // 跟著遊戲時間走（暫停時粒子也停）
 Events.on('fxClear', () => FX.clear());

@@ -38,9 +38,7 @@ Object.assign(Screen, {
         <div class="hub-logo"><h1>星環電路</h1><span class="en">CIRCUIT ROGUE</span>
           <div class="ulk-tiles"><span>解鎖 <b>${got} / ${all.length}</b></span><span>完成 <b>${P.runs}</b> 局</span><span>擊殺 <b>${P.kills.toLocaleString('zh-TW')}</b></span><span>最遠 <b>${P.sector ? `第 ${P.sector} 星區` : '—'}</b></span></div>
           <div class="hub-keys">WASD 移動　·　Space 衝刺　·　靠近停機坪、門、發射台按 <b>E</b>　·　<span class="ver">版本 ${CFG.VERSION}</span></div></div>
-        <div class="base-sys">${this.refreshBtn()}<button data-act="codex">📖 電路總覽</button>
-          <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button>
-          <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
+        <div class="base-sys">${this.refreshBtn()}<button data-act="codex">📖 電路總覽</button><button data-act="settings">⚙ 設定</button></div>
       </div>
       ${Hub.coop() ? this.roomBar() : this.unlockFreshHtml(false)}
       <div id="hubInfo" class="hub-info"></div>

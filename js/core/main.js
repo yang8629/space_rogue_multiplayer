@@ -15,6 +15,15 @@ Screen.el.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (b) Screen.act(b);
 });
+// 設定頁的滑桿（0～100 → 0～1）、勾選框
+Screen.el.addEventListener('input', e => {
+  const t = e.target.closest('[data-set]');
+  if (!t) return;
+  const k = t.dataset.set, v = t.type === 'checkbox' ? t.checked : +t.value / 100;
+  Settings.set(k, v);
+  const lab = Screen.el.querySelector(`[data-setv="${k}"]`);
+  if (lab) lab.textContent = Math.round(v * 100) + '%';
+});
 if (matchMedia('(pointer: coarse)').matches) setTouchMode(true);
 unlockLoad();  // 存檔升級（2.20.0 以前的紀錄刪掉、章節進度重來、補新的成績），要在標題畫面之前
 Screen.title();
