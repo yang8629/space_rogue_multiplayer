@@ -186,17 +186,18 @@ function drawShipArt(c, S, o = {}) {
 
 // 選飛船畫面的小圖：用 drawShipArt 畫成圖片（船頭朝上、噴焰開著），每艘只畫一次；畫不出來（測試環境）回傳 null
 const SHIP_ICON = new Map();
-function shipIconURL(S) {
-  if (SHIP_ICON.has(S)) return SHIP_ICON.get(S);
+function shipIconURL(S, size = 144) {
+  const key = S.name + '@' + size;
+  if (SHIP_ICON.has(key)) return SHIP_ICON.get(key);
   let url = null;
   try {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 144;
-    const c = cv.getContext('2d');
-    c.translate(72, 76); c.scale(3, 3); c.rotate(-Math.PI / 2);
+    const cv = document.createElement('canvas'); cv.width = cv.height = size;
+    const c = cv.getContext('2d'), k = size / 48;  // 144 px = 船身放大 3 倍
+    c.translate(size / 2, size / 2 + 4 * k / 3); c.scale(k, k); c.rotate(-Math.PI / 2);
     drawShipArt(c, S, { moving: true });
     url = cv.toDataURL();
   } catch (e) { url = null; }
-  SHIP_ICON.set(S, url);
+  SHIP_ICON.set(key, url);
   return url;
 }
 

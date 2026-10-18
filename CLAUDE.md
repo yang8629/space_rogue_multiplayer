@@ -34,7 +34,8 @@ GitHub Pages 發佈。`v1/` 是 V1（mp-0.6.4）的凍結副本（標籤 `v1-fin
 | `js/system/net.js` | 多人連線全部（大廳、同步、投票、重連、多人紀錄） |
 | `js/ui/render.js` | HUD、小地圖、搖桿、靶場面板 |
 | `js/ui/gl/` | 戰鬥畫面（WebGL／PixiJS）：`gl.js` 核心、`gl_world.js` 場地、`gl_actors.js` 敵人與飛船、`gl_fx.js` 子彈與特效 |
-| `js/ui/screens.js` | DOM 畫面（標題、選單、航圖、獎勵、商店、結算、紀錄） |
+| `js/ui/screens.js` | DOM 畫面（選單、航圖、獎勵、商店、結算、紀錄） |
+| `js/ui/base.js` | 基地（主畫面 `Screen.title(分頁)`）：機庫（選飛船、選章、出發）、軍械庫、晶片庫、戰績、「新」標記 |
 | `js/ui/listeners.js` | 聽事件：音效、畫面切換 |
 | `js/ui/fx.js` | `FX`：粒子、浮動數字、光圈、電弧、橫幅、震動 |
 | `js/ui/editor.js`／`codex.js`／`mechcheck.js` | 電路編輯器／電路總覽／機制檢查 |

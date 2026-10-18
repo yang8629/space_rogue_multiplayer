@@ -28,7 +28,7 @@ addEventListener('keydown', e => {
     const back = !Screen.el.classList.contains('hidden') && Screen.el.querySelector('[data-back]');
     if (back) { Screen.act(back); return; }
   }
-  if (k === 'enter' && Game.state === 'title') Screen.select('run');
+  if (k === 'enter' && Game.state === 'title') Screen.depart();
   if (k === 'enter' && Game.state === 'lobby' && document.activeElement && document.activeElement.id === 'netCode') Net.join(document.activeElement.value);
   if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();
 });

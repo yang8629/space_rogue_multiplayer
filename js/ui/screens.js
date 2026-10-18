@@ -9,6 +9,17 @@
 const CARD_CAT = { chip: '晶片', comp: '組件', mech: '機體強化' };
 const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 
+// 武器卡片的內容（選武器、軍械庫）：名稱、一句話；詳細 = 說明、數值、三條升級路線
+function weaponCardBody(id) {
+  const W = WEAPONS[id], p = weaponParams({ id, path: null, final: null }), dps = p.damage * p.count / p.interval;
+  const paths = Object.values(W.paths).map(P =>
+    `<div><b style="color:${W.color}">${P.name}</b>：${P.desc}<br><span style="color:#6a79ad">→ ${P.next.map(n => n.name).join(' ／ ')}</span></div>`).join('');
+  return `<div class="ttl" style="color:${W.color}">${W.name}</div>
+    <div class="ds brief">${WEAPON_BRIEF[id] || W.desc}</div>
+    <div class="det"><div class="ds">${W.desc}</div>
+    <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
+    <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>`;
+}
 function chipCard(id, footer = '') {
   const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip', r = rareOf(id);
   const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
@@ -104,8 +115,11 @@ const Screen = {
       case 'resume': Game.togglePauseMenu(false); break;
       case 'quitrun': Game.quitRun(); break;
       case 'title': Net.leave(); Game.mates = []; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
-      case 'chapters': Screen.chapterSelect(); break;
-      case 'chapter': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.select('run'); } break;
+      case 'base': Screen.title(arg); break;
+      case 'hgship': Screen.hgShip = arg; Screen.title('hangar'); break;
+      case 'basech': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.title('hangar'); } break;
+      case 'depart': Screen.depart(); break;
+      case 'hgrange': Screen.weaponSelect('range', Screen.hgPick()); break;  // 靶場一律全開：鎖住的飛船也能試
       case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
       case 'weapon': {
@@ -144,7 +158,6 @@ const Screen = {
       }
       case 'finish': Game.finishRun(); break;
       case 'records': Screen.records(); break;
-      case 'unlocks': Screen.unlocks(); break;
       case 'refresh': Screen.hardRefresh(); break;
       case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
       case 'clearrecok':
@@ -163,24 +176,6 @@ const Screen = {
     }
   },
 
-  // 開始遠征 → 先選章節（沒解鎖的灰掉、寫解鎖條件；通關過的打勾）
-  chapterSelect() {
-    const done = chapterProgress();
-    const cards = CHAPTERS.map(c => {
-      const open = chapterUnlocked(c.id), cleared = done.includes(c.id);
-      const bosses = Object.entries(c.bosses).map(([s, id]) => `<span style="color:${ENEMY_TYPES[id].color};white-space:nowrap">♛ ${ENEMY_TYPES[id].name}</span>`).join('　');
-      return `<div class="card" style="border-color:${open ? '#4cc9f0' : '#2a3460'};${open ? '' : 'opacity:.5'}">
-        <div class="ttl">${c.name}${cleared ? ' <span style="color:#9dff6b">✓ 已通關</span>' : ''}</div>
-        <div class="ty">星區 ${c.sectors[0]}～${c.sectors[1]}${c.hp !== 1 ? `　·　敵人血量 ×${c.hp}、受到的傷害 ×${c.dmg}` : ''}</div>
-        <div class="ds">${open ? c.intro : `通關「${chapterById(c.id - 1).name}」後解鎖`}<br>${bosses}${c.start ? `<br><span style="color:#ffd166">開局補償：◆${c.start.credits}、武器插座 +${c.start.wSock}、電路 +${c.start.slots}、三選一 ×${c.start.picks}</span>` : ''}</div>
-        <button data-act="chapter" data-arg="${c.id}" ${open ? '' : 'disabled'}>${open ? '選這章' : '未解鎖'}</button></div>`;
-    }).join('');
-    this.show(`<div class="scr pick">
-      <div class="between"><div><h2>選擇章節</h2>
-        <div class="sub">每章打一段星區，最後一個星區的旗艦擊沉就算通關，開啟下一章。打完可以繼續無盡模式。</div></div>
-        <button data-act="title" data-back>返回 (Esc)</button></div>
-      <div class="cards left">${cards}</div></div>`);
-  },
   select(mode) {
     const free = mode === 'sandbox' || mode === 'range';
     const bar =(label, v, max, col) => `<div class="ty">${label}
@@ -217,22 +212,13 @@ const Screen = {
     const S = SHIPS[shipId];
     const cards = Object.entries(WEAPONS).map(([id, W]) => {
       if (mode !== 'sandbox' && mode !== 'range' && !isUnlocked('weapon', id)) return this.lockedCard(W.name, W.color, unlockEntry('weapon', id));
-      const p = weaponParams({ id, path: null, final: null });
-      const dps = p.damage * p.count / p.interval;
-      const paths = Object.values(W.paths).map(P =>
-        `<div><b style="color:${W.color}">${P.name}</b>：${P.desc}<br><span style="color:#6a79ad">→ ${P.next.map(n => n.name).join(' ／ ')}</span></div>`).join('');
-      return `<div class="card" style="border-color:${W.color}">
-        <div class="ttl" style="color:${W.color}">${W.name}</div>
-        <div class="ds brief">${WEAPON_BRIEF[id] || W.desc}</div>
-        <div class="det"><div class="ds">${W.desc}</div>
-        <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
-        <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>
+      return `<div class="card" style="border-color:${W.color}">${weaponCardBody(id)}
         <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
     }).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
         <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，之後在「⚒ 軍械台」升級。</div></div>
-        <button data-act="select" data-arg="${mode}" data-back>返回 (Esc)</button></div>
+        <button ${mode === 'coop' ? `data-act="select" data-arg="${mode}"` : 'data-act="title"'} data-back>返回 (Esc)</button></div>
       <div class="cards left">${cards}</div></div>`);
   },
 
@@ -361,29 +347,6 @@ const Screen = {
         <div class="sub">犧牲一個晶片，賭一個電路格的屬性。</div></div>${this.status()}</div>${body}</div>`);
   },
 
-  title() {
-    this.show(`<div class="scr title-wrap">
-      <div class="refresh-corner">${this.refreshBtn()}</div>
-      <h1>星環電路</h1><div class="en">CIRCUIT ROGUE</div>
-      <div class="sub">組裝電路，疊出屬於你的彈幕</div>
-      <div class="row">
-        <button class="big" data-act="chapters">開始遠征</button>
-        <button class="big" data-act="select" data-arg="range">🎯 靶場</button>
-        <button class="big" data-act="coop" style="border-color:#ff9dbd;color:#ff9dbd">👥 多人連線（測試）</button>
-      </div>
-      <div class="row"><button data-act="codex">📖 電路總覽</button>
-        <button data-act="records">📜 遊玩紀錄</button>
-        <button data-act="unlocks">🔓 解鎖</button>
-        <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button>
-        <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
-      <div class="keys">電腦：WASD 移動　·　滑鼠左鍵 射擊　·　Space / 右鍵 衝刺（無敵）　·　Tab 隨時編輯電路（暫停）　·　M 靜音<br>
-      手機：自動攻擊時任意位置拖曳移動；關閉自動攻擊後，左半邊移動、右半邊瞄準射擊　·　「衝刺」「電路」「自動」按鈕　·　建議橫向遊玩</div>
-      ${this.unlockFreshHtml()}
-      <div class="ver">版本 ${CFG.VERSION}</div>
-    </div>`);
-    this.checkVersion();
-    Game.unlockFresh = [];  // 新達成的解鎖在標題只顯示一次
-  },
   // 清暫存重新整理：GitHub Pages 的檔案會被瀏覽器暫存，一般重新整理可能還是舊版
   //   開標題畫面時在背景抓一次最新的版號，跟目前的不一樣就讓按鈕亮起來
   refreshBtn() {  // 平常不顯示（只留位置），檢查到新版才出現
@@ -546,7 +509,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     const coop = Game.mode === 'coop';
     this.show(`<div class="scr title-wrap">
       <h1>${coop ? '選單' : '暫停'}</h1>
-      <div class="sub">${coop ? '多人模式不會暫停，隊友那邊照常進行。<br>' : ''}${Game.freePlay() ? '離開 = 回到標題。' : '離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。'}</div>
+      <div class="sub">${coop ? '多人模式不會暫停，隊友那邊照常進行。<br>' : ''}${Game.freePlay() ? '離開 = 回到基地。' : '離開遊戲 = 這一局中途結束（存入遊玩紀錄），顯示結算。'}</div>
       <div class="row"><button class="big" data-act="resume" data-back>繼續 (Esc)</button>
         <button class="big" data-act="quitrun">離開遊戲</button></div></div>`);
   },
@@ -560,7 +523,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
       <div class="row">${Game.mode !== 'coop' ? `<button class="big" data-act="run" data-arg="${Game.mode}">重新開始</button>` : ''}
-        <button class="big" data-act="title">回到標題</button></div>
+        <button class="big" data-act="title">回到基地</button></div>
       ${rec ? '<div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div><div id="copyBox"></div>' : ''}</div>`);
   },
   dead() {
@@ -584,7 +547,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
         ${run && Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}${run ? '<br><span style="color:#6a79ad">這一局已存入「遊玩紀錄」</span>' : ''}</div>
       ${this.runSummary()}
       <div class="row"><button class="big" data-act="run" data-arg="${Game.mode}">重新開始 (R)</button>
-      <button class="big" data-act="title">回到標題</button></div>
+      <button class="big" data-act="title">回到基地</button></div>
       ${run ? '<div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div><div id="copyBox"></div>' : ''}</div>`);
   },
 
@@ -614,33 +577,12 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },
 
-  // 局外成長一覽：每一類列出全部，開局就有的、已解鎖的、還沒解鎖的（條件＋進度）
-  unlocks() {
-    const P = unlockLoad();
-    const sec = ([kind, label]) => {
-      const ids = unlockIds(kind), rows = ids.map(id => {
-        const u = unlockEntry(kind, id), name = unlockName(kind, id);
-        if (!u) return `<div class="ulk open"><b>${name}</b><span class="ulk-st">開局就有</span></div>`;
-        const st = unlockState(u, P), pct = Math.round(st.cur / st.max * 100);
-        return `<div class="ulk ${st.done ? 'done' : 'lock'}"><b>${st.done ? '' : '🔒 '}${name}</b><span class="ulk-st">${st.done ? '✓ 已解鎖' : `${Math.floor(st.cur)} / ${st.max}`}</span>
-          <div class="ulk-need">${unlockNeed(u)}</div><div class="ulk-bar"><div style="width:${pct}%"></div></div></div>`;
-      }).join('');
-      const got = ids.filter(id => { const u = unlockEntry(kind, id); return !u || unlockState(u, P).done; }).length;
-      return `<h3>${label}<span class="ty">　${got} / ${ids.length}</span></h3><div class="ulk-grid">${rows}</div>`;
-    };
-    this.show(`<div class="scr ulk-scr">
-      <div class="between"><div><h2>🔓 解鎖</h2>
-        <div class="sub">玩越多，能選的飛船、武器、晶片越多（不會變強，只是選項變多）。進度跨局累計，存在這台裝置的瀏覽器。</div>
-        ${CFG.UNLOCK_ALL ? '<div class="sub" style="color:#ffd166">測試期間全部開放、都能選；下面是之後正式上鎖時的進度（從這一版開始記）。</div>' : ''}</div>
-        <button data-act="title" data-back>返回 (Esc)</button></div>
-      <div class="ulk-tiles"><span>完成 <b>${P.runs}</b> 局</span><span>擊殺 <b>${P.kills.toLocaleString('zh-TW')}</b></span><span>打倒精英 <b>${P.elites}</b></span><span>最遠 <b>第 ${P.sector || '—'} 星區</b></span></div>
-      ${UNLOCK_KINDS.map(sec).join('')}</div>`);
-  },
-  // 這一局新達成的解鎖條件（結算畫面；回到標題時也顯示一次，例如通關後直接回標題）
-  unlockFreshHtml() {
+  // 這一局新達成的解鎖條件（結算畫面；回到基地時也顯示一次，例如通關後直接回基地）；btn = 「去看」按鈕（跳到第一樣所在的分頁）
+  unlockFreshHtml(btn = true) {
     const F = Game.unlockFresh || [];
     if (!F.length) return '';
-    return `<div class="ulk-fresh">🔓 ${CFG.UNLOCK_ALL ? '達成解鎖條件' : '新解鎖'}：${F.map(u => `<b>${unlockName(u.kind, u.id)}</b>`).join('、')}<button data-act="unlocks">看解鎖</button></div>`;
+    const tab = (BASE_TABS.find(t => t.kinds.includes(F[0].kind)) || BASE_TABS[0]).id;
+    return `<div class="ulk-fresh">🔓 ${CFG.UNLOCK_ALL ? '達成解鎖條件' : '新解鎖'}：${F.map(u => `<b>${unlockName(u.kind, u.id)}</b>`).join('、')}${btn ? `<button data-act="base" data-arg="${tab}">回基地看</button>` : ''}</div>`;
   },
   records(msg = '', confirmClear = false) {
     const list = Game.loadRecords();

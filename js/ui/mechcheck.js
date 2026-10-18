@@ -2588,7 +2588,7 @@ const MechCheck = {
       const a = save(m, P), b = save(P, m);
       return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
     }],
-    ['局外成長', '解鎖進度', '一局結束把成績加進進度（跨局累計），回傳新達成的；打倒精英、回響擊殺有記；UNLOCK_ALL 時全部能選；關掉時沒達成的飛船變灰、不能選，沙盒照樣全開', M => {
+    ['局外成長', '解鎖進度', '一局結束把成績加進進度（跨局累計），回傳新達成的；打倒精英、回響擊殺有記；UNLOCK_ALL 時全部能選；關掉時機庫裡沒達成的飛船是剪影、不能出發，沙盒照樣全開', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL, sh = Screen.show;
       const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
       try {
@@ -2603,16 +2603,42 @@ const MechCheck = {
         const e = M.targets([[100, 0]], 'elite', true, 1)[0]; e.hurt(e.hp + 1, 0, 0, 'echo', null);  // 打死時遊戲自己算擊殺（onEnemyKilled）
         const killOk = Game.runStats.elites === 1 && Game.runStats.echoK === 1;
         CFG.UNLOCK_ALL = true;
-        const allOpen = isUnlocked('ship', 'gate') && !html(() => Screen.select('run')).includes('card locked');
+        const hg = ship => { Screen.hgShip = ship; return html(() => Screen.title('hangar')); }, hs = Screen.hgShip;
+        const allOpen = isUnlocked('ship', 'gate') && !hg('gate').includes('hg-slot locked');
         CFG.UNLOCK_ALL = false;
         const lockOk = !isUnlocked('ship', 'gate') && isUnlocked('ship', 'wraith') && isUnlocked('ship', 'vanguard') && !isUnlocked('weapon', 'blade');
-        const h = html(() => Screen.select('run')), gray = h.includes('🔒 星門號') && !h.includes('選擇星門號') && h.includes('選擇幻影號');
+        const h = hg('gate'), gray = h.includes('hg-slot on locked') && h.includes('data-act="depart" disabled') && !hg('wraith').includes('data-act="depart" disabled');
+        Screen.hgShip = hs;
         const sb = !html(() => Screen.select('sandbox')).includes('card locked');
         return { ok: sum && firstOk && secondOk && killOk && allOpen && lockOk && gray && sb,
           got: `第 1 局新達成 ${ids(a) || '無'}（要 focus,railgun,wraith）、第 2 局 ${ids(b) || '無'}（要 wallbounce）；累計 ${P.runs} 局、擊殺 ${P.kills}、迴旋 ${P.play.boomerang}${sum ? '' : '（錯誤）'}；`
-            + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、選飛船${gray ? '星門號變灰' : '沒變灰（錯誤）'}、沙盒${sb ? '全開' : '也鎖了（錯誤）'}` };
+            + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、機庫${gray ? '星門號是剪影、不能出發' : '星門號沒鎖（錯誤）'}、沙盒${sb ? '全開' : '也鎖了（錯誤）'}` };
       } finally {
         CFG.UNLOCK_ALL = all;
+        for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+      }
+    }],
+    ['局外成長', '基地', '機庫：鎖住的飛船按出發不會開始、解鎖的會到選武器並帶著機庫選的章；沒解鎖的章選不了；剛解鎖的東西在分頁和卡片上有「新」，打開那一頁之後就沒了', M => {
+      const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY, UNLOCK_SEEN_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL, sh = Screen.show, hs = Screen.hgShip, ch = Game.chapterId, tab = Screen.baseTab;
+      const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
+      try {
+        for (const [k] of keep) localStorage.removeItem(k);
+        CFG.UNLOCK_ALL = false;
+        Screen.hgShip = 'gate'; const lockGo = html(() => Screen.depart());
+        Screen.hgShip = 'vanguard'; Game.chapterId = 2; html(() => Screen.title('hangar'));
+        const chLock = Screen.hgChapter() === 1;  // 第二章還沒解鎖：機庫用第一章
+        localStorage.setItem(CHAPTER_KEY, JSON.stringify({ cleared: [1] })); Game.chapterId = 2;
+        const go = html(() => Screen.depart()), goOk = go.includes('選擇武器') && Game.chapterId === 2;
+        html(() => Screen.title('hangar'));  // 先看過一次（開局就有的不算新）
+        unlockAddRun({ sector: 1, bossIds: ['boss'], weapon: 'scatter', play: {} });  // 解鎖幻影號（第一章已通關 → 哨兵號也一起）
+        const a = html(() => Screen.title('armory')), tabNew = /data-arg="hangar">🚀 機庫<i class="new">2<\/i>/.test(a);
+        const b = html(() => Screen.title('hangar')), cardNew = /data-arg="wraith"[^]*?<i class="new">新<\/i>/.test(b.split('hg-main')[0]);
+        const c = html(() => Screen.title('hangar')), gone = !c.includes('<i class="new">');
+        return { ok: !lockGo && chLock && goOk && tabNew && cardNew && gone,
+          got: `鎖住的飛船按出發${lockGo ? '開始了（錯誤）' : '沒反應'}；沒解鎖的章${chLock ? '改用第一章' : '照樣選了（錯誤）'}；解鎖的飛船出發${goOk ? '到選武器、第二章' : '不對（錯誤）'}；`
+            + `解鎖幻影號、哨兵號後：機庫分頁${tabNew ? '「新」2 個' : '「新」數量不對（錯誤）'}、卡片${cardNew ? '有' : '沒有（錯誤）'}「新」、再打開一次${gone ? '沒了' : '還在（錯誤）'}` };
+      } finally {
+        CFG.UNLOCK_ALL = all; Screen.hgShip = hs; Game.chapterId = ch; Screen.baseTab = tab;
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
       }
     }],

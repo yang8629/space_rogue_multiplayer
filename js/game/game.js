@@ -779,7 +779,7 @@ const Game = {
     this.view();
     if (this.mode === 'coop') Net.leave();  // 雙人：自己離開，隊友可以一個人繼續（跟隊友離線一樣）
   },
-  // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到標題
+  // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到基地
   finishRun() {
     this.saveRecord(this.chapterDone() ? 'cleared' : 'retired');
     if (this.mode === 'coop') {  // 雙人：房主決定結束，兩人一起回到房間
@@ -799,7 +799,7 @@ const Game = {
     const R = this.runStats;
     if (!['run', 'coop'].includes(this.mode) || !R || R.recorded || MechCheck.running) return;  // 機制檢查的模擬局不存
     R.recorded = true;
-    // 局外成長：這一局的成績加進解鎖進度（先加再存紀錄：第一次讀進度時會用紀錄補成績，不能先看到這一局）；新達成的記在 unlockFresh（結算畫面、回到標題時顯示）
+    // 局外成長：這一局的成績加進解鎖進度（先加再存紀錄：第一次讀進度時會用紀錄補成績，不能先看到這一局）；新達成的記在 unlockFresh（結算畫面、回到基地時顯示）
     const ulk = { sector: this.sector, bossIds: R.bossIds.slice(), weapon: this.weapon.id, kills: R.kills, elites: R.elites, echoK: R.echoK, play: { ...this.playKills } };
     this.unlockFresh = unlockAddRun(ulk);
     const rec = this.mode === 'coop' ? Net.buildRecord(result) : this.buildRecord(result);

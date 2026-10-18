@@ -425,21 +425,11 @@ body.detail .card .det { display: flex; flex-direction: column; gap: 8px; flex: 
 .card .det .ds { flex: none; }  /* 詳細說明照內容排，空白留在按鈕上方 */
 .card button { margin-top: auto; }  /* 按鈕貼在卡片底部：同一排的卡片按鈕高度一樣（展開詳細說明時也是） */
 .cards.left { justify-content: flex-start; }
-/* 局外成長：鎖住的卡片、解鎖一覽、結算的新達成 */
+/* 局外成長：鎖住的卡片、總覽列、結算的新達成 */
 .card.locked { filter: grayscale(0.85); opacity: .55; }
 .card.locked img { opacity: .5; }
 .ulk-bar { height: 5px; background: #141c3a; border-radius: 3px; overflow: hidden; }
 .ulk-bar div { height: 100%; background: #ffd166; }
-.ulk-scr { max-width: 1100px; }
-.ulk-scr h3 { margin: 18px 0 8px; font-size: 15px; color: #c9d4ff; }
-.ulk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
-.ulk { background: #070b1a; border: 1px solid #22305e; border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 13px; }
-.ulk .ulk-st { font-size: 12px; color: #8fa3d9; }
-.ulk .ulk-need, .ulk .ulk-bar { grid-column: 1 / -1; }
-.ulk .ulk-need { font-size: 12px; color: #9aa6c4; }
-.ulk.done { border-color: #2ee6a6; } .ulk.done .ulk-st { color: #2ee6a6; }
-.ulk.open .ulk-st { color: #6a79ad; }
-.ulk.lock b { color: #8fa3d9; }
 .ulk-tiles { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; color: #9aa6c4; }
 .ulk-tiles b { color: #fff; }
 .ulk-fresh { margin: 10px auto; padding: 8px 14px; border: 1px solid #ffd166; border-radius: 8px; color: #ffd166; background: #1a1608; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 720px; }
@@ -486,3 +476,65 @@ body.detail .detail-hint button { background: #1c3a6e; }
 .card > .ttl:first-child { margin-top: 6px; }  /* 沒有分類標籤的卡片：標題別貼著上框 */
 .statl .sv { margin-right: 0; }
 .card .statl { gap: 3px 9px; font-size: 12px; }
+
+/* ===== 基地（主畫面，js/ui/base.js）：上方標題＋系統按鈕、總覽列、分頁；高度固定，換分頁時視窗不會忽大忽小 ===== */
+.scr.base { height: min(860px, 94vh); display: flex; flex-direction: column; gap: 10px; }
+.base-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.base-logo h1 { font-size: 34px; display: inline; }
+.base-logo .en { color: #4cc9f0; letter-spacing: 6px; font-size: 12px; margin-left: 12px; }
+.base-sys { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.base-sys button { padding: 6px 12px; font-size: 13px; }
+.base-sys #refreshBtn:not(:empty) { border-color: #4cc9f0; color: #4cc9f0; }
+.base .ulk-tiles { margin-top: 0; }
+.base .ulk-fresh { margin: 0 auto; }
+.base-tabs { display: flex; gap: 6px; border-bottom: 1px solid #2a3a7a; flex-wrap: wrap; }
+.base-tab { position: relative; border-radius: 8px 8px 0 0; border-bottom: none; padding: 8px 18px; font-size: 14px; color: #8fa3d9; background: #070b1a; }
+.base-tab.on { color: #bdf0ff; background: #13204a; border-color: #4cc9f0; }
+.base-body { flex: 1; overflow: auto; padding-right: 4px; }
+.base-body h3 { margin: 14px 0 0; font-size: 15px; color: #c9d4ff; }
+.base-body .cards { margin: 10px 0; }
+i.new { position: absolute; top: -7px; right: -7px; font-style: normal; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 6px; border-radius: 9px;
+  background: #ffd166; color: #1a1205; box-shadow: 0 0 10px rgba(255, 209, 102, .7); pointer-events: none; z-index: 1; }
+.card { position: relative; }
+/* 軍械庫：一律顯示完整說明（不用按 Shift） */
+.cards.full .card .det { display: flex; flex-direction: column; gap: 8px; }
+.cards.full .card .det .ds { flex: none; }
+.cards.full .card .brief { display: none; }
+/* 機庫：飛船一排、選中的大圖＋說明、下方選章＋出發 */
+.hg-slots { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.hg-slot { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 112px; padding: 6px 4px; border-radius: 10px; background: #070b1a; border-color: #22305e; }
+.hg-slot img { width: 64px; height: 64px; }
+.hg-slot span { font-size: 13px; color: var(--c); }
+.hg-slot.on { border-color: var(--c); box-shadow: 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); background: #0d1433; }
+.hg-slot.locked img, .hg-ship.locked img { filter: brightness(0) drop-shadow(0 0 1px #5a6a9e) drop-shadow(0 0 1px #5a6a9e); }  /* 沒解鎖：黑色剪影 */
+.hg-slot.locked span { color: #6a79ad; }
+.hg-main { display: flex; gap: 20px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
+.hg-ship { width: 220px; height: 220px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 22%, transparent) 0%, transparent 68%); }
+.hg-ship img { width: 200px; height: 200px; }
+.hg-info { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.hg-info .ttl { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+.hg-info .ttl .ty { margin-left: 10px; font-size: 12px; letter-spacing: 3px; color: #6a79ad; }
+.hg-info .ds { font-size: 13px; color: #c9d4ff; line-height: 1.7; }
+.hg-info .ty { font-size: 12px; color: #8fa3d9; }
+.hg-desc .det { display: block; }  /* 機庫：一句話＋完整的能力說明都顯示 */
+.hg-desc .brief { color: #fff; margin-bottom: 6px; }
+.hg-launch { border-top: 1px solid #22305e; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.hg-launch .ty { font-size: 12px; color: #8fa3d9; line-height: 1.7; }
+.hg-launch .ds { font-size: 13px; color: #c9d4ff; }
+.hg-chs { display: flex; gap: 8px; flex-wrap: wrap; }
+.hg-ch { font-size: 13px; padding: 6px 14px; }
+.hg-ch.on { border-color: #4cc9f0; color: #bdf0ff; background: #13204a; }
+.hg-ch .ok, .st-row .ok { color: #9dff6b; }
+.hg-go { margin-top: 4px; }
+/* 戰績 */
+.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 12px 0; }
+.st-box { background: #070b1a; border: 1px solid #22305e; border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.st-box h3 { margin: 0 0 4px; }
+.st-wide { grid-column: 1 / -1; }
+.st-row { display: flex; justify-content: space-between; font-size: 13px; color: #c9d4ff; }
+.st-row b { color: #8fa3d9; font-weight: 600; }
+.st-bar { display: grid; grid-template-columns: 110px 1fr 70px; gap: 10px; align-items: center; font-size: 13px; color: #c9d4ff; }
+.st-bar > div { height: 8px; background: #141c3a; border-radius: 4px; overflow: hidden; }
+.st-bar > div > div { height: 100%; background: #4cc9f0; }
+.st-bar b { text-align: right; font-variant-numeric: tabular-nums; }

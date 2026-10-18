@@ -223,7 +223,7 @@ const Net = {
       <div class="keys">一人按「開房間」拿到 4 碼房號，其他人輸入房號按「加入房間」。<br>
         多人遠征：航圖投票（選不同就照票數抽籤）、錢包各自獨立（怪物掉落的晶體每人都拿）、獎勵各自選、戰鬥中按 Tab 全員一起暫停。<br>
         一人被擊墜時留在原地，隊友靠近 ${CFG.REVIVE.time} 秒就能救起來（救的人分出自己一半的血量）；沒被救起的在戰鬥結束後以 30% HP 歸隊；全員都被擊墜才結束。</div>
-      <div class="row">${this.linked ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回標題 (Esc)</button>'}</div>
+      <div class="row">${this.linked ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回基地 (Esc)</button>'}</div>
       <div class="ver">版本 ${CFG.VERSION}</div></div>`);
     if (this.linked) this.lobbyStatus();
   },
@@ -355,7 +355,7 @@ const Net = {
     Game.mates = []; Game.state = 'title'; Game.inArena = false;
     Screen.show(`<div class="scr title-wrap"><h1 style="font-size:40px;color:#ff4d6d">連線中斷</h1>
       <div class="sub">${msg}</div>
-      <div class="row"><button class="big" data-act="title">回到標題</button><button data-act="records">📜 遊玩紀錄</button></div></div>`);
+      <div class="row"><button class="big" data-act="title">回到基地</button><button data-act="records">📜 遊玩紀錄</button></div></div>`);
   },
 
   // ---------- 斷線重連 ----------
@@ -404,7 +404,7 @@ const Net = {
       <div class="sub">${R.msg}${note ? `<br><span style="color:#ff4d6d">${note}</span>` : ''}<br>
         房主那邊會暫停並保留房間 ${NET_REJOIN_TIME} 秒，重新連線就能回到這一局。</div>
       <div class="row"><button class="big" data-act="netrejoin" ${this.rejoining ? 'disabled' : ''}>${this.rejoining ? '連線中…' : `重新連線（房號 ${R.code}）`}</button>
-        <button data-act="netgiveup">放棄，回到標題</button></div>`);
+        <button data-act="netgiveup">放棄，回到基地</button></div>`);
   },
   tryRejoin() {
     const R = this.rejoin;

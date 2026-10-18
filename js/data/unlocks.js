@@ -135,6 +135,16 @@ function isUnlocked(kind, id) {
   const u = unlockEntry(kind, id);
   return !u || unlockDone().has(u);
 }
+// 「新」標記（基地）：解鎖了、還沒在基地打開那一頁看過的；看過的存在 UNLOCK_SEEN_KEY（"種類:id" 的清單）
+const UNLOCK_SEEN_KEY = 'v2_unlock_seen';
+function unlockSeen() { try { const a = JSON.parse(localStorage.getItem(UNLOCK_SEEN_KEY) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
+function unlockIsNew(u, seen = unlockSeen()) { return unlockDone().has(u) && !seen.has(u.kind + ':' + u.id); }
+function unlockMarkSeen(list) {
+  const seen = unlockSeen(), add = list.filter(u => unlockIsNew(u, seen));
+  if (!add.length) return;
+  for (const u of add) seen.add(u.kind + ':' + u.id);
+  try { localStorage.setItem(UNLOCK_SEEN_KEY, JSON.stringify([...seen])); } catch (e) {}
+}
 // 晶片池（三選一、商店、黑市、事件、開局晶片）只留解鎖了的；不屬於可解鎖種類的（合成晶片）照留
 const chipOpen = id => { const k = unlockChipKind(id); return !k || isUnlocked(k, id); };
 const openChips = ids => CFG.UNLOCK_ALL ? ids : ids.filter(chipOpen);
