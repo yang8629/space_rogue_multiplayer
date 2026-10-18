@@ -75,13 +75,21 @@ function partCard(id, footer = '', parts = Game.parts, band = false) {
     <div class="fxl">${partLine(id)}</div>${tr(P.t2, 2)}${tr(P.t4, 4)}${footer}</div>`;
 }
 
+const SCROLL_BOXES = '.scr, .panel, .base-body';  // 畫面裡會捲動的框（css overflow: auto）
 const Screen = {
   el: document.getElementById('screen'),
   show(html) {
     // 有卡片的畫面：卡片只顯示精簡說明，按 Shift（手機按「詳細」）切換完整說明
     if (html.includes('class="card')) html += '<div class="detail-hint">按 Shift 切換詳細說明　<button data-act="detail">詳細</button></div>';
+    // 同一個畫面重畫（奇異點選晶片、商店買東西）：保留捲動位置，不跳回最上面；換了畫面才從頭
+    const key = this.scrollKey(), keep = [...this.el.querySelectorAll(SCROLL_BOXES)].map(e => e.scrollTop);
     this.el.innerHTML = html; this.el.classList.remove('hidden', 'hub');
+    if (key && key === this.scrollKey()) this.el.querySelectorAll(SCROLL_BOXES).forEach((e, i) => { if (keep[i]) e.scrollTop = keep[i]; });
     this.hubOn = false;  // 基地的飛船只在基地畫面（hubView）能動
+  },
+  scrollKey() {  // 認畫面：最外層框的 class＋標題
+    const f = this.el.firstElementChild, h = this.el.querySelector('h2');
+    return f ? f.className + '|' + (h ? h.textContent : '') : '';
   },
   hide() {
     this.el.classList.add('hidden');
