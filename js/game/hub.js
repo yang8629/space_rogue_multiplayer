@@ -150,10 +150,9 @@ const Hub = {
     else if (s.moving) s.aim = Math.atan2(my, mx);
     this.follow();
     this.updateShots(dt);
-    // 最近的互動點（自己現在開的那艘的停機坪不算）
+    // 最近的互動點（自己開的那艘的停機坪、裝著的武器的架子也算：看數據，按 E 不會換）
     let best = null, bd = Infinity;
     for (const z of HUB.zones) {
-      if ((z.kind === 'pad' && z.ship === this.shipId) || (z.kind === 'rack' && z.weapon === this.weaponId)) continue;
       const d = Math.hypot(z.x - s.x, z.y - s.y);
       if (d < z.r && d < bd) { best = z; bd = d; }
     }
@@ -223,6 +222,8 @@ const Hub = {
     this.cam.x = vw >= HUB.W ? HUB.W / 2 - vw / 2 : clamp(s.x - vw / 2, 0, HUB.W - vw);
     this.cam.y = (vh >= HUB.H ? HUB.H / 2 - vh / 2 : clamp(s.y - vh / 2, 0, HUB.H - vh)) - top;
   },
+  // 靠近的東西按 E 有沒有作用（自己開的那艘、裝著的武器：只看數據）；畫面照這個決定要不要顯示 E
+  actable(z) { return !!z && !(z.kind === 'pad' && z.ship === this.shipId) && !(z.kind === 'rack' && z.weapon === this.weaponId); },
   // 按 E（或 Enter）：對靠近的東西做事
   interact() {
     const z = this.near;

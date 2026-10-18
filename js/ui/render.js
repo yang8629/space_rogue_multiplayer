@@ -277,9 +277,9 @@ function drawHubHud() {
   if (Hub.coop()) {  // 多人房間：每艘船頭上的號碼（號碼色），✓ = 準備好了，📖 = 在看面板
     const tag = (slot, x, y, r, b) => label(`${slot}P${r ? ' ✓' : ''}${b ? ' 📖' : ''}`, sx(x), sy(y) - 24, Game.slotColor(slot), 13);
     for (const o of Net.roomShips()) tag(o.slot, o.x, o.y, o.r, o.b);
-    if (!Hub.near) tag(Net.mySlot(), Hub.ship.x, Hub.ship.y, Net.meReady, false);
+    if (!Hub.actable(Hub.near)) tag(Net.mySlot(), Hub.ship.x, Hub.ship.y, Net.meReady, false);
   }
-  if (Hub.near) {  // 靠近：船上方的「E」
+  if (Hub.actable(Hub.near)) {  // 靠近（按 E 有作用的）：船上方的「E」
     const s = Hub.ship, x = sx(s.x), y = sy(s.y) - 34;
     ctx.fillStyle = 'rgba(7, 11, 26, 0.85)'; ctx.strokeStyle = '#bdf0ff'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(x - 13, y - 13, 26, 26, 6); ctx.fill(); ctx.stroke();

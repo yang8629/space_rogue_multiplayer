@@ -65,7 +65,8 @@ Object.assign(Screen, {
     if (z && z.kind === 'rack' && isUnlocked('weapon', z.weapon)) unlockMarkSeen([unlockEntry('weapon', z.weapon)].filter(Boolean));  // 靠近解鎖的武器 = 看過
     if (z.kind === 'rack') {
       const W = WEAPONS[z.weapon], u = unlockEntry('weapon', z.weapon);
-      if (Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${W.color}">${W.name}</div><div class="hub-press">已準備，不能換武器</div>`;
+      if (z.weapon === Hub.weaponId) body = `<div class="hg-desc">${weaponCardBody(z.weapon)}</div><div class="hub-press">裝備中</div>`;
+      else if (Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${W.color}">${W.name}</div><div class="hub-press">已準備，不能換武器</div>`;
       else if (isUnlocked('weapon', z.weapon)) body = `<div class="hg-desc">${weaponCardBody(z.weapon)}</div><div class="hub-press"><b>E</b> 裝備${W.name}</div>`;
       else {
         const st = unlockState(u);
@@ -74,11 +75,12 @@ Object.assign(Screen, {
       }
     } else if (z.kind === 'pad') {
       const S = SHIPS[z.ship], u = unlockEntry('ship', z.ship);
-      if (Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${S.color}">${S.name}</div><div class="hub-press">已準備，不能換船</div>`;
+      const mine = z.ship === Hub.shipId;  // 自己開的那艘：一樣看數據
+      if (!mine && Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${S.color}">${S.name}</div><div class="hub-press">已準備，不能換船</div>`;
       else if (isUnlocked('ship', z.ship)) {
         const parts = Object.entries(S.parts).map(([p, n]) => `${PARTS[p].name} ×${n}`).join('、') || '沒有';
         body = `<div class="ttl" style="color:${S.color}">${S.name}<span class="ty">${S.en}</span></div>${shipStatLine(S)}<div class="hg-desc">${shipDescHtml(S)}</div>
-          <div class="ty">開局零件：${parts}</div><div class="hub-press"><b>E</b> 換成${S.name}</div>`;
+          <div class="ty">開局零件：${parts}</div><div class="hub-press">${mine ? '現在開的飛船' : `<b>E</b> 換成${S.name}`}</div>`;
       } else {
         const st = unlockState(u);
         body = `<div class="ttl" style="color:${S.color}">🔒 ${S.name}</div><div class="ds">${unlockNeed(u)}</div>
