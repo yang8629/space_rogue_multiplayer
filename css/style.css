@@ -525,8 +525,7 @@ body.detail .detail-hint button { background: #1c3a6e; }
 .hub-info .ds { font-size: 13px; color: #c9d4ff; line-height: 1.7; }
 .hub-info .ty { font-size: 12px; color: #8fa3d9; }
 .hub-press { font-size: 13px; color: #bdf0ff; }
-.hub-press b, .hub-keys b { display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 4px; border: 1px solid #bdf0ff; border-radius: 4px; text-align: center; }
-.hub-keys { margin-top: 4px; font-size: 12px; color: #8fa3d9; text-shadow: 0 1px 2px #03050c; }
+.hub-press b { display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 4px; border: 1px solid #bdf0ff; border-radius: 4px; text-align: center; }
 .scr.base.compact { height: auto; max-width: 680px; }  /* 發射台、設定：小視窗 */
 /* 設定頁 */
 .set-body h3 { margin: 16px 0 8px; }
