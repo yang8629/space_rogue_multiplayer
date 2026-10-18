@@ -205,11 +205,12 @@ const GLHub = {
       const yy = d.y + d.h / 2, xs = sg < 0 ? d.x + d.w : d.x, xm = L.x + sg * 150;
       D.paths.push({ pts: [[xs, yy], [xm, yy], [xm, L.y], [L.x + sg * (HUB.LAUNCH_PAD + 4), L.y]], col });
     }
+    // 用 moveTo／lineTo 畫折線（poly 不封口時三層線會往多邊形的一側偏，左右兩條偏的方向相反）
+    const line = pts => { g.moveTo(...pts[0]); for (const q of pts.slice(1)) g.lineTo(...q); return g; };
     for (const P of D.paths) {
-      const flat = P.pts.flat();
-      g.poly(flat, false).stroke({ width: 10, color: HUB_INK, join: 'miter' });
-      g.poly(flat, false).stroke({ width: 6, color: 0x0a0f22, join: 'miter' });
-      g.poly(flat, false).stroke({ width: 2, color: P.col, alpha: 0.35, join: 'miter' });
+      line(P.pts).stroke({ width: 10, color: HUB_INK, join: 'miter' });
+      line(P.pts).stroke({ width: 6, color: 0x0a0f22, join: 'miter' });
+      line(P.pts).stroke({ width: 2, color: P.col, alpha: 0.35, join: 'miter' });
       P.len = P.pts.slice(1).reduce((n, p, i) => n + Math.hypot(p[0] - P.pts[i][0], p[1] - P.pts[i][1]), 0);
     }
     const hw = HUB.RUNWAY_W / 2, yb = hall.y + hall.h;
@@ -305,8 +306,8 @@ const GLHub = {
     const g = this.gAnim, t = Hub.t, s = Hub.ship, seen = unlockSeen(), D = this.decor;
     g.clear(); GLActors.gS.clear();
     // 導管的光點、燈照在地板上、信號燈、伺服器的燈、獎盃、無人機
-    for (const [i, P] of D.paths.entries()) {
-      const d = (t * 110 + i * 157) % (P.len + 160);
+    for (const P of D.paths) {  // 左右兩條同時出發（對稱）
+      const d = (t * 110) % (P.len + 160);
       if (d > P.len) continue;
       let left = d;
       for (let k = 1; k < P.pts.length; k++) {
