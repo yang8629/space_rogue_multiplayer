@@ -5,7 +5,7 @@
 'use strict';
 
 // 基地配置：世界座標（W×H），點位一律寫在這張表；kind 決定按 E 做什麼（Hub.ACT）
-//   pad：停機坪（每艘飛船一個），door：門（打開基地的面板），launch：發射台（選章、出發），term：終端機
+//   pad：停機坪（每艘飛船一個），door：門（打開基地的面板），launch：發射台（選章、出發；多人 = 準備），term：終端機
 const HUB = {
   W: 1200, H: 660, WALL: 44, TOP: 100,  // TOP：畫面上方留給標題列的高度（螢幕 px）
   SPEED: 300, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
@@ -40,6 +40,9 @@ const Hub = {
     this.follow();
   },
   zone(id) { return HUB.zones.find(z => z.id === id) || null; },
+  // 基地畫在畫面上：主畫面（title），或多人開局選配裝（pick）
+  shown() { return this.ready && !Game.inArena && (Game.state === 'title' || Game.state === 'pick'); },
+  coop() { return Game.state === 'pick'; },  // 多人選配裝中：發射台 = 準備，終端機不能用
   setShip(id) { const S = SHIPS[id]; Object.assign(this.ship, { ship: S, parts: S.parts }); this.shipId = id; },
   // 換船：沒解鎖的不能換；回傳有沒有換
   pick(id) {
@@ -102,6 +105,6 @@ const Hub = {
     pad: z => Hub.pick(z.ship),
     door: z => Screen.basePanel(z.tab),
     launch: () => Screen.basePanel('launch'),
-    term: z => z.id === 'coop' ? Net.lobby() : Screen.weaponSelect('range', Hub.shipId),  // 靶場：用目前開的這艘選武器
+    term: z => { if (!Hub.coop()) { if (z.id === 'coop') Net.lobby(); else Screen.weaponSelect('range', Hub.shipId); } },  // 靶場：用目前開的這艘選武器
   },
 };

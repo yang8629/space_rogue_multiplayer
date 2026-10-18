@@ -31,7 +31,7 @@ function render() {
       ctx.fillText('畫面載入失敗：請檢查網路後重新整理；還是不行的話，請開啟瀏覽器的硬體加速或更新顯示卡驅動', VW / 2, VH / 2);
     }
   }
-  if (!Game.inArena) { if (Game.state === 'title' && Hub.ready) drawHubHud(); return; }
+  if (!Game.inArena) { if (Hub.shown()) drawHubHud(); return; }
   drawHUD();
   if (Input.touch && Game.state === 'play') drawSticks();
 }
@@ -184,23 +184,6 @@ function drawShipArt(c, S, o = {}) {
   c.beginPath(); c.ellipse(x1, 0, 0.9, 3.1, 0, 0, TAU); c.fill();
 }
 
-// 選飛船畫面的小圖：用 drawShipArt 畫成圖片（船頭朝上、噴焰開著），每艘只畫一次；畫不出來（測試環境）回傳 null
-const SHIP_ICON = new Map();
-function shipIconURL(S, size = 144) {
-  const key = S.name + '@' + size;
-  if (SHIP_ICON.has(key)) return SHIP_ICON.get(key);
-  let url = null;
-  try {
-    const cv = document.createElement('canvas'); cv.width = cv.height = size;
-    const c = cv.getContext('2d'), k = size / 48;  // 144 px = 船身放大 3 倍
-    c.translate(size / 2, size / 2 + 4 * k / 3); c.scale(k, k); c.rotate(-Math.PI / 2);
-    drawShipArt(c, S, { moving: true });
-    url = cv.toDataURL();
-  } catch (e) { url = null; }
-  SHIP_ICON.set(key, url);
-  return url;
-}
-
 // 靶場數據面板（右上）：DPS、總傷害、命中次數、傷害來源、這條電路每發幾顆、觸發層
 function drawRangePanel() {
   const s = Game.stats, fmt = n => Math.round(n).toLocaleString('zh-TW');
@@ -277,7 +260,7 @@ function drawHubHud() {
       if (n) badge(n, x + 40 * k, sy(z.y - z.r + 4));
     } else {
       const y = sy(z.kind === 'door' ? HUB.WALL + 30 : z.kind === 'launch' ? z.y - z.r - 14 : z.y + 78);
-      label(z.label, x, y, z.color, 15);
+      label(z.label, x, y, z.kind === 'term' && Hub.coop() ? '#4a5886' : z.color, 15);  // 多人選配裝中：終端機不能用（變暗）
       if (n) badge(n, x + 60, y - 18);
     }
   }

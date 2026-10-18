@@ -120,7 +120,6 @@ const Screen = {
       case 'hub': Screen.hubView(); break;
       case 'basech': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.basePanel('launch'); } break;
       case 'depart': Screen.depart(); break;
-      case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
       case 'weapon': {
         const [mode, ship, wid] = arg.split(':');
@@ -176,30 +175,7 @@ const Screen = {
     }
   },
 
-  select(mode) {
-    const free = mode === 'sandbox' || mode === 'range';
-    const bar =(label, v, max, col) => `<div class="ty">${label}
-      <div style="height:6px;background:#141c3a;border-radius:3px;margin-top:3px">
-      <div style="height:6px;width:${Math.round(v / max * 100)}%;background:${col};border-radius:3px"></div></div></div>`;
-    const cards = Object.entries(SHIPS).map(([id, S]) => {
-      const pts = S.hull.map(([x, y]) => `${x},${y}`).join(' '), icon = shipIconURL(S);  // 飛船小圖跟戰鬥畫面同一個畫法（畫不出來才用多邊形）
-      if (!free && !isUnlocked('ship', id)) return this.lockedCard(S.name, S.color, unlockEntry('ship', id), icon);
-      return `<div class="card" style="border-color:${S.color}">
-        ${icon ? `<img src="${icon}" width="72" height="72" alt="${S.name}" style="margin:0 auto;display:block">` : `<svg viewBox="-26 -26 52 52" width="72" height="72" style="margin:0 auto;display:block;transform:rotate(-90deg)">
-          <polygon points="${pts}" fill="${S.color}" fill-opacity=".3" stroke="${S.color}" stroke-width="2"/></svg>`}
-        <div class="ttl" style="color:${S.color};text-align:center">${S.name}<span class="ty" style="margin-left:6px">${S.en}</span></div>
-        ${shipStatLine(S)}
-        ${shipDescHtml(S)}
-        <button data-act="ship" data-arg="${mode}:${id}">選擇${S.name}</button></div>`;
-    }).join('');
-    this.show(`<div class="scr pick">
-      <div class="between"><div><h2>1 / ${free ? 2 : 3}　選擇飛船</h2>
-        <div class="sub">${{ run: '開始遠征', coop: '多人連線', sandbox: '沙盒模式', range: '🎯 靶場' }[mode]}：每艘飛船有一個專屬能力。</div></div>
-        ${mode === 'coop' ? '<button data-act="title">離開房間</button>' : '<button data-act="title" data-back>返回 (Esc)</button>'}</div>
-      <div class="cards left">${cards}</div></div>`);
-  },
-
-  // 還沒解鎖的飛船、武器：灰色卡片，寫解鎖條件和進度，沒有選擇按鈕
+  // 還沒解鎖的武器、晶片：灰色卡片，寫解鎖條件和進度，沒有選擇按鈕
   lockedCard(name, color, u, icon = null) {
     const st = unlockState(u);
     return `<div class="card locked" style="border-color:${color}">
@@ -218,7 +194,7 @@ const Screen = {
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
         <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，之後在「⚒ 軍械台」升級。</div></div>
-        <button ${mode === 'coop' ? `data-act="select" data-arg="${mode}"` : 'data-act="title"'} data-back>返回 (Esc)</button></div>
+        <button data-act="hub" data-back>回到基地 (Esc)</button></div>
       <div class="cards left">${cards}</div></div>`);
   },
 

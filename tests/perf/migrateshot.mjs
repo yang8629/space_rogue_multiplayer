@@ -22,6 +22,6 @@ const r = await p.evaluate(() => {
     sentry: isUnlocked('ship', 'sentry'), ch2: chapterUnlocked(2), ch3: chapterUnlocked(3) };
 });
 console.log(JSON.stringify(r));
-await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.chapterSelect(); }); await wait(400);
-await p.screenshot({ path: SHOTS + '存檔升級_選章.png' });
+await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.basePanel('launch'); }); await wait(400);
+await p.screenshot({ path: SHOTS + '存檔升級_發射台.png' });
 await b.close();

@@ -10,7 +10,7 @@ p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');
 await p.evaluate(() => { try { localStorage.setItem('renderer', 'gl'); } catch (e) {} });
 await p.reload(); await wait(1800);
-await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.select('run'); document.body.classList.add('detail'); });
+await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.title(); document.body.classList.add('detail'); });
 await wait(500);
 await p.screenshot({ path: SHOTS + '選飛船畫面_飛船能力.png' });
 // 堡壘號：被打兩下，血條上的灰血

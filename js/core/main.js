@@ -33,7 +33,7 @@ function frame(now) {
   Net.tick(dt);
   const gdt = Game.mode === 'range' && Range.slow ? dt * Range.SLOW : dt;  // 靶場慢動作
   Game.update(gdt);
-  if (Screen.hubOn && Game.state === 'title' && !Codex.isOpen) Hub.update(dt);  // 基地：開著飛船走（開了面板、總覽就停）
+  if (Screen.hubOn && Hub.shown() && !Codex.isOpen) Hub.update(dt);  // 基地：開著飛船走（開了面板、總覽就停）
   if (Game.mode === 'range' && Game.state === 'play') Range.tick(gdt);  // 靶場「擋彈」：標靶射彈幕
   Range.syncBar();  // 靶場按鈕列（只在靶場戰鬥中顯示）
   render();

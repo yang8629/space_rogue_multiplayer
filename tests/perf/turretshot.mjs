@@ -11,7 +11,7 @@ p.on('console', m => { if (m.type() === 'error') console.log('console', m.text()
 await p.goto(GAME + 'index.html');
 await p.evaluate(() => { try { localStorage.setItem('renderer', 'gl'); } catch (e) {} });
 await p.reload(); await wait(1800);
-await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.select('run'); });
+await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.title(); });
 await wait(500);
 await p.screenshot({ path: SHOTS + '選飛船畫面_五艘.png' });
 await p.evaluate(() => document.body.classList.add('detail'));

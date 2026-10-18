@@ -28,7 +28,7 @@ for (const [id, setup] of [['vanguard', ''], ['bulwark', 'armor'], ['wraith', 'b
   await page.evaluate(() => { clearInterval(window.__keep); Input.joy = null; });
   shots.push(f);
 }
-await page.evaluate(() => { Game.state = 'title'; Screen.select('run'); });
+await page.evaluate(() => { Game.state = 'title'; Screen.title(); });
 await new Promise(r => setTimeout(r, 400));
 await page.screenshot({ path: `${out}/ship_select.png` });
 console.log(shots.join('\n'));

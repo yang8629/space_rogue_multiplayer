@@ -1,5 +1,5 @@
 // 基地（主畫面：js/game/hub.js、js/ui/gl/gl_hub.js、js/ui/base.js）截圖 → art_lab/screenshots/
-//   假的進度（4 局、到過第 2 星區、雷射打倒星噬母艦）→ 全景、靠近停機坪（解鎖／鎖住）、門口、發射台，門後的面板，出發後的選武器，結算的新解鎖
+//   假的進度（4 局、到過第 2 星區、雷射打倒星噬母艦）→ 全景、靠近停機坪（解鎖／鎖住）、門口、發射台，門後的面板，出發後的選武器，多人選配裝，結算的新解鎖
 //   用法：node perf/baseshot.mjs（用 puppeteer 自己的瀏覽器資料，不動到平常玩的存檔）；印出一幀基地畫面花幾 ms
 import { GAME, SHOTS } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -29,6 +29,9 @@ for (const id of ['armory', 'chips', 'stats', 'launch']) { await p.evaluate(id =
 await p.evaluate(() => Screen.depart()); await shot('出發_選武器');
 const ms = await p.evaluate(() => { Screen.title(); const t = performance.now(); for (let i = 0; i < 20; i++) { GLR.render(); render(); } return (performance.now() - t) / 20; });
 console.log('基地一幀', ms.toFixed(1), 'ms');
+await p.evaluate(() => { Net.chapter = 1; Game.state = 'pick'; Screen.hubPick(); }); await at('launch', -40); await shot('多人準備');
+await p.evaluate(() => Screen.basePanel('launch')); await shot('多人準備_發射台');
+await p.evaluate(() => { Game.state = 'title'; });
 await p.evaluate(() => {
   Game.newRun('run', 'vanguard', 'laser'); Game.runStats.kills = 120; Game.runStats.time = 300;
   Game.unlockFresh = [unlockEntry('ship', 'gate')];

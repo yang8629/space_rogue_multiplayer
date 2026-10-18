@@ -11,7 +11,7 @@ p.on('console', m => { if (m.type() === 'error') console.log('console', m.text()
 await p.goto(GAME + 'index.html');
 await p.evaluate(() => { try { localStorage.setItem('renderer', 'gl'); } catch (e) {} });
 await p.reload(); await wait(1800);
-await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.select('run'); document.body.classList.add('detail'); });
+await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.title(); document.body.classList.add('detail'); });
 await wait(500);
 await p.screenshot({ path: SHOTS + '選飛船畫面_相位跳躍.png' });
 // 小行星擋在前面：跳之前、剛跳完（兩端的光點）

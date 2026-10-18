@@ -14,7 +14,7 @@ await p.reload(); await wait(1800);
 await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); });
 const shot = async name => { await wait(500); await p.screenshot({ path: SHOTS + `開局_${name}.png` }); };
 await shot('1標題');
-await p.evaluate(() => Screen.select('run')); await shot('2選飛船');
+await p.evaluate(() => Screen.title()); await shot('2選飛船');
 await p.evaluate(() => document.body.classList.add('detail')); await shot('2選飛船_詳細');
 await p.evaluate(() => document.body.classList.remove('detail'));
 await p.evaluate(() => Screen.weaponSelect('run', 'vanguard')); await shot('3選武器');

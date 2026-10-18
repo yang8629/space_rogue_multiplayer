@@ -2609,7 +2609,7 @@ const MechCheck = {
         const lockOk = !isUnlocked('ship', 'gate') && isUnlocked('ship', 'wraith') && isUnlocked('ship', 'vanguard') && !isUnlocked('weapon', 'blade');
         const gray = !Hub.pick('gate') && Hub.shipId === 'vanguard' && Hub.pick('wraith');
         Hub.setShip(hs);
-        const sb = !html(() => Screen.select('sandbox')).includes('card locked');
+        const sb = !html(() => Screen.weaponSelect('sandbox', 'vanguard')).includes('card locked');
         return { ok: sum && firstOk && secondOk && killOk && allOpen && lockOk && gray && sb,
           got: `第 1 局新達成 ${ids(a) || '無'}（要 focus,railgun,wraith）、第 2 局 ${ids(b) || '無'}（要 wallbounce）；累計 ${P.runs} 局、擊殺 ${P.kills}、迴旋 ${P.play.boomerang}${sum ? '' : '（錯誤）'}；`
             + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、基地${gray ? '換不到星門號、換得到幻影號' : '星門號沒鎖（錯誤）'}、沙盒${sb ? '全開' : '也鎖了（錯誤）'}` };
@@ -2646,6 +2646,20 @@ const MechCheck = {
         CFG.UNLOCK_ALL = all; Hub.setShip(hs); Game.chapterId = ch;
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
       }
+    }],
+    ['局外成長', '多人在基地準備', '多人開局選配裝也在基地：發射台按 E 是「準備」（章節照房主選的），準備 → 選武器（多人）；終端機不能用', M => {
+      const sh = Screen.show, st = Game.state, ch = Net.chapter;
+      const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
+      const goTo = id => { const z = Hub.zone(id), s = Hub.ship; s.x = z.x; s.y = z.y; s.vx = s.vy = 0; Hub.update(0); return Hub.near && Hub.near.id; };
+      try {
+        Net.chapter = 1; Game.state = 'pick';
+        const view = html(() => Screen.hubPick()), banner = view.includes('多人') && view.includes('離開房間');
+        const launch = goTo('launch') === 'launch' && html(() => Hub.interact()).includes('準備：選武器');
+        const go = html(() => Screen.depart()), goOk = go.includes('選擇武器') && go.includes('data-arg="coop:');
+        goTo('coop'); const termH = html(() => Hub.interact()), term = Game.state === 'pick' && !termH;  // 沒有開大廳、沒換畫面
+        return { ok: banner && launch && goOk && term,
+          got: `基地上方${banner ? '寫多人＋離開房間' : '沒寫（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到選武器（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
+      } finally { Game.state = st; Net.chapter = ch; }
     }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL;

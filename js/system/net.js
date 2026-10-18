@@ -737,7 +737,7 @@ const Net = {
     this.myPick = this.matePick = null; this.mateInRoom = false; this.picks = {};
     for (const q of this.peers) { q.pick = null; q.inRoom = false; }
     Game.state = 'pick'; Game.inArena = false;
-    Screen.select('coop');
+    Screen.hubPick();  // 在基地選：停機坪換船，到發射台準備（選武器、起始晶片）
   },
   cleanPick(m) {  // 對方傳來的選擇：不認得的就換成預設值
     return { ship: SHIPS[m.ship] ? m.ship : 'vanguard', weapon: WEAPONS[m.weapon] ? m.weapon : 'laser',

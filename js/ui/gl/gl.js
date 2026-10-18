@@ -99,7 +99,7 @@ const GLR = {
     const c = Game.cam, L = this.L;
     this.beginPools();
     GLWorld.drawBg();
-    const hub = !Game.inArena && Game.state === 'title' && Hub.ready;  // 基地（主畫面，蓋著面板時也畫在後面）
+    const hub = Hub.shown();  // 基地（主畫面、多人選配裝；蓋著面板時也畫在後面）
     L.world.visible = !!Game.inArena || hub;
     for (const k of GL_BATTLE_LAYERS) L[k].visible = !hub;
     L.hub.visible = hub;

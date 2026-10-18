@@ -8,7 +8,7 @@ const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));
 const wait = ms => new Promise(r => setTimeout(r, ms));
-await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.select('run'); });
+await p.evaluate(() => { SFX.setMuted && SFX.setMuted(true); Screen.title(); });
 await wait(300); await p.screenshot({ path: `${dir}/能量_選船.png` });
 await p.evaluate(() => {
   Game.mode = 'run'; Game.newRun('run', 'vanguard', 'laser');
