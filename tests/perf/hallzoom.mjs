@@ -1,4 +1,4 @@
-// 發射大廳放大看：能量導管（機庫、軍械庫 → 發射台）、跑道、終端機 → art_lab/screenshots/大廳_*.png
+// 中央大廳放大看：能量導管（機庫、軍械庫 → 發射台）、跑道、終端機 → art_lab/screenshots/大廳_*.png
 //   用法：node perf/hallzoom.mjs
 import { GAME, SHOTS } from './paths.mjs';
 import puppeteer from 'puppeteer-core';

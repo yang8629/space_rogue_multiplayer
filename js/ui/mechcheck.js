@@ -2669,8 +2669,9 @@ const MechCheck = {
         const free = (x, y, r) => hubFree(L, x, y, r);
         for (const z of Z) if (!free(z.x, z.y, 14)) bad.push(`${z.id} 開不到`);
         for (let i = 0; i < Z.length; i++) for (let j = i + 1; j < Z.length; j++) { const a = Z[i], b = Z[j]; if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r - 0.5) bad.push(`${a.id}／${b.id} 重疊`); }
-        // 走得到：從發射台旁邊用 20 的格子往外擴（飛船半徑 12），每個互動點附近要有走到的格子
-        const G = 20, seen = new Set(), L0 = Z.find(z => z.kind === 'launch'), q = [[Math.round((L0.x - 170) / G), Math.round(L0.y / G)]];
+        // 走得到：從出生點（大廳正中）用 20 的格子往外擴（飛船半徑 12），每個互動點附近要有走到的格子
+        const G = 20, seen = new Set(), q = [[Math.round(L.spawn.x / G), Math.round(L.spawn.y / G)]];
+        if (!free(L.spawn.x, L.spawn.y, 14)) bad.push('出生點不在房間裡');
         while (q.length) { const [i, j] = q.pop(), key = i + ',' + j; if (seen.has(key) || !free(i * G, j * G, 12)) continue; seen.add(key); q.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]); }
         for (const z of Z) { let ok = false; for (let i = -3; i <= 3 && !ok; i++) for (let j = -3; j <= 3 && !ok; j++) ok = seen.has((Math.round(z.x / G) + i) + ',' + (Math.round(z.y / G) + j)); if (!ok) bad.push(`${z.id} 走不到`); }
         // 大廳每間房都進得去：有一個開口同時碰到大廳和那間房
@@ -2691,7 +2692,7 @@ const MechCheck = {
       const st = Game.state, down = Input.down, hw = Hub.weaponId, keep = { x: Hub.ship && Hub.ship.x, y: Hub.ship && Hub.ship.y, aim: Hub.ship && Hub.ship.aim };
       try {
         Game.state = 'title'; Hub.enter(); Hub.shots = []; Hub.sparks = []; Hub.fireCd = 0;
-        const L = Hub.zone('launch'), s = Hub.ship; s.x = L.x - 170; s.y = L.y; s.aim = -Math.PI / 2;  // 朝上牆射
+        const s = Hub.ship; s.x = HUB.spawn.x; s.y = HUB.spawn.y; s.aim = -Math.PI / 2;  // 從大廳正中朝上牆射
         Hub.weaponId = 'scatter'; Input.down = true;
         Hub.updateShots(0.016); const first = Hub.shots.length;
         Hub.updateShots(0.016); const cd = Hub.shots.length === first;  // 冷卻中不會再射

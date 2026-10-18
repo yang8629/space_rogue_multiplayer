@@ -28,9 +28,10 @@ const CONSOLE_ICON = {
     g.rect(x - 3 * k, y + 2 * k, 6 * k, 8 * k).fill({ color: c, alpha: a }); g.rect(x - 10 * k, y + 10 * k, 20 * k, 4 * k).fill({ color: c, alpha: a });
   },
 };
-// 各房間的地板：底色、板子大小、花紋（grate 格柵、trace 電路紋、ring 大廳中間的圓、carpet 觀景台中間一塊）
+// 各房間的地板：底色、板子大小、花紋（grate 格柵、trace 電路紋、ring 大廳中間的紋章、carpet 觀景台中間一塊）
 const HUB_FLOOR = {
   hall: { base: 0x121931, tile: 80, pattern: 'ring' },
+  bay: { base: 0x10162a, tile: 60, pattern: 'grate' },
   hangar: { base: 0x10162a, tile: 60, pattern: 'grate' },
   armory: { base: 0x1a1624, tile: 80, pattern: null },
   lab: { base: 0x0e1b22, tile: 70, pattern: 'trace' },
@@ -79,7 +80,7 @@ const GLHub = {
       if (z.kind === 'pad') this.hexPad(g, z.x, z.y, z.r, 0x2b3654);
       else if (z.kind === 'rack') this.rackPlate(g, z.x, z.y);
       else if (z.kind === 'console') { this.hexPad(g, z.x, z.y + 8, 40, 0x2b3654, 8); g.circle(z.x, z.y + 8, 18).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); }
-      else if (z.kind === 'launch') { const hall = R.hall; this.launchPad(g, z, hall.y + hall.h); g.rect(z.x - HUB.RUNWAY_W / 2 - 8, hall.y + hall.h - 2, HUB.RUNWAY_W + 16, WT + 2).fill(0x02030a).stroke({ width: 3, color: HUB_INK }); }
+      else if (z.kind === 'launch') { const bay = R.bay; this.launchPad(g, z, bay.y + bay.h); g.rect(z.x - HUB.RUNWAY_W / 2 - 8, bay.y + bay.h - 2, HUB.RUNWAY_W + 16, WT + 2).fill(0x02030a).stroke({ width: 3, color: HUB_INK }); }
       else if (z.kind === 'term') {
         const x0 = z.side ? R.hall.x + R.hall.w - 54 : R.hall.x;
         g.rect(x0, z.y - 60, 54, 120).fill(hubShade(0x3a4870, z.side ? -0.2 : 0)).stroke({ width: 3, color: HUB_INK });
@@ -110,10 +111,12 @@ const GLHub = {
       }
     }
     if (F.pattern === 'carpet') g.rect(cx - r.w * 0.3, cy - r.h * 0.18, r.w * 0.6, r.h * 0.5).fill({ color: 0x2a3060, alpha: 0.45 }).stroke({ width: 2, color: 0x4a5a86, alpha: 0.5 });
-    if (F.pattern === 'ring') {  // 大廳：發射台外面一圈大圓＋放射的線
-      const L = HUB.zones.find(z => z.kind === 'launch');
-      if (L) { g.circle(L.x, L.y, 170).stroke({ width: 3, color: 0x2a3658, alpha: 0.8 }); g.circle(L.x, L.y, 240).stroke({ width: 2, color: 0x2a3658, alpha: 0.5 });
-        for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; g.moveTo(L.x + Math.cos(a) * 175, L.y + Math.sin(a) * 175).lineTo(L.x + Math.cos(a) * 235, L.y + Math.sin(a) * 235).stroke({ width: 2, color: 0x2a3658, alpha: 0.6 }); } }
+    if (F.pattern === 'ring') {  // 大廳：中間一塊圓形紋章（外圈＋放射的線＋八角內盤），出生點就在正中間
+      g.circle(cx, cy, 240).stroke({ width: 3, color: 0x2a3658, alpha: 0.8 }); g.circle(cx, cy, 300).stroke({ width: 2, color: 0x2a3658, alpha: 0.5 });
+      for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; g.moveTo(cx + Math.cos(a) * 245, cy + Math.sin(a) * 245).lineTo(cx + Math.cos(a) * 295, cy + Math.sin(a) * 295).stroke({ width: 2, color: 0x2a3658, alpha: 0.6 }); }
+      g.circle(cx, cy, 150).fill(hubShade(F.base, 0.07)).stroke({ width: 3, color: 0x2a3658 });
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; g.poly([cx + Math.cos(a) * 140, cy + Math.sin(a) * 140, cx + Math.cos(a + 0.12) * 100, cy + Math.sin(a + 0.12) * 100, cx + Math.cos(a - 0.12) * 100, cy + Math.sin(a - 0.12) * 100]).fill({ color: 0x4cc9f0, alpha: 0.18 }); }  // 指向四個方向的箭頭（往各區）
+      g.circle(cx, cy, 70).stroke({ width: 3, color: 0x4cc9f0, alpha: 0.35 });
     }
   },
   // 發射台＋跑道一體：八角盤面（光從左上的切面）、最下面那條邊撐開到跑道寬，接著直直往下到發射口；
@@ -162,7 +165,7 @@ const GLHub = {
   //   算好的路線、燈、信號燈、無人機、會閃的東西記在 this.decor（每幀畫）
   decorBuild(g) {
     const R = HUB.rooms, Z = HUB.zones, WT = HUB.WT, D = this.decor = { paths: [], lamps: [], beacons: [], drones: [], leds: [] };
-    const hall = R.hall, hg = R.hangar, ar = R.armory, lab = R.lab, deck = R.deck, rec = R.records;
+    const hall = R.hall, hg = R.hangar, ar = R.armory, lab = R.lab, deck = R.deck, rec = R.records, bay = R.bay;
     const L = Z.find(z => z.kind === 'launch');
     // 每間房上牆一排燈（燈座畫在牆邊，地板的光每幀畫）；信號燈放在大廳四角
     const onDoor = (x, y) => HUB.doors.some(d => x > d.x - 20 && x < d.x + d.w + 20 && y > d.y - 10 && y < d.y + d.h + 10);  // 燈不要擺在開口上
@@ -170,11 +173,11 @@ const GLHub = {
     for (const [x, y] of D.lamps) g.rect(x - 14, y - 6, 28, 8).fill(0xfff2c4).stroke({ width: 2, color: HUB_INK });
     D.beacons = [[hall.x + 14, hall.y + 14], [hall.x + hall.w - 14, hall.y + 14], [hall.x + 14, hall.y + hall.h - 14], [hall.x + hall.w - 14, hall.y + hall.h - 14]];
     for (const [x, y] of D.beacons) g.circle(x, y, 6).fill(0x2a3350).stroke({ width: 2, color: HUB_INK });
-    // 大廳：能量導管從機庫、軍械庫的開口接到發射台（飛船、武器的能量送去發射）；跑道出口兩側警示條紋
-    const [dH, dA] = HUB.doors;
+    // 大廳：能量導管從機庫、軍械庫的開口沿大廳下緣、穿過甲板的開口接到發射台（飛船、武器的能量送去發射）；跑道出口兩側警示條紋
+    const [dH, dA] = HUB.doors, yLow = hall.y + hall.h - 60, xm = HUB.BAY_DOOR / 2 - 22;
     for (const [d, sg, col] of [[dH, -1, 0x7fb4ff], [dA, 1, 0xffb347]]) {
-      const yy = d.y + d.h / 2, xs = sg < 0 ? d.x + d.w : d.x, xm = L.x + sg * 150;
-      D.paths.push({ pts: [[xs, yy], [xm, yy], [xm, L.y], [L.x + sg * (HUB.LAUNCH_PAD + 4), L.y]], col });
+      const yy = d.y + d.h / 2, xs = sg < 0 ? d.x + d.w : d.x, xe = L.x + sg * (HUB.LAUNCH_PAD + 4);
+      D.paths.push({ pts: [[xs, yy], [xs - sg * 60, yy], [xs - sg * 60, yLow], [L.x + sg * xm, yLow], [L.x + sg * xm, L.y], [xe, L.y]], col });
     }
     // 用 moveTo／lineTo 畫折線（poly 不封口時三層線會往多邊形的一側偏，左右兩條偏的方向相反）
     const line = pts => { g.moveTo(...pts[0]); for (const q of pts.slice(1)) g.lineTo(...q); return g; };
@@ -184,12 +187,16 @@ const GLHub = {
       line(P.pts).stroke({ width: 2, color: P.col, alpha: 0.35, join: 'miter' });
       P.len = P.pts.slice(1).reduce((n, p, i) => n + Math.hypot(p[0] - P.pts[i][0], p[1] - P.pts[i][1]), 0);
     }
-    const hw = HUB.RUNWAY_W / 2, yb = hall.y + hall.h;
+    const hw = HUB.RUNWAY_W / 2, yb = bay.y + bay.h;
     for (const sg of [-1, 1]) {
       const x0 = sg < 0 ? L.x - hw - 40 : L.x + hw + 14, w = 26, y0 = yb - 64;
       g.rect(x0, y0, w, 64).fill(0xc9961f).stroke({ width: 2, color: HUB_INK });
       for (let y = y0 + 6; y < yb - 4; y += 12) g.poly([x0, y + 6, x0 + w, y - 2, x0 + w, y + 3, x0, y + 11]).fill({ color: HUB_INK, alpha: 0.85 });
     }
+    // 大廳：紋章左右兩張長椅、四個斜角的盆栽（大廳＝大家集合的地方）
+    const hx0 = hall.x + hall.w / 2, hy0 = hall.y + hall.h / 2;
+    for (const sg of [-1, 1]) { const bx = hx0 + sg * 220 - 11, by = hy0 - 55; g.rect(bx, by, 22, 110).fill(0x4a3a2a).stroke({ width: 2, color: HUB_INK }); g.rect(sg < 0 ? bx : bx + 17, by, 5, 110).fill(0x6a5440); }
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.plant(g, hx0 + sx * 200, hy0 + sy * 175);
     // 機庫：停機位那一圈的地板環、每個停機位外側一段弧形標線、中間的轉盤、角落的燃料槽和貨櫃
     const { cx: hx, cy: hy, ring } = hg, pads = Z.filter(z => z.kind === 'pad'), half = (TAU - HUB.RING_GAP) / Math.max(1, pads.length) / 2 - 0.06;
     g.circle(hx, hy, ring + 95).stroke({ width: 6, color: 0x2a3658, alpha: 0.7 }); g.circle(hx, hy, ring - 85).stroke({ width: 4, color: 0x2a3658, alpha: 0.7 });
@@ -335,7 +342,7 @@ const GLHub = {
         if (near) g.circle(z.x, z.y + 8, z.r - 16 + Math.sin(t * 3) * 2).stroke({ width: 3, color: col, alpha: 0.7 });
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 60, 0xffd166, 0.25 + 0.2 * Math.sin(t * 3));
       } else if (z.kind === 'launch') {
-        const P = HUB.LAUNCH_PAD, RW = HUB.RUNWAY_W, ye = HUB.rooms.hall.y + HUB.rooms.hall.h, h = Hub.heat();  // h：出發動畫的蓄能（燈轉快、變亮）
+        const P = HUB.LAUNCH_PAD, RW = HUB.RUNWAY_W, ye = HUB.rooms.bay.y + HUB.rooms.bay.h, h = Hub.heat();  // h：出發動畫的蓄能（燈轉快、變亮）
         g.circle(z.x, z.y, P * 0.62 + 4).stroke({ width: 3 + 2 * h, color: h ? hubShade(col, 0.5 * h) : col, alpha: near || h ? 0.95 : 0.55 });
         for (let i = 0; i < 4; i++) {
           const a = Math.PI / 4 + i * Math.PI / 2, k = h ? Math.max(h * 0.6, Math.sin(t * (3 + 15 * h) - i * Math.PI / 2)) : Math.max(0, Math.sin(t * 3 - i * Math.PI / 2));

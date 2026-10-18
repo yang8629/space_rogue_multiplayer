@@ -4,7 +4,7 @@
 //   這裡不碰畫面：互動結果交給 Screen（面板），靠近的東西換了就發 hubNear 事件
 'use strict';
 
-// 基地配置：分區的太空站。中間是發射大廳；左翼機庫（停機位沿大圓排一圈、船頭朝中間的轉盤）；右翼軍械庫（武器架靠上牆排）；
+// 基地配置：分區的太空站。中間是中央大廳（出生點在正中），下面延伸出去發射甲板（發射台、跑道）；左翼機庫（停機位沿大圓排一圈、船頭朝中間的轉盤）；右翼軍械庫（武器架靠上牆排）；
 //   上面一排：晶片實驗室、觀景台、戰績室。房間之間隔一道牆，牆上的開口讓飛船過去。
 //   房間、開口都是矩形：飛船只能待在這些矩形裡（walk）。
 //   點位由 hubLayout 照數量算：加飛船 = 機庫的圓圈變大，加武器 = 軍械庫多一個架（一排 ARMORY_COLS 個），房間自己變大
@@ -12,7 +12,8 @@
 const HUB = {
   WT: 40, MARGIN: 140, TOP: 100,          // 牆厚；基地外圍留白（看得到太空）；畫面上方標題列的高度（螢幕 px）
   SPEED: 320, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
-  HALL_W: 860, HALL_H: 640,               // 發射大廳（最小）
+  HALL_W: 860, HALL_H: 640,               // 中央大廳（最小）
+  BAY_W: 320, BAY_H: 400, BAY_DOOR: 230,   // 發射甲板（大廳下面延伸出去）：寬、高、跟大廳之間的開口寬
   BAY_ARC: 200, RING_MIN: 230, RING_GAP: 1.3, PAD_R: 60,  // 機庫：每個停機位佔的弧長、圓圈最小半徑、對著大廳那側的缺口（弧度）
   RACK_GAP: 130, ARMORY_COLS: 5, RACK_ROW: 150, RACK_R: 46,      // 軍械庫：武器架間距、一排幾個、每排高度
   TOP_W: 440, TOP_H: 380,                 // 上面一排三個房間的大小
@@ -21,19 +22,20 @@ const HUB = {
 };
 // 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的操作台打開哪個面板
 const HUB_ROOMS = {
-  hall: { label: '發射大廳', en: 'LAUNCH HALL', color: '#4cc9f0' },
+  hall: { label: '中央大廳', en: 'CENTRAL HALL', color: '#4cc9f0' },
+  bay: { label: '發射甲板', en: 'LAUNCH DECK', color: '#4cc9f0' },
   hangar: { label: '機庫', en: 'HANGAR', color: '#7fb4ff' },
   armory: { label: '軍械庫', en: 'ARMORY', color: '#ffb347', console: { id: 'armory', label: '⚔ 武器資料', tab: 'armory' } },
   lab: { label: '晶片實驗室', en: 'CHIP LAB', color: '#2ee6a6', console: { id: 'chips', label: '◈ 晶片庫', tab: 'chips' } },
   deck: { label: '觀景台', en: 'OBSERVATION', color: '#9fb4ff' },
   records: { label: '戰績室', en: 'RECORDS', color: '#ffd166', console: { id: 'stats', label: '🏆 戰績', tab: 'stats' } },
 };
-// 終端機：發射大廳的左右牆，左右輪流、同一邊往下排
+// 終端機：中央大廳的左右牆，左右輪流、同一邊往下排
 const HUB_TERMS = [
   { id: 'coop', label: '👥 多人連線', color: '#ff9dbd' },
   { id: 'range', label: '🎯 靶場', color: '#9dff6b' },
 ];
-// 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, zones }
+// 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, zones, spawn（進基地的位置 = 大廳正中） }
 function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   const C = HUB, WT = C.WT, M = C.MARGIN;
   const ns = Math.max(1, shipIds.length), ring = Math.max(C.RING_MIN, ns * C.BAY_ARC / (TAU - C.RING_GAP));  // 機庫圓圈的半徑：停機位排得下
@@ -41,7 +43,8 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   const hangarW = 2 * (ring + 140), armoryW = Math.max(560, ac * C.RACK_GAP + 140);
   const midH = Math.max(C.HALL_H, hangarW, ar * C.RACK_ROW + 300), midY = M + C.TOP_H + WT;
   const hall = { x: M + hangarW + WT, y: midY, w: C.HALL_W, h: midH }, cx = hall.x + hall.w / 2;
-  const rooms = { hall, hangar: { x: M, y: midY, w: hangarW, h: midH }, armory: { x: hall.x + hall.w + WT, y: midY, w: armoryW, h: midH } };
+  const rooms = { hall, hangar: { x: M, y: midY, w: hangarW, h: midH }, armory: { x: hall.x + hall.w + WT, y: midY, w: armoryW, h: midH },
+    bay: { x: cx - C.BAY_W / 2, y: midY + midH + WT, w: C.BAY_W, h: C.BAY_H } };
   const tx = cx - (3 * C.TOP_W + 2 * WT) / 2;
   ['lab', 'deck', 'records'].forEach((k, i) => { rooms[k] = { x: tx + i * (C.TOP_W + WT), y: M, w: C.TOP_W, h: C.TOP_H }; });
   for (const [k, r] of Object.entries(rooms)) Object.assign(r, { id: k, ...HUB_ROOMS[k] });
@@ -53,6 +56,7 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
     { x: cx - D / 2, y: R.deck.y + R.deck.h - 30, w: D, h: WT + 60 },          // 觀景台 ↔ 大廳
     { x: R.lab.x + R.lab.w - 30, y: ty - D / 2, w: WT + 60, h: D },            // 晶片實驗室 ↔ 觀景台
     { x: R.deck.x + R.deck.w - 30, y: ty - D / 2, w: WT + 60, h: D },          // 觀景台 ↔ 戰績室
+    { x: cx - C.BAY_DOOR / 2, y: hall.y + hall.h - 30, w: C.BAY_DOOR, h: WT + 60 },  // 大廳 ↔ 發射甲板
   ];
   // 大廳每間房都進得去：上排左右兩間跟大廳上牆重疊的那一段也開一個口（重疊太短就不開，機制檢查會抓到）
   for (const k of ['lab', 'records']) {
@@ -70,12 +74,12 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
     zones.push({ id: 'rack:' + id, kind: 'rack', weapon: id, x: R.armory.x + R.armory.w / 2 + (c - (n - 1) / 2) * C.RACK_GAP, y: midY + 110 + r * C.RACK_ROW, r: C.RACK_R, label: WEAPONS[id] ? WEAPONS[id].name : id, color: WEAPONS[id] ? WEAPONS[id].color : '#8fa3d9' }); });
   // 房間裡的操作台：軍械庫在下面、晶片實驗室和戰績室在正中間
   for (const r of Object.values(rooms)) if (r.console) zones.push({ ...r.console, kind: 'console', room: r.id, color: r.color, x: r.x + r.w / 2, y: r.id === 'armory' ? r.y + r.h - 120 : r.y + r.h / 2 + 10, r: C.CONSOLE_R });
-  // 發射台：大廳下方正中，跑道穿過下牆到太空
-  zones.push({ id: 'launch', kind: 'launch', x: cx, y: hall.y + hall.h - 180, r: C.LAUNCH_R, label: '🚀 發射台', color: '#4cc9f0' });
+  // 發射台：發射甲板上，跑道穿過甲板的下牆到太空
+  zones.push({ id: 'launch', kind: 'launch', x: cx, y: R.bay.y + 140, r: C.LAUNCH_R, label: '🚀 發射台', color: '#4cc9f0' });
   // 終端機：大廳左右牆，左右輪流、同一邊往下排
   terms.forEach((t, i) => { const side = i % 2, k = Math.floor(i / 2);
     zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: hall.y + 130 + k * 170, r: C.TERM_R }); });
-  return { W: R.armory.x + armoryW + M, H: midY + midH + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones };
+  return { W: R.armory.x + armoryW + M, H: R.bay.y + R.bay.h + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones, spawn: { x: cx, y: hall.y + hall.h / 2 } };
 }
 Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
 // 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間或開口裡
@@ -85,14 +89,14 @@ const Hub = {
   shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈、打到牆的火花（只是好玩：沒有傷害，多人時不同步）
   ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
 
-  // 進基地：飛船停在發射台左邊（不壓到停機坪的名字）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
+  // 進基地：飛船在大廳正中（spawn）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
   enter() {
     const ids = Object.keys(SHIPS), want = this.shipId || Game.shipId;
     this.shipId = SHIPS[want] && isUnlocked('ship', want) ? want : ids.find(id => isUnlocked('ship', id)) || ids[0];
     const ws = Object.keys(WEAPONS), ww = this.weaponId || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
     this.weaponId = WEAPONS[ww] && isUnlocked('weapon', ww) ? ww : ws.find(id => isUnlocked('weapon', id)) || ws[0];
-    const L = this.zone('launch');
-    if (!this.ship || this.seq) this.ship = { x: L.x - 170, y: L.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };  // 出發過（飛出去了）：回來停在發射台旁邊
+    const P = HUB.spawn;
+    if (!this.ship || this.seq) this.ship = { x: P.x, y: P.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };  // 出發過（飛出去了）：回來從大廳正中開始
     this.seq = null;
     this.setShip(this.shipId);
     this.ship.weaponId = this.weaponId;  // 飛船物件帶著裝的武器（GLActors.ship 畫在船頭，跟戰鬥中同一段）
@@ -191,6 +195,8 @@ const Hub = {
   launch(then, off = 0) {
     if (!this.shown() || typeof GLR === 'undefined' || !GLR.ready || Game.simFast) { if (then) then(); return; }  // GLR.ready：真的有畫面
     const s = this.ship, L = this.zone('launch');
+    const inside = r => hubFree({ walk: [r] }, s.x, s.y, 0), D = HUB.doors.find(d => d.y > HUB.rooms.hall.y + HUB.rooms.hall.h - 40);
+    if (!inside(HUB.rooms.bay) && !inside(HUB.rooms.hall)) { s.x = D.x + D.w / 2 + off; s.y = D.y; }  // 在別的房間：直接從大廳到甲板的開口起飛
     this.seq = { t: 0, then, x0: s.x, y0: s.y, a0: s.aim, x1: L.x + off, y1: L.y, y2: HUB.H + 240 };
     s.vx = s.vy = 0; this.shots = []; this.dashT = 0;
     if (this.near) { this.near = null; Events.emit('hubNear', null); }
