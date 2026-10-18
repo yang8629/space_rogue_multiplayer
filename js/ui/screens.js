@@ -215,7 +215,7 @@ const Screen = {
     // 軍械台一律給武器升級；只有武器升滿之後，才可以改選「電路擴充」
     const canSlot = stage === 2 && Game.chain.length < CFG.MAX_SLOTS;
     const slotCard = canSlot ? `<div class="card" style="border-color:#2ee6a6">
-      <div class="ttl" style="color:#2ee6a6">⊞ 電路擴充</div>
+      <div class="ttl" style="color:#2ee6a6">🔌 電路擴充</div>
       <div class="ds">武器已升滿，改成電路插槽 +1（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。</div>
       <button data-act="slot" data-arg="armory">選擇</button></div>` : '';
     if (stage === 2) {
@@ -389,20 +389,25 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     if (!R) return;
     if (!R.options.some(rareOf)) R.revealed = true;  // 沒有稀有晶片：不演揭曉
     const slotCard = () => `<div class="card" style="border-color:#2ee6a6">
-      <div class="ty" style="color:#2ee6a6">⊞ 電路擴充</div><div class="ttl">插槽 +1</div>
+      <div class="ty" style="color:#2ee6a6">🔌 電路擴充</div><div class="ttl">插槽 +1</div>
       <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
       <button data-act="slot" data-arg="reward">選擇</button></div>`;
-    const cards = R.options.map((id, i) => {
+    // 揭曉動畫：零件（機體強化）、電路擴充、一般晶片一起先翻開，稀有那格最後才翻開
+    const cardOf = id => {
+      if (id === 'slot') return slotCard();
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
         return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
       }
-      const wait = rareOf(id) && !R.revealed;  // 揭曉動畫：稀有那格最後才翻開，翻開前不能按
+      const wait = rareOf(id) && !R.revealed;  // 稀有那格翻開前不能按
       const ok = Game.canAcquire(id) && !wait, label = Game.canAcquire(id) ? '選擇' : '倉庫已滿';
-      const html = chipCard(id, rareOf(id) && Game.ownedChip(baseOf(id)) ? rareButtons(id, wait) : `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
-      return !R.revealed ? html.replace(/^<div class="card([^"]*)">/, (_, c) => wait ? `<div class="card${c} rare-wait"><div class="rare-veil">✦</div>` : `<div class="card${c} flipin" style="animation-delay:${i * 0.12}s">`)
+      return chipCard(id, rareOf(id) && Game.ownedChip(baseOf(id)) ? rareButtons(id, wait) : `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
+    };
+    const cards = [...R.options, ...(R.slot ? ['slot'] : [])].map((id, i) => {  // slot：有電路擴充卡的三選一（CFG.REWARDS 的 slotCard）
+      const html = cardOf(id), wait = rareOf(id) && !R.revealed;
+      return !R.revealed ? html.replace(/^<div class="card([^"]*)"(?: style="([^"]*)")?>/, (_, c, st) => wait ? `<div class="card${c} rare-wait"${st ? ` style="${st}"` : ''}><div class="rare-veil">✦</div>` : `<div class="card${c} flipin" style="${st ? st + ';' : ''}animation-delay:${i * 0.12}s">`)  // 卡片本身有 style（電路擴充的框色）就接在後面
         : rareOf(id) && !R.popped ? html.replace('class="card', 'class="card rare-pop') : html;
-    }).join('') + (R.slot ? slotCard() : '');  // 有電路擴充卡的三選一（CFG.REWARDS 的 slotCard）
+    }).join('');
     if (!R.revealed) setTimeout(() => { if (Game.reward === R && Game.state === 'reward') { R.revealed = true; this.reward(); } }, REVEAL_MS);
     else R.popped = true;  // 翻開的動畫只播一次（之後重畫不再播）
     this.show(`<div class="scr">
@@ -432,7 +437,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
         ${Game.shop.healed ? '<button disabled>已補血</button>'
           : `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_REPAIR.price) && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${Game.shopHealHp()}（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆ ${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）</button>`}
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
-          ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">⊞ 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
+          ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">🔌 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
         ${!Game.shop.capBought
           ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_CAP) ? '' : 'disabled'} data-act="cap">⚡ 能量容量 +${CFG.CAP_SHOP_ADD}（目前 ${Game.energyCap()}，◆ ${Game.shopPrice(CFG.SHOP_CAP)}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>
@@ -552,7 +557,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     // 二選一：電路插槽 +1（多一格放晶片）或零件格 +1（多疊一層零件）；電路已滿時直接給零件格
     const pk = (k, icon, name, note, col) => `<button class="big" data-act="bossslot" data-arg="${k}"${V.pick ? ' disabled' : ''} style="min-width:230px;line-height:1.5${V.pick === k ? `;opacity:1;border-color:${col};box-shadow:0 0 14px ${col}` : ''}"><b style="color:${col}">${icon} ${name}</b>${V.pick === k ? ' ✓' : ''}<br><small style="color:#8fa3d9">${note}</small></button>`;
     const pick = !V.slot || V.pick === 'lost' ? '' : `<div class="sub" style="margin-bottom:4px;color:${V.pick ? '#8fa3d9' : '#ffd166'}">${V.pick ? '已選好' : '二選一：'}</div><div class="row" style="margin-top:0">
-      ${pk('chain', '⊞', '電路插槽 +1', `多一格放晶片（${V.pick === 'chain' ? '現在' : '目前'} ${Game.chain.length} 格）`, '#4cc9f0')}
+      ${pk('chain', '🔌', '電路插槽 +1', `多一格放晶片（${V.pick === 'chain' ? '現在' : '目前'} ${Game.chain.length} 格）`, '#4cc9f0')}
       ${pk('part', '⚙', '零件格 +1', `多疊一層零件（${V.pick === 'part' ? '現在' : '目前'} ${Game.partSlots} 格，已用 ${partsUsed(Game.parts)}）`, '#9fe8ff')}</div>`;
     const head = cleared
       ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">${Game.chapter().name}　完成！</h1>
