@@ -121,6 +121,14 @@ const GLHub = {
         this.glow(x0 + 27, z.y - 14, near ? 90 : 60, col, near ? 0.5 : 0.28);
       }
     }
+    if (Hub.coop()) {  // 多人房間：其他人的飛船（位置同步來的），船底號碼色的光
+      for (const o of Net.roomShips()) {
+        const S = SHIPS[o.s], col = glColor(Game.slotColor(o.slot));
+        this.glow(o.x, o.y, 34, col, 0.45);
+        GLActors.ship({ x: o.x, y: o.y, aim: o.a, r: 12, ship: S, parts: S.parts, moving: o.m, iframe: 0, dashT: 0, overdrive: 0 }, '');
+      }
+      this.glow(s.x, s.y, 34, glColor(Game.slotColor(Net.mySlot())), 0.45);
+    }
     GLActors.ship(s, '');  // 自己開的船
   },
   // 沒解鎖的飛船：黑色剪影＋一圈淡淡的灰光（看得出形狀）

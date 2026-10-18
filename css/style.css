@@ -500,6 +500,12 @@ body.detail .detail-hint button { background: #1c3a6e; }
 .hub-press b, .hub-keys b { display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 4px; border: 1px solid #bdf0ff; border-radius: 4px; text-align: center; }
 .hub-keys { margin-top: 4px; font-size: 12px; color: #8fa3d9; text-shadow: 0 1px 2px #03050c; }
 .scr.base.compact { height: auto; max-width: 680px; }  /* 發射台：選章＋出發，小視窗 */
+.hub-ui .hub-coop { gap: 8px; padding: 6px 12px; font-size: 13px; white-space: nowrap; flex-wrap: nowrap; }
+.hub-coop button { padding: 3px 10px; font-size: 12px; }
+.hub-coop .me { text-decoration: underline; text-underline-offset: 3px; }
+.hub-coop .code { letter-spacing: .2em; color: #ffd166; }
+.hub-coop .ok { color: #9dff6b; } .hub-coop .ty { color: #8fa3d9; font-size: 12px; }
+.hg-go .ok { color: #9dff6b; font-size: 14px; }
 .scr.base { height: min(860px, 94vh); display: flex; flex-direction: column; gap: 10px; }
 .base-body { flex: 1; overflow: auto; padding-right: 4px; }
 .base-body h3 { margin: 14px 0 0; font-size: 15px; color: #c9d4ff; }

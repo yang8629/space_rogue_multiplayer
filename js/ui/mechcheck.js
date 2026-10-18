@@ -1983,7 +1983,7 @@ const MechCheck = {
       Game.node = { type: 'combat', L: 1, id: 'mc' }; Game.startCombat({ level: 1, wavesTotal: 2, elites: 0, treasure: 2 });
       Game.startWave(1); const w1 = Game.combat.pending.includes('treasure');
       Game.startWave(2); const w2 = Game.combat.pending.filter(x => x === 'treasure').length;
-      Arena.reset();  // 逃跑量在方形場地：大地圖是隨機的，玩家擺的位置可能貼牆，寶藏被牆擋住跑不遠（約 1/50）
+      Arena.reset(); Game.objs = [];  // 逃跑量在方形場地：大地圖是隨機的，玩家擺的位置可能貼牆，寶藏被牆擋住跑不遠（約 1/50）；大地圖生的小行星、行星也清掉（留著會擋住牠）
       const p = Game.player, e = M.targets([[200, 0]], 'treasure', false, 1)[0], d0 = Math.hypot(e.x - p.x, e.y - p.y);
       for (let f = 0; f < 120; f++) { Game.time += 1 / 60; e.update(1 / 60, p); }
       const d1 = Math.hypot(e.x - p.x, e.y - p.y);
@@ -2647,18 +2647,18 @@ const MechCheck = {
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
       }
     }],
-    ['局外成長', '多人在基地準備', '多人開局選配裝也在基地：發射台按 E 是「準備」（章節照房主選的），準備 → 選武器（多人）；終端機不能用', M => {
+    ['局外成長', '多人在基地準備', '多人房間是共用的基地：上方是房間列（房號、離開）；發射台按 E 是「準備」，準備 → 選武器（多人）；終端機不能用', M => {
       const sh = Screen.show, st = Game.state, ch = Net.chapter;
       const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
       const goTo = id => { const z = Hub.zone(id), s = Hub.ship; s.x = z.x; s.y = z.y; s.vx = s.vy = 0; Hub.update(0); return Hub.near && Hub.near.id; };
       try {
         Net.chapter = 1; Game.state = 'pick';
-        const view = html(() => Screen.hubPick()), banner = view.includes('多人') && view.includes('離開房間');
+        const view = html(() => Screen.hubPick()), banner = view.includes('房號') && view.includes('data-act="title">離開');
         const launch = goTo('launch') === 'launch' && html(() => Hub.interact()).includes('準備：選武器');
         const go = html(() => Screen.depart()), goOk = go.includes('選擇武器') && go.includes('data-arg="coop:');
         goTo('coop'); const termH = html(() => Hub.interact()), term = Game.state === 'pick' && !termH;  // 沒有開大廳、沒換畫面
         return { ok: banner && launch && goOk && term,
-          got: `基地上方${banner ? '寫多人＋離開房間' : '沒寫（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到選武器（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
+          got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到選武器（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
       } finally { Game.state = st; Net.chapter = ch; }
     }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {

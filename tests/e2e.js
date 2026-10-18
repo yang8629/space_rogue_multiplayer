@@ -10,7 +10,7 @@ function make(name) {
     performance: { now: () => now }, navigator: {} };
   vm.createContext(ctx);
   runFiles((code, opt) => vm.runInContext(code, ctx, opt));
-  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena };', ctx);
+  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena, Hub };', ctx);
   return {
     T: ctx.__T,
     adv(ms) { now += ms; const due = timers.filter(x => x.t <= now); timers.splice(0, timers.length, ...timers.filter(x => x.t > now)); due.forEach(x => x.f()); },
@@ -46,14 +46,17 @@ const step = (n = 1, dt = 1 / 60) => {
   }
 };
 
-// ---- 大廳 → 選配裝 → 開始 ----
+// ---- 大廳 → 房間（共用的基地）→ 各自準備 → 全員準備好就開始 ----
 HA.Net.renderLobby(); HB.Net.renderLobby();
 connect(B); HB.Net.send({ t: 'hello', v: HB.CFG.VERSION }); pump();
 ok(HA.Net.linked && HA.Net.mateInRoom && HB.Net.linked && HB.Net.slot === 2 && HA.Net.peers.length === 1, 'client joined the room as 2P');
-HA.Net.beginPick(); pump();
-ok(HA.Game.state === 'pick' && HB.Game.state === 'pick', 'both in pick');
+ok(HA.Game.state === 'pick' && HB.Game.state === 'pick', 'both in the room (shared base)');
+// 位置同步：隊友的船出現在房主的基地，房主的船出現在隊友的基地
+HB.Hub.ship.x = 333; HB.Hub.ship.y = 444; HB.Net.sendRoomPos(); HA.Net.sendRoomPos(); pump();
+ok(HA.Net.roomShips().some(o => o.slot === 2 && o.x === 333 && o.y === 444) && HB.Net.roomShips().some(o => o.slot === 1), 'room positions synced both ways');
+HA.Net.setChapter(1); pump();
 HB.Net.ready('gate', 'railgun', 'split'); pump();
-ok(HB.Game.state === 'wait', 'client waits for host');
+ok(HB.Game.state === 'pick' && HB.Net.meReady && HA.Net.peers[0].ready && HA.Game.state === 'pick', 'client ready, waits in the room');
 HA.Net.ready('bulwark', 'plasma', 'amp'); pump(); step(2);
 ok(HA.Game.state === 'map' && HB.Game.state === 'map', 'both on map after start');
 ok(JSON.stringify(HA.Net.packMap(HA.Game.map)) === JSON.stringify(HB.Net.packMap(HB.Game.map)), 'client received identical map');

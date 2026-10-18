@@ -46,7 +46,7 @@ const Hub = {
   setShip(id) { const S = SHIPS[id]; Object.assign(this.ship, { ship: S, parts: S.parts }); this.shipId = id; },
   // 換船：沒解鎖的不能換；回傳有沒有換
   pick(id) {
-    if (!SHIPS[id] || !isUnlocked('ship', id) || id === this.shipId) return false;
+    if (!SHIPS[id] || !isUnlocked('ship', id) || id === this.shipId || (this.coop() && Net.meReady)) return false;  // 多人：準備好了就不能換
     const pad = this.zone('pad:' + id), s = this.ship;
     this.setShip(id);
     if (pad) { s.x = pad.x; s.y = pad.y; s.vx = s.vy = 0; }

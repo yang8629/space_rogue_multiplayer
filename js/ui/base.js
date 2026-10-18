@@ -22,13 +22,13 @@ Object.assign(Screen, {
     if (tab && BASE_PANELS.some(p => p.id === tab)) this.basePanel(tab);
     else this.hubView();
   },
-  // 多人開局選配裝：一樣在基地（Game.state = 'pick'，Net.enterPick）
+  // 多人房間：共用的基地（Game.state = 'pick'，Net.enterRoom）：其他人的飛船也在裡面（Net.roomShips）
   hubPick() {
     Hub.enter();
     this.hubView();
   },
   // 基地的上方列（標題、總覽、系統按鈕）＋下方的操作說明＋靠近時的說明卡；不擋滑鼠（只有按鈕能點）
-  //   多人選配裝中：上方改寫「選好飛船到發射台準備」＋離開房間
+  //   多人房間：上方改成房間列（房號、章節、每個人準備好了沒、延遲）＋離開房間
   hubView() {
     const P = unlockLoad();
     const all = UNLOCK_KINDS.flatMap(([k]) => unlockIds(k).map(id => unlockEntry(k, id)));
@@ -42,7 +42,7 @@ Object.assign(Screen, {
           <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button>
           <button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button></div>
       </div>
-      ${Hub.coop() ? `<div class="ulk-fresh hub-coop">👥 多人・${chapterById(Net.chapter).name.split('　')[0]}：停機坪選船，發射台按 E 準備<button data-act="title">離開房間</button></div>` : this.unlockFreshHtml(false)}
+      ${Hub.coop() ? this.roomBar() : this.unlockFreshHtml(false)}
       <div id="hubInfo" class="hub-info"></div>
     </div>`);
     this.el.classList.add('hub');
@@ -50,6 +50,13 @@ Object.assign(Screen, {
     this.hubInfo(Hub.near);
     this.checkVersion();
     Game.unlockFresh = [];  // 新達成的解鎖只顯示一次
+  },
+  // 多人房間列：房號、章節（房主在發射台選）、每個人（號碼色，✓ = 準備好了）、延遲
+  roomBar() {
+    const who = Net.roomList().map(([s, r, me]) => `<b style="color:${Game.slotColor(s)}"${me ? ' class="me" title="你"' : ''}>${s}P</b>${r ? '<span class="ok">✓</span>' : '<span class="ty">…</span>'}`).join(' ');
+    const alone = Net.role === 'host' && !Net.peers.some(q => q.linked);
+    return `<div class="ulk-fresh hub-coop">👥 房號 <b class="code">${Net.code}</b>　${chapterById(Net.chapter).name.split('　')[0]}　${alone ? '<span class="ty">把房號告訴朋友，等隊友加入…</span>' : who}
+      <span id="roomPing" class="ty">${Net.linked ? Net.pingHtml() : ''}</span><button data-act="title">離開</button></div>`;
   },
   // 靠近的東西的說明卡（hubNear 事件）：停機坪 = 飛船的能力、數值（沒解鎖 = 條件和進度），門、發射台、終端機 = 按 E 做什麼
   hubInfo(z) {
@@ -60,7 +67,8 @@ Object.assign(Screen, {
     let body = '';
     if (z.kind === 'pad') {
       const S = SHIPS[z.ship], u = unlockEntry('ship', z.ship);
-      if (isUnlocked('ship', z.ship)) {
+      if (Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${S.color}">${S.name}</div><div class="hub-press">已準備，不能換船</div>`;
+      else if (isUnlocked('ship', z.ship)) {
         const parts = Object.entries(S.parts).map(([p, n]) => `${PARTS[p].name} ×${n}`).join('、') || '沒有';
         body = `<div class="ttl" style="color:${S.color}">${S.name}<span class="ty">${S.en}</span></div>${shipStatLine(S)}<div class="hg-desc">${shipDescHtml(S)}</div>
           <div class="ty">開局零件：${parts}</div><div class="hub-press"><b>E</b> 換成${S.name}</div>`;
@@ -71,7 +79,7 @@ Object.assign(Screen, {
       }
     } else {
       const what = Hub.coop() && z.kind === 'term' ? '多人準備中不能用'
-        : { door: `進入${z.label.replace(/^\S+ /, '')}`, launch: Hub.coop() ? '準備：選武器、起始晶片' : '選章節、出發', term: z.id === 'coop' ? '開房間或加入朋友的房間' : `用${SHIPS[Hub.shipId].name}選武器，進靶場` }[z.kind];
+        : { door: `進入${z.label.replace(/^\S+ /, '')}`, launch: !Hub.coop() ? '選章節、出發' : Net.meReady ? '已準備，等其他人' : Net.role === 'host' ? '選章、準備' : '準備：選武器、起始晶片', term: z.id === 'coop' ? '開房間或加入朋友的房間' : `用${SHIPS[Hub.shipId].name}選武器，進靶場` }[z.kind];
       body = `<div class="ttl" style="color:${z.color}">${z.label}</div><div class="hub-press"><b>E</b> ${what}</div>`;
     }
     el.innerHTML = body; el.classList.add('on');
@@ -97,11 +105,13 @@ Object.assign(Screen, {
   // 發射台：選章（沒解鎖的灰掉），出發 → 選武器 → 起始晶片；多人 = 房主選好的章，準備 → 選武器 → 起始晶片 → 等隊友
   base_launch() {
     const S = SHIPS[Hub.shipId], done = chapterProgress();
-    if (Hub.coop()) {
-      const C = chapterById(Net.chapter);
-      return `<div class="hg-launch"><div class="ty">飛船：<b style="color:${S.color}">${S.name}</b>（在停機坪換船）　·　章節：<b>${C.name}</b>（房主選的）</div>
+    if (Hub.coop()) {  // 多人：房主選章（所有人都解鎖的才能選），每個人準備
+      const C = chapterById(Net.chapter), P = Net.myPick;
+      return `<div class="hg-launch"><div class="ty">飛船：<b style="color:${S.color}">${S.name}</b>（在停機坪換船）　·　章節：<b>${C.name}</b>${Net.role === 'host' ? '' : '（房主選的）'}</div>
+        ${Net.role === 'host' ? `<div class="hg-chs">${Net.chapterButtons()}</div>` : ''}
         <div class="ds">${C.intro}</div>
-        <div class="row hg-go"><button class="big" data-act="depart">👥 準備：選武器（Enter）</button></div></div>`;
+        <div class="row hg-go">${Net.meReady && P ? `<span class="ok">✓ 已準備：${SHIPS[P.ship].name} ＋ ${WEAPONS[P.weapon].name} ＋ ${P.chip ? CHIPS[P.chip].name : '無起始晶片'}，等其他人</span>`
+          : '<button class="big" data-act="depart">👥 準備：選武器（Enter）</button>'}</div></div>`;
     }
     const ch = chapterById(Hub.chapter());
     const chs = CHAPTERS.map(c => {
@@ -119,7 +129,7 @@ Object.assign(Screen, {
   // 出發：用基地開的飛船、發射台選的章 → 選武器 → 起始晶片（多人：章是房主選的，選完起始晶片就等隊友）
   depart() {
     if (!isUnlocked('ship', Hub.shipId)) return;
-    if (Hub.coop()) { this.weaponSelect('coop', Hub.shipId); return; }
+    if (Hub.coop()) { if (!Net.meReady) this.weaponSelect('coop', Hub.shipId); return; }
     Game.chapterId = Hub.chapter();
     this.weaponSelect('run', Hub.shipId);
   },

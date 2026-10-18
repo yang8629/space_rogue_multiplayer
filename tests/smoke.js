@@ -112,16 +112,18 @@ assert(Game.player.dead && Game.player.hp === 0 && Game.lastHit === '蟲群（�
 const rec2 = Net.buildRecord('dead'); assert(rec2.hp === 0 && rec2.cause === '蟲群（撞擊）', 'record has hp 0 and cause');
 sent = [];
 Net.backToRoom();
-assert(Game.state === 'lobby' && Net.linked && sent.some(m => m.t === 'room'), 'back to room keeps connection');
-Net.onData({ t: 'pick' });
-assert(Game.state === 'pick', 'host start pulls client into pick');
+assert(Game.state === 'pick' && Net.linked && sent.some(m => m.t === 'room'), 'back to room keeps connection (shared base)');
+Net.onData({ t: 'hp', sl: 1, x: 300, y: 200, a: 0, s: 'bulwark', m: 1, r: 1, b: 0 });
+assert(Net.roomShips().some(o => o.slot === 1 && o.s === 'bulwark' && o.r), 'client sees host ship in the room');
 Net.onData({ t: 'hello', v: 'old' });  // 版號檢查（房主端才處理，這裡只確認不當掉）
-// 房主：隊友沒回房間不能開始
+// 房主：隊友沒回房間（還在結算畫面）不會開始；回到房間、準備好才開始
 Net.close(); Net.role = 'host'; sent = [];
-const q3 = { conn: { open: true, send: m => sent.push(m), close() {} }, slot: 2, linked: true, inRoom: false, cleared: [] };
+const q3 = { conn: { open: true, send: m => sent.push(m), close() {} }, slot: 2, linked: true, inRoom: false, ready: false, cleared: [] };
 Net.peers = [q3]; Net.refreshPeers();
-Net.renderLobby(); Net.beginPick();
-assert(Game.state === 'lobby' && !sent.some(m => m.t === 'pick'), 'host cannot start before mate returns');
-Net.onData({ t: 'room' }, q3); Net.beginPick();
-assert(Game.state === 'pick' && sent.some(m => m.t === 'pick'), 'host starts after mate returns');
+Net.enterRoom(); Net.ready('vanguard', 'laser', null);
+assert(Game.state === 'pick' && Net.meReady && !sent.some(m => m.t === 'start'), 'host ready alone: waits for mate');
+Net.onData({ t: 'room' }, q3);
+assert(q3.inRoom && !sent.some(m => m.t === 'start'), 'mate back in the room but not ready: no start');
+Net.onData({ t: 'ready', ship: 'gate', weapon: 'railgun', chip: null }, q3);
+assert(sent.some(m => m.t === 'start') && Game.mode === 'coop', 'host starts when everyone in the room is ready');
 console.log(process.exitCode ? 'SOME FAILED' : 'ALL PASSED');
