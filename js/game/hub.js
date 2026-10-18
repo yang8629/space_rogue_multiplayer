@@ -83,7 +83,7 @@ function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= 
 
 const Hub = {
   shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈、打到牆的火花（只是好玩：沒有傷害，多人時不同步）
-  ready: false, shipId: null, weaponId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）
+  ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
 
   // 進基地：飛船停在發射台左邊（不壓到停機坪的名字）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
   enter() {
@@ -92,8 +92,10 @@ const Hub = {
     const ws = Object.keys(WEAPONS), ww = this.weaponId || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
     this.weaponId = WEAPONS[ww] && isUnlocked('weapon', ww) ? ww : ws.find(id => isUnlocked('weapon', id)) || ws[0];
     const L = this.zone('launch');
-    if (!this.ship) this.ship = { x: L.x - 170, y: L.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };
+    if (!this.ship || this.seq) this.ship = { x: L.x - 170, y: L.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };  // 出發過（飛出去了）：回來停在發射台旁邊
+    this.seq = null;
     this.setShip(this.shipId);
+    this.ship.weaponId = this.weaponId;  // 飛船物件帶著裝的武器（GLActors.ship 畫在船頭，跟戰鬥中同一段）
     this.ready = true;
     this.near = null;
     this.follow();
@@ -115,7 +117,7 @@ const Hub = {
   // 裝武器：沒解鎖的不能裝；多人準備好了不能換
   equip(id) {
     if (!WEAPONS[id] || !isUnlocked('weapon', id) || id === this.weaponId || (this.coop() && Net.meReady)) return false;
-    this.weaponId = id;
+    this.weaponId = this.ship.weaponId = id;
     Events.emit('hubSwap', id);
     return true;
   },
@@ -126,6 +128,7 @@ const Hub = {
   update(dt) {
     const s = this.ship, K = Input.keys;
     this.t += dt;
+    if (this.seq) { this.updateLaunch(dt); return; }  // 出發動畫中：不能操作
     let mx = 0, my = 0;
     if (K.has('w') || K.has('arrowup')) my -= 1;
     if (K.has('s') || K.has('arrowdown')) my += 1;
@@ -183,6 +186,36 @@ const Hub = {
     this.sparks = this.sparks.filter(k => k.t > 0);
   },
   MAX_SHOTS: 200,
+  // 出發動畫：開到發射台正中（off = 多人時左右錯開）、船頭轉向跑道 → 發射台蓄能 → 沿跑道加速衝出出口 → then()
+  //   只在基地真的畫在畫面上時播；模擬、測試（沒有畫面）、死亡畫面的「重新開始」直接 then()
+  LAUNCH: { move: 0.6, charge: 0.55, fly: 0.85 },
+  launch(then, off = 0) {
+    if (!this.shown() || typeof GLR === 'undefined' || !GLR.ready || Game.simFast) { if (then) then(); return; }  // GLR.ready：真的有畫面
+    const s = this.ship, L = this.zone('launch');
+    this.seq = { t: 0, then, x0: s.x, y0: s.y, a0: s.aim, x1: L.x + off, y1: L.y, y2: HUB.H + 240 };
+    s.vx = s.vy = 0; this.shots = []; this.dashT = 0;
+    if (this.near) { this.near = null; Events.emit('hubNear', null); }
+    Events.emit('hubLaunch');
+  },
+  updateLaunch(dt) {
+    const q = this.seq, s = this.ship, T = this.LAUNCH, ease = k => k * k * (3 - 2 * k), down = Math.PI / 2;
+    q.t += dt;
+    s.moving = true; s.dashT = 0;
+    if (q.t < T.move) {
+      const k = ease(q.t / T.move);
+      s.x = q.x0 + (q.x1 - q.x0) * k; s.y = q.y0 + (q.y1 - q.y0) * k; s.aim = q.a0 + angleDiff(q.a0, down) * k;
+    } else if (q.t < T.move + T.charge) { s.x = q.x1; s.y = q.y1; s.aim = down; s.moving = false; }
+    else {
+      const k = Math.min(1, (q.t - T.move - T.charge) / T.fly);
+      s.x = q.x1; s.y = q.y1 + (q.y2 - q.y1) * k * k * k; s.aim = down; s.dashT = 1;  // 越來越快（衝刺的光暈）
+    }
+    this.follow();
+    if (q.t >= T.move + T.charge + T.fly && q.then) { const f = q.then; q.then = null; f(); }  // 飛出去之後停在外面（多人：等房主開始）
+  },
+  // 發射台蓄能的程度（0～1，畫面用）：蓄能那段從 0 升到 1，衝出去時保持 1
+  heat() { const q = this.seq; return q ? clamp((q.t - this.LAUNCH.move) / this.LAUNCH.charge, 0, 1) : 0; },
+  // 衝出去那段播到哪（0～1，畫尾焰用；還沒衝 = 0）
+  flyK() { const q = this.seq, T = this.LAUNCH; return q ? clamp((q.t - T.move - T.charge) / T.fly, 0, 1) : 0; },
   // 鏡頭跟著飛船（飛船在標題列以下那塊的正中間），不超出基地外圍太多；縮放照畫面大小（1280×800 = 1）
   follow() {
     const room = VH - HUB.TOP, k = this.k = clamp(Math.min(VW / 1280, VH / 800), 0.7, 1.3), s = this.ship;
@@ -193,7 +226,7 @@ const Hub = {
   // 按 E（或 Enter）：對靠近的東西做事
   interact() {
     const z = this.near;
-    if (!z) return false;
+    if (!z || this.seq) return false;
     this.ACT[z.kind](z);
     return true;
   },

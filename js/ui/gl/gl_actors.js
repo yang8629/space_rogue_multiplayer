@@ -2,6 +2,39 @@
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
+// 武器模型（從上往下看、槍口朝 +x、長約 80）：每把武器幾塊零件 [點, 材質]，材質 metal 金屬、dark 深色金屬、accent 武器色的能量部件、light 白色核心
+//   畫法：零件填色＋上半塊疊一層亮的（光從上來）＋描邊；accent 的零件另外加光暈；基地（武器架、船頭）和戰鬥（船頭）共用
+const R4 = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+const WEAPON_MODEL = {
+  laser: { parts: [[[[-40, -6], [-28, -8], [-28, 8], [-40, 6]], 'dark'], [[[-28, -7], [10, -7], [14, -4], [14, 4], [10, 7], [-28, 7]], 'metal'],
+    [R4(14, -3, 38, 3), 'dark'], [R4(-22, -2, 8, 2), 'accent']], glow: [[40, 0, 4]] },  // 雷射步槍：長槍管＋發光槍口
+  scatter: { parts: [[R4(-34, -6, -26, 6), 'dark'], [[[-26, -12], [12, -12], [16, -8], [16, 8], [12, 12], [-26, 12]], 'metal'],
+    ...[-8, -3, 3, 8].map(y => [R4(16, y - 2, 30, y + 2), 'dark']), [R4(-6, -12, 0, 12), 'accent']], glow: [[31, -5, 3], [31, 5, 3]] },  // 散彈砲：短粗＋4 個槍口
+  plasma: { parts: [[[[-30, -10], [8, -10], [12, -6], [12, 6], [8, 10], [-30, 10]], 'metal'], [[[12, -6], [32, -5], [32, 5], [12, 6]], 'dark'], [R4(24, -7, 28, 7), 'accent']],
+    orb: [-8, 0, 9], glow: [[-8, 0, 9]] },  // 電漿砲：中間一顆發光的能量艙
+  railgun: { parts: [[R4(-38, -10, -24, 10), 'metal'], [R4(-24, -9, 44, -5), 'metal'], [R4(-24, 5, 44, 9), 'metal'],
+    [R4(-6, -9, -1, 9), 'dark'], [R4(20, -9, 25, 9), 'dark'], [[[-18, -2], [30, -2], [36, 0], [30, 2], [-18, 2]], 'accent']], glow: [[36, 0, 4]] },  // 軌道砲：兩條導軌夾著穿甲彈
+  blade: { parts: [[R4(-34, -4, -12, 4), 'dark'], [R4(-12, -11, -6, 11), 'metal'], [[[-6, -6], [30, -4], [44, 0], [30, 4], [-6, 6]], 'accent'],
+    [[[-4, -2], [34, 0], [-4, 2]], 'light']], glow: [[20, 0, 8]] },  // 相位刃：刀柄＋護手＋能量刃
+};
+// 畫一把武器：(x, y) 中心、rot 朝向、k 大小、col 武器色；mode：'' 正常、'ghost' 很淡的輪廓（裝走了）、'dark' 暗色剪影（沒解鎖）；a = 透明度（無敵時間閃爍）
+function glWeapon(g, id, x, y, rot, k, col, mode = '', glowFn = null, a = 1) {
+  const M = WEAPON_MODEL[id];
+  if (!M) return;
+  const c = Math.cos(rot), s = Math.sin(rot), T = ([lx, ly]) => [x + (lx * c - ly * s) * k, y + (lx * s + ly * c) * k];
+  const fillOf = { metal: 0x6a7699, dark: 0x3a4566, accent: col, light: 0xffffff };
+  for (const [pts, mat] of M.parts) {
+    const flat = pts.map(T).flat();
+    if (mode === 'ghost') { g.poly(flat).stroke({ width: 1.5, color: col, alpha: 0.25 }); continue; }
+    if (mode === 'dark') { g.poly(flat).fill({ color: 0x0a0d18, alpha: 0.9 }).stroke({ width: 1.5, color: 0x5a6a9e, alpha: 0.5 }); continue; }
+    g.poly(flat).fill({ color: fillOf[mat], alpha: a });
+    if (mat === 'metal' || mat === 'dark') g.poly(pts.map(([lx, ly]) => T([lx, Math.min(ly, 0)])).flat()).fill({ color: 0xffffff, alpha: 0.18 * a });  // 上半塊亮（光從上來）
+    g.poly(flat).stroke({ width: 1.5, color: 0x03050c, alpha: a });
+  }
+  if (M.orb && !mode) { const [ox, oy, r] = M.orb, [px, py] = T([ox, oy]); g.circle(px, py, r * k).fill({ color: col, alpha: a }).stroke({ width: 1.5, color: 0x03050c, alpha: a }); g.circle(px - 2 * k, py - 2 * k, r * 0.4 * k).fill({ color: 0xffffff, alpha: 0.8 * a }); }
+  if (glowFn && !mode) for (const [gx, gy, r] of M.glow) { const [px, py] = T([gx, gy]); glowFn(px, py, r * 4 * k, col, 0.45 * a); }
+}
+
 const GLActors = {
   init() {
     const L = GLR.L, S = () => new PIXI.Sprite();
@@ -231,6 +264,9 @@ const GLActors = {
       const f = sprL(GLR.T('s/flame'), A.nx - 2.8, 0, 1); f.anchor.set(0.75, 0.5); f.scale.set(len / fr, 6.4 / fr); f.alpha = fade * rand(0.75, 1); f.blendMode = 'add'; if (n('booster')) f.tint = 0xcfeeff;
     }
     if (A.id === 'gate') sprL(GLR.T('s/gate_ring'), -9, 0, 1 / 4, t * 2);  // 星門號：船尾旋轉的傳送環
+    // 裝上的武器：船頭底下（槍管從船頭伸出去）；戰鬥中自己的看 Game.weapon、房主那邊的隊友看配裝，其他（基地的船、隊友那邊的其他人）看飛船物件的 weaponId
+    const wid = own ? G.weapon.id : p.L ? p.L.weapon.id : p.weaponId, W = WEAPONS[wid];
+    if (W) glWeapon(g, wid, p.x + ca * 14, p.y + sa * 14, a, 0.62, glColor(W.color), '', (x, y, r, c, al) => this.glowAt(P, x, y, r, c, al), fade);
     // 船身（重裝甲層數決定哪一張）
     sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4);
     if (p.frostT > 0) {  // 被彗星凍住：船身蓋一層淡藍的霜＋冷光

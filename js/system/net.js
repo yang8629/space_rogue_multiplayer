@@ -257,12 +257,12 @@ const Net = {
   sendRoomPos() {
     const s = Hub.ship;
     if (!s) return;
-    this.send({ t: 'hp', sl: this.mySlot(), x: Math.round(s.x), y: Math.round(s.y), a: r2(s.aim), s: Hub.shipId, m: s.moving ? 1 : 0, r: this.meReady ? 1 : 0, b: Screen.hubOn ? 0 : 1 });
+    this.send({ t: 'hp', sl: this.mySlot(), x: Math.round(s.x), y: Math.round(s.y), a: r2(s.aim), s: Hub.shipId, w: Hub.weaponId, m: s.moving ? 1 : 0, r: this.meReady ? 1 : 0, b: Screen.hubOn ? 0 : 1 });
   },
   onRoomPos(m, q) {
     const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
     if (!slot || slot === this.mySlot()) return;
-    const had = this.roomMates[slot], p = { x: clamp(num(m.x), 0, HUB.W), y: clamp(num(m.y), 0, HUB.H), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() };
+    const had = this.roomMates[slot], p = { x: clamp(num(m.x), 0, HUB.W), y: clamp(num(m.y), 0, HUB.H), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() };
     this.roomMates[slot] = p;
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
     if (!had || had.r !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
@@ -491,10 +491,10 @@ const Net = {
   },
   // 隊友：其他玩家的飛船（房主 + 其他隊友），照號碼排
   setMates(others) {
-    const ships = [{ slot: 1, ship: this.matePick.ship }, ...(Array.isArray(others) ? others : [])
-      .map(o => ({ slot: clamp(Math.floor(num(o && o.slot)), 2, NET_MAX), ship: this.cleanPick(o || {}).ship }))
+    const ships = [{ slot: 1, ...this.matePick }, ...(Array.isArray(others) ? others : [])
+      .map(o => ({ slot: clamp(Math.floor(num(o && o.slot)), 2, NET_MAX), ...this.cleanPick(o || {}) }))
       .filter(o => o.slot !== this.slot)];
-    Game.mates = ships.map(o => { const m = new Player(SHIPS[o.ship]); m.slot = o.slot; return m; });
+    Game.mates = ships.map(o => { const m = new Player(SHIPS[o.ship]); m.slot = o.slot; m.weaponId = o.weapon; return m; });  // weaponId：畫在船頭
   },
   // 隊友：收到房主的狀態，回到這一局。同一個頁面（沒重新整理）就保留自己的配裝；重新整理過就用房主那邊記住的配裝
   applyResume(m) {
@@ -634,6 +634,7 @@ const Net = {
         break;
       case 'full': this.lost(NET_MAX === 2 ? '這個房間已經有兩個人了' : `這個房間已經滿了（最多 ${NET_MAX} 人）`); break;
       case 'ready': this.onMateReady(m, q); break;
+      case 'launch': if (client && Game.state === 'pick') Hub.launch(null, this.launchOff(this.slot, clamp(Math.floor(num(m.n, 2)), 2, NET_MAX))); break;  // 一起出發：播自己的動畫，飛出去等房主的 start
       case 'start': if (client) this.startClient(m); break;
       case 'i': if (host) this.applyInput(m, q); break;
       case 's': if (client) this.applySnap(m); break;
@@ -756,7 +757,13 @@ const Net = {
       chip: NORMAL_IDS.includes(m.chip) ? m.chip : null };
   },
   allReady() { return this.peers.length > 0 && this.peers.every(q => q.linked && q.ready && q.pick && q.inRoom); },
-  tryStart() { if (this.role === 'host' && Game.state === 'pick' && this.meReady && this.allReady()) this.startHost(); },
+  tryStart() {
+    if (this.role !== 'host' || Game.state !== 'pick' || !this.meReady || !this.allReady() || Hub.seq) return;
+    const n = this.peers.length + 1;
+    this.send({ t: 'launch', n });
+    Hub.launch(() => { if (Game.state === 'pick' && this.meReady && this.allReady()) this.startHost(); else Screen.hubPick(); }, this.launchOff(1, n));  // 播完再確認一次（有人中途離開就回基地）
+  },
+  launchOff(slot, n) { return (slot - 1 - (n - 1) / 2) * 26; },  // 出發動畫：照號碼在跑道上左右錯開
   ready(ship, weapon, chip) {
     if (this.role === 'client' && !this.linked) { this.lost(); return; }  // 房主一個人也可以先準備
     this.myPick = this.cleanPick({ ship, weapon, chip });

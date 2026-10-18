@@ -1,5 +1,5 @@
 // 多人房間（共用的基地）真的連線測試：兩個 Chrome、真的 PeerJS（要有網路）
-//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、到武器架換武器 → 兩邊準備（起始晶片）→ 開始
+//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、到武器架換武器 → 兩邊準備（起始晶片）→ 一起播出發動畫 → 開始
 //   截圖 art_lab/screenshots/房間測試_*.png；印出每一步過了沒
 //   用法：node perf/roomtest.mjs
 import { GAME, SHOTS } from './paths.mjs';
@@ -63,15 +63,20 @@ ok(await B.evaluate(() => Game.state === 'pick' && Net.meReady && Screen.hubOn),
 ok(await until(A, () => Net.peers[0].ready && document.querySelector('.hub-coop') && document.querySelector('.hub-coop').textContent.includes('✓')), '房主：房間列看到 2P ✓');
 await A.screenshot({ path: SHOTS + '房間測試_隊友準備好.png' });
 await prepare(A, 'scatter');
+ok(await until(B, () => !!Hub.seq, 3000), '全員準備好：隊友也播出發動畫');
+ok(await A.evaluate(() => Game.state === 'pick' && !!Hub.seq), '房主：出發動畫播完才開始');
 ok(await until(A, () => Game.state === 'map' && Game.mode === 'coop'), '房主準備 → 開始，房主到航圖');
 ok(await until(B, () => Game.state === 'map' && Game.mode === 'coop'), '隊友也到航圖');
 ok(await B.evaluate(() => Game.shipId === 'bulwark' && Game.weapon.id === 'laser'), '隊友用的是自己選的堡壘號＋雷射');
+// 船頭畫的武器：隊友那邊看房主的（開局選的 weaponId）、房主那邊看隊友的（配裝 L.weapon）
+ok(await B.evaluate(() => (Game.mates.find(m => m.slot === 1) || {}).weaponId === 'scatter') && await A.evaluate(() => Game.mates[0].L.weapon.id === 'laser'), '兩邊都知道對方裝的武器（戰鬥中畫在船頭）');
 await B.screenshot({ path: SHOTS + '房間測試_開始.png' });
 
 // 一局結束回到房間：兩邊都按「離開」不算，這裡直接回房間（backToRoom）
 await A.evaluate(() => Net.backToRoom()); await B.evaluate(() => Net.backToRoom());
 ok(await until(A, () => Game.state === 'pick' && Net.peers[0].inRoom) && await until(B, () => Game.state === 'pick'), '回到房間：兩邊都在共用的基地');
 ok(await A.evaluate(() => !Net.meReady && !Net.peers[0].ready), '回到房間要重新準備');
+ok(await B.evaluate(() => !Hub.seq && Hub.free(Hub.ship.x, Hub.ship.y, Hub.ship.r)), '回到房間：飛船回到基地裡（不是停在飛出去的地方）');
 await Promise.all([bA.close(), bB.close()]);
 console.log(fails ? `${fails} 項沒過` : '全部通過');
 process.exitCode = fails ? 1 : 0;

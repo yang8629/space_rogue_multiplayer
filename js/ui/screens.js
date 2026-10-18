@@ -122,7 +122,7 @@ const Screen = {
       case 'depart': Screen.depart(); break;
       case 'startchip': {  // 開局三選一晶片選好了
         const [mode, ship, wid, chip] = arg.split(':');
-        if (mode === 'coop') Net.ready(ship, wid, chip); else Game.newRun(mode, ship, wid, chip);
+        if (mode === 'coop') Net.ready(ship, wid, chip); else Hub.launch(() => Game.newRun(mode, ship, wid, chip));  // 從基地出發：先播出發動畫
         break;
       }
       case 'coop': Net.lobby(); break;

@@ -23,6 +23,7 @@
   Events.on('combatWon', () => { Screen.clickLock = performance.now() + 600; });  // 戰鬥中連點射擊：勝利／三選一畫面剛出現 0.6 秒內不接受點擊（免得直接按到按鈕）
   Events.on('hubNear', z => Screen.hubInfo(z));  // 基地：靠近的東西換了 → 換說明卡
   Events.on('hubSwap', () => { SFX.play('click'); Screen.hubInfo(Hub.near); });
+  Events.on('hubLaunch', () => { if (!Screen.hubOn) Screen.hubView(); });  // 出發動畫：蓋著的面板（起始晶片、發射台）收起來
   Events.on('editor', d => { if (d.open) Editor.open(); else Editor.close(); });
   Events.on('editorMsg', d => {
     if (d.hint === 'newChip') Editor.infoEl.innerHTML = `<b style="color:#9dff6b">${d.msg}</b><br>新晶片在下方倉庫：拖到上方電路（或點一下再點插槽）就能裝上。按 Tab 或「返回」回到航圖。`;
