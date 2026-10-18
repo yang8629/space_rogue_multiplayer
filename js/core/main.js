@@ -16,6 +16,7 @@ Screen.el.addEventListener('click', e => {
   if (b) Screen.act(b);
 });
 if (matchMedia('(pointer: coarse)').matches) setTouchMode(true);
+unlockLoad();  // 存檔升級（2.20.0 以前的紀錄刪掉、章節進度重來、補新的成績），要在標題畫面之前
 Screen.title();
 SFX.setMuted(SFX.muted);  // 依記住的設定更新靜音按鈕文字
 // 網址帶 #charts 或 #mech 時直接打開對應的總覽分頁（方便分享、檢查）

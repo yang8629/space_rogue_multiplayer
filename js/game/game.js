@@ -799,11 +799,13 @@ const Game = {
     const R = this.runStats;
     if (!['run', 'coop'].includes(this.mode) || !R || R.recorded || MechCheck.running) return;  // 機制檢查的模擬局不存
     R.recorded = true;
+    // 局外成長：這一局的成績加進解鎖進度（先加再存紀錄：第一次讀進度時會用紀錄補成績，不能先看到這一局）；新達成的記在 unlockFresh（結算畫面、回到標題時顯示）
+    const ulk = { sector: this.sector, bossIds: R.bossIds.slice(), weapon: this.weapon.id, kills: R.kills, elites: R.elites, echoK: R.echoK, play: { ...this.playKills } };
+    this.unlockFresh = unlockAddRun(ulk);
     const rec = this.mode === 'coop' ? Net.buildRecord(result) : this.buildRecord(result);
+    rec.ulk = ulk;  // 以後加新的解鎖條件時，用它補成績（unlockUpgrade）
     const list = [rec, ...this.loadRecords()].slice(0, CFG.MAX_RECORDS);
     try { localStorage.setItem(RECORDS_KEY, JSON.stringify(list)); } catch (e) {}
-    // 局外成長：這一局的成績加進解鎖進度；新達成的記在 unlockFresh（結算畫面、回到標題時顯示）
-    this.unlockFresh = unlockAddRun({ sector: this.sector, bossIds: R.bossIds, weapon: this.weapon.id, kills: R.kills, elites: R.elites, echoK: R.echoK, play: this.playKills });
   },
   // 目前這一局的紀錄（結算畫面的「複製這局紀錄」也用它，打完 Boss 還沒結束的局也能複製）
   buildRecord(result) {

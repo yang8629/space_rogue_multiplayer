@@ -2644,26 +2644,28 @@ const MechCheck = {
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
       }
     }],
-    ['局外成長', '老玩家補解鎖', '第一次讀進度時，用 2.20.0 以前的遊玩紀錄（到過的星區、打倒的旗艦、擊殺、玩法擊殺）和已通關的章補進度，只補一次；2.20.0 以後的紀錄不重複算', M => {
-      const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]);
-      const rec = (build, o) => ({ build, ship: '先鋒號', weapon: WEAPONS.laser.name + '・聚焦', sector: 1, bosses: [], kills: 100, mech: { playKills: {} }, ...o });
-      const put = ch => localStorage.setItem(CHAPTER_KEY, JSON.stringify({ cleared: ch }));
+    ['局外成長', '存檔升級', '第一次讀進度時：2.20.0 以前的遊玩紀錄刪掉、章節進度只照 2.20.0 以後通關（或打到無盡）的紀錄重來（只做一次）；以後加的新成績用 2.20.0 以後的紀錄補一次，已經在記的不重複算', M => {
+      const rec = (build, o) => ({ build, ship: '先鋒號', weapon: WEAPONS.laser.name + '・聚焦', chapter: 1, result: 'dead', endless: false, sector: 1, bosses: [], kills: 100, mech: { playKills: {} }, ...o });
+      const recs = [rec('mp-2.21.0（2026-10-19 10:00）', { kills: 50, ulk: { sector: 2, bossIds: ['boss'], weapon: 'laser', kills: 50, elites: 3, echoK: 0, play: {} } }),
+        rec('mp-2.20.0（2026-10-18 03:59）', { chapter: 2, result: 'cleared', sector: 3, bosses: [ENEMY_TYPES.boss2.name, ENEMY_TYPES.boss.name], kills: 900, mech: { playKills: { [CHIPS.sticky.name]: 70 } } }),
+        rec('mp-2.19.3（2026-10-17 10:00）', { chapter: 1, result: 'cleared', kills: 400 }), rec(undefined, { chapter: 3, endless: true })];
+      // 2.20.0 的存檔（已經記了 2.20.0 以後的成績）：只刪紀錄、章節重來，成績不重複加
+      const P = unlockParse({ runs: 2, kills: 950, sector: 3, boss: { boss: 1, boss2: 1 }, ch: [1, 2, 3] }), a = unlockUpgrade(P, recs);
+      const keepOk = a.recs.length === 2 && a.ch.join() === '2' && P.ch.join() === '2' && P.mig === 1 && P.kills === 950 && P.runs === 2;
+      const b = unlockUpgrade(P, a.recs), onceOk = b.ch === null && b.recs.length === 2;
+      // 以後加的新成績（假的「擊殺加倍」）：用 2.20.0 以後的兩筆紀錄補一次
+      UNLOCK_STATS.mcTest = (Q, r) => { Q.mcT = (Q.mcT || 0) + (r.kills || 0) * 2 + (r.elites || 0); };
+      let newOk = false, newGot = '';
       try {
-        put([]);
-        const P = unlockSeed(unlockParse({}), [rec('mp-2.19.3（2026-10-17 10:00）', { sector: 2, bosses: [ENEMY_TYPES.boss.name], mech: { playKills: { [CHIPS.sticky.name]: 70 } } }),
-          rec('mp-2.20.0（2026-10-18 03:59）', { sector: 3, kills: 900, mech: { playKills: { [CHIPS.sticky.name]: 70 } } }),
-          rec(undefined, { mech: { playKills: { [CHIPS.sticky.name]: 40 } } })]);
-        localStorage.removeItem(UNLOCK_KEY); unlockLoad();  // 第一次讀：補完存起來，之後不再補
-        const again = unlockParse(JSON.parse(localStorage.getItem(UNLOCK_KEY) || '{}')).seeded;
-        const one = P.runs === 2 && P.kills === 200 && P.sector === 2 && P.boss.boss === 1 && P.bossW.laser === 1 && P.play.sticky === 110 && again;
-        put([1]);
-        const Q = unlockSeed(unlockParse({}), []), chOk = Q.sector === 3 && Q.boss.boss2 === 1 && Q.boss.boss3 === 1 && Q.ch.includes(1);
-        return { ok: one && chOk,
-          got: `紀錄補：${P.runs} 局、擊殺 ${P.kills}、星區 ${P.sector}、星噬母艦 ${P.boss.boss || 0}、雷射打倒旗艦 ${P.bossW.laser || 0}、黏著 ${P.play.sticky || 0}（要 2、200、2、1、1、110）；${again ? '補過有記下來' : '沒記下補過（錯誤）'}${one ? '' : '（錯誤）'}；`
-            + `通關第一章補：星區 ${Q.sector}、王 ${Object.keys(Q.boss).join(',')}${chOk ? '' : '（錯誤）'}` };
-      } finally {
-        for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
-      }
+        unlockUpgrade(P, a.recs); const t1 = P.mcT; unlockUpgrade(P, a.recs);
+        newOk = t1 === (50 * 2 + 3) + 900 * 2 && P.mcT === t1 && P.kills === 950;
+        newGot = `新成績補了 ${t1}（要 ${50 * 2 + 3 + 900 * 2}）、再讀一次 ${P.mcT}`;
+      } finally { delete UNLOCK_STATS.mcTest; }
+      // 2.20.0 的紀錄換回成績：旗艦名稱 → id、武器名稱 → id、玩法擊殺的晶片名稱 → id
+      const r0 = recordRun(recs[1]), convOk = r0.bossIds.join() === 'boss2,boss' && r0.weapon === 'laser' && r0.play.sticky === 70 && r0.kills === 900;
+      return { ok: keepOk && onceOk && newOk && convOk,
+        got: `留下 ${a.recs.length} 筆紀錄（要 2）、章節 ${a.ch.join(',') || '無'}（要 2）、成績 ${P.runs} 局擊殺 ${P.kills}（不變）${keepOk ? '' : '（錯誤）'}；第二次${onceOk ? '不再刪' : '又做了一次（錯誤）'}；${newGot}${newOk ? '' : '（錯誤）'}；`
+          + `2.20.0 紀錄換回：王 ${r0.bossIds.join(',')}、武器 ${r0.weapon}、黏著 ${r0.play.sticky}${convOk ? '' : '（錯誤）'}` };
     }],
     ['多人', '人數和敵人數量',`一波的敵人：單人 ×1、雙人 ×${CFG.COOP_COUNT[0]}（第 1 星區開頭）；三、四人每多一個在線的人再 +${CFG.COOP_EXTRA}；離線的不算`, M => {
       const wave = () => {  // 第 1 星區開頭的一波（難度 0）；亂數固定 0.99 → 全部是蟲群，數量 = 預算
