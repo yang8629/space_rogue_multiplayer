@@ -23,10 +23,12 @@ const shot = async name => { await wait(450); await p.screenshot({ path: SHOTS +
 await shot('全景');
 await at('pad:wraith', 30); await shot('停機坪');
 await at('pad:gate', 30); await shot('停機坪_鎖住');
+await at('rack:scatter', 20); await shot('武器架');
+await at('rack:blade', 20); await shot('武器架_鎖住');
 await at('armory', 70); await shot('門口');
 await at('launch', -40); await shot('發射台旁');
 for (const id of ['armory', 'chips', 'stats', 'launch']) { await p.evaluate(id => Screen.basePanel(id), id); await shot('面板_' + { armory: '軍械庫', chips: '晶片庫', stats: '戰績', launch: '發射台' }[id]); }
-await p.evaluate(() => Screen.depart()); await shot('出發_選武器');
+await p.evaluate(() => Screen.depart()); await shot('出發_起始晶片');
 const ms = await p.evaluate(() => { Screen.title(); const t = performance.now(); for (let i = 0; i < 20; i++) { GLR.render(); render(); } return (performance.now() - t) / 20; });
 console.log('基地一幀', ms.toFixed(1), 'ms');
 // 多人房間（共用的基地）：假的房主＋兩個隊友（2P 準備好了、3P 在看面板）

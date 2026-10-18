@@ -5,34 +5,41 @@
 'use strict';
 
 // 基地配置：世界座標（W×H），點位一律寫在這張表；kind 決定按 E 做什麼（Hub.ACT）
-//   pad：停機坪（每艘飛船一個），door：門（打開基地的面板），launch：發射台（選章、出發；多人 = 準備），term：終端機
+//   pad：停機坪（每艘飛船一個），rack：武器架（每把武器一個），door：門（打開基地的面板），launch：發射台（選章、出發；多人 = 準備），term：終端機
 const HUB = {
-  W: 1200, H: 660, WALL: 44, TOP: 100,  // TOP：畫面上方留給標題列的高度（螢幕 px）
+  W: 1200, H: 720, WALL: 44, TOP: 100,  // TOP：畫面上方留給標題列的高度（螢幕 px）
   SPEED: 300, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
   zones: [
     { id: 'armory', kind: 'door', x: 300, y: 84, r: 80, label: '⚔ 軍械庫', color: '#ffb347', tab: 'armory' },
     { id: 'chips', kind: 'door', x: 600, y: 84, r: 80, label: '◈ 晶片庫', color: '#4cc9f0', tab: 'chips' },
     { id: 'stats', kind: 'door', x: 900, y: 84, r: 80, label: '🏆 戰績', color: '#ffd166', tab: 'stats' },
-    { id: 'coop', kind: 'term', x: 84, y: 330, r: 76, label: '👥 多人連線', color: '#ff9dbd' },
-    { id: 'range', kind: 'term', x: 1116, y: 330, r: 76, label: '🎯 靶場', color: '#9dff6b' },
-    { id: 'launch', kind: 'launch', x: 600, y: 500, r: 72, label: '🚀 發射台', color: '#4cc9f0' },
+    { id: 'coop', kind: 'term', x: 84, y: 370, r: 76, label: '👥 多人連線', color: '#ff9dbd' },
+    { id: 'range', kind: 'term', x: 1116, y: 370, r: 76, label: '🎯 靶場', color: '#9dff6b' },
+    { id: 'launch', kind: 'launch', x: 600, y: 572, r: 72, label: '🚀 發射台', color: '#4cc9f0' },
   ],
-  PAD_Y: 300, PAD_GAP: 190, PAD_R: 60,
+  RACK_Y: 200, RACK_R: 46,                // 武器架那一排（門和停機坪中間）
+  PAD_Y: 350, PAD_GAP: 190, PAD_R: 60,
   LAUNCH_PAD: 62, RUNWAY_W: 84,  // 發射台盤面的半徑；盤面到下方出口那段跑道的寬
 };
-// 停機坪：照 SHIPS 的順序一排，中間對齊
+// 停機坪、武器架：照 SHIPS、WEAPONS 的順序各一排，中間對齊
 for (const [i, id] of Object.keys(SHIPS).entries()) {
   const n = Object.keys(SHIPS).length;
   HUB.zones.push({ id: 'pad:' + id, kind: 'pad', ship: id, x: HUB.W / 2 + (i - (n - 1) / 2) * HUB.PAD_GAP, y: HUB.PAD_Y, r: HUB.PAD_R, label: SHIPS[id].name, color: SHIPS[id].color });
 }
+for (const [i, id] of Object.keys(WEAPONS).entries()) {
+  const n = Object.keys(WEAPONS).length;
+  HUB.zones.push({ id: 'rack:' + id, kind: 'rack', weapon: id, x: HUB.W / 2 + (i - (n - 1) / 2) * HUB.PAD_GAP, y: HUB.RACK_Y, r: HUB.RACK_R, label: WEAPONS[id].name, color: WEAPONS[id].color });
+}
 
 const Hub = {
-  ready: false, shipId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標），整個基地放進一個畫面
+  ready: false, shipId: null, weaponId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標），整個基地放進一個畫面
 
   // 進基地：飛船停在發射台左邊（不壓到停機坪的名字）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
   enter() {
     const ids = Object.keys(SHIPS), want = this.shipId || Game.shipId;
     this.shipId = SHIPS[want] && isUnlocked('ship', want) ? want : ids.find(id => isUnlocked('ship', id)) || ids[0];
+    const ws = Object.keys(WEAPONS), ww = this.weaponId || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
+    this.weaponId = WEAPONS[ww] && isUnlocked('weapon', ww) ? ww : ws.find(id => isUnlocked('weapon', id)) || ws[0];
     const L = this.zone('launch');
     if (!this.ship) this.ship = { x: L.x - 150, y: L.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };
     this.setShip(this.shipId);
@@ -51,6 +58,13 @@ const Hub = {
     const pad = this.zone('pad:' + id), s = this.ship;
     this.setShip(id);
     if (pad) { s.x = pad.x; s.y = pad.y; s.vx = s.vy = 0; }
+    Events.emit('hubSwap', id);
+    return true;
+  },
+  // 裝武器：沒解鎖的不能裝；多人準備好了不能換
+  equip(id) {
+    if (!WEAPONS[id] || !isUnlocked('weapon', id) || id === this.weaponId || (this.coop() && Net.meReady)) return false;
+    this.weaponId = id;
     Events.emit('hubSwap', id);
     return true;
   },
@@ -82,7 +96,7 @@ const Hub = {
     // 最近的互動點（自己現在開的那艘的停機坪不算）
     let best = null, bd = Infinity;
     for (const z of HUB.zones) {
-      if (z.kind === 'pad' && z.ship === this.shipId) continue;
+      if ((z.kind === 'pad' && z.ship === this.shipId) || (z.kind === 'rack' && z.weapon === this.weaponId)) continue;
       const d = Math.hypot(z.x - s.x, z.y - s.y);
       if (d < z.r && d < bd) { best = z; bd = d; }
     }
@@ -104,8 +118,9 @@ const Hub = {
   },
   ACT: {
     pad: z => Hub.pick(z.ship),
+    rack: z => Hub.equip(z.weapon),
     door: z => Screen.basePanel(z.tab),
     launch: () => Screen.basePanel('launch'),
-    term: z => { if (!Hub.coop()) { if (z.id === 'coop') Net.lobby(); else Screen.weaponSelect('range', Hub.shipId); } },  // 靶場：用目前開的這艘選武器
+    term: z => { if (!Hub.coop()) { if (z.id === 'coop') Net.lobby(); else Game.newRun('range', Hub.shipId, Hub.weaponId); } },  // 靶場：用目前開的船、裝的武器
   },
 };

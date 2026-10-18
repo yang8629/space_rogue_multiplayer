@@ -253,7 +253,11 @@ function drawHubHud() {
   };
   for (const z of HUB.zones) {
     const x = sx(z.x), n = Screen.hubNew(z, seen);
-    if (z.kind === 'pad') {
+    if (z.kind === 'rack') {  // 武器架：名字（裝備中的加「・裝備中」，沒解鎖的灰＋🔒）
+      const ok = isUnlocked('weapon', z.weapon), on = z.weapon === Hub.weaponId, y = sy(z.y + z.r + 10);
+      label(`${ok ? '' : '🔒 '}${z.label}${on ? '・裝備中' : ''}`, x, y, !ok ? '#6a79ad' : z.color, 13);
+      if (n) badge(n, x + 36 * k, sy(z.y - z.r + 10));
+    } else if (z.kind === 'pad') {
       const ok = isUnlocked('ship', z.ship), y = sy(z.y + z.r + 18);
       label(`${ok ? '' : '🔒 '}${z.label}`, x, y, !ok ? '#6a79ad' : z.ship === Hub.shipId ? hudMix(z.color, -0.45) : z.color, 13);  // 自己開走的那艘：字變暗
       if (n) badge(n, x + 40 * k, sy(z.y - z.r + 4));

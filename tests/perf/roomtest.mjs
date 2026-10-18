@@ -1,5 +1,5 @@
 // 多人房間（共用的基地）真的連線測試：兩個 Chrome、真的 PeerJS（要有網路）
-//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 房主選章 → 兩邊準備（選武器、起始晶片）→ 開始
+//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、到武器架換武器 → 兩邊準備（起始晶片）→ 開始
 //   截圖 art_lab/screenshots/房間測試_*.png；印出每一步過了沒
 //   用法：node perf/roomtest.mjs
 import { GAME, SHOTS } from './paths.mjs';
@@ -49,10 +49,13 @@ ok(await until(A, () => (Net.roomShips().find(o => o.slot === 2) || {}).s === 'b
 
 // 隊友準備：發射台按 E → 準備 → 選武器 → 起始晶片
 const prepare = async (p, wpn) => {
+  if (wpn !== await p.evaluate(() => Hub.weaponId)) {  // 武器架：開過去按 E 裝備
+    await p.evaluate(w => { const z = Hub.zone('rack:' + w), s = Hub.ship; s.x = z.x; s.y = z.y; }, wpn);
+    await wait(300); await p.keyboard.press('e'); await wait(300);
+  }
   await p.evaluate(() => { const z = Hub.zone('launch'), s = Hub.ship; s.x = z.x; s.y = z.y; });
   await wait(300); await p.keyboard.press('e'); await wait(300);
   await p.click('[data-act="depart"]'); await wait(300);
-  await p.click(`[data-act="weapon"][data-arg$=":${wpn}"]`); await wait(300);
   await p.click('[data-act="startchip"]'); await wait(500);
 };
 await prepare(B, 'laser');

@@ -13,6 +13,29 @@ function hubShade(c, k) {
 // 切面的亮度：法線朝左上（光的方向）越亮
 const hubLit = (nx, ny) => (-nx - ny) / Math.SQRT2;
 
+// 武器架上浮著的圖樣：每把武器一個畫法（照它的子彈長相），c = 顏色、a = 透明度
+const WEAPON_GLYPH = {
+  laser: (g, x, y, c, a) => {  // 一道斜的光束
+    g.moveTo(x - 20, y + 10).lineTo(x + 20, y - 10).stroke({ width: 7, color: c, alpha: a * 0.6 });
+    g.moveTo(x - 20, y + 10).lineTo(x + 20, y - 10).stroke({ width: 2.5, color: 0xffffff, alpha: a });
+  },
+  scatter: (g, x, y, c, a) => {  // 4 顆彈丸扇形散開
+    for (let i = 0; i < 4; i++) { const ang = -0.6 + i * 0.4; g.circle(x - 10 + Math.cos(ang) * 22, y + Math.sin(ang) * 22, 5).fill({ color: c, alpha: a }).stroke({ width: 1.5, color: HUB_INK, alpha: a }); }
+  },
+  plasma: (g, x, y, c, a) => {  // 大顆電漿球
+    g.circle(x, y, 13).fill({ color: c, alpha: a * 0.85 }).stroke({ width: 2, color: HUB_INK, alpha: a });
+    g.circle(x - 3, y - 3, 5).fill({ color: 0xffffff, alpha: a * 0.8 });
+  },
+  railgun: (g, x, y, c, a) => {  // 細長的穿甲彈＋後面一道軌跡
+    g.moveTo(x - 30, y).lineTo(x - 14, y).stroke({ width: 2, color: c, alpha: a * 0.6 });
+    g.poly([x - 14, y - 4, x + 10, y - 4, x + 20, y, x + 10, y + 4, x - 14, y + 4]).fill({ color: c, alpha: a }).stroke({ width: 1.5, color: HUB_INK, alpha: a });
+  },
+  blade: (g, x, y, c, a) => {  // 一道弧形刀光
+    glArc(g, x - 8, y, 20, -1.1, 1.1); g.stroke({ width: 6, color: c, alpha: a * 0.8 });
+    glArc(g, x - 8, y, 20, -0.9, 0.9); g.stroke({ width: 2, color: 0xffffff, alpha: a });
+  },
+};
+
 const GLHub = {
   init() {
     const L = GLR.L;
@@ -55,6 +78,8 @@ const GLHub = {
     g.rect(L.x - RW / 2 - 8, H - T - 4, RW + 16, T + 4).fill(0x02030a).stroke({ width: 3, color: HUB_INK });
     // 停機坪：六角形，6 個切面照光的方向上色，中間一圈
     for (const z of HUB.zones.filter(z => z.kind === 'pad')) this.hexPad(g, z.x, z.y, z.r, 0x2b3654);
+    // 武器架：小的八角底座
+    for (const z of HUB.zones.filter(z => z.kind === 'rack')) this.hexPad(g, z.x, z.y + 12, z.r - 10, 0x2b3654, 8);
     this.launchPad(g, L, H - T);
     // 終端機：靠牆的控制台＋螢幕
     for (const z of HUB.zones.filter(z => z.kind === 'term')) {
@@ -128,6 +153,14 @@ const GLHub = {
         if (ok) GLActors.ship(ghost, '');
         else this.silhouette(S, z.x, z.y);
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 70, 0xffd166, 0.25 + 0.2 * pulse);
+      } else if (z.kind === 'rack') {
+        // 浮著的武器圖樣（上下輕輕晃），底下一圈武器色的光；裝備中：光圈亮、圖樣亮；沒解鎖：灰暗
+        const ok = isUnlocked('weapon', z.weapon), on = z.weapon === Hub.weaponId, bob = Math.sin(t * 2 + z.x) * 3, wc = ok ? col : 0x3a4566;
+        g.circle(z.x, z.y + 12, z.r - 22).stroke({ width: on ? 3 : 2, color: wc, alpha: on ? 0.95 : ok ? 0.5 : 0.35 });
+        if (near) g.circle(z.x, z.y + 12, z.r - 4 + Math.sin(t * 3) * 2).stroke({ width: 3, color: wc, alpha: 0.8 });
+        this.glow(z.x, z.y, on ? 60 : 44, wc, on ? 0.45 : ok ? 0.2 : 0.08);
+        WEAPON_GLYPH[z.weapon](g, z.x, z.y - 4 + bob, wc, ok ? 1 : 0.45);
+        if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 56, 0xffd166, 0.25 + 0.2 * Math.sin(t * 3));
       } else if (z.kind === 'launch') {
         // 盤面：一圈光環＋4 顆燈輪流亮（靠近時光環變亮）
         const P = HUB.LAUNCH_PAD, RW = HUB.RUNWAY_W;

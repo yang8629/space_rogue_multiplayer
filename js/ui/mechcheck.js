@@ -2588,7 +2588,7 @@ const MechCheck = {
       const a = save(m, P), b = save(P, m);
       return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
     }],
-    ['局外成長', '解鎖進度', '一局結束把成績加進進度（跨局累計），回傳新達成的；打倒精英、回響擊殺有記；UNLOCK_ALL 時全部能選；關掉時基地裡沒達成的飛船換不過去，沙盒照樣全開', M => {
+    ['局外成長', '解鎖進度', '一局結束把成績加進進度（跨局累計），回傳新達成的；打倒精英、回響擊殺有記；UNLOCK_ALL 時全部能選；關掉時基地裡沒達成的飛船換不過去、武器裝不了', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL, sh = Screen.show;
       const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
       try {
@@ -2609,10 +2609,12 @@ const MechCheck = {
         const lockOk = !isUnlocked('ship', 'gate') && isUnlocked('ship', 'wraith') && isUnlocked('ship', 'vanguard') && !isUnlocked('weapon', 'blade');
         const gray = !Hub.pick('gate') && Hub.shipId === 'vanguard' && Hub.pick('wraith');
         Hub.setShip(hs);
-        const sb = !html(() => Screen.weaponSelect('sandbox', 'vanguard')).includes('card locked');
+        const hw = Hub.weaponId; Hub.weaponId = 'laser';
+        const sb = !Hub.equip('blade') && Hub.weaponId === 'laser' && Hub.equip('scatter');  // 相位刃沒解鎖：裝不了；散彈開局就有
+        Hub.weaponId = hw;
         return { ok: sum && firstOk && secondOk && killOk && allOpen && lockOk && gray && sb,
           got: `第 1 局新達成 ${ids(a) || '無'}（要 focus,railgun,wraith）、第 2 局 ${ids(b) || '無'}（要 wallbounce）；累計 ${P.runs} 局、擊殺 ${P.kills}、迴旋 ${P.play.boomerang}${sum ? '' : '（錯誤）'}；`
-            + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、基地${gray ? '換不到星門號、換得到幻影號' : '星門號沒鎖（錯誤）'}、沙盒${sb ? '全開' : '也鎖了（錯誤）'}` };
+            + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、基地${gray ? '換不到星門號、換得到幻影號' : '星門號沒鎖（錯誤）'}、武器架${sb ? '裝不了相位刃、裝得了散彈' : '鎖住的也裝得了（錯誤）'}` };
       } finally {
         CFG.UNLOCK_ALL = all;
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
@@ -2631,7 +2633,7 @@ const MechCheck = {
         Game.chapterId = 2; const chLock = Hub.chapter() === 1;  // 第二章還沒解鎖：用第一章
         localStorage.setItem(CHAPTER_KEY, JSON.stringify({ cleared: [1] })); Game.chapterId = 2;
         const launch = goTo('launch') === 'launch' && html(() => Hub.interact()).includes('data-act="depart"');
-        const go = html(() => Screen.depart()), goOk = go.includes('選擇武器') && Game.chapterId === 2;
+        const go = html(() => Screen.depart()), goOk = go.includes('起始晶片') && go.includes(`:${Hub.weaponId}:`) && Game.chapterId === 2;  // 出發 → 直接起始晶片（武器在基地裝好了）
         unlockAddRun({ sector: 2, bossIds: ['boss'], weapon: 'scatter', play: {} });  // 解鎖幻影號、軌道砲（第一章已通關 → 哨兵號也一起）
         const padZ = Hub.zone('pad:wraith'), doorZ = Hub.zone('armory');
         const newBefore = Screen.hubNew(padZ) === 1 && Screen.hubNew(doorZ) === 1;
@@ -2641,24 +2643,24 @@ const MechCheck = {
         const swap = Hub.interact() && Hub.shipId === 'wraith';
         return { ok: nearPad === 'pad:gate' && lockSwap && door && chLock && launch && goOk && newBefore && newAfter && swap,
           got: `鎖住的停機坪${nearPad === 'pad:gate' ? '' : '沒偵測到（錯誤）'}按 E ${lockSwap ? '不換' : '換了（錯誤）'}；門口按 E ${door ? '打開軍械庫' : '沒打開（錯誤）'}；沒解鎖的章${chLock ? '改用第一章' : '照樣選了（錯誤）'}；`
-            + `發射台${launch ? '打開' : '沒打開（錯誤）'}、出發${goOk ? '到選武器、第二章' : '不對（錯誤）'}；「新」：解鎖後停機坪、門${newBefore ? '都有' : '數量不對（錯誤）'}，看過之後${newAfter ? '沒了（哨兵號還在）' : '不對（錯誤）'}；解鎖的停機坪按 E ${swap ? '換成幻影號' : '沒換（錯誤）'}` };
+            + `發射台${launch ? '打開' : '沒打開（錯誤）'}、出發${goOk ? '到起始晶片（用裝好的武器）、第二章' : '不對（錯誤）'}；「新」：解鎖後停機坪、門${newBefore ? '都有' : '數量不對（錯誤）'}，看過之後${newAfter ? '沒了（哨兵號還在）' : '不對（錯誤）'}；解鎖的停機坪按 E ${swap ? '換成幻影號' : '沒換（錯誤）'}` };
       } finally {
         CFG.UNLOCK_ALL = all; Hub.setShip(hs); Game.chapterId = ch;
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
       }
     }],
-    ['局外成長', '多人在基地準備', '多人房間是共用的基地：上方是房間列（房號、離開）；發射台按 E 是「準備」，準備 → 選武器（多人）；終端機不能用', M => {
+    ['局外成長', '多人在基地準備', '多人房間是共用的基地：上方是房間列（房號、離開）；發射台按 E 是「準備」，準備 → 起始晶片（多人）；終端機不能用', M => {
       const sh = Screen.show, st = Game.state, ch = Net.chapter;
       const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
       const goTo = id => { const z = Hub.zone(id), s = Hub.ship; s.x = z.x; s.y = z.y; s.vx = s.vy = 0; Hub.update(0); return Hub.near && Hub.near.id; };
       try {
         Net.chapter = 1; Game.state = 'pick';
         const view = html(() => Screen.hubPick()), banner = view.includes('房號') && view.includes('data-act="title">離開');
-        const launch = goTo('launch') === 'launch' && html(() => Hub.interact()).includes('準備：選武器');
-        const go = html(() => Screen.depart()), goOk = go.includes('選擇武器') && go.includes('data-arg="coop:');
+        const launch = goTo('launch') === 'launch' && html(() => Hub.interact()).includes('準備：選起始晶片');
+        const go = html(() => Screen.depart()), goOk = go.includes('起始晶片') && go.includes('data-arg="coop:');
         goTo('coop'); const termH = html(() => Hub.interact()), term = Game.state === 'pick' && !termH;  // 沒有開大廳、沒換畫面
         return { ok: banner && launch && goOk && term,
-          got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到選武器（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
+          got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到起始晶片（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
       } finally { Game.state = st; Net.chapter = ch; }
     }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {

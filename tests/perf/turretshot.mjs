@@ -17,8 +17,6 @@ await p.screenshot({ path: SHOTS + '選飛船畫面_五艘.png' });
 await p.evaluate(() => document.body.classList.add('detail'));
 await wait(300);
 await p.screenshot({ path: SHOTS + '選飛船畫面_五艘_詳細.png' });
-await p.evaluate(() => Screen.weaponSelect('run', 'sentry')); await wait(300);
-await p.screenshot({ path: SHOTS + '選武器畫面_五把_詳細.png' });
 // 砲台：玩家往左衝刺，砲台留在原地朝右邊的靶開火
 await p.evaluate(() => {
   document.body.classList.remove('detail');

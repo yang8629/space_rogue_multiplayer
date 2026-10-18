@@ -17,7 +17,6 @@ await shot('1標題');
 await p.evaluate(() => Screen.title()); await shot('2選飛船');
 await p.evaluate(() => document.body.classList.add('detail')); await shot('2選飛船_詳細');
 await p.evaluate(() => document.body.classList.remove('detail'));
-await p.evaluate(() => Screen.weaponSelect('run', 'vanguard')); await shot('3選武器');
 await p.evaluate(() => Screen.chipPick('run', 'vanguard', 'laser')); await shot('4起始晶片');
 await p.evaluate(() => Game.newRun('run', 'vanguard', 'laser', NORMAL_IDS[0])); await shot('5航圖');
 await p.evaluate(() => { const n = Game.reachable()[0]; Game.enterNode(n); }); await wait(1500); await shot('6第一場戰鬥');

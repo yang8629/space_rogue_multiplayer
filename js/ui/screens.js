@@ -120,12 +120,6 @@ const Screen = {
       case 'hub': Screen.hubView(); break;
       case 'basech': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.basePanel('launch'); } break;
       case 'depart': Screen.depart(); break;
-      case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
-      case 'weapon': {
-        const [mode, ship, wid] = arg.split(':');
-        if (mode === 'sandbox' || mode === 'range') Game.newRun(mode, ship, wid); else this.chipPick(mode, ship, wid);
-        break;
-      }
       case 'startchip': {  // 開局三選一晶片選好了
         const [mode, ship, wid, chip] = arg.split(':');
         if (mode === 'coop') Net.ready(ship, wid, chip); else Game.newRun(mode, ship, wid, chip);
@@ -185,29 +179,15 @@ const Screen = {
       <div class="ds">${unlockNeed(u)}</div><div class="ulk-bar"><div style="width:${Math.round(st.cur / st.max * 100)}%"></div></div>
       <div class="ty" style="text-align:center">${Math.floor(st.cur)} / ${st.max}</div></div>`;
   },
-  weaponSelect(mode, shipId) {
-    const S = SHIPS[shipId];
-    const cards = Object.entries(WEAPONS).map(([id, W]) => {
-      if (mode !== 'sandbox' && mode !== 'range' && !isUnlocked('weapon', id)) return this.lockedCard(W.name, W.color, unlockEntry('weapon', id));
-      return `<div class="card" style="border-color:${W.color}">${weaponCardBody(id)}
-        <button data-act="weapon" data-arg="${mode}:${shipId}:${id}">使用${W.name}</button></div>`;
-    }).join('');
-    this.show(`<div class="scr pick">
-      <div class="between"><div><h2>2 / ${mode === 'sandbox' || mode === 'range' ? 2 : 3}　選擇武器</h2>
-        <div class="sub">飛船：<b style="color:${S.color}">${S.name}</b>。武器這一場固定不換，之後在「⚒ 軍械台」升級。</div></div>
-        <button data-act="hub" data-back>回到基地 (Esc)</button></div>
-      <div class="cards left">${cards}</div></div>`);
-  },
-
   // 開局三選一起始晶片（遠征與雙人；取代以前飛船自帶的晶片）
   chipPick(mode, shipId, weaponId) {
     const S = SHIPS[shipId], W = WEAPONS[weaponId];
     const cards = startChipPicks().map(id =>
       chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
     this.show(`<div class="scr pick">
-      <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>
+      <div class="between"><div><h2>起始晶片（三選一）</h2>
         <div class="sub"><b style="color:${S.color}">${S.name}</b> ＋ <b style="color:${W.color}">${W.name}</b>。選一個開局晶片，裝在武器右邊。</div></div>
-        <button data-act="ship" data-arg="${mode}:${shipId}" data-back>返回 (Esc)</button></div>
+        <button data-act="hub" data-back>回到基地 (Esc)</button></div>
       <div class="cards">${cards}</div></div>`);
   },
   // 死亡畫面的「重新開始」：遠征要重新選起始晶片，沙盒直接開
