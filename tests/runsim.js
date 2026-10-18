@@ -106,7 +106,7 @@ function oneRun(w, s) {
   const route = BEST ? null : ONLY ? { path: ONLY[0], final: +ONLY[1] } : routes[s % routes.length];
   B.setRoute(route);
   const ship = SHIP || pick(Object.keys(SHIPS));
-  G.newRun('run', ship, w, pick(pickN(NORMAL_IDS, 3)));
+  G.newRun('run', ship, w, pick(T_.startChipPicks()));
   const log = { fights: 0, sector: 1, layer: 0, won: false };
   for (let guard = 0; guard < 200; guard++) {
     const st = G.state;

@@ -2589,10 +2589,10 @@ const MechCheck = {
       return { ok: a && b, got: `房主救隊友${a ? '' : '（錯誤）'}；隊友救房主${b ? '' : '（錯誤）'}` };
     }],
     ['局外成長', '解鎖進度', '一局結束把成績加進進度（跨局累計），回傳新達成的；打倒精英、回響擊殺有記；UNLOCK_ALL 時全部能選；關掉時沒達成的飛船變灰、不能選，沙盒照樣全開', M => {
-      const keep = [UNLOCK_KEY, CHAPTER_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL, sh = Screen.show;
+      const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL, sh = Screen.show;
       const html = fn => { let h = ''; Screen.show = x => { h = x; }; try { fn(); } finally { Screen.show = sh; } return h; };
       try {
-        localStorage.removeItem(UNLOCK_KEY); localStorage.removeItem(CHAPTER_KEY);
+        for (const [k] of keep) localStorage.removeItem(k);  // 玩家自己的紀錄也先拿開，不然會被拿去補解鎖
         const ids = L => L.map(u => u.id).sort().join(',');
         const a = unlockAddRun({ sector: 2, bossIds: ['boss'], weapon: 'laser', kills: 100, elites: 2, echoK: 5, play: { boomerang: 60 } });
         const b = unlockAddRun({ sector: 1, bossIds: [], weapon: 'scatter', kills: 50, play: { boomerang: 50 } });
@@ -2613,6 +2613,55 @@ const MechCheck = {
             + `回響打死精英：精英 ${Game.runStats.elites}、回響擊殺 ${Game.runStats.echoK}；全開時${allOpen ? '都能選' : '有鎖（錯誤）'}；上鎖時${lockOk ? '照進度' : '不對'}、選飛船${gray ? '星門號變灰' : '沒變灰（錯誤）'}、沙盒${sb ? '全開' : '也鎖了（錯誤）'}` };
       } finally {
         CFG.UNLOCK_ALL = all;
+        for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+      }
+    }],
+    ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {
+      const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL;
+      const seen = () => {  // 抽很多次，看出現過哪些晶片
+        const got = new Set(), add = id => { if (CHIPS[id]) got.add(baseOf(id)); };
+        for (let i = 0; i < 300; i++) {
+          Game.rewardOptions('combat', 2).forEach(add);
+          Game.openShop(); Game.shop.items.forEach(it => add(it.id));
+          startChipPicks().forEach(add);
+        }
+        return got;
+      };
+      try {
+        for (const [k] of keep) localStorage.removeItem(k);
+        CFG.UNLOCK_ALL = false;
+        M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const locked = UNLOCKS.filter(u => u.kind !== 'ship' && u.kind !== 'weapon').map(u => u.id);
+        const a = seen(), leak = locked.filter(id => a.has(id)), openMiss = NORMAL_IDS.filter(id => chipOpen(id) && !a.has(id));
+        unlockAddRun({ sector: 1, bossIds: [], weapon: 'laser', play: { sticky: 100 } });  // 黏著 100 次 → 感染
+        const b = seen(), infect = b.has('infect') && !b.has('wallbounce');
+        CFG.UNLOCK_ALL = true;
+        const c = seen(), allIn = NORMAL_IDS.every(id => c.has(id));
+        return { ok: !leak.length && !openMiss.length && infect && allIn,
+          got: `上鎖時出現沒解鎖的：${leak.join('、') || '無'}；解鎖的沒出現過：${openMiss.join('、') || '無'}；黏著 100 次後${infect ? '出現感染' : '感染沒出現或牆反彈也出現（錯誤）'}；全開時${allIn ? '全部都出現' : '有沒出現的（錯誤）'}` };
+      } finally {
+        CFG.UNLOCK_ALL = all;
+        for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+      }
+    }],
+    ['局外成長', '老玩家補解鎖', '第一次讀進度時，用 2.20.0 以前的遊玩紀錄（到過的星區、打倒的旗艦、擊殺、玩法擊殺）和已通關的章補進度，只補一次；2.20.0 以後的紀錄不重複算', M => {
+      const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]);
+      const rec = (build, o) => ({ build, ship: '先鋒號', weapon: WEAPONS.laser.name + '・聚焦', sector: 1, bosses: [], kills: 100, mech: { playKills: {} }, ...o });
+      const put = ch => localStorage.setItem(CHAPTER_KEY, JSON.stringify({ cleared: ch }));
+      try {
+        put([]);
+        const P = unlockSeed(unlockParse({}), [rec('mp-2.19.3（2026-10-17 10:00）', { sector: 2, bosses: [ENEMY_TYPES.boss.name], mech: { playKills: { [CHIPS.sticky.name]: 70 } } }),
+          rec('mp-2.20.0（2026-10-18 03:59）', { sector: 3, kills: 900, mech: { playKills: { [CHIPS.sticky.name]: 70 } } }),
+          rec(undefined, { mech: { playKills: { [CHIPS.sticky.name]: 40 } } })]);
+        localStorage.removeItem(UNLOCK_KEY); unlockLoad();  // 第一次讀：補完存起來，之後不再補
+        const again = unlockParse(JSON.parse(localStorage.getItem(UNLOCK_KEY) || '{}')).seeded;
+        const one = P.runs === 2 && P.kills === 200 && P.sector === 2 && P.boss.boss === 1 && P.bossW.laser === 1 && P.play.sticky === 110 && again;
+        put([1]);
+        const Q = unlockSeed(unlockParse({}), []), chOk = Q.sector === 3 && Q.boss.boss2 === 1 && Q.boss.boss3 === 1 && Q.ch.includes(1);
+        return { ok: one && chOk,
+          got: `紀錄補：${P.runs} 局、擊殺 ${P.kills}、星區 ${P.sector}、星噬母艦 ${P.boss.boss || 0}、雷射打倒旗艦 ${P.bossW.laser || 0}、黏著 ${P.play.sticky || 0}（要 2、200、2、1、1、110）；${again ? '補過有記下來' : '沒記下補過（錯誤）'}${one ? '' : '（錯誤）'}；`
+            + `通關第一章補：星區 ${Q.sector}、王 ${Object.keys(Q.boss).join(',')}${chOk ? '' : '（錯誤）'}` };
+      } finally {
         for (const [k, v] of keep) if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
       }
     }],

@@ -21,7 +21,7 @@ function make() {
   runFiles((code, opt) => vm.runInContext(code, ctx, opt));
   vm.runInContext(BOT, ctx);
   if (TWEAK) vm.runInContext(TWEAK, ctx);
-  vm.runInContext('globalThis.__T = { Game, Net, CFG, SHIPS, NORMAL_IDS, pick, pickN, Arena, B: __B };', ctx);
+  vm.runInContext('globalThis.__T = { Game, Net, CFG, SHIPS, NORMAL_IDS, pick, pickN, startChipPicks, Arena, B: __B };', ctx);
   return { T: ctx.__T, adv(ms) { now += ms; const due = timers.filter(x => x.t <= now); timers.splice(0, timers.length, ...timers.filter(x => x.t > now)); due.forEach(x => x.f()); } };
 }
 
@@ -57,8 +57,8 @@ function oneRun(s) {
   HB.Net.send({ t: 'hello', v: HB.CFG.VERSION }); pump();
   HA.Net.beginPick(); pump();
   const wA = WPN[s % 5], wB = WPN[(s * 3 + 2) % 5];
-  HB.Net.ready(HB.pick(Object.keys(HB.SHIPS)), wB, HB.pick(HB.pickN(HB.NORMAL_IDS, 3))); pump();
-  HA.Net.ready(HA.pick(Object.keys(HA.SHIPS)), wA, HA.pick(HA.pickN(HA.NORMAL_IDS, 3))); pump(); step(2);
+  HB.Net.ready(HB.pick(Object.keys(HB.SHIPS)), wB, HB.pick(HB.startChipPicks())); pump();
+  HA.Net.ready(HA.pick(Object.keys(HA.SHIPS)), wA, HA.pick(HA.startChipPicks())); pump(); step(2);
   const log = { won: false, sector: 1, layer: 0, fights: 0, downs: [0, 0], revives: 0, w: [wA, wB] };
   const GA = HA.Game;
   const odn = GA.playerDown.bind(GA); GA.playerDown = p => { log.downs[p === GA.player ? 0 : 1]++; return odn(p); };

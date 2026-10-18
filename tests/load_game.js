@@ -17,6 +17,8 @@ function readGame() {
 }
 
 // 假 DOM：任何屬性、任何呼叫都回傳同一個物件；innerHTML 等寫入的值會被記下來
+// --locked：照局外成長上鎖（新玩家的晶片池）；沒給 = 全部開放（模擬測的是解鎖完的遊戲）
+const LOCKED = process.argv.includes('--locked');
 const STUB = `
 const __mk = () => { const store = {}; const f = function () { return p; }; const p = new Proxy(f, {
   get(t, k) {
@@ -31,9 +33,10 @@ globalThis.document = __mk(); globalThis.window = globalThis; globalThis.addEven
 globalThis.matchMedia = () => ({ matches: false }); globalThis.requestAnimationFrame = () => {};
 globalThis.innerWidth = 1280; globalThis.innerHeight = 720; globalThis.devicePixelRatio = 1;
 // 存檔放在記憶體裡（章節進度等要讀得回來，機制檢查「章節進度」會測）；遊玩紀錄不存：模擬一跑幾百局，越存越大會拖慢
-globalThis.localStorage = (() => { const m = new Map(); return {
+//   --locked：解鎖進度、章節進度也不存，每一局都是新玩家的晶片池
+globalThis.localStorage = (() => { const m = new Map(), drop = ['v2_runRecords', ...(${LOCKED} ? ['v2_unlocks', 'v2_chapters'] : [])]; return {
   getItem: k => (m.has(k) ? m.get(k) : null),
-  setItem(k, v) { if (k !== 'v2_runRecords') m.set(k, String(v)); },
+  setItem(k, v) { if (!drop.includes(k)) m.set(k, String(v)); },
   removeItem(k) { m.delete(k); } }; })();
 globalThis.location = { hash: '' };
 `;
@@ -42,12 +45,13 @@ globalThis.location = { hash: '' };
 const EXPORTS = `Game, CHIPS, WEAPONS, NORMAL_IDS, COMPOSITE_IDS, OVERLOADS, CFG, SHIPS, Enemy, Screen, Editor, Codex,
   TYPE_META, NODE_META, PASSIVE_LABEL, LV_INFO, ENEMY_TYPES, lvMulOf,
   chipId, fullChip, newChip, socketsOf, isComp, isHost, parseChipId, SLOT_ATTRS, splitChain, flatChain, sockCount, analyzeChain, compileChain, runOps, weaponParams, weaponTitle, genMap,
-  hasLv, slotLv, lvName, compsFor, bhGood, baseOf, MechCheck, SockCheck, Net, Player, render, Objects, Arena`;
+  hasLv, slotLv, lvName, startChipPicks, isUnlocked, openChips, compsFor, bhGood, baseOf, MechCheck, SockCheck, Net, Player, render, Objects, Arena`;
 
 // 在某個 vm context 裡依序執行每個遊戲檔案（run = vm.runInThisContext 或 (code, opt) => vm.runInContext(code, ctx, opt)）
 function runFiles(run, pre = '') {
   run(STUB + pre, { filename: 'stub' });
   for (const f of readGame().files) run(f.code, { filename: f.name });
+  run(`CFG.UNLOCK_ALL = ${!LOCKED};`, { filename: 'unlock' });
 }
 
 let cached = null;

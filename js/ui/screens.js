@@ -239,7 +239,7 @@ const Screen = {
   // 開局三選一起始晶片（遠征與雙人；取代以前飛船自帶的晶片）
   chipPick(mode, shipId, weaponId) {
     const S = SHIPS[shipId], W = WEAPONS[weaponId];
-    const cards = pickN(NORMAL_IDS, 3).map(id =>
+    const cards = startChipPicks().map(id =>
       chipCard(id, `<button data-act="startchip" data-arg="${mode}:${shipId}:${weaponId}:${id}">選這個</button>`)).join('');
     this.show(`<div class="scr pick">
       <div class="between"><div><h2>3 / 3　起始晶片（三選一）</h2>

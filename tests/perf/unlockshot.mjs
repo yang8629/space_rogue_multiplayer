@@ -1,5 +1,5 @@
 // 局外成長（解鎖）的畫面截圖 → art_lab/screenshots/
-//   標題（🔓 解鎖按鈕＋新達成）、解鎖一覽（假的進度）、選飛船／選武器（暫時關掉 UNLOCK_ALL 看鎖住的卡片）、結算的新達成
+//   標題（🔓 解鎖按鈕＋新達成）、解鎖一覽（假的進度）、選飛船／選武器（鎖住的卡片）、起始晶片（只有解鎖了的）、結算的新達成
 //   用法：node perf/unlockshot.mjs（用 puppeteer 自己的瀏覽器資料，不動到平常玩的進度）
 import { GAME, SHOTS } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -27,13 +27,15 @@ await wait(300);
 await p.screenshot({ path: SHOTS + '解鎖_標題.png' });
 await p.evaluate(() => Screen.unlocks()); await wait(300);
 await p.screenshot({ path: SHOTS + '解鎖_一覽.png', fullPage: true });
-await p.evaluate(() => { CFG.UNLOCK_ALL = false; Screen.select('run'); }); await wait(400);
+await p.evaluate(() => { Screen.select('run'); }); await wait(400);
 await p.screenshot({ path: SHOTS + '解鎖_選飛船_上鎖.png' });
 await p.evaluate(() => { Screen.weaponSelect('run', 'vanguard'); }); await wait(300);
 await p.screenshot({ path: SHOTS + '解鎖_選武器_上鎖.png' });
+const picks = await p.evaluate(() => { Screen.chipPick('run', 'vanguard', 'laser'); return [...document.querySelectorAll('[data-act=startchip]')].map(x => x.dataset.arg.split(':')[3]); }); await wait(300);
+await p.screenshot({ path: SHOTS + '解鎖_起始晶片.png' });
+console.log('起始晶片', picks.join(','));
 // 結算：飛船已毀的畫面＋新達成
 await p.evaluate(() => {
-  CFG.UNLOCK_ALL = true;
   Game.newRun('run', 'vanguard', 'laser');
   Game.runStats.kills = 120; Game.runStats.time = 300;
   Game.unlockFresh = [unlockEntry('ship', 'gate')];

@@ -495,7 +495,7 @@ const Game = {
   // 稀有晶片：每一格玩法晶片 CFG.RARE.chance 機率變稀有（換成隨機一個玩法晶片＋詞條；身上已經有的也會出現）；need = 至少幾格稀有
   withRare(out, need = 0) {
     const make = i => {
-      const pool = NORMAL_IDS.filter(id => hasLv(id) && !out.some((o, j) => j !== i && CHIPS[o] && baseOf(o) === id));
+      const pool = openChips(NORMAL_IDS).filter(id => hasLv(id) && !out.some((o, j) => j !== i && CHIPS[o] && baseOf(o) === id));
       out[i] = newChip(pick(pool), null, rollRare());
     };
     out.forEach((id, i) => { if (CHIPS[id] && hasLv(id) && Math.random() < CFG.RARE.chance) make(i); });
@@ -527,7 +527,7 @@ const Game = {
   // 至少一格是組件（組件才填得滿插座）：沒抽到就隨機把一格換成組件
   withComp(ids) {
     if (ids.some(id => isComp(id))) return ids;
-    const pool = NORMAL_IDS.filter(id => isComp(id) && !ids.includes(id));
+    const pool = openChips(NORMAL_IDS).filter(id => isComp(id) && !ids.includes(id));
     if (pool.length) ids[Math.floor(Math.random() * ids.length)] = pick(pool);
     return ids;
   },
@@ -543,10 +543,10 @@ const Game = {
     if (!R || this.credits < R.reroll) return;
     this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(R.kind, R.rareAdd || 0); R.revealed = false; this.view(); });  // 刷新：稀有那格重新演揭曉
   },
-  // 獎勵、商店可以出現的晶片：已經有的玩法晶片不再出現（同一種只有一個；升級靠插組件）
+  // 獎勵、商店、事件可以出現的晶片：解鎖了的（局外成長）；已經有的玩法晶片不再出現（同一種只有一個；升級靠插組件）
   chipOffers() {
     const own = new Set([...this.chain, ...this.socks.flat(), ...this.inventory].filter(Boolean).map(baseOf));
-    return NORMAL_IDS.filter(id => !(hasLv(id) && own.has(id)));
+    return openChips(NORMAL_IDS).filter(id => !(hasLv(id) && own.has(id)));
   },
   // ---------- 取得晶片：放進倉庫（不會合成：玩法晶片靠插組件升級，組件、觸發器不會升級） ----------
   canAcquire(id) {
