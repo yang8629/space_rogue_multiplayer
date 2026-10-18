@@ -647,7 +647,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
   // 房間列的「複製」：房號放進剪貼簿，按鈕變「✓ 已複製」1.5 秒；被擋時把房號選起來，按鈕改提示按 Ctrl+C
   copyCode(btn) {
     const show = t => { btn.textContent = t; setTimeout(() => { if (btn.isConnected) btn.textContent = '📋 複製'; }, 1500); };
-    const fallback = () => { const el = btn.parentElement.querySelector('.code'), r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); show('按 Ctrl+C'); };
+    const fallback = () => { const el = btn.parentElement.querySelector('.code'), r = document.createRange(); r.selectNodeContents(el); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); show('按 Ctrl+C'); };
     try { navigator.clipboard.writeText(Net.code).then(() => show('✓ 已複製'), fallback); } catch (e) { fallback(); }
   },
   // 複製文字到剪貼簿；被擋時（例如嵌在 iframe 裡）在畫面上的 #copyBox 顯示文字框讓玩家自己全選複製
