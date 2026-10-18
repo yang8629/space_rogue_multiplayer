@@ -664,7 +664,7 @@ function slotAttrLine(i) {
   const CV = { blast: m => `爆炸 ${Math.round(50 * m)}%`, ignite: m => `燃燒每秒 ${Math.round(30 * m)}%`, frost: m => `減速 ${Math.round(40 * m)}%`, shock: m => `電弧 ${Math.max(1, Math.round(m))} 道`, shred: m => `受傷 +${Math.round(25 * m)}%`, amp: m => `傷害 +${Math.round(100 * m)}%`, split: m => `分裂成 ${Math.max(2, Math.round(3 + 2 * (m - 1)))} 顆`,
     pierce: m => `穿透 +${Math.round(2 * m)}`, bigshot: m => `傷害 +${Math.round(30 * m)}%` };
   let fx;
-  if (!id) fx = '這格現在是空的，放晶片進來才有效果';
+  if (!id) fx = `${S.desc}<span style="color:#8fa3d9">（現在是空格，放晶片進來才會作用）</span>`;
   else if (at === 'eff' || at === 'weak') {
     const k = at === 'eff' ? 1.5 : 0.7, b = baseOf(id);
     fx = isComp(id) ? (CV[b] ? `${CV[b](1)} → <b>${CV[b](k)}</b>` : '這個組件沒有可以放大的數值') : `插在${CHIPS[id].name}上的組件效果 ×${k}`;
