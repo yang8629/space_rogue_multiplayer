@@ -13,26 +13,26 @@ function hubShade(c, k) {
 // 切面的亮度：法線朝左上（光的方向）越亮
 const hubLit = (nx, ny) => (-nx - ny) / Math.SQRT2;
 
-// 武器架上浮著的圖樣：每把武器一個畫法（照它的子彈長相），c = 顏色、a = 透明度
+// 武器的圖樣（武器架上、裝備時跟著飛船）：每把武器一個畫法（照它的子彈長相），c = 顏色、a = 透明度、k = 大小
 const WEAPON_GLYPH = {
-  laser: (g, x, y, c, a) => {  // 一道斜的光束
-    g.moveTo(x - 20, y + 10).lineTo(x + 20, y - 10).stroke({ width: 7, color: c, alpha: a * 0.6 });
-    g.moveTo(x - 20, y + 10).lineTo(x + 20, y - 10).stroke({ width: 2.5, color: 0xffffff, alpha: a });
+  laser: (g, x, y, c, a, k = 1) => {  // 一道斜的光束
+    g.moveTo(x - 20 * k, y + 10 * k).lineTo(x + 20 * k, y - 10 * k).stroke({ width: 7 * k, color: c, alpha: a * 0.6 });
+    g.moveTo(x - 20 * k, y + 10 * k).lineTo(x + 20 * k, y - 10 * k).stroke({ width: 2.5 * k, color: 0xffffff, alpha: a });
   },
-  scatter: (g, x, y, c, a) => {  // 4 顆彈丸扇形散開
-    for (let i = 0; i < 4; i++) { const ang = -0.6 + i * 0.4; g.circle(x - 10 + Math.cos(ang) * 22, y + Math.sin(ang) * 22, 5).fill({ color: c, alpha: a }).stroke({ width: 1.5, color: HUB_INK, alpha: a }); }
+  scatter: (g, x, y, c, a, k = 1) => {  // 4 顆彈丸扇形散開
+    for (let i = 0; i < 4; i++) { const ang = -0.6 + i * 0.4; g.circle(x + (-10 + Math.cos(ang) * 22) * k, y + Math.sin(ang) * 22 * k, 5 * k).fill({ color: c, alpha: a }).stroke({ width: 1.5, color: HUB_INK, alpha: a }); }
   },
-  plasma: (g, x, y, c, a) => {  // 大顆電漿球
-    g.circle(x, y, 13).fill({ color: c, alpha: a * 0.85 }).stroke({ width: 2, color: HUB_INK, alpha: a });
-    g.circle(x - 3, y - 3, 5).fill({ color: 0xffffff, alpha: a * 0.8 });
+  plasma: (g, x, y, c, a, k = 1) => {  // 大顆電漿球
+    g.circle(x, y, 13 * k).fill({ color: c, alpha: a * 0.85 }).stroke({ width: 2, color: HUB_INK, alpha: a });
+    g.circle(x - 3 * k, y - 3 * k, 5 * k).fill({ color: 0xffffff, alpha: a * 0.8 });
   },
-  railgun: (g, x, y, c, a) => {  // 細長的穿甲彈＋後面一道軌跡
-    g.moveTo(x - 30, y).lineTo(x - 14, y).stroke({ width: 2, color: c, alpha: a * 0.6 });
-    g.poly([x - 14, y - 4, x + 10, y - 4, x + 20, y, x + 10, y + 4, x - 14, y + 4]).fill({ color: c, alpha: a }).stroke({ width: 1.5, color: HUB_INK, alpha: a });
+  railgun: (g, x, y, c, a, k = 1) => {  // 細長的穿甲彈＋後面一道軌跡
+    g.moveTo(x - 30 * k, y).lineTo(x - 14 * k, y).stroke({ width: 2, color: c, alpha: a * 0.6 });
+    g.poly([x - 14 * k, y - 4 * k, x + 10 * k, y - 4 * k, x + 20 * k, y, x + 10 * k, y + 4 * k, x - 14 * k, y + 4 * k]).fill({ color: c, alpha: a }).stroke({ width: 1.5, color: HUB_INK, alpha: a });
   },
-  blade: (g, x, y, c, a) => {  // 一道弧形刀光
-    glArc(g, x - 8, y, 20, -1.1, 1.1); g.stroke({ width: 6, color: c, alpha: a * 0.8 });
-    glArc(g, x - 8, y, 20, -0.9, 0.9); g.stroke({ width: 2, color: 0xffffff, alpha: a });
+  blade: (g, x, y, c, a, k = 1) => {  // 一道弧形刀光
+    glArc(g, x - 8 * k, y, 20 * k, -1.1, 1.1); g.stroke({ width: 6 * k, color: c, alpha: a * 0.8 });
+    glArc(g, x - 8 * k, y, 20 * k, -0.9, 0.9); g.stroke({ width: 2 * k, color: 0xffffff, alpha: a });
   },
 };
 // 操作台上的全像圖樣：每個面板一個（軍械庫 = 交叉的刀、晶片庫 = 晶片、戰績 = 獎盃）
@@ -329,11 +329,12 @@ const GLHub = {
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 70, 0xffd166, 0.25 + 0.2 * pulse);
       } else if (z.kind === 'rack') {
         // 浮著的武器圖樣（上下輕輕晃），底下一圈武器色的光；裝備中：光圈亮、圖樣亮；沒解鎖：灰暗
+        //   裝備中：武器已經拿去裝在船上（跟著飛船），架子空著，只剩很淡的輪廓
         const ok = isUnlocked('weapon', z.weapon), on = z.weapon === Hub.weaponId, bob = Math.sin(t * 2 + z.x) * 3, wc = ok ? col : 0x3a4566;
-        g.circle(z.x, z.y + 12, z.r - 22).stroke({ width: on ? 3 : 2, color: wc, alpha: on ? 0.95 : ok ? 0.5 : 0.35 });
+        g.circle(z.x, z.y + 12, z.r - 22).stroke({ width: 2, color: wc, alpha: on ? 0.2 : ok ? 0.5 : 0.35 });
         if (near) g.circle(z.x, z.y + 12, z.r - 4 + Math.sin(t * 3) * 2).stroke({ width: 3, color: wc, alpha: 0.8 });
-        this.glow(z.x, z.y, on ? 60 : 44, wc, on ? 0.45 : ok ? 0.2 : 0.08);
-        if (WEAPON_GLYPH[z.weapon]) WEAPON_GLYPH[z.weapon](g, z.x, z.y - 4 + bob, wc, ok ? 1 : 0.45);
+        if (!on) this.glow(z.x, z.y, 44, wc, ok ? 0.2 : 0.08);
+        if (WEAPON_GLYPH[z.weapon]) WEAPON_GLYPH[z.weapon](g, z.x, z.y - 4 + (on ? 0 : bob), wc, on ? 0.12 : ok ? 1 : 0.45);
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 56, 0xffd166, 0.25 + 0.2 * Math.sin(t * 3));
       } else if (z.kind === 'console') {
         // 全像：底座上轉動的圈、浮著的圖樣（靠近時變亮）
@@ -373,6 +374,14 @@ const GLHub = {
         GLActors.ship({ x: o.x, y: o.y, aim: o.a, r: 12, ship: S, parts: S.parts, moving: o.m, iframe: 0, dashT: 0, overdrive: 0 }, '');
       }
       this.glow(s.x, s.y, 34, glColor(Game.slotColor(Net.mySlot())), 0.45);
+    }
+    // 裝備中的武器：縮小浮在船後面跟著走（慢慢上下晃），底下一圈武器色的光
+    const W = WEAPONS[Hub.weaponId];
+    if (W && WEAPON_GLYPH[Hub.weaponId]) {
+      const wcol = glColor(W.color), bx = s.x - Math.cos(s.aim) * 30, by = s.y - Math.sin(s.aim) * 30 + Math.sin(t * 3) * 2;
+      this.glow(bx, by, 30, wcol, 0.5);
+      g.circle(bx, by, 15).stroke({ width: 2, color: wcol, alpha: 0.8 });
+      WEAPON_GLYPH[Hub.weaponId](g, bx, by, wcol, 1, 0.55);
     }
     GLActors.ship(s, '');  // 自己開的船
   },

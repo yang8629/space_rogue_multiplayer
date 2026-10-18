@@ -262,7 +262,7 @@ function drawHubHud() {
     const x = sx(z.x), n = Screen.hubNew(z, seen);
     if (z.kind === 'rack') {  // 武器架：名字（裝備中的加「・裝備中」，沒解鎖的灰＋🔒）
       const ok = isUnlocked('weapon', z.weapon), on = z.weapon === Hub.weaponId, y = sy(z.y + z.r + 10);
-      label(`${ok ? '' : '🔒 '}${z.label}${on ? '・裝備中' : ''}`, x, y, !ok ? '#6a79ad' : z.color, 13);
+      label(`${ok ? '' : '🔒 '}${z.label}${on ? '（裝在船上）' : ''}`, x, y, !ok ? '#6a79ad' : on ? hudMix(z.color, -0.45) : z.color, 13);  // 裝備中：武器跟著飛船，架子空著（字變暗）
       if (n) badge(n, x + 36 * k, sy(z.y - z.r + 10));
     } else if (z.kind === 'pad') {
       const ok = isUnlocked('ship', z.ship), f = z.face == null ? Math.PI / 2 : z.face, lx = sx(z.x + Math.cos(f) * (z.r + 16)), y = sy(z.y + Math.sin(f) * (z.r + 16));  // 名字寫在船頭那側（機庫中間）
