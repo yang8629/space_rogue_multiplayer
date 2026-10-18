@@ -40,8 +40,8 @@ const Hub = {
     this.follow();
   },
   zone(id) { return HUB.zones.find(z => z.id === id) || null; },
-  // 基地畫在畫面上：主畫面（title），或多人開局選配裝（pick）
-  shown() { return this.ready && !Game.inArena && (Game.state === 'title' || Game.state === 'pick'); },
+  // 基地畫在畫面上：主畫面（title）、多人連線畫面（lobby，從基地的終端機打開，基地留在後面）、多人房間（pick）
+  shown() { return this.ready && !Game.inArena && ['title', 'lobby', 'pick'].includes(Game.state); },
   coop() { return Game.state === 'pick'; },  // 多人選配裝中：發射台 = 準備，終端機不能用
   setShip(id) { const S = SHIPS[id]; Object.assign(this.ship, { ship: S, parts: S.parts }); this.shipId = id; },
   // 換船：沒解鎖的不能換；回傳有沒有換

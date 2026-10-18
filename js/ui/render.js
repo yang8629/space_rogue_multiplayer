@@ -215,8 +215,7 @@ function drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left�
   if (left) x += w;
   ctx.save();
   ctx.globalAlpha = 0.85;
-  ctx.fillStyle = 'rgba(5, 8, 20, 0.7)'; ctx.fillRect(x - w, y, w, h);
-  ctx.strokeStyle = 'rgba(130, 160, 240, 0.4)'; ctx.lineWidth = 1; ctx.strokeRect(x - w, y, w, h);
+  hudFrame(x - w, y, w, h, 'rgba(130, 160, 240, 0.35)', 0.9);
   ctx.translate(x - w, y); ctx.scale(s, s);
   const C = Game.combat, cur = C ? Math.max(0, (C.wave || 1) - 1) : 0;
   ctx.fillStyle = 'rgba(70, 90, 160, 0.55)'; ctx.fill(Arena.path);
@@ -256,7 +255,7 @@ function drawHubHud() {
     const x = sx(z.x), n = Screen.hubNew(z, seen);
     if (z.kind === 'pad') {
       const ok = isUnlocked('ship', z.ship), y = sy(z.y + z.r + 18);
-      label(`${ok ? '' : '🔒 '}${z.label}${z.ship === Hub.shipId ? '（開走了）' : ''}`, x, y, ok ? z.color : '#6a79ad', 13);
+      label(`${ok ? '' : '🔒 '}${z.label}`, x, y, !ok ? '#6a79ad' : z.ship === Hub.shipId ? hudMix(z.color, -0.45) : z.color, 13);  // 自己開走的那艘：字變暗
       if (n) badge(n, x + 40 * k, sy(z.y - z.r + 4));
     } else {
       const y = sy(z.kind === 'door' ? HUB.WALL + 30 : z.kind === 'launch' ? z.y - z.r - 14 : z.y + 78);
@@ -278,12 +277,47 @@ function drawHubHud() {
   ctx.textBaseline = 'alphabetic';
 }
 
+// HUD 的條（跟介面同一套：描邊 #03050c、凹槽、填色上亮下暗）：k = 0～1，seg = 刻度幾格
+function hudBar(x, y, w, h, k, col, seg = 0) {
+  ctx.fillStyle = '#03050c'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+  const g0 = ctx.createLinearGradient(0, y, 0, y + h); g0.addColorStop(0, '#05070f'); g0.addColorStop(1, '#141b33');
+  ctx.fillStyle = g0; ctx.fillRect(x, y, w, h);
+  const fw = w * clamp(k, 0, 1);
+  if (fw > 0) {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, hudMix(col, 0.45)); g.addColorStop(0.45, col); g.addColorStop(1, hudMix(col, -0.45));
+    ctx.fillStyle = g; ctx.fillRect(x, y, fw, h);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.fillRect(x, y, fw, 1);
+  }
+  if (seg) { ctx.fillStyle = 'rgba(3, 5, 12, 0.55)'; for (let i = 1; i < seg; i++) ctx.fillRect(x + Math.round(w * i / seg), y, 1, h); }
+}
+// HUD 的框（電路格、小地圖）：描邊、金屬底（上亮下暗）、左上亮邊右下暗邊；edge = 內圈的色邊（null = 不畫）
+function hudFrame(x, y, w, h, edge, alpha = 0.9) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  ctx.fillStyle = '#03050c'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+  const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#18213f'); g.addColorStop(1, '#0a0f22');
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y, 1, h);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'; ctx.fillRect(x, y + h - 2, w, 2); ctx.fillRect(x + w - 1, y, 1, h);
+  if (edge) { ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3); }
+  ctx.restore();
+}
+// 顏色變亮（k > 0）／變暗（k < 0），給漸層用；只認 #rrggbb
+function hudMix(c, k) {
+  if (typeof c !== 'string' || c.length !== 7) return c;
+  const v = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)).map(x => Math.round(k >= 0 ? x + (255 - x) * k : x * (1 + k)));
+  return `rgb(${v[0]}, ${v[1]}, ${v[2]})`;
+}
+// HUD 的字：深色描邊（疊在場景上也看得清楚）
+function hudText(txt, x, y, col, font) {
+  ctx.font = font; ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#03050c';
+  ctx.strokeText(txt, x, y); ctx.fillStyle = col; ctx.fillText(txt, x, y);
+}
+
 function drawHUD() {
   const p = Game.player, s = Game.stats, C = Game.combat, T = Input.touch;
   const hpW = Math.min(220, VW * 0.42);
-  ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 20, hpW + 4, 18);
-  ctx.fillStyle = p.hp / p.maxHp > 0.3 ? '#4cc9f0' : '#ff4d6d';
-  ctx.fillRect(22, 22, hpW * p.hp / p.maxHp, 14);
+  hudBar(22, 22, hpW, 14, p.hp / p.maxHp, p.hp / p.maxHp > 0.3 ? '#4cc9f0' : '#ff4d6d', 10);  // 每格 10%
   if (p.drRec > 0 && p.hp < p.maxHp) {  // 灰血（堡壘號）：之後還能補回來的血量（淡色接在血條後面）
     ctx.fillStyle = 'rgba(176, 186, 206, 0.55)';  // 灰色
     ctx.fillRect(22 + hpW * Math.max(0, p.hp) / p.maxHp, 22, hpW * Math.min(p.drRec, p.maxHp - Math.max(0, p.hp)) / p.maxHp, 14);
@@ -294,21 +328,18 @@ function drawHUD() {
     ctx.font = 'bold 15px Segoe UI Symbol'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffd166';
     ctx.fillText('⛨' + (ward > 1 ? '×' + ward : ''), hpW + 32, 35);
   }
-  ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
-  ctx.fillText(`HP ${Math.ceil(p.hp)} / ${p.maxHp}`, 28, 33);
+  ctx.textAlign = 'left';
+  hudText(`HP ${Math.ceil(p.hp)} / ${p.maxHp}`, 28, 33, '#fff', 'bold 12px Segoe UI');
   // 衝刺冷卻
   const dashMax = p.ship.dashCd * (1 - Game.passives.dashCd) * Game.mech.dashCd, dr = 1 - clamp(p.dashCd / dashMax, 0, 1);
-  ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, 42, 110, 8);
-  ctx.fillStyle = dr >= 1 ? '#bdf0ff' : '#35508a'; ctx.fillRect(21, 43, 108 * dr, 6);
-  ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
-  ctx.fillText(T ? '衝刺' : '衝刺 [Space/右鍵]', 136, 50);
+  hudBar(22, 44, 106, 5, dr, dr >= 1 ? '#bdf0ff' : '#4a6aa8');
+  hudText(T ? '衝刺' : '衝刺 [Space/右鍵]', 136, 50, '#8fa3d9', '10px Microsoft JhengHei');
   // 蓄力／超頻模組過熱（隊友：數值由房主同步過來）
   const heat = Net.role === 'client' ? p.heatR || 0 : s.heatLimit ? p.ohT / s.heatLimit : 0;
   let bx = T ? 180 : 250;  // 小條由左往右排（文字長短不一）
   const bar = (label, k, col) => {
-    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(bx, 42, 70, 8);
-    ctx.fillStyle = col; ctx.fillRect(bx + 1, 43, 68 * clamp(k, 0, 1), 6);
-    ctx.font = '10px Microsoft JhengHei'; ctx.fillStyle = col; ctx.fillText(label, bx + 74, 50);
+    hudBar(bx + 2, 44, 66, 5, k, col);
+    hudText(label, bx + 74, 50, col, '10px Microsoft JhengHei');
     bx += 84 + ctx.measureText(label).width;
   };
   if (s.charge) bar(p.chargeC >= 1 ? '蓄滿' : '蓄力', p.chargeC || 0, p.chargeC >= 1 ? '#ffffff' : '#ffb347');
@@ -335,23 +366,18 @@ function drawHUD() {
     ctx.font = 'bold 11px Microsoft JhengHei'; ctx.fillStyle = '#ff6b6b';
     ctx.fillText(`✖ 間歇失效中：${fk.map(i => CHIPS[Game.chain[i]].short || CHIPS[Game.chain[i]].name).join('、')}`, Math.max(bx, T ? 320 : 410), 50);
   }
-  ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px Segoe UI';
-  ctx.fillText(`◆ ${Game.credits}`, 20, 72);
-  ctx.fillStyle = p.ship.color; ctx.font = 'bold 12px Microsoft JhengHei';
-  ctx.fillText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 72, 72);  // 護盾層數
+  hudText(`◆ ${Game.credits}`, 20, 72, '#ffd166', 'bold 14px Segoe UI');
+  hudText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 72, 72, p.ship.color, 'bold 12px Microsoft JhengHei');  // 護盾層數
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
     const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;
-    ctx.fillStyle = 'rgba(10, 16, 40, 0.8)'; ctx.fillRect(20, y, mw + 4, 12);
-    ctx.fillStyle = m.dead ? '#555' : Game.colorOf(m); ctx.fillRect(22, y + 2, mw * Math.max(0, m.hp) / m.maxHp, 8);
-    ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = m.dead ? '#ff4d6d' : '#cfe8ff';
-    ctx.fillText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
-      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`, mw + 32, y + 11);  // ⛨：還有終焉護殼
+    hudBar(22, y + 2, mw, 8, Math.max(0, m.hp) / m.maxHp, m.dead ? '#555555' : Game.colorOf(m));
+    hudText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
+      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`, mw + 32, y + 11, m.dead ? '#ff4d6d' : '#cfe8ff', '11px Microsoft JhengHei');  // ⛨：還有終焉護殼
   });
 
-  ctx.textAlign = 'right'; ctx.fillStyle = '#cfe8ff'; ctx.font = `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`;
-  ctx.fillText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34);
-  ctx.font = '12px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
-  ctx.fillText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54);
+  ctx.textAlign = 'right';
+  hudText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34, '#cfe8ff', `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`);
+  hudText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54, '#8fa3d9', '12px Microsoft JhengHei');
   // FPS（右上角最上面）：綠 ≥ 55、黃 ≥ 40、紅
   ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b';
   ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14);
@@ -371,26 +397,21 @@ function drawHUD() {
   ctx.textAlign = 'center';
   for (let i = 0; i < n; i++) {
     const id = Game.chain[i];
-    ctx.fillStyle = 'rgba(10, 16, 48, 0.85)'; ctx.fillRect(x, y, w, 40);
     if (id) {
       const col = id === 'weapon' ? Game.wp.color : TYPE_META[CHIPS[id].type].color;
-      ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39);
-      ctx.fillStyle = col; ctx.font = `bold ${T ? 11 : 13}px Microsoft JhengHei`;
-      ctx.fillText(lvShort(id, slotLv(i)), x + w / 2, y + 25);
+      hudFrame(x, y, w, 40, col);
+      hudText(lvShort(id, slotLv(i)), x + w / 2, y + 25, col, `bold ${T ? 11 : 13}px Microsoft JhengHei`);
       if (rareOf(id)) { ctx.fillStyle = '#ffd166'; ctx.font = `bold ${T ? 10 : 12}px Segoe UI`; ctx.fillText('★', x + w - 7, y + 12); }  // 稀有晶片
-    } else {
-      ctx.strokeStyle = '#2f3f78'; ctx.setLineDash([3, 3]); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39); ctx.setLineDash([]);
-    }
+    } else hudFrame(x, y, w, 40, null, 0.55);  // 空格：暗一點的空框（不用虛線）
     if (i < n - 1) {
       ctx.fillStyle = '#4c5a8f'; ctx.font = '12px Segoe UI';
       ctx.fillText('→', x + w + gap / 2, y + 25);
     }
     x += w + gap;
   }
-  ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = '#8fa3d9';
-  if (T) ctx.fillText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒`, VW / 2, y + 56);
+  if (T) hudText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒`, VW / 2, y + 56, '#8fa3d9', '11px Microsoft JhengHei');
   else {
-    ctx.fillText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒 · ⚡${s.used}/${s.cap}${s.off ? `（沒電 ${s.off}）` : ''}　[Tab] 編輯電路`, VW / 2, VH - 16);
+    hudText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒 · ⚡${s.used}/${s.cap}${s.off ? `（沒電 ${s.off}）` : ''}　[Tab] 編輯電路`, VW / 2, VH - 16, '#8fa3d9', '11px Microsoft JhengHei');
     ctx.textAlign = 'left'; ctx.fillStyle = '#4a5886';
     ctx.fillText('WASD 移動 · 左鍵射擊 · Space 衝刺', 20, VH - 16);
   }
