@@ -4,16 +4,16 @@
 //   這裡不碰畫面：互動結果交給 Screen（面板），靠近的東西換了就發 hubNear 事件
 'use strict';
 
-// 基地配置：分區的太空站。中間是發射大廳；左翼機庫（停機位一格一格、格子角上有柱子）；右翼軍械庫（武器架靠上牆排）；
+// 基地配置：分區的太空站。中間是發射大廳；左翼機庫（停機位沿大圓排一圈、船頭朝中間的轉盤）；右翼軍械庫（武器架靠上牆排）；
 //   上面一排：晶片實驗室、觀景台、戰績室。房間之間隔一道牆，牆上的開口讓飛船過去。
-//   房間、開口都是矩形：飛船只能待在這些矩形裡（walk），不能撞進柱子（blocks）。
-//   點位由 hubLayout 照數量算：加飛船 = 機庫多一格（一排 HANGAR_COLS 格），加武器 = 軍械庫多一個架（一排 ARMORY_COLS 個），房間自己變大
+//   房間、開口都是矩形：飛船只能待在這些矩形裡（walk）。
+//   點位由 hubLayout 照數量算：加飛船 = 機庫的圓圈變大，加武器 = 軍械庫多一個架（一排 ARMORY_COLS 個），房間自己變大
 //   kind 決定按 E 做什麼（Hub.ACT）：pad 停機位、rack 武器架、console 房間裡的全像操作台（打開面板）、launch 發射台、term 終端機
 const HUB = {
   WT: 40, MARGIN: 140, TOP: 100,          // 牆厚；基地外圍留白（看得到太空）；畫面上方標題列的高度（螢幕 px）
   SPEED: 320, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
   HALL_W: 860, HALL_H: 640,               // 發射大廳（最小）
-  BAY_W: 210, BAY_H: 200, HANGAR_COLS: 3, PAD_R: 60, PILLAR: 26,  // 機庫：停機位大小、一排幾格、柱子大小
+  BAY_ARC: 200, RING_MIN: 230, RING_GAP: 1.3, PAD_R: 60,  // 機庫：每個停機位佔的弧長、圓圈最小半徑、對著大廳那側的缺口（弧度）
   RACK_GAP: 130, ARMORY_COLS: 5, RACK_ROW: 150, RACK_R: 46,      // 軍械庫：武器架間距、一排幾個、每排高度
   TOP_W: 440, TOP_H: 380,                 // 上面一排三個房間的大小
   DOOR_W: 170,                            // 牆上開口的寬
@@ -33,13 +33,13 @@ const HUB_TERMS = [
   { id: 'coop', label: '👥 多人連線', color: '#ff9dbd' },
   { id: 'range', label: '🎯 靶場', color: '#9dff6b' },
 ];
-// 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, blocks（柱子）, zones }
+// 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, zones }
 function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   const C = HUB, WT = C.WT, M = C.MARGIN;
-  const hc = Math.max(1, Math.min(C.HANGAR_COLS, shipIds.length)), hr = Math.max(1, Math.ceil(shipIds.length / C.HANGAR_COLS));
+  const ns = Math.max(1, shipIds.length), ring = Math.max(C.RING_MIN, ns * C.BAY_ARC / (TAU - C.RING_GAP));  // 機庫圓圈的半徑：停機位排得下
   const ac = Math.max(1, Math.min(C.ARMORY_COLS, weaponIds.length)), ar = Math.max(1, Math.ceil(weaponIds.length / C.ARMORY_COLS));
-  const hangarW = hc * C.BAY_W + 100, armoryW = Math.max(560, ac * C.RACK_GAP + 140);
-  const midH = Math.max(C.HALL_H, hr * C.BAY_H + 140, ar * C.RACK_ROW + 300), midY = M + C.TOP_H + WT;
+  const hangarW = 2 * (ring + 140), armoryW = Math.max(560, ac * C.RACK_GAP + 140);
+  const midH = Math.max(C.HALL_H, hangarW, ar * C.RACK_ROW + 300), midY = M + C.TOP_H + WT;
   const hall = { x: M + hangarW + WT, y: midY, w: C.HALL_W, h: midH }, cx = hall.x + hall.w / 2;
   const rooms = { hall, hangar: { x: M, y: midY, w: hangarW, h: midH }, armory: { x: hall.x + hall.w + WT, y: midY, w: armoryW, h: midH } };
   const tx = cx - (3 * C.TOP_W + 2 * WT) / 2;
@@ -54,12 +54,12 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
     { x: R.lab.x + R.lab.w - 30, y: ty - D / 2, w: WT + 60, h: D },            // 晶片實驗室 ↔ 觀景台
     { x: R.deck.x + R.deck.w - 30, y: ty - D / 2, w: WT + 60, h: D },          // 觀景台 ↔ 戰績室
   ];
-  const zones = [], blocks = [];
-  // 機庫：停機位一格一格（整塊置中），格子的每個角一根柱子
-  const bx0 = R.hangar.x + 40, by0 = midY + (midH - hr * C.BAY_H) / 2;
-  shipIds.forEach((id, i) => { const c = i % C.HANGAR_COLS, r = Math.floor(i / C.HANGAR_COLS);
-    zones.push({ id: 'pad:' + id, kind: 'pad', ship: id, x: bx0 + C.BAY_W * (c + 0.5), y: by0 + C.BAY_H * (r + 0.5), r: C.PAD_R, label: SHIPS[id] ? SHIPS[id].name : id, color: SHIPS[id] ? SHIPS[id].color : '#8fa3d9' }); });
-  for (let c = 0; c <= hc; c++) for (let r = 0; r <= hr; r++) blocks.push({ x: bx0 + c * C.BAY_W - C.PILLAR / 2, y: by0 + r * C.BAY_H - C.PILLAR / 2, w: C.PILLAR, h: C.PILLAR });
+  const zones = [];
+  // 機庫：停機位沿大圓排一圈（從缺口下緣順時針），船頭朝中間；對著大廳開口（右邊）留缺口
+  const hcx = R.hangar.x + R.hangar.w / 2, hcy = midY + midH / 2, step = (TAU - C.RING_GAP) / ns;
+  Object.assign(R.hangar, { cx: hcx, cy: hcy, ring });
+  shipIds.forEach((id, i) => { const a = C.RING_GAP / 2 + (i + 0.5) * step;
+    zones.push({ id: 'pad:' + id, kind: 'pad', ship: id, x: hcx + Math.cos(a) * ring, y: hcy + Math.sin(a) * ring, face: a + Math.PI, r: C.PAD_R, label: SHIPS[id] ? SHIPS[id].name : id, color: SHIPS[id] ? SHIPS[id].color : '#8fa3d9' }); });
   // 軍械庫：武器架從上牆往下一排一排（每排置中），操作台在下面
   weaponIds.forEach((id, i) => { const c = i % C.ARMORY_COLS, r = Math.floor(i / C.ARMORY_COLS), n = Math.min(C.ARMORY_COLS, weaponIds.length - r * C.ARMORY_COLS);
     zones.push({ id: 'rack:' + id, kind: 'rack', weapon: id, x: R.armory.x + R.armory.w / 2 + (c - (n - 1) / 2) * C.RACK_GAP, y: midY + 110 + r * C.RACK_ROW, r: C.RACK_R, label: WEAPONS[id] ? WEAPONS[id].name : id, color: WEAPONS[id] ? WEAPONS[id].color : '#8fa3d9' }); });
@@ -70,9 +70,11 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   // 終端機：大廳左右牆，左右輪流、同一邊往下排
   terms.forEach((t, i) => { const side = i % 2, k = Math.floor(i / 2);
     zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: hall.y + 130 + k * 170, r: C.TERM_R }); });
-  return { W: R.armory.x + armoryW + M, H: midY + midH + M, rooms, doors, walk: [...Object.values(rooms), ...doors], blocks, zones };
+  return { W: R.armory.x + armoryW + M, H: midY + midH + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones };
 }
 Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
+// 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間或開口裡
+function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h); }
 
 const Hub = {
   ready: false, shipId: null, weaponId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）
@@ -147,10 +149,9 @@ const Hub = {
     }
     if (best !== this.near) { this.near = best; Events.emit('hubNear', best); }
   },
-  // 飛船（半徑 r）放在 (x, y) 可不可以：整個在某個房間或開口裡、沒碰到柱子
+  // 飛船（半徑 r）放在 (x, y) 可不可以：整個在某個房間或開口裡
   free(x, y, r) {
-    if (!HUB.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h)) return false;
-    return !HUB.blocks.some(b => Math.hypot(x - clamp(x, b.x, b.x + b.w), y - clamp(y, b.y, b.y + b.h)) < r);
+    return hubFree(HUB, x, y, r);
   },
   // 鏡頭跟著飛船（飛船在標題列以下那塊的正中間），不超出基地外圍太多；縮放照畫面大小（1280×800 = 1）
   follow() {

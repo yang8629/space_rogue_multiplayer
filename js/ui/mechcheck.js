@@ -2665,8 +2665,8 @@ const MechCheck = {
     }],
     ['局外成長', '基地配置', '基地（分區太空站）照數量自動排（hubLayout）：每艘飛船、每把武器、每台終端機、每個操作台都有位置；互動點都在房間裡、開得到（不在柱子上）、互動範圍不重疊；每個房間都走得到（從發射台出發經過開口）。現在的數量和假的「8 艘飛船、7 把武器、3 台終端機」都要過', M => {
       const check = L => {
-        const bad = [], Z = L.zones, inRect = (x, y, r, R) => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h;
-        const free = (x, y, r) => L.walk.some(R => inRect(x, y, r, R)) && !L.blocks.some(b => Math.hypot(x - clamp(x, b.x, b.x + b.w), y - clamp(y, b.y, b.y + b.h)) < r);
+        const bad = [], Z = L.zones;
+        const free = (x, y, r) => hubFree(L, x, y, r);
         for (const z of Z) if (!free(z.x, z.y, 14)) bad.push(`${z.id} 開不到`);
         for (let i = 0; i < Z.length; i++) for (let j = i + 1; j < Z.length; j++) { const a = Z[i], b = Z[j]; if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r - 0.5) bad.push(`${a.id}／${b.id} 重疊`); }
         // 走得到：從發射台旁邊用 20 的格子往外擴（飛船半徑 12），每個互動點附近要有走到的格子

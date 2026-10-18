@@ -265,8 +265,8 @@ function drawHubHud() {
       label(`${ok ? '' : '🔒 '}${z.label}${on ? '・裝備中' : ''}`, x, y, !ok ? '#6a79ad' : z.color, 13);
       if (n) badge(n, x + 36 * k, sy(z.y - z.r + 10));
     } else if (z.kind === 'pad') {
-      const ok = isUnlocked('ship', z.ship), y = sy(z.y + z.r + 18);
-      label(`${ok ? '' : '🔒 '}${z.label}`, x, y, !ok ? '#6a79ad' : z.ship === Hub.shipId ? hudMix(z.color, -0.45) : z.color, 13);  // 自己開走的那艘：字變暗
+      const ok = isUnlocked('ship', z.ship), f = z.face == null ? Math.PI / 2 : z.face, lx = sx(z.x + Math.cos(f) * (z.r + 16)), y = sy(z.y + Math.sin(f) * (z.r + 16));  // 名字寫在船頭那側（機庫中間）
+      label(`${ok ? '' : '🔒 '}${z.label}`, lx, y, !ok ? '#6a79ad' : z.ship === Hub.shipId ? hudMix(z.color, -0.45) : z.color, 13);  // 自己開走的那艘：字變暗
       if (n) badge(n, x + 40 * k, sy(z.y - z.r + 4));
     } else {
       const y = sy(z.kind === 'console' ? z.y + 62 : z.kind === 'launch' ? z.y - z.r - 14 : z.y + 78);
