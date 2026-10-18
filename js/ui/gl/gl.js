@@ -57,6 +57,25 @@ const GLR = {
     }
   },
   T(name) { return this.tex[name] || PIXI.Texture.WHITE; },
+  // 暖機（只做一次）：每頁圖集一張貼圖、每種牆面貼磚（填色＋挖洞）、流光（加法混色＋遮罩）、粒子容器（一般、加法）
+  warmed: false,
+  warm() {
+    if (!this.ready || this.warmed) return;
+    this.warmed = true;
+    const C = new PIXI.Container(), first = new Map();
+    for (const [name, f] of Object.entries(this.frames)) if (!first.has(f.page)) first.set(f.page, name);
+    for (const name of first.values()) C.addChild(new PIXI.Sprite(this.T(name)));
+    for (const t of Object.values(this.tiles)) { const g = new PIXI.Graphics(); g.rect(0, 0, 64, 64).fill(new PIXI.FillPattern(t, 'repeat')); g.poly([10, 10, 40, 10, 25, 40]).cut(); C.addChild(g); }
+    for (const fr of Object.values(this.flows)) { const m = new PIXI.Graphics(); m.rect(0, 0, 64, 64).fill(0xffffff); const ts = new PIXI.TilingSprite({ texture: fr[0], width: 64, height: 64 }); ts.blendMode = 'add'; ts.mask = m; C.addChild(m, ts); }
+    for (const blend of ['normal', 'add']) {
+      const pc = new PIXI.ParticleContainer({ dynamicProperties: { position: true, rotation: true, vertex: true, color: true } }); pc.blendMode = blend;
+      for (const name of first.values()) pc.particleChildren.push(new PIXI.Particle({ texture: this.T(name) }));
+      pc.update(); C.addChild(pc);
+    }
+    const rt = PIXI.RenderTexture.create({ width: 64, height: 64 });
+    this.app.renderer.render({ container: C, target: rt });
+    C.destroy({ children: true }); rt.destroy(true);
+  },
   res(name) { const f = this.frames[name]; return f ? f.res : 1; },
 
   // ---------- 圖層 ----------

@@ -138,7 +138,8 @@ const Game = {
       bosses: [], bossIds: [], elites: 0, echoK: 0, started: Date.now(), recorded: false,  // bossIds、elites、echoK：解鎖進度用（打倒的旗艦、精英、回響擊殺）
       // 遊玩紀錄用的判斷資料：受到的傷害來源、被打中次數、衝刺次數、走過的節點、取得的晶片、武器升級、各關摘要
       taken: {}, hits: 0, dashes: 0, path: [], got: [], upgrades: [], sectors: [],
-      perf: { worst: 0, worstAt: '', slow: 0 } };  // 效能：戰鬥中最慢的一幀（ms）、在哪裡、超過 100ms 的幀數
+      perf: { worst: 0, worstAt: '', slow: 0 },  // 效能：戰鬥中最慢的一幀（ms）、在哪裡、超過 100ms 的幀數
+      cap: { n: 0, cut: 0, max: 0, at: '' } };  // 子彈上限防呆：觸發幾幀、刪了幾顆、最多幾顆、在哪裡（最多那次）
     this.sectorStats = { chips: {}, t0: 0, kills0: 0, dmg0: 0 };  // 「本關」＝目前這個星區
     this.nodeLog = null;
     this.lastHit = '';
@@ -164,6 +165,20 @@ const Game = {
     if (!R || !R.perf || this.state !== 'play' || !this.inArena || ms > 2000) return;
     if (ms > 100) R.perf.slow++;
     if (ms > R.perf.worst) { R.perf.worst = Math.round(ms); R.perf.worstAt = this.whereNow(); }
+  },
+  // 子彈上限防呆（CFG.BULLET_CAP）：超過就刪最舊的（標 dead，別處還拿著的也當成消失）；記下觸發的地方
+  capBullets() {
+    const C = CFG.BULLET_CAP, R = this.runStats;
+    let hit = false;
+    for (const [k, cap] of [['bullets', C.mine], ['eBullets', C.enemy]]) {
+      const arr = this[k], over = arr.length - cap;
+      if (over <= 0) continue;
+      hit = true;
+      if (R && R.cap) { R.cap.cut += over; if (arr.length > R.cap.max) { R.cap.max = arr.length; R.cap.at = `${this.whereNow()}（${k === 'bullets' ? '我方' : '敵方'}）`; } }
+      for (let i = 0; i < over; i++) arr[i].dead = true;
+      arr.splice(0, over);
+    }
+    if (hit && R && R.cap) R.cap.n++;  // 這一幀觸發（我方、敵方都超過也只算一幀）
   },
   totalDmg() { return this.runStats ? Object.values(this.runStats.dmg).reduce((a, b) => a + b, 0) : 0; },
   logNodeStart(node) {
@@ -845,7 +860,7 @@ const Game = {
       sectors: [...R.sectors, this.sectorSummary() + (result === 'cleared' || result === 'retired' ? '' : ' ←目前')],
       path: [...R.path, ...(inFight ? [this.nodeSummary(true)] : [])],
       upgrades: R.upgrades.slice(), got: R.got.slice(),
-      perf: R.perf ? { ...R.perf } : null,
+      perf: R.perf ? { ...R.perf } : null, cap: R.cap && R.cap.n ? { ...R.cap } : null,
     };
     return rec;
   },
@@ -1447,6 +1462,7 @@ const Game = {
       this.updatePortals(dt);
       this.updateBullets(dt);
       this.updateEnemyBullets(dt);
+      this.capBullets();
       this.updateZones(dt);
       this.updatePickups(dt);
       if (this.mates.length) this.updateRevive(dt);

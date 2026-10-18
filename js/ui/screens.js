@@ -708,7 +708,8 @@ function recordText(r) {
   const cd = (r.chipDmg || []).map(([k, v]) => (/^武器・/.test(k) ? '武器' : /^機體/.test(k) ? '機體' : chip(k)) + v).join(' ');
   L.push(`傷害 ${r.dmg} 最大${r.maxHit}｜${src}｜${cd}`);
   if (r.taken) L.push(`被打 ${r.hits}下 衝刺${r.dashes}｜${Object.entries(r.taken).map(([k, v]) => hurt(k) + v).join(' ')}`);
-  if (r.perf && r.perf.worst) L.push(`效能 最慢一幀${r.perf.worst}ms(${r.perf.worstAt}) 卡>100ms ${r.perf.slow}次`);  // 戰鬥中最慢的一幀在哪（第幾層、第幾波、場上子彈數）
+  if (r.perf && r.perf.worst) L.push(`效能 最慢一幀${r.perf.worst}ms(${r.perf.worstAt}) 卡>100ms ${r.perf.slow}次`);
+  if (r.cap && r.cap.n) L.push(`子彈上限 觸發${r.cap.n}幀 刪${r.cap.cut}顆 最多${r.cap.max}顆(${r.cap.at})`);  // 防呆刪了子彈：這局有組合會爆量，要修  // 戰鬥中最慢的一幀在哪（第幾層、第幾波、場上子彈數）
   // 每個星區一行：摘要＋走過的節點（戰28-10 ＝ 戰鬥 28 秒、掉 10 血）
   const nodes = {};
   for (const p of r.path || []) {

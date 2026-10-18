@@ -19,6 +19,7 @@
     play: () => { if (Game.pauseMenu) Screen.pauseMenu(); else Screen.hide(); },  // 戰鬥中：Esc 選單
   };
   Events.on('view', d => (VIEWS[d.state] || (() => Screen.hide()))(d.msg));
+  Events.on('view', d => { if ((d.state === 'map' || d.state === 'reward') && !GLR.warmed) setTimeout(() => GLR.warm(), 300); });  // 戰鬥前的靜止畫面（起飛之後）：偷偷把戰鬥畫面暖機，第一場不卡
   Events.on('died', () => setTimeout(() => { if (Game.state === 'dead') Screen.dead(); }, 900));  // 先看一下爆炸再顯示結算
   Events.on('combatWon', () => { Screen.clickLock = performance.now() + 600; });  // 戰鬥中連點射擊：勝利／三選一畫面剛出現 0.6 秒內不接受點擊（免得直接按到按鈕）
   Events.on('hubNear', z => Screen.hubInfo(z));  // 基地：靠近的東西換了 → 換說明卡

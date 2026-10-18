@@ -83,6 +83,7 @@ const CFG = {
   CAP_SHOP_ADD: 2,          // 補給站買一次容量 +2
   CAP_SINK: 2,              // 散熱片每層容量 +2
   MAGNET_RANGE: 140,
+  BULLET_CAP: { mine: 6000, enemy: 3000 },  // 子彈上限（防呆）：我方、敵方超過就刪最舊的，免得爆量卡死；碰到會記進遊玩紀錄
   AUTO_RANGE: 560,          // 手機自動攻擊的索敵距離
   RESONANCE: 0.5,           // 每個相鄰共振器 +50% 效果
   RICOCHET_RANGE: 420,      // 彈射尋找下一個目標的距離
