@@ -50,15 +50,12 @@ const GLHub = {
       g.rect(z.x - 84, 0, 168, T + 6).fill(0x0a0f1f).stroke({ width: 3, color: HUB_INK });
       g.rect(z.x - 92, T + 6, 184, 10).fill(hubShade(0x3a4870, -0.1)).stroke({ width: 2, color: HUB_INK });  // 門檻
     }
-    // 發射口（下牆挖空，外面是太空）＋盤面到出口的跑道（兩側金屬軌，箭頭在 gAnim 畫）
-    const L = Hub.zone('launch'), RW = HUB.RUNWAY_W, ry = L.y + HUB.LAUNCH_PAD - 4;
+    // 發射口（下牆挖空，外面是太空）
+    const L = Hub.zone('launch'), RW = HUB.RUNWAY_W;
     g.rect(L.x - RW / 2 - 8, H - T - 4, RW + 16, T + 4).fill(0x02030a).stroke({ width: 3, color: HUB_INK });
-    g.rect(L.x - RW / 2, ry, RW, H - T - ry).fill(0x0c1226).stroke({ width: 2, color: HUB_INK });
-    for (const sg of [-1, 1]) g.rect(L.x + sg * (RW / 2 + 4) - 4, ry, 8, H - T - ry).fill(hubShade(0x3a4870, sg < 0 ? 0.05 : -0.2)).stroke({ width: 2, color: HUB_INK });
     // 停機坪：六角形，6 個切面照光的方向上色，中間一圈
     for (const z of HUB.zones.filter(z => z.kind === 'pad')) this.hexPad(g, z.x, z.y, z.r, 0x2b3654);
-    // 發射台：八角形盤面＋內圈（畫在跑道上面）
-    this.hexPad(g, L.x, L.y, HUB.LAUNCH_PAD, 0x26304c, 8);
+    this.launchPad(g, L, H - T);
     // 終端機：靠牆的控制台＋螢幕
     for (const z of HUB.zones.filter(z => z.kind === 'term')) {
       const left = z.x < W / 2, x0 = left ? T : W - T - 54;
@@ -67,6 +64,31 @@ const GLHub = {
       g.rect(x0 + 8, z.y + 26, 38, 12).fill(0x55658f).stroke({ width: 2, color: HUB_INK });
     }
     this.built = true;
+  },
+  // 發射台＋跑道一體：八角盤面（光從左上的切面）、最下面那條邊撐開到跑道寬，接著直直往下到發射口；
+  //   外面一圈金屬邊（描邊—金屬—描邊）連續繞過盤面和跑道兩側，跑道中間一條凹下去的滑軌（箭頭在 gAnim 畫）
+  launchPad(g, L, yEnd) {
+    const P = HUB.LAUNCH_PAD, hw = HUB.RUNWAY_W / 2, base = 0x26304c, n = 8;
+    const oct = Array.from({ length: n }, (_, i) => { const a = i / n * TAU + Math.PI / n; return [L.x + Math.cos(a) * P, L.y + Math.sin(a) * P]; });
+    // 最下面兩個點（i = 1、2：右下、左下）往外撐到跑道寬
+    oct[1][0] = L.x + hw; oct[2][0] = L.x - hw;
+    const by = oct[1][1];
+    // 盤面的切面
+    for (let i = 0; i < n; i++) {
+      const [ax, ay] = oct[i], [bx, by2] = oct[(i + 1) % n], mx = (ax + bx) / 2 - L.x, my = (ay + by2) / 2 - L.y, l = Math.hypot(mx, my);
+      g.poly([L.x, L.y, ax, ay, bx, by2]).fill(hubShade(base, hubLit(mx / l, my / l) * 0.35));
+    }
+    // 跑道（朝下的面：比盤面暗一點）＋中間凹下去的滑軌
+    g.rect(L.x - hw, by, hw * 2, yEnd - by).fill(hubShade(base, -0.18));
+    g.rect(L.x - hw + 14, by, hw * 2 - 28, yEnd - by).fill(0x0a0f22);
+    g.rect(L.x - hw + 14, by, 2, yEnd - by).fill(0x03050c); g.rect(L.x + hw - 16, by, 2, yEnd - by).fill(hubShade(base, 0.25));
+    // 外框：盤面上半圈＋跑道兩側連成一條（跑道底端接到牆）
+    const rim = [[L.x - hw, yEnd], ...oct.slice(2), oct[0], oct[1], [L.x + hw, yEnd]].flat();
+    g.poly(rim, false).stroke({ width: 10, color: HUB_INK, join: 'round' });
+    g.poly(rim, false).stroke({ width: 5, color: 0x4a5a86, join: 'round' });
+    g.poly(rim, false).stroke({ width: 1.5, color: 0x8a9ac4, alpha: 0.5, join: 'round' });  // 金屬邊上的亮線
+    // 盤面中間的圓台
+    g.circle(L.x, L.y, P * 0.62).fill(hubShade(base, -0.25)).stroke({ width: 3, color: HUB_INK });
   },
   // 切面的多邊形台座：n 邊，每一邊一個三角形切面，亮度照切面朝向
   hexPad(g, cx, cy, r, base, n = 6) {
@@ -116,9 +138,9 @@ const GLHub = {
         }
         this.glow(z.x, z.y, P * 1.5, col, near ? 0.35 : 0.18);
         // 跑道上往出口的箭頭（一個接一個亮）
-        const ry = z.y + P - 4, ye = HUB.H - HUB.WALL, n = 3, step = (ye - ry) / n;
+        const ry = z.y + P * Math.sin(3 * Math.PI / 8), ye = HUB.H - HUB.WALL, n = 3, step = (ye - ry) / n;
         for (let i = 0; i < n; i++) {
-          const y = ry + 4 + i * step, hw = RW / 2 - 14, k = Math.max(0, Math.sin(t * 4 - i * 1.1));
+          const y = ry + 3 + i * step, hw = RW / 2 - 20, k = Math.max(0, Math.sin(t * 4 - i * 1.1));
           g.poly([z.x - hw, y, z.x, y + 10, z.x + hw, y, z.x + hw, y + 6, z.x, y + 16, z.x - hw, y + 6]).fill({ color: col, alpha: 0.25 + 0.65 * k });
         }
         this.glow(z.x, HUB.H - HUB.WALL / 2, 90, 0x4cc9f0, 0.4 + 0.1 * Math.sin(t * 2));  // 發射口的力場
