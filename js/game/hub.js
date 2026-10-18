@@ -19,6 +19,7 @@ const HUB = {
   TOP_W: 440, TOP_H: 380,                 // 上面一排三個房間的大小
   DOOR_W: 170,                            // 牆上開口的寬
   CONSOLE_R: 70, TERM_R: 70, LAUNCH_R: 72, LAUNCH_PAD: 62, RUNWAY_W: 84,
+  TARGET_R: 24, DPS_WIN: 3, KNOCK: 520,   // 軍械庫標靶機的半徑、每秒傷害算最近幾秒；被別人的子彈打中往後推的速度
 };
 // 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的操作台打開哪個面板
 const HUB_ROOMS = {
@@ -35,7 +36,7 @@ const HUB_TERMS = [
   { id: 'coop', label: '👥 多人連線', color: '#ff9dbd' },
   { id: 'range', label: '🎯 靶場', color: '#9dff6b' },
 ];
-// 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, zones, spawn（進基地的位置 = 大廳正中） }
+// 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, zones, spawn（進基地的位置 = 大廳正中）, targets（軍械庫的標靶機） }
 function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   const C = HUB, WT = C.WT, M = C.MARGIN;
   const ns = Math.max(1, shipIds.length), ring = Math.max(C.RING_MIN, ns * C.BAY_ARC / (TAU - C.RING_GAP));  // 機庫圓圈的半徑：停機位排得下
@@ -72,6 +73,9 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   // 軍械庫：武器架從上牆往下一排一排（每排置中），操作台在下面
   weaponIds.forEach((id, i) => { const c = i % C.ARMORY_COLS, r = Math.floor(i / C.ARMORY_COLS), n = Math.min(C.ARMORY_COLS, weaponIds.length - r * C.ARMORY_COLS);
     zones.push({ id: 'rack:' + id, kind: 'rack', weapon: id, x: R.armory.x + R.armory.w / 2 + (c - (n - 1) / 2) * C.RACK_GAP, y: midY + 110 + r * C.RACK_ROW, r: C.RACK_R, label: WEAPONS[id] ? WEAPONS[id].name : id, color: WEAPONS[id] ? WEAPONS[id].color : '#8fa3d9' }); });
+  // 軍械庫靶場：武器架和操作台之間、偏右邊立 3 個標靶機（前後錯開，從左邊射）
+  const A = R.armory, tym = (midY + 110 + (ar - 1) * C.RACK_ROW + A.y + A.h - 120) / 2;
+  const targets = [[0.62, -50], [0.76, 40], [0.9, -15]].map(([fx, dy]) => ({ x: A.x + A.w * fx, y: tym + dy, r: C.TARGET_R }));
   // 房間裡的操作台：軍械庫在下面、晶片實驗室和戰績室在正中間
   for (const r of Object.values(rooms)) if (r.console) zones.push({ ...r.console, kind: 'console', room: r.id, color: r.color, x: r.x + r.w / 2, y: r.id === 'armory' ? r.y + r.h - 120 : r.y + r.h / 2 + 10, r: C.CONSOLE_R });
   // 發射台：發射甲板上，跑道穿過甲板的下牆到太空
@@ -79,14 +83,15 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   // 終端機：大廳左右牆，左右輪流、同一邊往下排
   terms.forEach((t, i) => { const side = i % 2, k = Math.floor(i / 2);
     zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: hall.y + 130 + k * 170, r: C.TERM_R }); });
-  return { W: R.armory.x + armoryW + M, H: R.bay.y + R.bay.h + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones, spawn: { x: cx, y: hall.y + hall.h / 2 } };
+  return { W: R.armory.x + armoryW + M, H: R.bay.y + R.bay.h + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones, spawn: { x: cx, y: hall.y + hall.h / 2 }, targets };
 }
 Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
 // 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間或開口裡
 function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h); }
 
 const Hub = {
-  shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈、打到牆的火花（只是好玩：沒有傷害，多人時不同步）
+  shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈（多人時別人的也在：sl = 誰射的，自己的 0）、打到東西的火花（只是好玩：沒有血量）
+  nums: [], hits: [], kick: { x: 0, y: 0 }, hitT: 0, hitN: 0, mateHit: {},  // 跳出的傷害數字；標靶機每一發 { i, t, dmg }；被打中往後推的速度、閃白剩幾秒、被打中幾次；其他人的閃白
   ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
 
   // 進基地：飛船在大廳正中（spawn）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
@@ -146,9 +151,10 @@ const Hub = {
     else { const k = Math.min(1, dt * 12), l = Math.max(1, len); s.vx += (mx / l * HUB.SPEED - s.vx) * k; s.vy += (my / l * HUB.SPEED - s.vy) * k; }
     s.dashT = Math.max(0, this.dashT);
     // 撞牆、撞柱子：x、y 分開試，擋住的那個方向停下（可以貼著牆滑）
-    const nx = s.x + s.vx * dt, ny = s.y + s.vy * dt;
-    if (this.free(nx, s.y, s.r)) s.x = nx; else s.vx = 0;
-    if (this.free(s.x, ny, s.r)) s.y = ny; else s.vy = 0;
+    const kd = Math.exp(-6 * dt), nx = s.x + (s.vx + this.kick.x) * dt, ny = s.y + (s.vy + this.kick.y) * dt;  // kick：被別人打中的推力（慢慢消失）
+    this.kick.x *= kd; this.kick.y *= kd; this.hitT = Math.max(0, this.hitT - dt);
+    if (this.free(nx, s.y, s.r)) s.x = nx; else { s.vx = 0; this.kick.x = 0; }
+    if (this.free(s.x, ny, s.r)) s.y = ny; else { s.vy = 0; this.kick.y = 0; }
     const wx = Input.mx / this.k + this.cam.x, wy = Input.my / this.k + this.cam.y;
     if (Input.mouseMoved) s.aim = Math.atan2(wy - s.y, wx - s.x);
     else if (s.moving) s.aim = Math.atan2(my, mx);
@@ -167,27 +173,52 @@ const Hub = {
     return hubFree(HUB, x, y, r);
   },
   // 射擊：按住左鍵，照裝備武器的基本數值（射速 interval、一次 count 發、散開 spread、彈速 speed、射程 life）從船頭射出；
-  //   子彈撞牆（出了房間和開口）就在那裡爆火花；最多 MAX_SHOTS 顆
+  //   子彈撞牆（出了房間和開口）就在那裡爆火花；打到軍械庫的標靶機跳傷害數字、算每秒傷害；
+  //   多人房間：開火時發 hubFire 事件（net.js 轉給其他人，addFire 在對方那邊生出同樣的子彈）；別人的子彈打到自己 = 被往子彈方向推、閃白；
+  //   打到別人的船只畫火花和數字（推他的是他那邊自己算）；最多 MAX_SHOTS 顆
   updateShots(dt) {
-    const s = this.ship, P = weaponParams({ id: this.weaponId, path: null, final: null });
+    const s = this.ship;
     this.fireCd -= dt;
     if (Input.down && this.fireCd <= 0) {
-      this.fireCd = P.interval;
-      const n = P.count, mx = s.x + Math.cos(s.aim) * 24, my = s.y + Math.sin(s.aim) * 24;
-      for (let i = 0; i < n && this.shots.length < Hub.MAX_SHOTS; i++) {
-        const a = s.aim + (n > 1 ? (i / (n - 1) - 0.5) * P.spread : 0);
-        this.shots.push({ x: mx, y: my, vx: Math.cos(a) * P.speed, vy: Math.sin(a) * P.speed, t: P.life, life: P.life, r: P.radius, col: P.color, w: this.weaponId });
-      }
+      this.fireCd = weaponParams({ id: this.weaponId, path: null, final: null }).interval;
+      const mx = s.x + Math.cos(s.aim) * 24, my = s.y + Math.sin(s.aim) * 24;
+      this.addFire(0, mx, my, s.aim, this.weaponId);
       Events.emit('shoot', { weapon: this.weaponId });
+      Events.emit('hubFire', { x: mx, y: my, a: s.aim, w: this.weaponId });
     }
+    const others = this.coop() ? Net.roomShips() : [], spark = (b, x, y) => { b.t = 0; this.sparks.push({ x, y, t: 0.3, col: b.col }); };
     for (const b of this.shots) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt;
-      if (!hubFree(HUB, b.x, b.y, 1)) { b.t = 0; this.sparks.push({ x: b.x - b.vx * dt, y: b.y - b.vy * dt, t: 0.3, col: b.col }); }
+      if (!hubFree(HUB, b.x, b.y, 1)) { spark(b, b.x - b.vx * dt, b.y - b.vy * dt); continue; }
+      const ti = HUB.targets.findIndex(T => Math.hypot(T.x - b.x, T.y - b.y) < T.r + b.r);
+      if (ti >= 0) { spark(b, b.x, b.y); this.hits.push({ i: ti, t: this.t, dmg: b.dmg }); this.num(b.x, b.y - 10, b.dmg); continue; }
+      if (b.sl && Math.hypot(s.x - b.x, s.y - b.y) < s.r + b.r + 4) {  // 別人的子彈打到自己
+        const sp = Math.hypot(b.vx, b.vy) || 1;
+        this.kick.x += b.vx / sp * HUB.KNOCK; this.kick.y += b.vy / sp * HUB.KNOCK; this.hitT = 0.25; this.hitN++;
+        spark(b, b.x, b.y); this.num(s.x, s.y - 22, b.dmg); continue;
+      }
+      const o = others.find(o => o.slot !== b.sl && Math.hypot(o.x - b.x, o.y - b.y) < 16 + b.r);
+      if (o) { spark(b, b.x, b.y); this.num(o.x, o.y - 22, b.dmg); this.mateHit[o.slot] = 0.25; }
     }
     this.shots = this.shots.filter(b => b.t > 0);
     for (const k of this.sparks) k.t -= dt;
     this.sparks = this.sparks.filter(k => k.t > 0);
+    for (const n of this.nums) n.t -= dt;
+    this.nums = this.nums.filter(n => n.t > 0);
+    this.hits = this.hits.filter(h => this.t - h.t < HUB.DPS_WIN);
+    for (const k in this.mateHit) this.mateHit[k] = Math.max(0, this.mateHit[k] - dt);
   },
+  // 一次開火：照武器的基本數值（一次 count 發、散開 spread、彈速 speed、射程 life、傷害 damage）；sl = 誰射的（自己 0）
+  addFire(sl, x, y, aim, w) {
+    const P = weaponParams({ id: w, path: null, final: null }), n = P.count;
+    for (let i = 0; i < n && this.shots.length < Hub.MAX_SHOTS; i++) {
+      const a = aim + (n > 1 ? (i / (n - 1) - 0.5) * P.spread : 0);
+      this.shots.push({ x, y, vx: Math.cos(a) * P.speed, vy: Math.sin(a) * P.speed, t: P.life, life: P.life, r: P.radius, col: P.color, w, sl, dmg: Math.round(P.damage) });
+    }
+  },
+  num(x, y, v) { this.nums.push({ x: x + rand(-8, 8), y, v, t: 0.8 }); },
+  // 標靶機 i 最近 DPS_WIN 秒的每秒傷害（畫在靶上面）
+  dps(i) { let sum = 0; for (const h of this.hits) if (h.i === i) sum += h.dmg; return Math.round(sum / HUB.DPS_WIN); },
   MAX_SHOTS: 200,
   // 出發動畫：開到發射台正中（off = 多人時左右錯開）、船頭轉向跑道 → 發射台蓄能 → 沿跑道加速衝出出口 → then()
   //   只在基地真的畫在畫面上時播；模擬、測試（沒有畫面）、死亡畫面的「重新開始」直接 then()

@@ -274,6 +274,9 @@ function drawHubHud() {
       if (n) badge(n, x + 60, y - 18);
     }
   }
+  for (const n of Hub.nums) { ctx.globalAlpha = Math.min(1, n.t * 2.5); label(String(n.v), sx(n.x), sy(n.y - (0.8 - n.t) * 40), '#ffe9a8', 14); }  // 打中跳出的傷害數字（往上飄）
+  ctx.globalAlpha = 1;
+  for (const [i, T] of HUB.targets.entries()) { const v = Hub.dps(i); if (v) label(`每秒 ${v}`, sx(T.x), sy(T.y - T.r - 22), '#ffd166', 13); }  // 標靶機：最近 3 秒的每秒傷害
   if (Hub.coop()) {  // 多人房間：每艘船頭上的號碼（號碼色），✓ = 準備好了，📖 = 在看面板
     const tag = (slot, x, y, r, b) => label(`${slot}P${r ? ' ✓' : ''}${b ? ' 📖' : ''}`, sx(x), sy(y) - 24, Game.slotColor(slot), 13);
     for (const o of Net.roomShips()) tag(o.slot, o.x, o.y, o.r, o.b);

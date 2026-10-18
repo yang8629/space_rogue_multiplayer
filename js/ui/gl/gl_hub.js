@@ -215,6 +215,10 @@ const GLHub = {
       g.rect(x0, ar.y + 6, x1 - x0, 26).fill(0x4a3a2a).stroke({ width: 2, color: HUB_INK });
       for (const z of racks) g.rect(z.x - 30, ar.y + 10, 60, 18).fill(0x2a2018).stroke({ width: 2, color: HUB_INK });
     }
+    for (const T of HUB.targets) {  // 靶場：標靶機（切面底座＋紅白靶面＋中間的感測器）
+      this.hexPad(g, T.x, T.y, T.r + 12, 0x3a4466);
+      for (const [r, c] of [[T.r, 0xe8ecf6], [T.r * 0.7, 0xd04050], [T.r * 0.42, 0xe8ecf6], [T.r * 0.18, 0xd04050]]) g.circle(T.x, T.y, r).fill(c).stroke({ width: 1.5, color: HUB_INK });
+    }
     this.crate(g, ar.x + 20, ar.y + ar.h - 82, 64, 64, 0x5a3a2a); this.crate(g, ar.x + 92, ar.y + ar.h - 70, 52, 52, 0x5a4a32);
     this.crate(g, ar.x + ar.w - 84, ar.y + ar.h - 82, 64, 64, 0x5a3a2a); this.barrel(g, ar.x + ar.w - 112, ar.y + ar.h - 30, 15, 0x7a3b33);
     // 晶片實驗室：上牆、左牆一排伺服器機櫃（燈每幀閃）
@@ -375,6 +379,9 @@ const GLHub = {
       else { g.circle(b.x, b.y, b.r).fill({ color: c, alpha: fade }); g.circle(b.x, b.y, b.r * 0.45).fill({ color: 0xffffff, alpha: fade }); }
       this.glow(b.x, b.y, b.r * 5, c, 0.5 * fade);
     }
+    for (const [i, T] of HUB.targets.entries()) { const h = Hub.hits.findLast(h => h.i === i), k = h ? Math.max(0, 1 - (Hub.t - h.t) / 0.15) : 0; if (k) this.glow(T.x, T.y, 50, 0xffffff, 0.6 * k); }  // 標靶機被打中：閃白
+    if (Hub.hitT > 0) this.glow(s.x, s.y, 44, 0xffffff, 3 * Hub.hitT);  // 自己被打中：閃白
+    for (const o of Hub.coop() ? Net.roomShips() : []) if (Hub.mateHit[o.slot] > 0) this.glow(o.x, o.y, 44, 0xffffff, 3 * Hub.mateHit[o.slot]);
     for (const k of Hub.sparks) { const c = glColor(k.col), q = 1 - k.t / 0.3; g.circle(k.x, k.y, 4 + q * 14).stroke({ width: 2, color: c, alpha: 1 - q }); this.glow(k.x, k.y, 26, c, 0.6 * (1 - q)); }
     const fk = Hub.flyK();
     if (fk > 0 && fk < 1) {  // 出發動畫衝出去：船尾拖一道能量光跡（越快越長）

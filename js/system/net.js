@@ -267,6 +267,14 @@ const Net = {
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
     if (!had || had.r !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
   },
+  // 基地裡開火（hubFire 事件）：告訴其他人（房主轉給其他隊友），對方用 Hub.addFire 生出同樣的子彈
+  sendHubFire(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hf', sl: this.mySlot(), x: Math.round(d.x), y: Math.round(d.y), a: r2(d.a), w: d.w }); },
+  onHubFire(m, q) {
+    const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
+    if (!slot || slot === this.mySlot() || Game.state !== 'pick' || !WEAPONS[m.w]) return;
+    if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
+    Hub.addFire(slot, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H), num(m.a), m.w);
+  },
   // 現在要畫的其他人（太久沒收到的不畫）
   roomShips() {
     const now = performance.now();
@@ -626,6 +634,7 @@ const Net = {
         break;
       case 'chap': if (client) { this.chapter = Game.chapterId = this.cleanChapter(m.chapter); this.roomStatus(); } break;
       case 'hp': this.onRoomPos(m, q); break;
+      case 'hf': this.onHubFire(m, q); break;
       case 'hold': if (client) this.hold = typeof m.why === 'string' ? m.why.slice(0, 40) : null; break;
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
       case 'room':
@@ -1285,3 +1294,4 @@ document.addEventListener('visibilitychange', () => {
   if (!Net.linked || Game.mode !== 'coop') return;
   if (Net.role === 'host') { Net.myAway = document.hidden; Net.pushPause(); } else Net.send({ t: 'away', on: document.hidden });
 });
+Events.on('hubFire', d => Net.sendHubFire(d));  // 基地裡開火：多人房間時告訴其他人

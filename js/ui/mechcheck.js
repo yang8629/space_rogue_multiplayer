@@ -2672,6 +2672,10 @@ const MechCheck = {
         // 走得到：從出生點（大廳正中）用 20 的格子往外擴（飛船半徑 12），每個互動點附近要有走到的格子
         const G = 20, seen = new Set(), q = [[Math.round(L.spawn.x / G), Math.round(L.spawn.y / G)]];
         if (!free(L.spawn.x, L.spawn.y, 14)) bad.push('出生點不在房間裡');
+        for (const T of L.targets) {  // 標靶機：整個（含底座）在軍械庫裡、不壓到武器架和操作台
+          if (!hubFree({ walk: [L.rooms.armory] }, T.x, T.y, T.r + 12)) bad.push('標靶機不在軍械庫裡');
+          for (const z of Z) if (Math.hypot(z.x - T.x, z.y - T.y) < z.r + T.r + 12) bad.push(`標靶機壓到 ${z.id}`);
+        }
         while (q.length) { const [i, j] = q.pop(), key = i + ',' + j; if (seen.has(key) || !free(i * G, j * G, 12)) continue; seen.add(key); q.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]); }
         for (const z of Z) { let ok = false; for (let i = -3; i <= 3 && !ok; i++) for (let j = -3; j <= 3 && !ok; j++) ok = seen.has((Math.round(z.x / G) + i) + ',' + (Math.round(z.y / G) + j)); if (!ok) bad.push(`${z.id} 走不到`); }
         // 大廳每間房都進得去：有一個開口同時碰到大廳和那間房
@@ -2706,6 +2710,31 @@ const MechCheck = {
           got: `散彈一次射出 ${first} 發（要 4）；冷卻中${cd ? '不會' : '會（錯誤）'}再射；放開 5 秒後子彈${gone ? '都消失' : '還在（錯誤）'}；貼著牆射${maxSpark ? '有火花' : '沒有火花（錯誤）'}` };
       } finally {
         Input.down = down; Game.state = st; Hub.weaponId = hw; Hub.shots = []; Hub.sparks = [];
+        if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
+      }
+    }],
+    ['局外成長', '基地靶場', '軍械庫的標靶機：打中跳傷害數字、頭上算每秒傷害（照武器傷害）；多人房間裡別人的子彈打到自己：被往子彈方向推開、閃白，不會掉血', M => {
+      const st = Game.state, down = Input.down, hw = Hub.weaponId, keep = { x: Hub.ship && Hub.ship.x, y: Hub.ship && Hub.ship.y, aim: Hub.ship && Hub.ship.aim };
+      try {
+        Game.state = 'title'; Hub.enter(); Hub.shots = []; Hub.sparks = []; Hub.nums = []; Hub.hits = []; Hub.fireCd = 0; Hub.kick = { x: 0, y: 0 }; Hub.hitN = 0;
+        const T = HUB.targets[0], s = Hub.ship; s.x = T.x - 160; s.y = T.y; s.aim = 0;  // 站在第一個靶左邊，朝右射
+        Hub.weaponId = 'laser'; Input.down = true;
+        for (let i = 0; i < 40; i++) Hub.updateShots(0.016);
+        Input.down = false;
+        const dmg = Math.round(weaponParams({ id: 'laser', path: null, final: null }).damage), hit = Hub.hits.filter(h => h.i === 0), dps = Hub.dps(0);
+        const okT = hit.length > 0 && hit.every(h => h.dmg === dmg) && dps === Math.round(hit.length * dmg / HUB.DPS_WIN) && Hub.nums.length > 0;
+        // 別人（2P）在自己左邊朝右開火：子彈打到自己 → 往右推
+        Hub.shots = []; s.x = T.x - 300; s.y = T.y + 200; const hp = Game.player ? Game.player.hp : 0;
+        Hub.addFire(2, s.x - 120, s.y, 0, 'laser');
+        for (let i = 0; i < 30; i++) Hub.updateShots(0.016);
+        const okHit = Hub.hitN > 0 && Hub.kick.x > 100 && Hub.hitT > 0;
+        Hub.addFire(0, s.x - 120, s.y, 0, 'laser'); const n0 = Hub.hitN;  // 自己的子彈不會打到自己
+        for (let i = 0; i < 30; i++) Hub.updateShots(0.016);
+        const selfSafe = Hub.hitN === n0, noHp = !Game.player || Game.player.hp === hp;
+        return { ok: okT && okHit && selfSafe && noHp,
+          got: `標靶機打中 ${hit.length} 發、每發 ${hit.length ? hit[0].dmg : 0}（雷射 ${dmg}）、每秒 ${dps}${okT ? '' : '（錯誤）'}；2P 的子彈打到自己：${okHit ? `被推（推力 ${Math.round(Hub.kick.x)}）` : '沒反應（錯誤）'}；自己的子彈${selfSafe ? '不會' : '會（錯誤）'}打到自己；血量${noHp ? '不變' : '變了（錯誤）'}` };
+      } finally {
+        Input.down = down; Game.state = st; Hub.weaponId = hw; Hub.shots = []; Hub.sparks = []; Hub.nums = []; Hub.hits = []; Hub.kick = { x: 0, y: 0 }; Hub.hitT = 0;
         if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
       }
     }],

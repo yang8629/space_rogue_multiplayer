@@ -1,5 +1,5 @@
 // 多人房間（共用的基地）真的連線測試：兩個 Chrome、真的 PeerJS（要有網路）
-//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、到武器架換武器 → 兩邊準備（起始晶片）→ 一起播出發動畫 → 開始
+//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、互射 → 到武器架換武器 → 兩邊準備（起始晶片）→ 一起播出發動畫 → 開始
 //   截圖 art_lab/screenshots/房間測試_*.png；印出每一步過了沒
 //   用法：node perf/roomtest.mjs
 import { GAME, SHOTS } from './paths.mjs';
@@ -47,13 +47,21 @@ await B.evaluate(() => { const z = Hub.zone('pad:bulwark'), s = Hub.ship; s.x = 
 await wait(300); await B.keyboard.press('e'); await wait(500);
 ok(await until(A, () => (Net.roomShips().find(o => o.slot === 2) || {}).s === 'bulwark', 5000), '隊友換成堡壘號，房主看得到');
 
+// 互射：隊友停在大廳，房主在他左邊朝右開火 → 隊友那邊被打中、被往右推
+await B.evaluate(() => { const P = HUB.spawn, s = Hub.ship; s.x = P.x + 120; s.y = P.y; s.vx = s.vy = 0; Hub.hitN = 0; });
+await wait(400);
+await A.evaluate(() => { const P = HUB.spawn, s = Hub.ship; s.x = P.x - 120; s.y = P.y; s.aim = 0; Input.mouseMoved = false; Input.down = true; });
+await wait(600); await A.evaluate(() => { Input.down = false; });
+ok(await until(B, () => Hub.hitN > 0, 4000), '互射：房主開火，隊友那邊被打中（被推開、閃白）');
+await A.screenshot({ path: SHOTS + '房間測試_互射.png' });
+
 // 隊友準備：發射台按 E → 準備 → 選武器 → 起始晶片
 const prepare = async (p, wpn) => {
   if (wpn !== await p.evaluate(() => Hub.weaponId)) {  // 武器架：開過去按 E 裝備
     await p.evaluate(w => { const z = Hub.zone('rack:' + w), s = Hub.ship; s.x = z.x; s.y = z.y; }, wpn);
     await wait(300); await p.keyboard.press('e'); await wait(300);
   }
-  await p.evaluate(() => { const z = Hub.zone('launch'), s = Hub.ship; s.x = z.x; s.y = z.y; });
+  await p.evaluate(() => { const z = Hub.zone('launch'), s = Hub.ship; s.x = z.x; s.y = z.y; Hub.kick = { x: 0, y: 0 }; });  // 推力歸零（互射剛被打中）
   await wait(300); await p.keyboard.press('e'); await wait(300);
   await p.click('[data-act="depart"]'); await wait(300);
   await p.click('[data-act="startchip"]'); await wait(500);
