@@ -25,7 +25,10 @@ await at('pad:wraith', 30); await shot('停機坪');
 await at('pad:gate', 30); await shot('停機坪_鎖住');
 await at('rack:scatter', 20); await shot('武器架');
 await at('rack:blade', 20); await shot('武器架_鎖住');
-await at('armory', 70); await shot('門口');
+await at('armory', 30); await shot('操作台');
+await at('chips', 60); await shot('晶片實驗室');
+await at('stats', 60); await shot('戰績室');
+await p.evaluate(() => { const d = HUB.rooms.deck, s = Hub.ship; s.x = d.x + d.w / 2; s.y = d.y + d.h / 2 + 40; Hub.update(0.016); }); await shot('觀景台');
 await at('launch', -40); await shot('發射台旁');
 for (const id of ['armory', 'chips', 'stats', 'launch']) { await p.evaluate(id => Screen.basePanel(id), id); await shot('面板_' + { armory: '軍械庫', chips: '晶片庫', stats: '戰績', launch: '發射台' }[id]); }
 await p.evaluate(() => Screen.depart()); await shot('出發_起始晶片');
@@ -36,7 +39,7 @@ await p.evaluate(() => {
   Net.role = 'host'; Net.code = 'K7QX'; Net.ping = 42; Net.chapter = 1;
   Net.peers = [{ slot: 2, linked: true, inRoom: true, ready: true, pick: { ship: 'bulwark', weapon: 'laser', chip: null } }, { slot: 3, linked: true, inRoom: true, ready: false }];
   Net.refreshPeers(); Net.enterRoom();
-  Net.roomMates = { 2: { x: 520, y: 470, a: 0.6, s: 'bulwark', m: true, r: true, b: false, at: 1e12 }, 3: { x: 880, y: 160, a: -1.2, s: 'wraith', m: false, r: false, b: true, at: 1e12 } };
+  const L = Hub.zone('launch'); Net.roomMates = { 2: { x: L.x + 160, y: L.y - 40, a: 0.6, s: 'bulwark', m: true, r: true, b: false, at: 1e12 }, 3: { x: L.x - 60, y: L.y - 220, a: -1.2, s: 'wraith', m: false, r: false, b: true, at: 1e12 } };
 });
 await at('launch', -60); await shot('多人房間');
 await p.evaluate(() => Screen.basePanel('launch')); await shot('多人房間_發射台');
@@ -51,7 +54,7 @@ await shot('結算_新解鎖');
 await p.evaluate(() => {
   const sh = Object.keys(SHIPS), wp = Object.keys(WEAPONS);
   Object.assign(HUB, hubLayout(Array.from({ length: 8 }, (_, i) => sh[i % sh.length]), Array.from({ length: 7 }, (_, i) => wp[i % wp.length])));
-  GLHub.built = false; GLHub.gBase.clear(); Game.state = 'title'; Screen.title();
+  GLHub.built = false; Game.state = 'title'; Screen.title();
   const L = Hub.zone('launch'); Hub.ship.x = L.x - 150; Hub.ship.y = L.y;
 });
 await shot('擴充_下面');

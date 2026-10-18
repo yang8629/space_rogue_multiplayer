@@ -251,6 +251,13 @@ function drawHubHud() {
     ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.roundRect(x - w / 2, y - 10, w, 20, 10); ctx.fill();
     ctx.font = 'bold 12px Microsoft JhengHei'; ctx.fillStyle = '#1a1205'; ctx.fillText(txt, x, y + 1);
   };
+  // 房間名：印在地板左上角（大字、淡色、房間的顏色），英文小字在下面
+  for (const r of Object.values(HUB.rooms)) {
+    ctx.textAlign = 'left'; ctx.globalAlpha = 0.55;
+    label(r.label, sx(r.x + 18), sy(r.y + 64), r.color, Math.round(20 * k));
+    ctx.font = `bold ${Math.round(10 * k)}px Segoe UI`; ctx.fillStyle = r.color; ctx.fillText(r.en, sx(r.x + 20), sy(r.y + 88));
+    ctx.globalAlpha = 1; ctx.textAlign = 'center';
+  }
   for (const z of HUB.zones) {
     const x = sx(z.x), n = Screen.hubNew(z, seen);
     if (z.kind === 'rack') {  // 武器架：名字（裝備中的加「・裝備中」，沒解鎖的灰＋🔒）
@@ -262,7 +269,7 @@ function drawHubHud() {
       label(`${ok ? '' : '🔒 '}${z.label}`, x, y, !ok ? '#6a79ad' : z.ship === Hub.shipId ? hudMix(z.color, -0.45) : z.color, 13);  // 自己開走的那艘：字變暗
       if (n) badge(n, x + 40 * k, sy(z.y - z.r + 4));
     } else {
-      const y = sy(z.kind === 'door' ? HUB.WALL + 30 : z.kind === 'launch' ? z.y - z.r - 14 : z.y + 78);
+      const y = sy(z.kind === 'console' ? z.y + 62 : z.kind === 'launch' ? z.y - z.r - 14 : z.y + 78);
       label(z.label, x, y, z.kind === 'term' && Hub.coop() ? '#4a5886' : z.color, 15);  // 多人選配裝中：終端機不能用（變暗）
       if (n) badge(n, x + 60, y - 18);
     }

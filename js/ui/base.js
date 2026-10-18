@@ -86,7 +86,7 @@ Object.assign(Screen, {
       }
     } else {
       const what = Hub.coop() && z.kind === 'term' ? '多人準備中不能用'
-        : { door: `進入${z.label.replace(/^\S+ /, '')}`, launch: !Hub.coop() ? '選章節、出發' : Net.meReady ? '已準備，等其他人' : Net.role === 'host' ? '選章、準備' : '準備：選起始晶片', term: z.id === 'coop' ? '開房間或加入朋友的房間' : `用${SHIPS[Hub.shipId].name}＋${WEAPONS[Hub.weaponId].name}進靶場` }[z.kind];
+        : { console: `打開${z.label.replace(/^\S+ /, '')}`, launch: !Hub.coop() ? '選章節、出發' : Net.meReady ? '已準備，等其他人' : Net.role === 'host' ? '選章、準備' : '準備：選起始晶片', term: z.id === 'coop' ? '開房間或加入朋友的房間' : `用${SHIPS[Hub.shipId].name}＋${WEAPONS[Hub.weaponId].name}進靶場` }[z.kind];
       body = `<div class="ttl" style="color:${z.color}">${z.label}</div><div class="hub-press"><b>E</b> ${what}</div>`;
     }
     el.innerHTML = body; el.classList.add('on');

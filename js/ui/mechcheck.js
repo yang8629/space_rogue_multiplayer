@@ -2663,29 +2663,26 @@ const MechCheck = {
           got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到起始晶片（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
       } finally { Game.state = st; Net.chapter = ch; }
     }],
-    ['局外成長', '基地配置', '基地照數量自動排（hubLayout）：每艘飛船、每把武器、每扇門、每台終端機都有位置；停機坪、武器架、發射台在牆內；互動範圍彼此不重疊。現在的數量和假的「8 艘飛船、7 把武器、5 扇門、3 台終端機」都要過', M => {
+    ['局外成長', '基地配置', '基地（分區太空站）照數量自動排（hubLayout）：每艘飛船、每把武器、每台終端機、每個操作台都有位置；互動點都在房間裡、開得到（不在柱子上）、互動範圍不重疊；每個房間都走得到（從發射台出發經過開口）。現在的數量和假的「8 艘飛船、7 把武器、3 台終端機」都要過', M => {
       const check = L => {
-        const C = HUB, bad = [], Z = L.zones;
-        for (const z of Z.filter(z => ['pad', 'rack', 'launch'].includes(z.kind)))
-          if (z.x - z.r < C.WALL || z.x + z.r > L.W - C.WALL || z.y - z.r < C.WALL || z.y + z.r > L.H - C.WALL) bad.push(`${z.id} 超出牆`);
-        for (let i = 0; i < Z.length; i++) for (let j = i + 1; j < Z.length; j++) {
-          const a = Z[i], b = Z[j];
-          if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r - 0.5) bad.push(`${a.id}／${b.id} 重疊`);
-        }
+        const bad = [], Z = L.zones, inRect = (x, y, r, R) => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h;
+        const free = (x, y, r) => L.walk.some(R => inRect(x, y, r, R)) && !L.blocks.some(b => Math.hypot(x - clamp(x, b.x, b.x + b.w), y - clamp(y, b.y, b.y + b.h)) < r);
+        for (const z of Z) if (!free(z.x, z.y, 14)) bad.push(`${z.id} 開不到`);
+        for (let i = 0; i < Z.length; i++) for (let j = i + 1; j < Z.length; j++) { const a = Z[i], b = Z[j]; if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r - 0.5) bad.push(`${a.id}／${b.id} 重疊`); }
+        // 走得到：從發射台旁邊用 20 的格子往外擴（飛船半徑 12），每個互動點附近要有走到的格子
+        const G = 20, seen = new Set(), L0 = Z.find(z => z.kind === 'launch'), q = [[Math.round((L0.x - 170) / G), Math.round(L0.y / G)]];
+        while (q.length) { const [i, j] = q.pop(), key = i + ',' + j; if (seen.has(key) || !free(i * G, j * G, 12)) continue; seen.add(key); q.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]); }
+        for (const z of Z) { let ok = false; for (let i = -3; i <= 3 && !ok; i++) for (let j = -3; j <= 3 && !ok; j++) ok = seen.has((Math.round(z.x / G) + i) + ',' + (Math.round(z.y / G) + j)); if (!ok) bad.push(`${z.id} 走不到`); }
         return bad;
       };
       const ships = Object.keys(SHIPS), weapons = Object.keys(WEAPONS);
-      const now = { W: HUB.W, H: HUB.H, zones: HUB.zones };
-      const allNow = ships.every(id => HUB.zones.some(z => z.ship === id)) && weapons.every(id => HUB.zones.some(z => z.weapon === id)) && HUB_DOORS.every(d => Hub.zone(d.id)) && HUB_TERMS.every(t => Hub.zone(t.id));
-      const fakeShips = Array.from({ length: 8 }, (_, i) => ships[i] || 'ship' + i), fakeWeapons = Array.from({ length: 7 }, (_, i) => weapons[i] || 'wpn' + i);
-      const fakeDoors = [...HUB_DOORS, { id: 'd4', label: 'D4', color: '#fff', tab: 'stats' }, { id: 'd5', label: 'D5', color: '#fff', tab: 'stats' }];
-      const fakeTerms = [...HUB_TERMS, { id: 't3', label: 'T3', color: '#fff' }];
-      const big = hubLayout(fakeShips, fakeWeapons, fakeDoors, fakeTerms);
-      const allBig = big.zones.filter(z => z.kind === 'pad').length === 8 && big.zones.filter(z => z.kind === 'rack').length === 7 && big.zones.filter(z => z.kind === 'door').length === 5 && big.zones.filter(z => z.kind === 'term').length === 3;
-      const b1 = check(now), b2 = check(big);
+      const allNow = ships.every(id => HUB.zones.some(z => z.ship === id)) && weapons.every(id => HUB.zones.some(z => z.weapon === id)) && HUB_TERMS.every(t => Hub.zone(t.id)) && ['armory', 'chips', 'stats'].every(id => Hub.zone(id));
+      const big = hubLayout(Array.from({ length: 8 }, (_, i) => ships[i] || 'ship' + i), Array.from({ length: 7 }, (_, i) => weapons[i] || 'wpn' + i), [...HUB_TERMS, { id: 't3', label: 'T3', color: '#fff' }]);
+      const allBig = big.zones.filter(z => z.kind === 'pad').length === 8 && big.zones.filter(z => z.kind === 'rack').length === 7 && big.zones.filter(z => z.kind === 'term').length === 3;
+      const b1 = check(HUB), b2 = check(big);
       return { ok: allNow && allBig && !b1.length && !b2.length,
-        got: `現在 ${Math.round(HUB.W)}×${Math.round(HUB.H)}：${allNow ? '每樣都有位置' : '有東西沒位置（錯誤）'}${b1.length ? '；' + b1.slice(0, 4).join('、') + '（錯誤）' : '、沒有重疊或超出'}；`
-          + `假的 8 艘／7 把／5 門／3 台：${Math.round(big.W)}×${Math.round(big.H)}、停機坪 ${big.padRows.length} 排${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、沒有重疊或超出'}` };
+        got: `現在 ${Math.round(HUB.W)}×${Math.round(HUB.H)}：${allNow ? '每樣都有位置' : '有東西沒位置（錯誤）'}${b1.length ? '；' + b1.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}；`
+          + `假的 8 艘／7 把／3 台：${Math.round(big.W)}×${Math.round(big.H)}${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}` };
     }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL;
