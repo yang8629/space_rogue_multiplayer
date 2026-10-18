@@ -8,7 +8,7 @@
 //   上面一排：晶片實驗室、觀景台、戰績室。房間之間隔一道牆，牆上的開口讓飛船過去。
 //   房間、開口都是矩形：飛船只能待在這些矩形裡（walk）。
 //   點位由 hubLayout 照數量算：加飛船 = 機庫的圓圈變大，加武器 = 軍械庫多一個架（一排 ARMORY_COLS 個），房間自己變大
-//   kind 決定按 E 做什麼（Hub.ACT）：pad 停機位、rack 武器架、console 房間裡的全像操作台（打開面板）、launch 發射台、term 終端機
+//   kind 決定按 E 做什麼（Hub.ACT）：pad 停機位、rack 武器架、console 房間裡的操作台（打開面板）、launch 發射台、term 終端機
 const HUB = {
   WT: 40, MARGIN: 140, TOP: 100,          // 牆厚；基地外圍留白（看得到太空）；畫面上方標題列的高度（螢幕 px）
   SPEED: 320, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
@@ -19,7 +19,7 @@ const HUB = {
   DOOR_W: 170,                            // 牆上開口的寬
   CONSOLE_R: 70, TERM_R: 70, LAUNCH_R: 72, LAUNCH_PAD: 62, RUNWAY_W: 84,
 };
-// 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的全像操作台打開哪個面板
+// 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的操作台打開哪個面板
 const HUB_ROOMS = {
   hall: { label: '發射大廳', en: 'LAUNCH HALL', color: '#4cc9f0' },
   hangar: { label: '機庫', en: 'HANGAR', color: '#7fb4ff' },

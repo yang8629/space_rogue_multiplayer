@@ -45,16 +45,16 @@ function hubWeapon(g, id, x, y, rot, k, col, mode = '', glowFn = null) {
   if (M.orb && !mode) { const [ox, oy, r] = M.orb, [px, py] = T([ox, oy]); g.circle(px, py, r * k).fill(col).stroke({ width: 1.5, color: HUB_INK }); g.circle(px - 2 * k, py - 2 * k, r * 0.4 * k).fill({ color: 0xffffff, alpha: 0.8 }); }
   if (glowFn && !mode) for (const [gx, gy, r] of M.glow) { const [px, py] = T([gx, gy]); glowFn(px, py, r * 4 * k, col, 0.45); }
 }
-// 操作台上的全像圖樣：每個面板一個（軍械庫 = 交叉的刀、晶片庫 = 晶片、戰績 = 獎盃）
-const CONSOLE_HOLO = {
-  armory: (g, x, y, c, a) => { for (const sg of [-1, 1]) g.moveTo(x - 14 * sg, y - 14).lineTo(x + 14 * sg, y + 14).stroke({ width: 4, color: c, alpha: a }); },
-  chips: (g, x, y, c, a) => {
-    g.rect(x - 12, y - 12, 24, 24).stroke({ width: 3, color: c, alpha: a });
-    for (let i = -1; i <= 1; i++) for (const sg of [-1, 1]) { g.moveTo(x + i * 7, y + sg * 12).lineTo(x + i * 7, y + sg * 18).stroke({ width: 2, color: c, alpha: a }); g.moveTo(x + sg * 12, y + i * 7).lineTo(x + sg * 18, y + i * 7).stroke({ width: 2, color: c, alpha: a }); }
+// 操作台螢幕上的圖樣：每個面板一個（軍械庫 = 交叉的刀、晶片庫 = 晶片、戰績 = 獎盃）；k = 大小
+const CONSOLE_ICON = {
+  armory: (g, x, y, c, a, k = 1) => { for (const sg of [-1, 1]) g.moveTo(x - 14 * k * sg, y - 14 * k).lineTo(x + 14 * k * sg, y + 14 * k).stroke({ width: 4 * k, color: c, alpha: a }); },
+  chips: (g, x, y, c, a, k = 1) => {
+    g.rect(x - 12 * k, y - 12 * k, 24 * k, 24 * k).stroke({ width: 3 * k, color: c, alpha: a });
+    for (let i = -1; i <= 1; i++) for (const sg of [-1, 1]) { g.moveTo(x + i * 7 * k, y + sg * 12 * k).lineTo(x + i * 7 * k, y + sg * 18 * k).stroke({ width: 2 * k, color: c, alpha: a }); g.moveTo(x + sg * 12 * k, y + i * 7 * k).lineTo(x + sg * 18 * k, y + i * 7 * k).stroke({ width: 2 * k, color: c, alpha: a }); }
   },
-  stats: (g, x, y, c, a) => {
-    g.poly([x - 13, y - 14, x + 13, y - 14, x + 9, y + 2, x - 9, y + 2]).fill({ color: c, alpha: a * 0.7 }).stroke({ width: 2, color: c, alpha: a });
-    g.rect(x - 3, y + 2, 6, 8).fill({ color: c, alpha: a }); g.rect(x - 10, y + 10, 20, 4).fill({ color: c, alpha: a });
+  stats: (g, x, y, c, a, k = 1) => {
+    g.poly([x - 13 * k, y - 14 * k, x + 13 * k, y - 14 * k, x + 9 * k, y + 2 * k, x - 9 * k, y + 2 * k]).fill({ color: c, alpha: a * 0.7 }).stroke({ width: 2 * k, color: c, alpha: a });
+    g.rect(x - 3 * k, y + 2 * k, 6 * k, 8 * k).fill({ color: c, alpha: a }); g.rect(x - 10 * k, y + 10 * k, 20 * k, 4 * k).fill({ color: c, alpha: a });
   },
 };
 // 各房間的地板：底色、板子大小、花紋（grate 格柵、trace 電路紋、ring 大廳中間的圓、carpet 觀景台中間一塊）
@@ -71,7 +71,7 @@ const GLHub = {
   init() {
     const L = GLR.L;
     this.gBase = new PIXI.Graphics(); L.hub.addChild(this.gBase);   // 不會動的：牆、地板、擺設、停機位、武器架、操作台、發射台的底座
-    this.gAnim = new PIXI.Graphics(); L.hub.addChild(this.gAnim);   // 會動的：光圈、全像、導管光點、燈、無人機、發射台的箭頭
+    this.gAnim = new PIXI.Graphics(); L.hub.addChild(this.gAnim);   // 會動的：光圈、操作台螢幕、導管光點、燈、無人機、發射台的箭頭
     this.pG = GLR.pool('hubGlow', L.hub, () => new PIXI.Sprite());  // 加法發光
     this.built = false;
   },
@@ -318,7 +318,7 @@ const GLHub = {
     for (const [i, [x, y]] of D.lamps.entries()) this.glow(x, y + 30, 80, 0xfff2c4, 0.11 + 0.02 * Math.sin(t * 7 + i * 1.7));
     for (const [i, [x, y]] of D.beacons.entries()) { const on = Math.sin(t * 2.4 + i * Math.PI / 2) > 0.6; g.circle(x, y, 3.5).fill(on ? 0xff4d6d : 0x5a1f2e); if (on) this.glow(x, y, 26, 0xff4d6d, 0.5); }
     for (const e of D.leds) {
-      if (e.trophy) { const bob = Math.sin(t * 1.5 + e.x) * 2; CONSOLE_HOLO.stats(g, e.x, e.y + bob, e.col, 0.95); this.glow(e.x, e.y, 30, e.col, 0.3); }
+      if (e.trophy) { CONSOLE_ICON.stats(g, e.x, e.y, e.col, 0.95); this.glow(e.x, e.y, 30, e.col, 0.3); }
       else if (e.screen) g.rect(e.x - 3, e.y - 50, 6, 100).fill({ color: e.col, alpha: 0.25 + 0.15 * Math.sin(t * 2 + e.x) });
       else { const on = Math.sin(t * 3 + e.k) > 0; g.circle(e.x, e.y, 2.5).fill(on ? e.col : 0x1a3a30); if (on) this.glow(e.x, e.y, 10, e.col, 0.5); }
     }
@@ -355,12 +355,11 @@ const GLHub = {
         hubWeapon(g, z.weapon, z.x, z.y, 0, 1, col, on ? 'ghost' : ok ? '' : 'dark', (x, y, r, c, a) => this.glow(x, y, r, c, a));
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 56, 0xffd166, 0.25 + 0.2 * Math.sin(t * 3));
       } else if (z.kind === 'console') {
-        // 全像：底座上轉動的圈、浮著的圖樣（靠近時變亮）
-        const k = near ? 1 : 0.6, bob = Math.sin(t * 2 + z.x) * 3;
+        // 底座中間的圓形螢幕：房間色的底光＋圖樣（靠近時變亮）
+        const k = near ? 1 : 0.6;
         this.glow(z.x, z.y + 8, 50, col, 0.3 * k);
-        g.ellipse(z.x, z.y - 14 + bob, 26, 8).stroke({ width: 2, color: col, alpha: 0.6 * k });
-        glArc(g, z.x, z.y - 14 + bob, 34, t * 1.5, t * 1.5 + 2.2); g.stroke({ width: 2, color: col, alpha: 0.8 * k });
-        (CONSOLE_HOLO[z.id] || CONSOLE_HOLO.stats)(g, z.x, z.y - 16 + bob, col, k);
+        g.circle(z.x, z.y + 8, 15).fill({ color: col, alpha: 0.18 * k });
+        (CONSOLE_ICON[z.id] || CONSOLE_ICON.stats)(g, z.x, z.y + 8, col, k, 0.62);
         if (near) g.circle(z.x, z.y + 8, z.r - 16 + Math.sin(t * 3) * 2).stroke({ width: 3, color: col, alpha: 0.7 });
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 60, 0xffd166, 0.25 + 0.2 * Math.sin(t * 3));
       } else if (z.kind === 'launch') {
