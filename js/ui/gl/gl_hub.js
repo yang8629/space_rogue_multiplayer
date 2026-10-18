@@ -13,9 +13,12 @@ function hubShade(c, k) {
 // 切面的亮度：法線朝左上（光的方向）越亮
 const hubLit = (nx, ny) => (-nx - ny) / Math.SQRT2;
 
-// 操作台螢幕上的圖樣：每個面板一個（軍械庫 = 交叉的刀、晶片庫 = 晶片、戰績 = 獎盃）；k = 大小
+// 操作台螢幕上的圖樣：每個面板一個（軍械庫 = 槍、晶片庫 = 晶片、戰績 = 獎盃）；k = 大小
 const CONSOLE_ICON = {
-  armory: (g, x, y, c, a, k = 1) => { for (const sg of [-1, 1]) g.moveTo(x - 14 * k * sg, y - 14 * k).lineTo(x + 14 * k * sg, y + 14 * k).stroke({ width: 4 * k, color: c, alpha: a }); },
+  armory: (g, x, y, c, a, k = 1) => {  // 槍的側面（槍口朝右）：槍托、槍身、槍管、握把
+    for (const pts of [[[-19, -3], [-10, -6], [-10, 2], [-19, 6]], [[-10, -7], [8, -7], [8, 1], [-10, 1]], [[8, -6], [19, -6], [19, -2], [8, -2]], [[-5, 1], [1, 1], [-1, 10], [-7, 10]]])
+      g.poly(pts.flatMap(([px, py]) => [x + px * k, y + py * k])).fill({ color: c, alpha: a * 0.7 }).stroke({ width: 2 * k, color: c, alpha: a });
+  },
   chips: (g, x, y, c, a, k = 1) => {
     g.rect(x - 12 * k, y - 12 * k, 24 * k, 24 * k).stroke({ width: 3 * k, color: c, alpha: a });
     for (let i = -1; i <= 1; i++) for (const sg of [-1, 1]) { g.moveTo(x + i * 7 * k, y + sg * 12 * k).lineTo(x + i * 7 * k, y + sg * 18 * k).stroke({ width: 2 * k, color: c, alpha: a }); g.moveTo(x + sg * 12 * k, y + i * 7 * k).lineTo(x + sg * 18 * k, y + i * 7 * k).stroke({ width: 2 * k, color: c, alpha: a }); }
