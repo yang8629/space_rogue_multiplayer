@@ -261,7 +261,7 @@ function drawHubHud() {
   for (const z of HUB.zones) {
     const x = sx(z.x), n = Screen.hubNew(z, seen);
     if (z.kind === 'rack') {  // 武器架：名字（裝備中的加「・裝備中」，沒解鎖的灰＋🔒）
-      const ok = isUnlocked('weapon', z.weapon), on = z.weapon === Hub.weaponId, y = sy(z.y + z.r + 10);
+      const ok = isUnlocked('weapon', z.weapon), on = z.weapon === Hub.weaponId, y = sy(z.y + 44);
       label(`${ok ? '' : '🔒 '}${z.label}${on ? '（裝在船上）' : ''}`, x, y, !ok ? '#6a79ad' : on ? hudMix(z.color, -0.45) : z.color, 13);  // 裝備中：武器跟著飛船，架子空著（字變暗）
       if (n) badge(n, x + 36 * k, sy(z.y - z.r + 10));
     } else if (z.kind === 'pad') {
