@@ -477,19 +477,30 @@ body.detail .detail-hint button { background: #1c3a6e; }
 .statl .sv { margin-right: 0; }
 .card .statl { gap: 3px 9px; font-size: 12px; }
 
-/* ===== 基地（主畫面，js/ui/base.js）：上方標題＋系統按鈕、總覽列、分頁；高度固定，換分頁時視窗不會忽大忽小 ===== */
-.scr.base { height: min(860px, 94vh); display: flex; flex-direction: column; gap: 10px; }
-.base-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.base-logo h1 { font-size: 34px; display: inline; }
-.base-logo .en { color: #4cc9f0; letter-spacing: 6px; font-size: 12px; margin-left: 12px; }
+/* ===== 基地（主畫面）：場景在 WebGL（gl_hub.js），這裡是蓋在上面的 DOM：上方列、說明卡、操作說明（.hub-ui，不擋滑鼠）；門後的面板（.scr.base） ===== */
+#screen.hub { background: transparent; pointer-events: none; align-items: stretch; justify-content: stretch; }
+.hub-ui { position: relative; width: 100%; height: 100%; }
+.hub-ui button, .hub-ui .ulk-fresh { pointer-events: auto; }
+.hub-top { position: absolute; top: 14px; left: 18px; right: 18px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.hub-logo h1 { display: inline; font-size: 30px; color: #bdf0ff; letter-spacing: 3px; text-shadow: 0 0 18px #4cc9f0, 0 2px 0 #03050c; }
+.hub-logo .en { color: #4cc9f0; letter-spacing: 6px; font-size: 12px; margin-left: 12px; }
+.hub-logo .ulk-tiles { margin-top: 6px; text-shadow: 0 1px 2px #03050c; }
 .base-sys { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.base-sys button { padding: 6px 12px; font-size: 13px; }
+.base-sys button { padding: 6px 12px; font-size: 13px; background: rgba(11, 16, 36, .85); }
 .base-sys #refreshBtn:not(:empty) { border-color: #4cc9f0; color: #4cc9f0; }
-.base .ulk-tiles { margin-top: 0; }
-.base .ulk-fresh { margin: 0 auto; }
-.base-tabs { display: flex; gap: 6px; border-bottom: 1px solid #2a3a7a; flex-wrap: wrap; }
-.base-tab { position: relative; border-radius: 8px 8px 0 0; border-bottom: none; padding: 8px 18px; font-size: 14px; color: #8fa3d9; background: #070b1a; }
-.base-tab.on { color: #bdf0ff; background: #13204a; border-color: #4cc9f0; }
+.hub-ui .ulk-fresh { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); margin: 0; }
+.hub-info { position: absolute; right: 18px; bottom: 18px; width: 340px; display: none; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px;
+  background: rgba(11, 16, 36, .92); border: 1px solid #2a3a7a; box-shadow: 0 0 24px rgba(76, 201, 240, .15); }
+.hub-info.on { display: flex; }
+.hub-info .ttl { font-size: 18px; font-weight: 700; letter-spacing: 2px; }
+.hub-info .ttl .ty { margin-left: 10px; font-size: 11px; letter-spacing: 3px; color: #6a79ad; }
+.hub-info .ds { font-size: 13px; color: #c9d4ff; line-height: 1.7; }
+.hub-info .ty { font-size: 12px; color: #8fa3d9; }
+.hub-press { font-size: 13px; color: #bdf0ff; }
+.hub-press b, .hub-keys b { display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 4px; border: 1px solid #bdf0ff; border-radius: 4px; text-align: center; }
+.hub-keys { margin-top: 4px; font-size: 12px; color: #8fa3d9; text-shadow: 0 1px 2px #03050c; }
+.scr.base.compact { height: auto; max-width: 680px; }  /* 發射台：選章＋出發，小視窗 */
+.scr.base { height: min(860px, 94vh); display: flex; flex-direction: column; gap: 10px; }
 .base-body { flex: 1; overflow: auto; padding-right: 4px; }
 .base-body h3 { margin: 14px 0 0; font-size: 15px; color: #c9d4ff; }
 .base-body .cards { margin: 10px 0; }
@@ -500,23 +511,7 @@ i.new { position: absolute; top: -7px; right: -7px; font-style: normal; font-siz
 .cards.full .card .det { display: flex; flex-direction: column; gap: 8px; }
 .cards.full .card .det .ds { flex: none; }
 .cards.full .card .brief { display: none; }
-/* 機庫：飛船一排、選中的大圖＋說明、下方選章＋出發 */
-.hg-slots { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
-.hg-slot { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 112px; padding: 6px 4px; border-radius: 10px; background: #070b1a; border-color: #22305e; }
-.hg-slot img { width: 64px; height: 64px; }
-.hg-slot span { font-size: 13px; color: var(--c); }
-.hg-slot.on { border-color: var(--c); box-shadow: 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); background: #0d1433; }
-.hg-slot.locked img, .hg-ship.locked img { filter: brightness(0) drop-shadow(0 0 1px #5a6a9e) drop-shadow(0 0 1px #5a6a9e); }  /* 沒解鎖：黑色剪影 */
-.hg-slot.locked span { color: #6a79ad; }
-.hg-main { display: flex; gap: 20px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
-.hg-ship { width: 220px; height: 220px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--c) 22%, transparent) 0%, transparent 68%); }
-.hg-ship img { width: 200px; height: 200px; }
-.hg-info { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
-.hg-info .ttl { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
-.hg-info .ttl .ty { margin-left: 10px; font-size: 12px; letter-spacing: 3px; color: #6a79ad; }
-.hg-info .ds { font-size: 13px; color: #c9d4ff; line-height: 1.7; }
-.hg-info .ty { font-size: 12px; color: #8fa3d9; }
+/* 說明卡、發射台 */
 .hg-desc .det { display: block; }  /* 機庫：一句話＋完整的能力說明都顯示 */
 .hg-desc .brief { color: #fff; margin-bottom: 6px; }
 .hg-launch { border-top: 1px solid #22305e; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }

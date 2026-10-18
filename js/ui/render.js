@@ -31,7 +31,7 @@ function render() {
       ctx.fillText('畫面載入失敗：請檢查網路後重新整理；還是不行的話，請開啟瀏覽器的硬體加速或更新顯示卡驅動', VW / 2, VH / 2);
     }
   }
-  if (!Game.inArena) return;
+  if (!Game.inArena) { if (Game.state === 'title' && Hub.ready) drawHubHud(); return; }
   drawHUD();
   if (Input.touch && Game.state === 'play') drawSticks();
 }
@@ -256,6 +256,40 @@ function drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left�
 
 // 每 0.5 秒算一次 FPS（主迴圈每幀呼叫 FPS.tick）
 const FPS = { v: 60, n: 0, t0: 0, tick(now) { this.n++; if (now - this.t0 >= 500) { this.v = Math.round(this.n * 1000 / (now - this.t0)); this.n = 0; this.t0 = now; } } };
+// 基地的文字標籤：門、終端機、發射台的名稱，停機坪的船名（沒解鎖加 🔒），有「新」的亮金色標記，靠近時船上方提示「E」
+function drawHubHud() {
+  const k = Hub.k, sx = x => (x - Hub.cam.x) * k, sy = y => (y - Hub.cam.y) * k, seen = unlockSeen();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const label = (txt, x, y, color, size = 14) => {
+    ctx.font = `bold ${size}px Microsoft JhengHei`; ctx.lineWidth = 4; ctx.strokeStyle = '#03050c';
+    ctx.strokeText(txt, x, y); ctx.fillStyle = color; ctx.fillText(txt, x, y);
+  };
+  const badge = (n, x, y) => {
+    const txt = n > 1 ? `新 ${n}` : '新', w = n > 1 ? 40 : 26;
+    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.roundRect(x - w / 2, y - 10, w, 20, 10); ctx.fill();
+    ctx.font = 'bold 12px Microsoft JhengHei'; ctx.fillStyle = '#1a1205'; ctx.fillText(txt, x, y + 1);
+  };
+  for (const z of HUB.zones) {
+    const x = sx(z.x), n = Screen.hubNew(z, seen);
+    if (z.kind === 'pad') {
+      const ok = isUnlocked('ship', z.ship), y = sy(z.y + z.r + 18);
+      label(`${ok ? '' : '🔒 '}${z.label}${z.ship === Hub.shipId ? '（開走了）' : ''}`, x, y, ok ? z.color : '#6a79ad', 13);
+      if (n) badge(n, x + 40 * k, sy(z.y - z.r + 4));
+    } else {
+      const y = sy(z.kind === 'door' ? HUB.WALL + 30 : z.kind === 'launch' ? z.y - z.r - 14 : z.y + 78);
+      label(z.label, x, y, z.color, 15);
+      if (n) badge(n, x + 60, y - 18);
+    }
+  }
+  if (Hub.near) {  // 靠近：船上方的「E」
+    const s = Hub.ship, x = sx(s.x), y = sy(s.y) - 34;
+    ctx.fillStyle = 'rgba(7, 11, 26, 0.85)'; ctx.strokeStyle = '#bdf0ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(x - 13, y - 13, 26, 26, 6); ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 15px Segoe UI'; ctx.fillStyle = '#bdf0ff'; ctx.fillText('E', x, y + 1);
+  }
+  ctx.textBaseline = 'alphabetic';
+}
+
 function drawHUD() {
   const p = Game.player, s = Game.stats, C = Game.combat, T = Input.touch;
   const hpW = Math.min(220, VW * 0.42);

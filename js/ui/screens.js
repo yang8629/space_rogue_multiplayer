@@ -80,7 +80,8 @@ const Screen = {
   show(html) {
     // 有卡片的畫面：卡片只顯示精簡說明，按 Shift（手機按「詳細」）切換完整說明
     if (html.includes('class="card')) html += '<div class="detail-hint">按 Shift 切換詳細說明　<button data-act="detail">詳細</button></div>';
-    this.el.innerHTML = html; this.el.classList.remove('hidden');
+    this.el.innerHTML = html; this.el.classList.remove('hidden', 'hub');
+    this.hubOn = false;  // 基地的飛船只在基地畫面（hubView）能動
   },
   hide() {
     this.el.classList.add('hidden');
@@ -116,10 +117,9 @@ const Screen = {
       case 'quitrun': Game.quitRun(); break;
       case 'title': Net.leave(); Game.mates = []; Game.state = 'title'; Game.inArena = false; Screen.title(); break;
       case 'base': Screen.title(arg); break;
-      case 'hgship': Screen.hgShip = arg; Screen.title('hangar'); break;
-      case 'basech': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.title('hangar'); } break;
+      case 'hub': Screen.hubView(); break;
+      case 'basech': if (chapterUnlocked(+arg)) { Game.chapterId = +arg; Screen.basePanel('launch'); } break;
       case 'depart': Screen.depart(); break;
-      case 'hgrange': Screen.weaponSelect('range', Screen.hgPick()); break;  // 靶場一律全開：鎖住的飛船也能試
       case 'select': Screen.select(arg); break;
       case 'ship': { const [mode, ship] = arg.split(':'); Screen.weaponSelect(mode, ship); break; }
       case 'weapon': {
@@ -577,12 +577,12 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button></div><div id="copyBox"></div></div>`);
   },
 
-  // 這一局新達成的解鎖條件（結算畫面；回到基地時也顯示一次，例如通關後直接回基地）；btn = 「去看」按鈕（跳到第一樣所在的分頁）
+  // 這一局新達成的解鎖條件（結算畫面；回到基地時也顯示一次，例如通關後直接回基地）；btn = 「回基地看」按鈕（第一樣在哪個面板就打開哪個）
   unlockFreshHtml(btn = true) {
     const F = Game.unlockFresh || [];
     if (!F.length) return '';
-    const tab = (BASE_TABS.find(t => t.kinds.includes(F[0].kind)) || BASE_TABS[0]).id;
-    return `<div class="ulk-fresh">🔓 ${CFG.UNLOCK_ALL ? '達成解鎖條件' : '新解鎖'}：${F.map(u => `<b>${unlockName(u.kind, u.id)}</b>`).join('、')}${btn ? `<button data-act="base" data-arg="${tab}">回基地看</button>` : ''}</div>`;
+    const P = BASE_PANELS.find(p => p.kinds.includes(F[0].kind)), arg = P ? ` data-arg="${P.id}"` : '';  // 飛船沒有面板：回基地，停機坪上有「新」
+    return `<div class="ulk-fresh">🔓 ${CFG.UNLOCK_ALL ? '達成解鎖條件' : '新解鎖'}：${F.map(u => `<b>${unlockName(u.kind, u.id)}</b>`).join('、')}${btn ? `<button data-act="base"${arg}>回基地看</button>` : ''}</div>`;
   },
   records(msg = '', confirmClear = false) {
     const list = Game.loadRecords();

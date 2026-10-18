@@ -20,7 +20,7 @@ addEventListener('keydown', e => {
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
   if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k, e.shiftKey)) return;
-  if (k === ' ') { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } return; }
+  if (k === ' ') { e.preventDefault(); if (Game.state === 'play' || Screen.hubOn) { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
   if (k === 'escape' && Game.state === 'play' && !e.repeat) { Game.togglePauseMenu(); return; }  // 戰鬥中：選單（繼續／離開遊戲）
@@ -28,7 +28,8 @@ addEventListener('keydown', e => {
     const back = !Screen.el.classList.contains('hidden') && Screen.el.querySelector('[data-back]');
     if (back) { Screen.act(back); return; }
   }
-  if (k === 'enter' && Game.state === 'title') Screen.depart();
+  if ((k === 'e' || k === 'enter') && Screen.hubOn && !e.repeat) Hub.interact();  // 基地：對靠近的停機坪、門、發射台做事
+  else if (k === 'enter' && Game.state === 'title' && Screen.el.querySelector('[data-act="depart"]')) Screen.depart();  // 發射台的面板：Enter = 出發
   if (k === 'enter' && Game.state === 'lobby' && document.activeElement && document.activeElement.id === 'netCode') Net.join(document.activeElement.value);
   if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();
 });
@@ -41,7 +42,7 @@ addEventListener('blur', () => { Input.keys.clear(); Input.down = false; Input.d
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const canvasPos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-addEventListener('mousemove', e => { const p = canvasPos(e); Input.mx = p.x; Input.my = p.y; });
+addEventListener('mousemove', e => { const p = canvasPos(e); Input.mx = p.x; Input.my = p.y; Input.mouseMoved = true; });  // mouseMoved：基地的船頭要不要朝滑鼠
 canvas.addEventListener('mousedown', e => {
   if (Game.state !== 'play' || Input.touch) return;
   if (e.button === 0) Input.down = true;

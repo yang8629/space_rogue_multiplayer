@@ -5,6 +5,8 @@
 //   遊戲邏輯不碰這裡；這裡只讀遊戲狀態畫出來（換引擎時只換這一層）
 'use strict';
 
+// 戰鬥用的圖層：在基地時藏起來（飛船圖層 ships 兩邊都用）
+const GL_BATTLE_LAYERS = ['grid', 'map', 'mapFx', 'pickups', 'bullets', 'fx', 'eBullets', 'enemies', 'eFx', 'texts'];
 const GLR = {
   ready: false, failed: false, app: null, L: {}, tex: {}, frames: null,
   // 啟動：PixiJS（從 CDN 載入）或圖集沒載入、WebGL 開不起來 → failed（render.js 在戰鬥畫面中間寫原因）
@@ -62,12 +64,13 @@ const GLR = {
     const st = this.app.stage, C = () => new PIXI.Container();
     const L = this.L;
     L.bg = C(); L.world = C(); st.addChild(L.bg, L.world);
+    L.hub = C(); L.world.addChild(L.hub);  // 基地場景（在飛船圖層下面）
     for (const k of ['grid', 'map', 'mapFx', 'pickups', 'bullets', 'fx', 'eBullets', 'enemies', 'eFx', 'ships', 'texts']) { L[k] = C(); L.world.addChild(L[k]); }
     // 發光：整個世界加 bloom（亮的地方自然發光）
     const F = PIXI.filters || {};
     if (F.AdvancedBloomFilter) L.world.filters = [new F.AdvancedBloomFilter({ threshold: 0.72, bloomScale: 0.45, brightness: 1, blur: 4, quality: 4 })];
     this.pools = {};
-    GLWorld.init(); GLActors.init(); GLFx.init();
+    GLWorld.init(); GLActors.init(); GLFx.init(); GLHub.init();
   },
   // 物件池：每幀從頭借，用不到的藏起來（不每幀建立／刪除物件）
   pool(key, layer, make) {
@@ -96,11 +99,17 @@ const GLR = {
     const c = Game.cam, L = this.L;
     this.beginPools();
     GLWorld.drawBg();
-    L.world.visible = !!Game.inArena;
+    const hub = !Game.inArena && Game.state === 'title' && Hub.ready;  // 基地（主畫面，蓋著面板時也畫在後面）
+    L.world.visible = !!Game.inArena || hub;
+    for (const k of GL_BATTLE_LAYERS) L[k].visible = !hub;
+    L.hub.visible = hub;
     if (Game.inArena) {
       const sh = FX.shake, sx = sh ? rand(-sh, sh) : 0, sy = sh ? rand(-sh, sh) : 0;
       L.world.scale.set(ZOOM); L.world.position.set((-c.x + sx) * ZOOM, (-c.y + sy) * ZOOM);
       GLWorld.draw(); GLFx.draw(); GLActors.draw(); GLFx.drawTexts();
+    } else if (hub) {
+      L.world.scale.set(Hub.k); L.world.position.set(-Hub.cam.x * Hub.k, -Hub.cam.y * Hub.k);
+      GLHub.draw();
     }
     this.endPools();
     this.app.render();
