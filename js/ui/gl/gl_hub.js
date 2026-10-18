@@ -393,6 +393,14 @@ const GLHub = {
       }
       this.glow(s.x, s.y, 34, glColor(Game.slotColor(Net.mySlot())), 0.45);
     }
+    // 基地裡射出去的子彈（快的拖一條光、慢的是光球）、打到牆的火花（擴散的圈）
+    for (const b of Hub.shots) {
+      const c = glColor(b.col), fade = Math.min(1, b.t / b.life * 3), sp = Math.hypot(b.vx, b.vy), tail = Math.min(40, sp * 0.03);
+      if (tail > 14) { g.moveTo(b.x - b.vx / sp * tail, b.y - b.vy / sp * tail).lineTo(b.x, b.y).stroke({ width: b.r * 1.6, color: c, alpha: 0.7 * fade }); g.moveTo(b.x - b.vx / sp * tail * 0.6, b.y - b.vy / sp * tail * 0.6).lineTo(b.x, b.y).stroke({ width: b.r * 0.6, color: 0xffffff, alpha: fade }); }
+      else { g.circle(b.x, b.y, b.r).fill({ color: c, alpha: fade }); g.circle(b.x, b.y, b.r * 0.45).fill({ color: 0xffffff, alpha: fade }); }
+      this.glow(b.x, b.y, b.r * 5, c, 0.5 * fade);
+    }
+    for (const k of Hub.sparks) { const c = glColor(k.col), q = 1 - k.t / 0.3; g.circle(k.x, k.y, 4 + q * 14).stroke({ width: 2, color: c, alpha: 1 - q }); this.glow(k.x, k.y, 26, c, 0.6 * (1 - q)); }
     // 裝上的武器：裝在船頭、跟著船頭轉（這一層在飛船底下，槍管從船頭伸出去）
     const W = WEAPONS[Hub.weaponId];
     if (W) hubWeapon(g, Hub.weaponId, s.x + Math.cos(s.aim) * 14, s.y + Math.sin(s.aim) * 14, s.aim, 0.62, glColor(W.color), '', (x, y, r, c, a) => this.glow(x, y, r, c, a));

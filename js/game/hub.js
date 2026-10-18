@@ -82,6 +82,7 @@ Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
 function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h); }
 
 const Hub = {
+  shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈、打到牆的火花（只是好玩：沒有傷害，多人時不同步）
   ready: false, shipId: null, weaponId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）
 
   // 進基地：飛船停在發射台左邊（不壓到停機坪的名字）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
@@ -145,6 +146,7 @@ const Hub = {
     if (Input.mouseMoved) s.aim = Math.atan2(wy - s.y, wx - s.x);
     else if (s.moving) s.aim = Math.atan2(my, mx);
     this.follow();
+    this.updateShots(dt);
     // 最近的互動點（自己現在開的那艘的停機坪不算）
     let best = null, bd = Infinity;
     for (const z of HUB.zones) {
@@ -158,6 +160,29 @@ const Hub = {
   free(x, y, r) {
     return hubFree(HUB, x, y, r);
   },
+  // 射擊：按住左鍵，照裝備武器的基本數值（射速 interval、一次 count 發、散開 spread、彈速 speed、射程 life）從船頭射出；
+  //   子彈撞牆（出了房間和開口）就在那裡爆火花；最多 MAX_SHOTS 顆
+  updateShots(dt) {
+    const s = this.ship, P = weaponParams({ id: this.weaponId, path: null, final: null });
+    this.fireCd -= dt;
+    if (Input.down && this.fireCd <= 0) {
+      this.fireCd = P.interval;
+      const n = P.count, mx = s.x + Math.cos(s.aim) * 24, my = s.y + Math.sin(s.aim) * 24;
+      for (let i = 0; i < n && this.shots.length < Hub.MAX_SHOTS; i++) {
+        const a = s.aim + (n > 1 ? (i / (n - 1) - 0.5) * P.spread : 0);
+        this.shots.push({ x: mx, y: my, vx: Math.cos(a) * P.speed, vy: Math.sin(a) * P.speed, t: P.life, life: P.life, r: P.radius, col: P.color, w: this.weaponId });
+      }
+      Events.emit('shoot', { weapon: this.weaponId });
+    }
+    for (const b of this.shots) {
+      b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt;
+      if (!hubFree(HUB, b.x, b.y, 1)) { b.t = 0; this.sparks.push({ x: b.x - b.vx * dt, y: b.y - b.vy * dt, t: 0.3, col: b.col }); }
+    }
+    this.shots = this.shots.filter(b => b.t > 0);
+    for (const k of this.sparks) k.t -= dt;
+    this.sparks = this.sparks.filter(k => k.t > 0);
+  },
+  MAX_SHOTS: 200,
   // 鏡頭跟著飛船（飛船在標題列以下那塊的正中間），不超出基地外圍太多；縮放照畫面大小（1280×800 = 1）
   follow() {
     const room = VH - HUB.TOP, k = this.k = clamp(Math.min(VW / 1280, VH / 800), 0.7, 1.3), s = this.ship;

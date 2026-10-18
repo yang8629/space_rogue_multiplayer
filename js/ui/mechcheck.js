@@ -2687,6 +2687,27 @@ const MechCheck = {
         got: `現在 ${Math.round(HUB.W)}×${Math.round(HUB.H)}：${allNow ? '每樣都有位置' : '有東西沒位置（錯誤）'}${b1.length ? '；' + b1.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}；`
           + `假的 8 艘／7 把／3 台：${Math.round(big.W)}×${Math.round(big.H)}${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}` };
     }],
+    ['局外成長', '基地射擊', '基地按住左鍵用裝備的武器射：照武器的射速、一次幾發（散彈 4 發）；子彈撞牆就消失、在那裡爆火花；放開就停', M => {
+      const st = Game.state, down = Input.down, hw = Hub.weaponId, keep = { x: Hub.ship && Hub.ship.x, y: Hub.ship && Hub.ship.y, aim: Hub.ship && Hub.ship.aim };
+      try {
+        Game.state = 'title'; Hub.enter(); Hub.shots = []; Hub.sparks = []; Hub.fireCd = 0;
+        const L = Hub.zone('launch'), s = Hub.ship; s.x = L.x - 170; s.y = L.y; s.aim = -Math.PI / 2;  // 朝上牆射
+        Hub.weaponId = 'scatter'; Input.down = true;
+        Hub.updateShots(0.016); const first = Hub.shots.length;
+        Hub.updateShots(0.016); const cd = Hub.shots.length === first;  // 冷卻中不會再射
+        Input.down = false;
+        for (let i = 0; i < 300; i++) Hub.updateShots(0.016);  // 5 秒：子彈都撞到牆或飛完
+        const gone = Hub.shots.length === 0;
+        Hub.weaponId = 'laser'; Hub.fireCd = 0; Input.down = true; s.aim = -Math.PI / 2; s.y = HUB.rooms.hall.y + 40;  // 貼著上牆射：一定撞牆
+        let maxSpark = 0; for (let i = 0; i < 30; i++) { Hub.updateShots(0.016); maxSpark = Math.max(maxSpark, Hub.sparks.length); }
+        Input.down = false;
+        return { ok: first === 4 && cd && gone && maxSpark > 0,
+          got: `散彈一次射出 ${first} 發（要 4）；冷卻中${cd ? '不會' : '會（錯誤）'}再射；放開 5 秒後子彈${gone ? '都消失' : '還在（錯誤）'}；貼著牆射${maxSpark ? '有火花' : '沒有火花（錯誤）'}` };
+      } finally {
+        Input.down = down; Game.state = st; Hub.weaponId = hw; Hub.shots = []; Hub.sparks = [];
+        if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
+      }
+    }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL;
       const seen = () => {  // 抽很多次，看出現過哪些晶片

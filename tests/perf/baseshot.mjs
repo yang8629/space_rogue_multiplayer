@@ -29,6 +29,10 @@ await at('armory', 30); await shot('操作台');
 await at('chips', 60); await shot('晶片實驗室');
 await at('stats', 60); await shot('戰績室');
 await p.evaluate(() => { const d = HUB.rooms.deck, s = Hub.ship; s.x = d.x + d.w / 2; s.y = d.y + d.h / 2 + 40; Hub.update(0.016); }); await shot('觀景台');
+// 射擊：飛船在大廳，滑鼠指向右上、按住左鍵 0.6 秒（散彈）
+await p.evaluate(() => { const L = Hub.zone('launch'), s = Hub.ship; s.x = L.x - 170; s.y = L.y; Hub.equip('scatter'); Hub.update(0.016); });
+await p.mouse.move(1000, 250); await p.mouse.down(); await wait(600); await p.screenshot({ path: SHOTS + '基地_射擊.png' }); await p.mouse.up();
+console.log('射擊：子彈', await p.evaluate(() => Hub.shots.length + Hub.sparks.length));
 await p.evaluate(() => { const h = HUB.rooms.hall, s = Hub.ship; s.x = h.x + h.w / 2; s.y = h.y + 60; Hub.update(0.016); }); await shot('大廳上方');
 await at('launch', -40); await shot('發射台旁');
 for (const id of ['armory', 'chips', 'stats', 'launch']) { await p.evaluate(id => Screen.basePanel(id), id); await shot('面板_' + { armory: '軍械庫', chips: '晶片庫', stats: '戰績', launch: '發射台' }[id]); }

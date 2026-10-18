@@ -44,7 +44,7 @@ const ctx = canvas.getContext('2d');
 const canvasPos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 addEventListener('mousemove', e => { const p = canvasPos(e); Input.mx = p.x; Input.my = p.y; Input.mouseMoved = true; });  // mouseMoved：基地的船頭要不要朝滑鼠
 canvas.addEventListener('mousedown', e => {
-  if (Game.state !== 'play' || Input.touch) return;
+  if ((Game.state !== 'play' && !Screen.hubOn) || Input.touch) return;  // 戰鬥中，或基地（可以射著玩）
   if (e.button === 0) Input.down = true;
   if (e.button === 2) { Input.dash = true; Input.dashHeld = true; }
 });
