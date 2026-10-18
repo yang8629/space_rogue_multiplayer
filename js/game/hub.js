@@ -15,9 +15,10 @@ const HUB = {
     { id: 'stats', kind: 'door', x: 900, y: 84, r: 80, label: '🏆 戰績', color: '#ffd166', tab: 'stats' },
     { id: 'coop', kind: 'term', x: 84, y: 330, r: 76, label: '👥 多人連線', color: '#ff9dbd' },
     { id: 'range', kind: 'term', x: 1116, y: 330, r: 76, label: '🎯 靶場', color: '#9dff6b' },
-    { id: 'launch', kind: 'launch', x: 600, y: 524, r: 88, label: '🚀 發射台', color: '#4cc9f0' },
+    { id: 'launch', kind: 'launch', x: 600, y: 500, r: 72, label: '🚀 發射台', color: '#4cc9f0' },
   ],
   PAD_Y: 300, PAD_GAP: 190, PAD_R: 60,
+  LAUNCH_PAD: 62, RUNWAY_W: 84,  // 發射台盤面的半徑；盤面到下方出口那段跑道的寬
 };
 // 停機坪：照 SHIPS 的順序一排，中間對齊
 for (const [i, id] of Object.keys(SHIPS).entries()) {
@@ -28,12 +29,12 @@ for (const [i, id] of Object.keys(SHIPS).entries()) {
 const Hub = {
   ready: false, shipId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標），整個基地放進一個畫面
 
-  // 進基地：飛船停在發射台前面；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
+  // 進基地：飛船停在發射台左邊（不壓到停機坪的名字）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
   enter() {
     const ids = Object.keys(SHIPS), want = this.shipId || Game.shipId;
     this.shipId = SHIPS[want] && isUnlocked('ship', want) ? want : ids.find(id => isUnlocked('ship', id)) || ids[0];
     const L = this.zone('launch');
-    if (!this.ship) this.ship = { x: L.x, y: L.y - 120, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };
+    if (!this.ship) this.ship = { x: L.x - 150, y: L.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };
     this.setShip(this.shipId);
     this.ready = true;
     this.near = null;

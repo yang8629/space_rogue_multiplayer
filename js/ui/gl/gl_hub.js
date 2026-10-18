@@ -50,13 +50,15 @@ const GLHub = {
       g.rect(z.x - 84, 0, 168, T + 6).fill(0x0a0f1f).stroke({ width: 3, color: HUB_INK });
       g.rect(z.x - 92, T + 6, 184, 10).fill(hubShade(0x3a4870, -0.1)).stroke({ width: 2, color: HUB_INK });  // 門檻
     }
-    // 發射口（下牆挖空，外面是太空）
-    const L = Hub.zone('launch');
-    g.rect(L.x - 90, H - T - 4, 180, T + 4).fill(0x02030a).stroke({ width: 3, color: HUB_INK });
+    // 發射口（下牆挖空，外面是太空）＋盤面到出口的跑道（兩側金屬軌，箭頭在 gAnim 畫）
+    const L = Hub.zone('launch'), RW = HUB.RUNWAY_W, ry = L.y + HUB.LAUNCH_PAD - 4;
+    g.rect(L.x - RW / 2 - 8, H - T - 4, RW + 16, T + 4).fill(0x02030a).stroke({ width: 3, color: HUB_INK });
+    g.rect(L.x - RW / 2, ry, RW, H - T - ry).fill(0x0c1226).stroke({ width: 2, color: HUB_INK });
+    for (const sg of [-1, 1]) g.rect(L.x + sg * (RW / 2 + 4) - 4, ry, 8, H - T - ry).fill(hubShade(0x3a4870, sg < 0 ? 0.05 : -0.2)).stroke({ width: 2, color: HUB_INK });
     // 停機坪：六角形，6 個切面照光的方向上色，中間一圈
     for (const z of HUB.zones.filter(z => z.kind === 'pad')) this.hexPad(g, z.x, z.y, z.r, 0x2b3654);
-    // 發射台：大的八角形＋內圈
-    this.hexPad(g, L.x, L.y, L.r - 6, 0x26304c, 8);
+    // 發射台：八角形盤面＋內圈（畫在跑道上面）
+    this.hexPad(g, L.x, L.y, HUB.LAUNCH_PAD, 0x26304c, 8);
     // 終端機：靠牆的控制台＋螢幕
     for (const z of HUB.zones.filter(z => z.kind === 'term')) {
       const left = z.x < W / 2, x0 = left ? T : W - T - 54;
@@ -105,15 +107,22 @@ const GLHub = {
         else this.silhouette(S, z.x, z.y);
         if (Screen.hubNew(z, seen)) this.glow(z.x, z.y, 70, 0xffd166, 0.25 + 0.2 * pulse);
       } else if (z.kind === 'launch') {
-        // 往發射口的箭頭，一個接一個亮
+        // 盤面：一圈光環＋4 顆燈輪流亮（靠近時光環變亮）
+        const P = HUB.LAUNCH_PAD, RW = HUB.RUNWAY_W;
+        g.circle(z.x, z.y, P * 0.62 + 4).stroke({ width: 3, color: col, alpha: near ? 0.95 : 0.55 });
         for (let i = 0; i < 4; i++) {
-          const y = z.y - 40 + i * 34, k = 0.25 + 0.75 * Math.max(0, Math.sin(t * 4 - i * 0.9));
-          g.poly([z.x - 34, y, z.x, y + 22, z.x + 34, y, z.x + 34, y + 10, z.x, y + 32, z.x - 34, y + 10]).fill({ color: col, alpha: 0.25 + 0.6 * k });
+          const a = Math.PI / 4 + i * Math.PI / 2, k = Math.max(0, Math.sin(t * 3 - i * Math.PI / 2));
+          g.circle(z.x + Math.cos(a) * P * 0.8, z.y + Math.sin(a) * P * 0.8, 4).fill({ color: col, alpha: 0.3 + 0.7 * k });
         }
-        g.circle(z.x, z.y, z.r - 14).stroke({ width: 3, color: col, alpha: near ? 0.9 : 0.5 });
-        this.glow(z.x, z.y, z.r * 1.4, col, near ? 0.35 : 0.18);
-        this.glow(z.x, HUB.H - HUB.WALL / 2, 110, 0x4cc9f0, 0.4 + 0.1 * Math.sin(t * 2));  // 發射口的力場
-        g.rect(z.x - 90, HUB.H - HUB.WALL / 2 - 2, 180, 4).fill({ color: 0x9fe8ff, alpha: 0.8 });
+        this.glow(z.x, z.y, P * 1.5, col, near ? 0.35 : 0.18);
+        // 跑道上往出口的箭頭（一個接一個亮）
+        const ry = z.y + P - 4, ye = HUB.H - HUB.WALL, n = 3, step = (ye - ry) / n;
+        for (let i = 0; i < n; i++) {
+          const y = ry + 4 + i * step, hw = RW / 2 - 14, k = Math.max(0, Math.sin(t * 4 - i * 1.1));
+          g.poly([z.x - hw, y, z.x, y + 10, z.x + hw, y, z.x + hw, y + 6, z.x, y + 16, z.x - hw, y + 6]).fill({ color: col, alpha: 0.25 + 0.65 * k });
+        }
+        this.glow(z.x, HUB.H - HUB.WALL / 2, 90, 0x4cc9f0, 0.4 + 0.1 * Math.sin(t * 2));  // 發射口的力場
+        g.rect(z.x - RW / 2 - 8, HUB.H - HUB.WALL / 2 - 2, RW + 16, 4).fill({ color: 0x9fe8ff, alpha: 0.8 });
       } else if (z.kind === 'term') {
         const left = z.x < HUB.W / 2, x0 = left ? HUB.WALL : HUB.W - HUB.WALL - 54;
         g.rect(x0 + 10, z.y - 44, 34, 60).fill({ color: col, alpha: 0.35 + 0.15 * Math.sin(t * 5 + z.y) });  // 螢幕
