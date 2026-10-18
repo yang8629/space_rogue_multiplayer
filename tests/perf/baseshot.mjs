@@ -47,5 +47,15 @@ await p.evaluate(() => {
   Screen.dead();
 });
 await shot('結算_新解鎖');
+// 擴充測試：假的 8 艘飛船、7 把武器（重複用現有的）→ 基地變大，鏡頭停在最小縮放、跟著飛船捲動
+await p.evaluate(() => {
+  const sh = Object.keys(SHIPS), wp = Object.keys(WEAPONS);
+  Object.assign(HUB, hubLayout(Array.from({ length: 8 }, (_, i) => sh[i % sh.length]), Array.from({ length: 7 }, (_, i) => wp[i % wp.length])));
+  GLHub.built = false; GLHub.gBase.clear(); Game.state = 'title'; Screen.title();
+  const L = Hub.zone('launch'); Hub.ship.x = L.x - 150; Hub.ship.y = L.y;
+});
+await shot('擴充_下面');
+await p.evaluate(() => { Hub.ship.x = 300; Hub.ship.y = 180; Hub.update(0.016); });
+await shot('擴充_上面');
 await b.close();
 console.log('done');

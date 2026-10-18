@@ -29,7 +29,7 @@ GitHub Pages 發佈。`v1/` 是 V1（mp-0.6.4）的凍結副本（標籤 `v1-fin
 | `js/game/arena.js` | 戰鬥場地 `Arena`（方形場地／大地圖、牆、閘門、尋路 `navTo` 只給模擬電腦用） |
 | `js/game/game.js` | `Game`：流程、戰鬥、晶片效果、玩法擊殺、稀有詞條（`rareAct`）、零件、飛船能力（`tickMech`、`addDecoy`／`enemyTarget`、`addTurret`／`updateTurrets`）、三選一（`openReward`）、商店、改裝廠、主更新 |
 | `js/game/range.js` | 靶場 |
-| `js/game/hub.js` | 基地（主畫面）：配置 `HUB`（停機坪、武器架、門、發射台、終端機）、開著飛船走 `Hub.update`、按 E `Hub.interact`、換船 `pick`、裝武器 `equip` |
+| `js/game/hub.js` | 基地（主畫面）：配置 `hubLayout`（照飛船、武器數量和 `HUB_DOORS`、`HUB_TERMS` 自動排；加東西只改資料）、開著飛船走 `Hub.update`、按 E `Hub.interact`、換船 `pick`、裝武器 `equip` |
 | `js/game/effects.js` | 特效事件（只發事件；真正的特效在 `js/ui/fx.js`） |
 | `js/system/input.js`／`audio.js`／`settings.js` | 輸入；音效、音樂；設定（`Settings`，設定頁是 `Screen.settings`） |
 | `js/system/net.js` | 多人連線全部（大廳、同步、投票、重連、多人紀錄） |

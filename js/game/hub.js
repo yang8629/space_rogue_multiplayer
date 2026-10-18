@@ -4,35 +4,59 @@
 //   這裡不碰畫面：互動結果交給 Screen（面板），靠近的東西換了就發 hubNear 事件
 'use strict';
 
-// 基地配置：世界座標（W×H），點位一律寫在這張表；kind 決定按 E 做什麼（Hub.ACT）
-//   pad：停機坪（每艘飛船一個），rack：武器架（每把武器一個），door：門（打開基地的面板），launch：發射台（選章、出發；多人 = 準備），term：終端機
+// 基地配置：世界座標（W×H）。點位由 hubLayout 照數量算（加飛船、武器、門、終端機只要改資料，基地自己變大）
+//   kind 決定按 E 做什麼（Hub.ACT）：pad 停機坪（每艘飛船一個）、rack 武器架（每把武器一個）、door 門（打開基地的面板）、
+//   launch 發射台（選章、出發；多人 = 準備）、term 終端機
+//   由上到下：上牆的門 → 武器架（一排最多 ROW_MAX 個，多的換下一排）→ 停機坪（同樣）→ 發射台＋跑道；終端機貼左右牆
 const HUB = {
-  W: 1200, H: 720, WALL: 44, TOP: 100,  // TOP：畫面上方留給標題列的高度（螢幕 px）
+  WALL: 44, TOP: 100,                     // TOP：畫面上方留給標題列的高度（螢幕 px）
   SPEED: 300, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
-  zones: [
-    { id: 'armory', kind: 'door', x: 300, y: 84, r: 80, label: '⚔ 軍械庫', color: '#ffb347', tab: 'armory' },
-    { id: 'chips', kind: 'door', x: 600, y: 84, r: 80, label: '◈ 晶片庫', color: '#4cc9f0', tab: 'chips' },
-    { id: 'stats', kind: 'door', x: 900, y: 84, r: 80, label: '🏆 戰績', color: '#ffd166', tab: 'stats' },
-    { id: 'coop', kind: 'term', x: 84, y: 370, r: 76, label: '👥 多人連線', color: '#ff9dbd' },
-    { id: 'range', kind: 'term', x: 1116, y: 370, r: 76, label: '🎯 靶場', color: '#9dff6b' },
-    { id: 'launch', kind: 'launch', x: 600, y: 572, r: 72, label: '🚀 發射台', color: '#4cc9f0' },
-  ],
-  RACK_Y: 200, RACK_R: 46,                // 武器架那一排（門和停機坪中間）
-  PAD_Y: 350, PAD_GAP: 190, PAD_R: 60,
-  LAUNCH_PAD: 62, RUNWAY_W: 84,  // 發射台盤面的半徑；盤面到下方出口那段跑道的寬
+  MIN_W: 1200,                            // 基地最小寬度
+  ROW_MAX: 6, GAP: 190, SIDE: 160,        // 停機坪、武器架：一排最多幾個、間距；左右各留多寬給終端機
+  DOOR_Y: 84, DOOR_R: 70, DOOR_GAP: 300,  // 門：在上牆、互動半徑（跟第一排武器架剛好不重疊）、彼此間距
+  RACK_Y0: 200, RACK_ROW: 130, RACK_R: 46,  // 武器架：第一排的 y、每排的高度、互動半徑
+  PAD_DY: 150, PAD_ROW: 160, PAD_R: 60,   // 停機坪：第一排離最後一排武器架多遠、每排的高度
+  TERM_R: 76, TERM_ROW: 170,              // 終端機：互動半徑、同一邊上下的間距
+  LAUNCH_DY: 222, LAUNCH_R: 72, BOTTOM: 148,  // 發射台：離最後一排停機坪多遠、互動半徑；發射台到下牆外緣
+  LAUNCH_PAD: 62, RUNWAY_W: 84,           // 發射台盤面的半徑；盤面到下方出口那段跑道的寬
+  K_MIN: 0.75,                            // 縮放最小到多少；整個基地放不進一個畫面就改成鏡頭跟著飛船捲動
 };
-// 停機坪、武器架：照 SHIPS、WEAPONS 的順序各一排，中間對齊
-for (const [i, id] of Object.keys(SHIPS).entries()) {
-  const n = Object.keys(SHIPS).length;
-  HUB.zones.push({ id: 'pad:' + id, kind: 'pad', ship: id, x: HUB.W / 2 + (i - (n - 1) / 2) * HUB.PAD_GAP, y: HUB.PAD_Y, r: HUB.PAD_R, label: SHIPS[id].name, color: SHIPS[id].color });
+// 門、終端機：照這兩張表的順序排（門平均排在上牆；終端機左右輪流貼牆、同一邊的上下排開）
+const HUB_DOORS = [
+  { id: 'armory', label: '⚔ 軍械庫', color: '#ffb347', tab: 'armory' },
+  { id: 'chips', label: '◈ 晶片庫', color: '#4cc9f0', tab: 'chips' },
+  { id: 'stats', label: '🏆 戰績', color: '#ffd166', tab: 'stats' },
+];
+const HUB_TERMS = [
+  { id: 'coop', label: '👥 多人連線', color: '#ff9dbd' },
+  { id: 'range', label: '🎯 靶場', color: '#9dff6b' },
+];
+// 照數量算配置：回傳 { W, H, zones, padRows }（padRows = 每排停機坪的 y，地板畫走道用）
+function hubLayout(shipIds, weaponIds, doors = HUB_DOORS, terms = HUB_TERMS) {
+  const C = HUB, cols = Math.max(1, Math.min(C.ROW_MAX, Math.max(shipIds.length, weaponIds.length)));
+  const W = Math.max(C.MIN_W, cols * C.GAP + 2 * C.SIDE, doors.length * C.DOOR_GAP), zones = [];
+  // 一排一排擺：rows[j] = 第 j 排的 id
+  const rows = ids => Array.from({ length: Math.ceil(ids.length / C.ROW_MAX) }, (_, j) => ids.slice(j * C.ROW_MAX, (j + 1) * C.ROW_MAX));
+  const rowX = (i, n) => W / 2 + (i - (n - 1) / 2) * C.GAP;
+  doors.forEach((d, i) => zones.push({ ...d, kind: 'door', x: W / 2 + (i - (doors.length - 1) / 2) * C.DOOR_GAP, y: C.DOOR_Y, r: C.DOOR_R }));
+  const rr = rows(weaponIds);
+  rr.forEach((row, j) => row.forEach((id, i) => zones.push({ id: 'rack:' + id, kind: 'rack', weapon: id, x: rowX(i, row.length), y: C.RACK_Y0 + j * C.RACK_ROW, r: C.RACK_R, label: WEAPONS[id] ? WEAPONS[id].name : id, color: WEAPONS[id] ? WEAPONS[id].color : '#8fa3d9' })));
+  const padY0 = C.RACK_Y0 + Math.max(0, rr.length - 1) * C.RACK_ROW + C.PAD_DY, pr = rows(shipIds), padRows = pr.map((_, j) => padY0 + j * C.PAD_ROW);
+  pr.forEach((row, j) => row.forEach((id, i) => zones.push({ id: 'pad:' + id, kind: 'pad', ship: id, x: rowX(i, row.length), y: padRows[j], r: C.PAD_R, label: SHIPS[id] ? SHIPS[id].name : id, color: SHIPS[id] ? SHIPS[id].color : '#8fa3d9' })));
+  const lastPad = padRows[padRows.length - 1] || padY0, launchY = lastPad + C.LAUNCH_DY;
+  zones.push({ id: 'launch', kind: 'launch', x: W / 2, y: launchY, r: C.LAUNCH_R, label: '🚀 發射台', color: '#4cc9f0' });
+  // 終端機：左右輪流；同一邊有幾台就以停機坪中間為準上下排開
+  const midY = (padRows[0] + lastPad) / 2 + 20, perSide = [Math.ceil(terms.length / 2), Math.floor(terms.length / 2)];
+  terms.forEach((t, i) => {
+    const side = i % 2, k = Math.floor(i / 2), n = perSide[side];
+    zones.push({ ...t, kind: 'term', x: side ? W - C.WALL - 40 : C.WALL + 40, y: midY + (k - (n - 1) / 2) * C.TERM_ROW, r: C.TERM_R });
+  });
+  return { W, H: launchY + C.BOTTOM, zones, padRows };
 }
-for (const [i, id] of Object.keys(WEAPONS).entries()) {
-  const n = Object.keys(WEAPONS).length;
-  HUB.zones.push({ id: 'rack:' + id, kind: 'rack', weapon: id, x: HUB.W / 2 + (i - (n - 1) / 2) * HUB.PAD_GAP, y: HUB.RACK_Y, r: HUB.RACK_R, label: WEAPONS[id].name, color: WEAPONS[id].color });
-}
+Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
 
 const Hub = {
-  ready: false, shipId: null, weaponId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標），整個基地放進一個畫面
+  ready: false, shipId: null, weaponId: null, ship: null, near: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）
 
   // 進基地：飛船停在發射台左邊（不壓到停機坪的名字）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
   enter() {
@@ -102,12 +126,13 @@ const Hub = {
     }
     if (best !== this.near) { this.near = best; Events.emit('hubNear', best); }
   },
-  // 鏡頭：整個基地縮放到一個畫面（上方留 TOP 給標題列），置中；畫面大小變了也跟著算
+  // 鏡頭：整個基地縮放到一個畫面（上方留 TOP 給標題列），置中；縮放會小於 K_MIN（基地太大）就停在 K_MIN、改成跟著飛船捲動
+  //   每一個方向各自判斷：放得下的方向置中，放不下的方向跟著飛船（不超出基地外面太多）
   follow() {
-    const room = VH - HUB.TOP;
-    this.k = clamp(Math.min(VW / (HUB.W + 60), room / (HUB.H + 30)), 0.55, 1.6);
-    this.cam.x = HUB.W / 2 - VW / 2 / this.k;
-    this.cam.y = HUB.H / 2 - (HUB.TOP + room / 2) / this.k;
+    const room = VH - HUB.TOP, k = this.k = clamp(Math.min(VW / (HUB.W + 60), room / (HUB.H + 30)), HUB.K_MIN, 1.6), s = this.ship;
+    const vw = VW / k, vh = room / k, top = HUB.TOP / k;
+    this.cam.x = vw >= HUB.W + 60 ? HUB.W / 2 - vw / 2 : clamp(s.x - vw / 2, -30, HUB.W + 30 - vw);
+    this.cam.y = (vh >= HUB.H + 30 ? HUB.H / 2 - vh / 2 : clamp(s.y - vh / 2, -15, HUB.H + 15 - vh)) - top;
   },
   // 按 E（或 Enter）：對靠近的東西做事
   interact() {

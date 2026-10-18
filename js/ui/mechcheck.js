@@ -2663,6 +2663,30 @@ const MechCheck = {
           got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到起始晶片（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
       } finally { Game.state = st; Net.chapter = ch; }
     }],
+    ['局外成長', '基地配置', '基地照數量自動排（hubLayout）：每艘飛船、每把武器、每扇門、每台終端機都有位置；停機坪、武器架、發射台在牆內；互動範圍彼此不重疊。現在的數量和假的「8 艘飛船、7 把武器、5 扇門、3 台終端機」都要過', M => {
+      const check = L => {
+        const C = HUB, bad = [], Z = L.zones;
+        for (const z of Z.filter(z => ['pad', 'rack', 'launch'].includes(z.kind)))
+          if (z.x - z.r < C.WALL || z.x + z.r > L.W - C.WALL || z.y - z.r < C.WALL || z.y + z.r > L.H - C.WALL) bad.push(`${z.id} 超出牆`);
+        for (let i = 0; i < Z.length; i++) for (let j = i + 1; j < Z.length; j++) {
+          const a = Z[i], b = Z[j];
+          if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r - 0.5) bad.push(`${a.id}／${b.id} 重疊`);
+        }
+        return bad;
+      };
+      const ships = Object.keys(SHIPS), weapons = Object.keys(WEAPONS);
+      const now = { W: HUB.W, H: HUB.H, zones: HUB.zones };
+      const allNow = ships.every(id => HUB.zones.some(z => z.ship === id)) && weapons.every(id => HUB.zones.some(z => z.weapon === id)) && HUB_DOORS.every(d => Hub.zone(d.id)) && HUB_TERMS.every(t => Hub.zone(t.id));
+      const fakeShips = Array.from({ length: 8 }, (_, i) => ships[i] || 'ship' + i), fakeWeapons = Array.from({ length: 7 }, (_, i) => weapons[i] || 'wpn' + i);
+      const fakeDoors = [...HUB_DOORS, { id: 'd4', label: 'D4', color: '#fff', tab: 'stats' }, { id: 'd5', label: 'D5', color: '#fff', tab: 'stats' }];
+      const fakeTerms = [...HUB_TERMS, { id: 't3', label: 'T3', color: '#fff' }];
+      const big = hubLayout(fakeShips, fakeWeapons, fakeDoors, fakeTerms);
+      const allBig = big.zones.filter(z => z.kind === 'pad').length === 8 && big.zones.filter(z => z.kind === 'rack').length === 7 && big.zones.filter(z => z.kind === 'door').length === 5 && big.zones.filter(z => z.kind === 'term').length === 3;
+      const b1 = check(now), b2 = check(big);
+      return { ok: allNow && allBig && !b1.length && !b2.length,
+        got: `現在 ${Math.round(HUB.W)}×${Math.round(HUB.H)}：${allNow ? '每樣都有位置' : '有東西沒位置（錯誤）'}${b1.length ? '；' + b1.slice(0, 4).join('、') + '（錯誤）' : '、沒有重疊或超出'}；`
+          + `假的 8 艘／7 把／5 門／3 台：${Math.round(big.W)}×${Math.round(big.H)}、停機坪 ${big.padRows.length} 排${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、沒有重疊或超出'}` };
+    }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL;
       const seen = () => {  // 抽很多次，看出現過哪些晶片

@@ -61,8 +61,9 @@ const GLHub = {
       g.rect(x, y, w, h).stroke({ width: 1.5, color: HUB_INK });
     }
     // 走道：停機坪那一排、發射台往上的那條，地板顏色亮一點
-    g.rect(T + 30, HUB.PAD_Y - 90, W - 2 * T - 60, 180).fill({ color: 0x2a3658, alpha: 0.25 });
-    g.rect(W / 2 - 80, HUB.PAD_Y + 90, 160, HUB.H - T - HUB.PAD_Y - 90).fill({ color: 0x2a3658, alpha: 0.25 });
+    for (const y of HUB.padRows) g.rect(T + 30, y - 90, W - 2 * T - 60, 180).fill({ color: 0x2a3658, alpha: 0.25 });
+    const lastPad = HUB.padRows[HUB.padRows.length - 1];
+    g.rect(W / 2 - 80, lastPad + 90, 160, HUB.H - T - lastPad - 90).fill({ color: 0x2a3658, alpha: 0.25 });
     // 牆：外框一圈厚金屬，上、左面亮，下、右面暗
     const wall = (x, y, w, h, k) => { g.rect(x, y, w, h).fill(hubShade(0x3a4870, k)).stroke({ width: 3, color: HUB_INK }); g.rect(x + 4, y + 4, w - 8, Math.min(10, h - 8)).fill({ color: 0xffffff, alpha: 0.06 }); };
     wall(0, 0, W, T, 0.12); wall(0, H - T, W, T, -0.3); wall(0, T, T, H - 2 * T, 0.05); wall(W - T, T, T, H - 2 * T, -0.22);
