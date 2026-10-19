@@ -98,7 +98,7 @@ const Screen = {
   status() {
     const p = Game.player;
     return `<div class="row"><span class="pill">${statIcon('hp')}${Math.ceil(p.hp)} / ${p.maxHp}</span>
-      <span class="pill gold" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體每人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
+      <span class="pill crystal" data-credits>◆ ${Game.credits}</span>${Game.mode === 'coop' ? '<span class="pill" style="color:#ff9dbd" title="怪物掉落的晶體每人都拿；其他收入與花費各自計算">👥 各自的錢包</span>' : ''}
       <span class="pill" title="零件已用／零件格">${statIcon('slots')}零件 ${partsUsed(Game.parts)} / ${Game.partSlots}</span>
       ${Game.boons && Game.boons.ward ? `<span class="pill" style="color:${EVENTS.ward.color}" title="終焉護殼：受到致命傷害時留 1 HP">${EVENTS.ward.icon} 免死 ${Game.boons.ward}</span>` : ''}
       <button data-act="editor">整理電路 (Tab)</button></div>`;
@@ -572,6 +572,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       : `<h1>星區 ${Game.sector} 突破！</h1><div class="sub">${boss.name}已被擊沉。<br>${reward}</div>`;
     this.show(`<div class="scr title-wrap">${head}
       ${pick}
+      ${this.status()}
       ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
       ${this.runSummary()}
       ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${!V.pick ? '👥 房主在等你：先選二選一的獎勵' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : `

@@ -2149,6 +2149,39 @@ const MechCheck = {
           && r2.early === 0 && !r2.first.near && !r2.ahead && p.hp === hp0 && Game.eBullets.length === 0,
         got: `機率 100% 時：第 1／2／3（蟲潮）區 ${n1}／${n2}／${n3} 隻；打到後 ${A.delay - 0.2} 秒${r1.ringing ? '在響' : '沒在響'}、醒了 ${r1.early} 隻；第一次叫人：近的${yes(r1.first.near)}、前方 700 的${yes(r1.first.ahead)}；再 2 秒：前方的${yes(r1.ahead)}、身後的${yes(r1.behind)}（逃了 ${Math.round(r1.fled)}）；倒數內打掉：近的${yes(r2.first.near)}、前方的${yes(r2.ahead)}；撞到 HP ${hp0} → ${p.hp}` };
     }],
+    ['敵人', '逃跑：大地圖不卡牆', '警報艇、寶藏無人機在大地圖被追著跑：沿著牆、往空的地方逃，不會頂著牆不動（場地大小照 Arena；以前照方形場地的大小，大部分方向被當成出界，直直往牆衝）', M => {
+      // 量法同 tests/alarmstuck.js：玩家從 250 外一直追（距離 180 以外就靠近），每局 8 秒，數「幾乎不動（每秒 < 20）」的時間
+      const dt = 1 / 60, out = [];
+      let bad = 0;
+      for (const type of ['alarm', 'treasure']) {
+        let stuck = 0, total = 0;
+        for (let r = 0; r < 6; r++) {
+          M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+          Game.sector = 2; Game.node = { type: 'combat', L: 3, id: 'mc' + r }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
+          Game.combat.pending = []; Game.enemies = [];
+          const P = Game.player, k = r % Arena.areas.length, [ax, ay] = Arena.randomIn(k, 60);
+          Game.spawnEnemy(type); const e = Game.enemies[Game.enemies.length - 1];
+          e.spawnT = 0; e.x = ax; e.y = ay; e.home = [ax, ay]; e.zone = Arena.zoneOf(ax, ay); e.alert = true; e.hp = e.maxHp = 1e9; e.hurt(1, 0, 0, 'direct');
+          let st = null;
+          for (let i = 0; i < 32 && !st; i++) { const a = i / 32 * TAU, x = ax + Math.cos(a) * 250, y = ay + Math.sin(a) * 250; if (Arena.f(x, y) > 40 && Arena.zoneOf(x, y) === e.zone) st = [x, y]; }
+          if (!st) continue;
+          [P.x, P.y] = st; P.zone = e.zone; P.hp = P.maxHp = 1e9;
+          for (let f = 0; f < 8 * 60 && !e.dead; f++) {
+            Game.time += dt;
+            const x0 = e.x, y0 = e.y, dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1;
+            if (d > 180) { P.x += dx / d * 230 * dt; P.y += dy / d * 230 * dt; }
+            Arena.collide(P, P.r, null);
+            e.update(dt, P);
+            if (Math.hypot(e.x - x0, e.y - y0) / dt < 20) stuck += dt;
+            total += dt;
+          }
+        }
+        const pct = total ? stuck / total * 100 : 100;
+        if (pct > 2) bad++;
+        out.push(`${ENEMY_TYPES[type].name} 幾乎不動 ${pct.toFixed(1)}%`);
+      }
+      return { ok: !bad, got: `${out.join('、')}（6 局 × 8 秒；要 ≤ 2%）` };
+    }],
     ['事件', '航圖：？事件節點', `每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（大多 2 個）、只在第 2～5 層、同一個分岔不會有兩個；每個都有事件種類；星圖情報的 2 個目標是走得到的一般戰鬥；雙人同步航圖時事件和寶藏星域都帶著`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       let bad = [], two = 0, N = 60;

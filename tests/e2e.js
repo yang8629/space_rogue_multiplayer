@@ -303,7 +303,11 @@ while (!sector2 && guard++ < 40) {
         `boss pick: host chain ${sA0} → ${HA.Game.chain.length} (parts ${pA0} → ${HA.Game.partSlots}), client parts ${pB0} → ${HB.Game.partSlots} (chain ${sB0} → ${HB.Game.chain.length})`);
       ok(blockPick && waited && blocked && !HA.Net.modWaiting(),
         `host waits for own pick + teammate's pick (pick block ${blockPick}, waited ${!!waited}, blocked ${blocked}, after pick ${HA.Net.modWaiting()})`);
+      // 選王的獎勵時可以開電路（包包）；隊友開著電路時房主前往下一星區：隊友那邊先關掉電路、照樣跟過去
+      const hasBtn = String(HA.Screen.el.innerHTML).includes('data-act="editor"'); HA.Game.toggleEditor(); const hostEd = hasBtn && HA.Game.state === 'editor'; HA.Game.toggleEditor();
+      HB.Game.toggleEditor(); const cliEd = HB.Game.state === 'editor';
       HA.Game.nextSector(); pump(); step(3);
+      ok(hostEd && cliEd && HB.Game.state === 'map', `victory screen: inventory opens (host ${hostEd}, client ${cliEd}); client editing still follows to the next sector (${HB.Game.state})`);
       ok(HB.Game.sector === 2 && HA.Game.sector === 2 && HA.Game.bossId === HB.Game.bossId &&
         JSON.stringify(HA.Net.packMap(HA.Game.map)) === JSON.stringify(HB.Net.packMap(HB.Game.map)), 'sector 2 map synced');
       sector2 = true;

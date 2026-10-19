@@ -739,7 +739,7 @@ class Enemy {
     this.blinkAt -= A.step;
     for (let i = 0; i < 24; i++) {
       const a = rand(0, TAU), dd = rand(A.dist[0], A.dist[1]);
-      const x = clamp(this.x + Math.cos(a) * dd, this.r + 20, CFG.WORLD_W - this.r - 20), y = clamp(this.y + Math.sin(a) * dd, this.r + 20, CFG.WORLD_H - this.r - 20);
+      const x = clamp(this.x + Math.cos(a) * dd, this.r + 20, Arena.W - this.r - 20), y = clamp(this.y + Math.sin(a) * dd, this.r + 20, Arena.H - this.r - 20);  // 場地大小照 Arena（大地圖比 CFG.WORLD_W 大）
       if (!Arena.rect && (Arena.f(x, y) < this.r + 20 || (this.zone != null && Arena.zoneOf(x, y) !== this.zone))) continue;
       if (Objects.inHole({ x, y, r: this.r }, OBJ.HOLE_NOESC) || Objects.onSolid({ x, y, r: this.r }, 20)) continue;
       this.blinkTo = [x, y]; this.blinkT = A.warn;
@@ -901,7 +901,7 @@ class Enemy {
       let best = -Infinity;
       for (let i = 0; i < 8; i++) {
         const cx = Math.cos(i / 8 * TAU), cy = Math.sin(i / 8 * TAU), tx = this.x + cx * 90, ty = this.y + cy * 90;
-        if (tx < this.r || ty < this.r || tx > CFG.WORLD_W - this.r || ty > CFG.WORLD_H - this.r) continue;
+        if (tx < this.r || ty < this.r || tx > Arena.W - this.r || ty > Arena.H - this.r) continue;  // 場地大小照 Arena（大地圖比 CFG.WORLD_W 大：以前大部分方向都被當成出界，一個都沒選到就直直往牆衝）
         if (Arena.losBlocked(this.x, this.y, tx, ty, this.r) || (Game.objs.length && Objects.losBlocked(this.x, this.y, tx, ty, this.r))) continue;
         const s = cx * ux + cy * uy + 0.3 * (cx * ox + cy * oy);  // 偏好原本的方向，不會每次重選就左右抖
         if (s > best) { best = s; this.fleeDir = [cx, cy]; }

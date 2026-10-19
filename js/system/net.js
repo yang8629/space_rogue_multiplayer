@@ -43,6 +43,12 @@ const NET_MAX = 4;  // 一個房間最多幾人（含房主）
 // 一則訊息超過幾個字就切段送（Net.put）：PeerJS json 模式的上限是 16300 位元組；4000 字最壞每字 3 位元組（中文）＋包裝 ≈ 12KB
 //   NET_PIECE_MAX：最多幾段（約 1MB，再大的不收）
 const NET_PIECE = 4000, NET_PIECE_MAX = 250;
+// 幾秒沒收到對方任何訊息就當成斷線（keepAlive；平常每秒至少一則 ping）
+//   實測：遊玩紀錄最慢一幀 1.6 秒（隊友 2-6 第 1 波）、同步最長間隔 0.52 秒 → 5 秒不會誤判
+const NET_SILENT = 5;
+// 對方切到背景時放寬到幾秒：背景分頁改用計時器送 ping，Chrome 背景超過 5 分鐘的分頁計時器一分鐘才跑一次
+//   （關掉分頁也會先觸發「切到背景」；正常關掉、按離開會先送 bye，不用等到這裡）
+const NET_SILENT_HID = 70;
 
 const Net = {
   role: null,          // null = 單人；'host' = 房主；'client' = 加入的隊友
@@ -132,8 +138,9 @@ const Net = {
   modWaiting() { return this.peers.some(q => q.modWait); },
   resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; },
   close() {
+    if (this.role) this.send({ t: 'bye' });  // 告訴對方我走了（連線的關閉通知不一定送得出去：關掉分頁時）
     const peer = this.peer, conns = [this.conn, ...this.peers.map(q => q.conn), ...this.pending.map(q => q.conn)];
-    this.peer = this.conn = null; this.role = null; this.ping = null; this.pings = {}; this.fxBuf = []; this.pieceBuf = null;
+    this.peer = this.conn = null; this.role = null; this.ping = null; this.pings = {}; this.fxBuf = []; this.pieceBuf = null; this.heard = 0; this.hostHid = false;
     this.peers = []; this.pending = []; this.slot = 1; this.at = {}; this.myAway = false; this.hold = null; this.picks = {}; this.roomMates = {}; this.meReady = false;
     this.linked = false; this.mateInRoom = false; this.mateEditing = false; this.mateAway = false; this.myPick = this.matePick = null; this.code = '';
     this.chapter = 1;
@@ -153,6 +160,7 @@ const Net = {
       const left = Math.max(0, Math.ceil((this.waiting.until - performance.now()) / 1000)), el = document.getElementById('rejoinLeft');
       if (el) el.textContent = left;
       if (left <= 0) this.giveUp();
+      else if (this.peers.some(q => q.linked)) this.keepAlive(dt);  // 三人以上：等的時候其他隊友照樣收到 ping（不然會被當成房主斷線）
       return;
     }
     if (!this.linked) return;
@@ -173,6 +181,11 @@ const Net = {
       const gl = this.goUntil && document.getElementById('goLeft');  // 出發倒數
       if (gl) gl.textContent = Math.max(1, Math.ceil((this.goUntil - performance.now()) / 1000));
     }
+    this.keepAlive(dt);
+  },
+  // 每秒 ping 一次（也是「我還在」的訊號）；太久沒收到對方任何訊息就當成斷線（直接關掉瀏覽器、當機時連線不會送出關閉通知）
+  //   對方切到背景（hid）時不算：背景分頁的遊戲迴圈停住、計時器被放慢，送不出 ping
+  keepAlive(dt) {
     this.pingT += dt;
     if (this.pingT >= 1) {
       this.pingT = 0;
@@ -180,6 +193,9 @@ const Net = {
       this.send({ t: 'ping', at: performance.now(), wf: PF ? PF.worst : 0, wfAt: PF ? PF.worstAt : '', sl: PF ? PF.slow : 0 });  // 順便告訴對方自己最慢的一幀（雙人紀錄用）
       if (this.role === 'host' && Game.mode === 'coop' && Game.inArena) this.sendDmg();  // 每秒同步一次兩人的傷害統計
     }
+    const now = performance.now(), lim = hid => (hid ? NET_SILENT_HID : NET_SILENT), silent = (h, hid) => h && now - h > lim(hid) * 1000;
+    if (this.role === 'host') { for (const q of this.peers.slice()) if (q.linked && q.conn && silent(q.heard, q.hid)) this.lost(`隊友沒有回應（超過 ${lim(q.hid)} 秒）`, q); }
+    else if (this.linked && this.conn && silent(this.heard, this.hostHid)) this.lost(`房主沒有回應（超過 ${lim(this.hostHid)} 秒）`);
   },
   // ---------- 傷害統計：房主記兩人各自的傷害，同步給隊友 ----------
   // nm：每個晶片的顯示名稱與顏色（用那個人自己的武器、飛船算），對方畫面的「隊友傷害」直接用
@@ -467,7 +483,7 @@ const Net = {
   // 房主：隊友斷線 → 遊戲暫停，房間保留 NET_REJOIN_TIME 秒等隊友回來（重新整理後輸入同一個房號也可以）
   waitForMate(msg, q) {
     const conn = q.conn;
-    q.conn = null; q.linked = false; q.editing = false; q.away = false; q.ping = null; q.at = null;
+    q.conn = null; q.linked = false; q.editing = false; q.away = false; q.ping = null; q.at = null; q.heard = 0; q.hid = false;  // heard 歸零：重連回來的第一則訊息才開始算
     try { conn && conn.close(); } catch (e) {}
     q.waiting = { until: performance.now() + NET_REJOIN_TIME * 1000, msg };
     this.voteEnd = 0;
@@ -495,7 +511,7 @@ const Net = {
   // 隊友：斷線 → 暫停，可以按「重新連線」回到同一局
   clientLost(msg) {
     const conn = this.conn, peer = this.peer, first = !this.rejoin;
-    this.conn = this.peer = null; this.linked = false; this.mateEditing = false; this.rejoining = false;
+    this.conn = this.peer = null; this.linked = false; this.mateEditing = false; this.rejoining = false; this.heard = 0; this.hostHid = false;
     try { conn && conn.close(); } catch (e) {}
     try { peer && peer.destroy(); } catch (e) {}
     this.rejoin = { code: this.code || (this.rejoin && this.rejoin.code), runId: this.runId, tries: first ? 0 : this.rejoin.tries, msg };
@@ -553,14 +569,14 @@ const Net = {
     const G = Game, mate = this.mateOf(q), L = mate.L;
     const C = G.combat;
     return {
-      t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.state, slot: q.slot,
+      t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.screenState(), slot: q.slot,
       others: this.peers.filter(o => o !== q && o.pick).map(o => ({ slot: o.slot, ...o.pick })),  // 其他隊友（三人以上）
       you: { pick: q.pick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory, sa: L.slotAttr || [],
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
         parts: L.parts, ps: L.partSlots, cap: L.cap, ws: L.wSock, pk: L.playKills, bp: L.bonusPicks || 0, bn: L.boons },
       map: this.packMap(G.map), chapter: G.chapterId, sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
       combat: G.inArena && C ? { level: C.level, wavesTotal: C.wavesTotal === Infinity ? 0 : C.wavesTotal, elites: C.elites, boss: !!C.boss, wave: C.wave } : null,
-      lootTotal: this.lootTotal, victory: G.state === 'victory' ? G.victory : null,
+      lootTotal: this.lootTotal, victory: G.screenState() === 'victory' ? G.victory : null,
     };
   },
   // 隊友：其他玩家的飛船（房主 + 其他隊友），照號碼排
@@ -655,7 +671,10 @@ const Net = {
   onData(m, q = null) {
     if (!m || typeof m !== 'object') return;
     if (this.role === 'host' && q && m.t !== 'hello' && !this.peers.includes(q)) return;  // 還沒打招呼的連線只收 hello
+    if (q) q.heard = performance.now(); else this.heard = performance.now();  // 最後一次收到對方的訊息（keepAlive 判斷斷線）
     if (m.t === 'pc') { this.onPiece(m, q); return; }  // 切段送的長訊息（Net.put）
+    if (m.t === 'hid') { if (q) q.hid = !!m.on; else this.hostHid = !!m.on; return; }  // 對方切到背景：斷線判斷放寬（NET_SILENT_HID）
+    if (m.t === 'bye') { if (this.role === 'host') this.lost(undefined, q); else this.lost('房主離開了'); return; }  // 對方關掉、離開（close）：馬上知道，不用等逾時
     const now = performance.now(), S = this.stats;
     if (S && (m.t === 's' || m.t === 'i')) {  // 同步訊息之間最長隔多久（卡頓的指標；暫停中不算）
       if (Game.state === 'play' && !this.pauseReason()) {
@@ -810,14 +829,15 @@ const Net = {
         }
         break;
       case 'sector':
-        if (client && Game.state === 'victory') {
+        if (client && Game.screenState() === 'victory') {
+          if (Game.state === 'editor') Game.toggleEditor();  // 隊友開著電路（選王的獎勵時可以開）：先關掉（配裝照常送給房主）
           const map = this.unpackMap(m.map);
           if (!map || !ENEMY_TYPES[m.bossId]) { this.lost('收到的星圖有問題，請兩邊都重新整理'); break; }
           this.nextMap = { map, bossId: m.bossId };
           Game.nextSector();
         }
         break;
-      case 'finish': if (client && Game.state === 'victory') Game.finishRun(); break;
+      case 'finish': if (client && Game.screenState() === 'victory') { if (Game.state === 'editor') Game.toggleEditor(); Game.finishRun(); } break;
       case 'moddone':  // 隊友選好了旗艦獎勵：大家都好了，房主就可以前往下一星區
         if (host && q.modWait) { q.modWait = false; if (!this.modWaiting() && Game.state === 'victory') Screen.victory(); }
         break;
@@ -1411,8 +1431,16 @@ const Net = {
   },
 };
 addEventListener('beforeunload', () => Net.close());
+// 背景分頁的遊戲迴圈（requestAnimationFrame）停住：改用計時器送 ping，對方才知道我還在（keepAlive）
+if (typeof setInterval === 'function') { const iv = setInterval(() => { if (document.hidden && Net.role) Net.send({ t: 'ping', at: performance.now() }); }, 1000); if (iv && iv.unref) iv.unref(); }  // unref：在 node 跑測試時不擋住程式結束
 // 切到其他視窗／分頁時通知隊友：兩人一起暫停（瀏覽器會把背景分頁的遊戲停住，不暫停的話飛船會站著挨打）
 document.addEventListener('visibilitychange', () => {
+  if (Net.role) Net.send({ t: 'hid', on: document.hidden });  // 房間裡也送：背景分頁送不出 ping，對方先不要判斷斷線（keepAlive）
+  if (!document.hidden && Net.role) {  // 自己切回來：背景時的訊息可能晚到，從現在重新算
+    const now = performance.now();
+    if (Net.heard) Net.heard = now;
+    for (const q of Net.peers) if (q.heard) q.heard = now;
+  }
   if (!Net.linked || Game.mode !== 'coop') return;
   if (Net.role === 'host') { Net.myAway = document.hidden; Net.pushPause(); } else Net.send({ t: 'away', on: document.hidden });
 });

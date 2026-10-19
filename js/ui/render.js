@@ -380,7 +380,7 @@ function drawHUD() {
     ctx.font = 'bold 11px Microsoft JhengHei'; ctx.fillStyle = '#ff6b6b';
     ctx.fillText(`✖ 間歇失效中：${fk.map(i => CHIPS[Game.chain[i]].short || CHIPS[Game.chain[i]].name).join('、')}`, Math.max(bx, T ? 320 : 410), 50);
   }
-  hudText(`◆ ${Game.credits}`, 20, 72, '#ffd166', 'bold 14px Segoe UI');
+  hudText(`◆ ${Game.credits}`, 20, 72, '#9ff0ff', 'bold 14px Segoe UI');  // 晶體的顏色（跟戰場上的晶體一樣）
   hudText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 72, 72, p.ship.color, 'bold 12px Microsoft JhengHei');  // 護盾層數
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
     const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;

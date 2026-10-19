@@ -1093,7 +1093,7 @@ const Game = {
       }
       if (this.state === 'blackhole') this.bh.sel = [];
       this.view();
-    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'event', 'armory', 'workshop'].includes(this.state)) {
+    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'event', 'armory', 'workshop', 'victory'].includes(this.state)) {
       this.returnState = this.state;
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
@@ -1117,8 +1117,9 @@ const Game = {
       if (sec) sec[k] = (sec[k] || 0) + parts[k];
     }
   },
+  screenState() { return this.state === 'editor' ? this.returnState : this.state; },  // 畫面底下是哪一頁（開著電路編輯器時 = 打開前那一頁）
   restoreScreen() {  // 依目前狀態重畫對應的畫面（機制檢查跑完後用）；開著編輯器時畫底下那一頁
-    Events.emit('view', { state: this.state === 'editor' ? this.returnState : this.state, msg: '' });
+    Events.emit('view', { state: this.screenState(), msg: '' });
   },
 
   onEnemyKilled(e) {
