@@ -39,6 +39,13 @@ const seen = await A.evaluate(() => { const o = Net.roomShips().find(o => o.slot
 ok(b1.x > b0.x + 100, `隊友：鍵盤移動（x ${Math.round(b0.x)} → ${Math.round(b1.x)}）`);
 ok(seen && Math.abs(seen.x - b1.x) < 30 && Math.abs(seen.y - b1.y) < 30, `房主：看到 2P 的位置跟著動（看到 ${seen ? Math.round(seen.x) + ',' + Math.round(seen.y) : '沒有'}，實際 ${Math.round(b1.x)},${Math.round(b1.y)}）`);
 ok(await until(B, () => Net.roomShips().some(o => o.slot === 1)), '隊友：看到 1P 的船');
+// 順不順（真的網路）：隊友往左開 1 秒，房主畫面上每一幀記 2P 的位置 → 隊友一直在動時，沒動的幀要是 0
+//   （以前每秒只同步 12 次、沒有補動作：tests/roomlag.js 量到 8 成的幀不動）
+const samp = A.evaluate(() => new Promise(res => { const out = []; let n = 0; const f = () => { const o = Net.roomShips().find(o => o.slot === 2); out.push(o ? [o.x, o.y] : null); if (++n < 75) requestAnimationFrame(f); else res(out); }; requestAnimationFrame(f); }));
+await B.keyboard.down('a'); const pos = await samp; await B.keyboard.up('a');
+const mv = pos.slice(16).map((p, i) => p && pos[i + 15] ? Math.hypot(p[0] - pos[i + 15][0], p[1] - pos[i + 15][1]) : NaN).filter(Number.isFinite);  // 前 15 幀是起步（跳過）
+const still = mv.filter(m => m < 0.01).length, mx = Math.max(...mv), avg = mv.reduce((a, b) => a + b, 0) / mv.length;
+ok(mv.length > 40 && still === 0 && mx < avg * 3, `房主：2P 移動時每幀都在動（沒動 ${still}/${mv.length} 幀、每幀平均 ${avg.toFixed(1)}px、最多 ${mx.toFixed(1)}px）`);
 await A.screenshot({ path: SHOTS + '房間測試_房主畫面.png' });
 await B.screenshot({ path: SHOTS + '房間測試_隊友畫面.png' });
 

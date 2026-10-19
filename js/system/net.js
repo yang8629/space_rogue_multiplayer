@@ -16,7 +16,7 @@ const NET_IDLE_EVERY = 5;  // 待機（還沒發現玩家）的敵人每幾次�
 const NET_VOTE_TIME = 20;  // 兩人都回到航圖後的投票時間（秒）
 const NET_GO_TIME = 3;     // 兩人都選好節點後，倒數幾秒進關卡
 const NET_REJOIN_TIME = 120;  // 斷線後房間保留多久等隊友重連（秒）
-const NET_ROOM_RATE = 1 / 12;  // 房間（共用的基地）裡每秒同步幾次飛船位置
+const NET_ROOM_RATE = 1 / 30;  // 房間（共用的基地）裡每秒同步幾次飛船位置（跟戰鬥一樣；以前 12 次，對方的船每 5 幀才跳一次：tests/roomlag.js）
 const NET_ROOM_STALE = 2000;   // 多久沒收到某人的位置就不畫他（ms）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
@@ -111,7 +111,10 @@ const Net = {
       return;
     }
     if (!this.linked) return;
-    if (Game.state === 'pick') { this.roomAcc += dt; if (this.roomAcc >= NET_ROOM_RATE) { this.roomAcc = 0; this.sendRoomPos(); } }
+    if (Game.state === 'pick') {
+      this.roomAcc += dt; if (this.roomAcc >= NET_ROOM_RATE) { this.roomAcc = Math.min(this.roomAcc - NET_ROOM_RATE, NET_ROOM_RATE); this.sendRoomPos(); }
+      this.smoothRoom(dt);
+    }
     // 暫停中（Tab、切到背景）、不在戰鬥、隊友倒下（倒下時不送操作）：同步間隔不累積，恢復後從下一則訊息重新算
     if (this.stats && (Game.state !== 'play' || this.pauseReason() || (this.role === 'host' && Game.mates.some(m => m.dead))))
       this.stats.lastRecv = 0;
@@ -257,12 +260,13 @@ const Net = {
   sendRoomPos() {
     const s = Hub.ship;
     if (!s) return;
-    this.send({ t: 'hp', sl: this.mySlot(), x: Math.round(s.x), y: Math.round(s.y), a: r2(s.aim), s: Hub.shipId, w: Hub.weaponId, m: s.moving ? 1 : 0, r: this.meReady ? 1 : 0, b: Screen.hubOn ? 0 : 1 });
+    this.send({ t: 'hp', sl: this.mySlot(), x: Math.round(s.x), y: Math.round(s.y), vx: Math.round(s.vx), vy: Math.round(s.vy), a: r2(s.aim), s: Hub.shipId, w: Hub.weaponId, m: s.moving ? 1 : 0, r: this.meReady ? 1 : 0, b: Screen.hubOn ? 0 : 1 });
   },
   onRoomPos(m, q) {
     const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
     if (!slot || slot === this.mySlot()) return;
-    const had = this.roomMates[slot], p = { x: clamp(num(m.x), 0, HUB.W), y: clamp(num(m.y), 0, HUB.H), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() };
+    const had = this.roomMates[slot], p = { x: clamp(num(m.x), 0, HUB.W), y: clamp(num(m.y), 0, HUB.H), vx: clamp(num(m.vx), -2000, 2000), vy: clamp(num(m.vy), -2000, 2000), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() };
+    p.dx = had ? had.dx : p.x; p.dy = had ? had.dy : p.y;  // 畫面上的位置接著上一次的（smoothRoom 慢慢拉過去）
     this.roomMates[slot] = p;
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
     if (!had || had.r !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
@@ -275,10 +279,19 @@ const Net = {
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
     Hub.addFire(slot, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H), num(m.a), m.w);
   },
-  // 現在要畫的其他人（太久沒收到的不畫）
+  // 其他人的船在畫面上的位置（dx, dy）：照收到的位置＋速度往前推，再平滑地拉過去；差太遠（傳送、回到基地）直接跳過去
+  //   往前推 = 收到之後過了多久＋單程延遲（來回延遲的一半）＋平滑本身的落後，最多 0.25 秒
+  smoothRoom(dt) {
+    const now = performance.now(), k = Math.min(1, dt * 12), lead = (this.ping || 0) / 2000 + 0.08;  // 平滑 12、平滑落後 0.08 秒：tests/roomlag.js 比過（平滑 20 在延遲 100ms 急轉時推過頭、跳 2 倍）
+    for (const p of Object.values(this.roomMates)) {
+      const age = Math.min(0.25, Math.max(0, (now - p.at) / 1000) + lead), tx = p.x + p.vx * age, ty = p.y + p.vy * age;
+      if (Math.hypot(tx - p.dx, ty - p.dy) > 200) { p.dx = tx; p.dy = ty; } else { p.dx += (tx - p.dx) * k; p.dy += (ty - p.dy) * k; }
+    }
+  },
+  // 現在要畫的其他人（太久沒收到的不畫）：x, y 是畫面上的位置（smoothRoom）
   roomShips() {
     const now = performance.now();
-    return Object.entries(this.roomMates).filter(([, p]) => now - p.at < NET_ROOM_STALE).map(([s, p]) => ({ slot: +s, ...p }));
+    return Object.entries(this.roomMates).filter(([, p]) => now - p.at < NET_ROOM_STALE).map(([s, p]) => ({ slot: +s, ...p, x: p.dx, y: p.dy }));
   },
   setMsg(html) { const el = document.getElementById('netMsg'); if (el) el.innerHTML = html; },
   // ---------- 章節：房主在發射台選，所有人都解鎖的章節才能選 ----------
