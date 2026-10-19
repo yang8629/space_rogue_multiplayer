@@ -1109,7 +1109,9 @@ const Net = {
         e.type === 'spitter' || e.type === 'hive' ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 開火倒數（噴吐者鼓起、母巢脈動）、弱點標記／破甲
         e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
         e.affixes ? e.affixes.join(',') : null, e.r !== e.t.radius ? r2(e.r) : null, e.ledT > 0 ? 1 : 0,  // 精英詞綴、體型（分裂後變小）、被統帥加成
-        e.alertT > 0 ? r2(e.alertT) : 0])),  // 剛發現玩家（頭上「!」還顯示幾秒）
+        e.alertT > 0 ? r2(e.alertT) : 0, e.tgt || 0,  // 剛發現玩家（頭上「!」還顯示幾秒）、拖曳艦鎖定／牽引的玩家號碼（被拉的人自己拉自己，Game.beamPull）
+        e.grp || 0])),  // 同一隻精英（分裂、編隊）：精英血條同一條
+
       et, ei,
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
       lt: this.lootTotal, w: G.combat ? G.combat.wave : 0, k: G.kills, ex: G.exit ? [r(G.exit.x), r(G.exit.y), G.exit.r, G.exit.gate ? 1 : 0] : null, ar: G.combat ? G.combat.areaN || 0 : 0,
@@ -1224,7 +1226,7 @@ const Net = {
         mode: et[a[12]], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
         shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false,
         cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: type === 'worm' ? num(a[23]) : undefined,
-        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]) };
+        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined };
     }).filter(Boolean);
     for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
     const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）

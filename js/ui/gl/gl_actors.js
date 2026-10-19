@@ -95,7 +95,7 @@ const GLActors = {
     const alpha = (0.3 + 0.7 * sp) * (1 - 0.9 * (e.cloak || 0)), k = (e.r / T.radius) * sp;
     let rot = ['swarmer', 'worm', 'splitling', 'lurker', 'spitter', 'treasure'].includes(ty) ? Math.atan2(e.vy, e.vx) : e.rot || 0;
     if (ty === 'spitter') rot = spitterFace(e);
-    if (ty === 'elite' || ty === 'boss2') rot = enemyFace(e);  // 船頭朝目標（不自己一直轉）
+    if (T.face) rot = enemyFace(e);  // 船頭朝目標（不自己一直轉）
     const base = (name, n, period, scaleRes = 2) => this.spr(this.frame(name, Math.floor(t / period * n) % n), e.x, e.y, k / scaleRes, rot);
     let main;
     switch (ty) {
@@ -103,6 +103,9 @@ const GLActors = {
       case 'brute': { const curled = e.mode === 'windup' || e.mode === 'charge'; main = this.spr(this.frame(curled ? 'brute_ball' : 'brute', 0), e.x, e.y, k * (curled ? 0.9 : 1) / 2, rot); if (e.mode === 'stun' && Math.floor(t * 10) % 2) main.alpha = 0.5; break; }
       case 'spitter': { const cd = T.ranged ? T.ranged.cd : 1.8, p = e.cd != null ? 1 - clamp(e.cd / cd, 0, 1) : 0, f = p < 0.75 ? 0 : Math.min(7, 1 + Math.floor((p - 0.75) / 0.25 * 7)); main = this.spr(this.frame('spitter', f), e.x, e.y, k / 2, rot); break; }
       case 'elite': main = base('elite', 16, TAU / 1.1); break;
+      case 'artillery': { const ch = e.mode === 'windup' ? 1 - clamp(e.modeT / CFG.ARTILLERY.windup, 0, 1) : 0; main = this.spr(this.frame('artillery', Math.round(ch * 4)), e.x, e.y, k / 2, rot); break; }  // 蓄力時砲管越來越亮
+      case 'tractor': { const on = e.mode === 'pull' ? 2 : e.mode === 'aim' ? 1 : 0; main = this.spr(this.frame('tractor', on * 4 + Math.floor(t * 8) % 4), e.x, e.y, k / 2, rot); break; }  // 鎖定、牽引時發射器亮起來
+      case 'wing': main = base('wing', 6, TAU / 3); break;
       case 'gunboat': { const ch = e.mode === 'windup' ? 1 - Math.max(0, e.modeT) / 0.6 : 0; main = this.spr(this.frame('gunboat', Math.round(clamp(ch, 0, 1) * 4)), e.x, e.y, k / 2, rot); break; }
       case 'worm': {
         const head = this.wormHead.has(e), tailSeg = !head && this.wormTail.has(e), leg = Math.floor((t * 12 / TAU + (e.id % 4) * 0.25) * 4) % 4;
@@ -163,8 +166,8 @@ const GLActors = {
     }
     if (e.affixes && sp >= 1) this.affixFx(e, cv);
     if (e.spawnT > 0) g.circle(e.x, e.y, e.r * (2.2 - sp)).stroke({ width: 1, color: glColor(T.color), alpha: 0.8 });
-    if (e.hp < e.maxHp && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !(e.cloak > 0.5)) {
-      const w = ty === 'elite' ? e.r * 3 : e.r * 2;
+    if ((e.hp < e.maxHp || T.elite) && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !(e.cloak > 0.5)) {  // 精英一直顯示（同一隻有好幾艘時，靠這個找出殘血的那艘）
+      const w = T.elite ? e.r * 3 : e.r * 2;
       g.rect(e.x - w / 2, e.y - e.r - 12, w, 4).fill({ color: 0x330000 });
       g.rect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4).fill({ color: glColor(T.color) });
     }
@@ -191,18 +194,37 @@ const GLActors = {
     }
   },
 
-  // 衝鋒／滾球預警線：一律紅色
+  // 衝鋒／滾球預警線：一律紅色；拖曳艦的鎖定線、牽引光束（連到被鎖定的那艘船）
   telegraph(e) {
+    if (e.mode === 'aim' || e.mode === 'pull') { this.beam(e); return; }
     if (e.mode !== 'windup') return;
     const g = this.gE, t = Game.time;
     let len, alpha, w = e.r * 1.6;
     if (e.type === 'elite') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; w = e.r * 1.4; }
+    else if (e.type === 'wing') { len = 520; alpha = 0.2 + 0.4 * Math.sin(t * 30) ** 2; w = 3; }  // 交叉齊射的彈道
+    else if (e.type === 'artillery') { g.circle(e.x, e.y, e.r + 6 + 34 * Math.max(0, e.modeT) / CFG.ARTILLERY.windup).stroke({ width: 3, color: 0xff2a2a, alpha: 0.35 + 0.4 * Math.sin(t * 30) ** 2 }); return; }
     else if (e.type === 'brute') { len = telegraphLen(e); alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }
     else if (e.type === 'boss2') { len = telegraphLen(e); alpha = 0.25 + 0.45 * Math.sin(t * 30) ** 2; }
     else if (e.type === 'lurker') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; }
     else if (e.type === 'gunboat') { g.circle(e.x, e.y, e.r + 6 + 40 * Math.max(0, e.modeT) / 0.6).stroke({ width: 3, color: 0xff2a2a, alpha: 0.35 + 0.4 * Math.sin(t * 30) ** 2 }); return; }
     else return;
     g.moveTo(e.x, e.y).lineTo(e.x + Math.cos(e.chargeA) * len, e.y + Math.sin(e.chargeA) * len).stroke({ width: w, color: 0xff2a2a, alpha });
+  },
+  // 拖曳艦：aim = 細的紅色鎖定線（閃）；pull = 粗的青色光束（加法發光、往船這邊流的光點）
+  beam(e) {
+    const s = Game.shipBySlot(e.tgt);
+    if (!s || s.dead) return;
+    const g = this.gE, t = Game.time, sx = e.x + Math.cos(e.chargeA) * e.r, sy = e.y + Math.sin(e.chargeA) * e.r;
+    if (e.mode === 'aim') { g.moveTo(sx, sy).lineTo(s.x, s.y).stroke({ width: 2, color: 0xff2a2a, alpha: 0.35 + 0.5 * Math.sin(t * 30) ** 2 }); return; }
+    const col = glColor(e.t.color);
+    g.moveTo(sx, sy).lineTo(s.x, s.y).stroke({ width: 12, color: col, alpha: 0.18 });
+    g.moveTo(sx, sy).lineTo(s.x, s.y).stroke({ width: 4, color: col, alpha: 0.7 });
+    g.moveTo(sx, sy).lineTo(s.x, s.y).stroke({ width: 1.5, color: 0xffffff, alpha: 0.8 });
+    for (let i = 0; i < 6; i++) {  // 光點從船流向拖曳艦
+      const f = 1 - ((t * 1.6 + i / 6) % 1), x = sx + (s.x - sx) * f, y = sy + (s.y - sy) * f;
+      this.glowAt(this.pE, x, y, 10, col, 0.7);
+    }
+    this.glowAt(this.pE, s.x, s.y, 30 + 4 * Math.sin(t * 20), col, 0.45);
   },
 
   // ---------- 飛船 ----------

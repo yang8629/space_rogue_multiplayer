@@ -437,17 +437,27 @@ function drawHUD() {
     ctx.fillRect(bx, by, bw * Math.max(0, boss.hp / boss.maxHp), 10);
     ctx.textAlign = 'center'; ctx.font = 'bold 13px Microsoft JhengHei'; ctx.fillStyle = '#ffd3dc';
     ctx.fillText(`♛ ${boss.t.name}${boss.enraged ? '（暴走）' : ''}`, VW / 2, by - 6);
-  } else {  // 精英血條（跟旗艦同一個位置，黃色）：分裂出來的兩隻合起來算
-    const els = Game.enemies.filter(e => e.t.elite && !e.dead && !(e.spawnT > 0));
-    if (els.length) {
-      const bw = Math.min(420, VW - 40), bx = VW / 2 - bw / 2, by = T ? VH - 44 : VH - 112;
-      const hp = els.reduce((a, e) => a + Math.max(0, e.hp), 0), mx = els.reduce((a, e) => a + e.maxHp, 0);
-      ctx.fillStyle = 'rgba(20, 16, 4, 0.85)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
-      ctx.fillStyle = els.some(e => e.enraged) ? '#ff4d6d' : '#ffd400';
-      ctx.fillRect(bx, by, bw * clamp(hp / (mx || 1), 0, 1), 8);
-      ctx.textAlign = 'center'; ctx.font = 'bold 13px Microsoft JhengHei'; ctx.fillStyle = '#fff3b0';
-      ctx.fillText(`⚠ ${eliteName(els[0])}${els.length > 1 ? ` ×${els.length}` : ''}`, VW / 2, by - 6);
+  } else {  // 精英血條（跟旗艦同一個位置，黃色）：一隻精英一條，往上疊；同一隻 = 同一個 grp（分裂出來的兩隻、編隊的幾艘，Enemy.grp）
+    //   同一隻有好幾艘時切成幾段，一段一艘、各自的血量（編隊 fleet 段、分裂 2 段；打掉的那段留空）；哪一艘殘血看頭上的小血條
+    const groups = new Map();
+    for (const e of Game.enemies) if (e.t.elite && !e.dead && !(e.spawnT > 0)) {
+      const k = e.grp || e.id, g = groups.get(k) || { e, list: [], n: e.t.fleet || (e.grp ? 2 : 1) };
+      g.list.push(e); groups.set(k, g);
     }
+    const bw = Math.min(420, VW - 40), bx = VW / 2 - bw / 2;
+    [...groups.values()].slice(0, 4).forEach((g, i) => {
+      const by = (T ? VH - 44 : VH - 112) - i * 30, n = Math.max(g.n, g.list.length), gap = n > 1 ? 4 : 0, sw = (bw - gap * (n - 1)) / n;
+      g.list.sort((a, b) => a.id - b.id);
+      for (let s = 0; s < n; s++) {
+        const e = g.list[s], x = bx + s * (sw + gap);
+        ctx.fillStyle = 'rgba(20, 16, 4, 0.85)'; ctx.fillRect(x - 2, by - 2, sw + 4, 12);
+        if (!e) continue;  // 打掉的那艘：空的一段
+        ctx.fillStyle = e.enraged ? '#ff4d6d' : '#ffd400';
+        ctx.fillRect(x, by, sw * clamp(e.hp / (e.maxHp || 1), 0, 1), 8);
+      }
+      ctx.textAlign = 'center'; ctx.font = 'bold 13px Microsoft JhengHei'; ctx.fillStyle = '#fff3b0';
+      ctx.fillText(`⚠ ${eliteName(g.e)}`, VW / 2, by - 6);
+    });
   }
 
   const why = Net.pauseReason();

@@ -40,7 +40,9 @@ const Game = {
   // 畫面跟著誰：自己被擊墜時看還活著的隊友
   viewShip() { return this.player.dead && this.mates.find(m => !m.dead) || this.player; },
   // 幾號玩家（1P＝房主）：自己的號碼問 Net，隊友的號碼記在飛船上
-  tagOf(p) { return `${p === this.player ? Net.mySlot() : p.slot || 2}P`; },
+  tagOf(p) { return `${this.slotOf(p)}P`; },
+  slotOf(p) { return p === this.player ? Net.mySlot() : p.slot || 2; },  // 玩家號碼（單人 = 1）
+  shipBySlot(s) { return s === Net.mySlot() ? this.player : this.mates.find(m => m.slot === s) || null; },
   // 雙人：s 號玩家的出生點離中間多遠（照號碼由左到右、以中間為準，每人隔 100；兩人時是 -50／+50）
   slotX(s) { return (s - (this.mates.length + 2) / 2) * 100; },
   // 玩家顏色：雙人時照號碼（CFG.PLAYER_COLORS），單人就是飛船自己的顏色
@@ -334,23 +336,23 @@ const Game = {
     }
     // 警報艇（CFG.ALARM）：分區的戰鬥第 from 區以後，混在這一區的敵人裡（在精英放進來之前插：精英照舊最先出場）（蟲潮那一區不放：全是蟲群）
     if (this.usesAreas() && !C.swarmArea && n >= CFG.ALARM.from && Math.random() < CFG.ALARM.chance) list.splice(randInt(0, list.length), 0, 'alarm');
-    if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift('elite');  // 精英最先出場
+    if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift(this.pickElite(this.sector));  // 精英最先出場
     if (C.treasure === n || C.hoard) list.splice(Math.floor(list.length / 2), 0, 'treasure');  // 寶藏無人機：混在這一區的敵人中間出場
     // 沙盒：每 10 波輪流出現三隻旗艦
     const sbBoss = C.sandbox && n % 10 === 0 ? CFG.BOSS_ORDER[(n / 10 - 1) % CFG.BOSS_ORDER.length] : null;
     if (sbBoss) list.push(sbBoss);
-    else if (C.sandbox && n % 5 === 0) list.unshift('elite');
+    else if (C.sandbox && n % 5 === 0) list.unshift(this.pickElite(1 + Math.floor(n / 5)));
     C.pending = list;
     // 精英詞綴先抽好（出場橫幅要寫名字）：第 1 星區 1 個、第 2 星區 2 個、第 3 星區以後 3 個；沙盒照波次（第 5 波 1 個、第 15 波 3 個）
-    const nAff = affixCount(C.sandbox ? Math.floor(n / 5) : this.sector);
-    C.eliteRolls = list.filter(x => x === 'elite').map(() => rollAffixes(nAff));
+    const nAff = affixCount(C.sandbox ? Math.floor(n / 5) : this.sector), eliteTypes = list.filter(x => ENEMY_TYPES[x].elite);
+    C.eliteRolls = eliteTypes.map(x => rollAffixes(nAff, x));
     C.waveN = 0;  // 這一區實際出場幾隻（spawnEnemy 加；列隊蟲一隻 6 節）：精英亂入照這個算「剩一半」
-    if (C.intrude === n) C.intrudeRoll = rollAffixes(nAff);
+    if (C.intrude === n) { C.intrudeType = this.pickElite(this.sector); C.intrudeRoll = rollAffixes(nAff, C.intrudeType); }
     const bText = C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`;
     Events.emit('waveStart', { n, boss: !!sbBoss, swarm: C.swarmArea });
     if (C.eliteRolls.length && !sbBoss) {  // 精英出場：名字＋詞綴說明
       const R = C.eliteRolls[0];
-      bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, R.map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　'), 3);
+      bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES[eliteTypes[0]] })}`, affixBrief(R), 3);
     } else if (C.swarmArea) bannerFx('⚠ 蟲潮', `${bText}：大群脆弱的蟲群湧過來`, 2.5);
     else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : n === 1 ? [C.sos && `⚠ 追兵：敵人 +${Math.round((C.sos - 1) * 100)}%`, C.hoard && '✦ 寶藏星域：每一區都有寶藏無人機'].filter(Boolean).join('　') : '', 2);
   },
@@ -361,6 +363,29 @@ const Game = {
       : s === 2 ? [randInt(1, 2), 0.4] : late ? [1, 0.3] : [randInt(0, 1), 0.2];
     const pool = Object.keys(THEMES).filter(k => THEMES[k].from <= Math.min(s, 3));
     return { list: pickN(pool, Math.min(n, pool.length)), share };
+  },
+  // 抽一種精英（CFG.ELITE_POOL：這個星區出得來的，照權重 × 章節的 eliteW）
+  pickElite(sector) {
+    const P = CFG.ELITE_POOL, W = (!this.freePlay() && this.chapter().eliteW) || {};
+    const ids = Object.keys(P).filter(k => P[k].from <= sector), w = ids.map(k => P[k].w * (W[k] != null ? W[k] : 1));
+    let r = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < ids.length; i++) if ((r -= w[i]) < 0) return ids[i];
+    return ids[ids.length - 1];
+  },
+  // 編隊（ENEMY_TYPES[type].fleet）：e 是第一艘，在旁邊補上其他艘，共用一個編隊 F（CFG.WING、ELITE_AI.wing）；詞綴、待機照 e
+  //   kids = 同隊的其他艘：叫醒一艘整隊一起醒（wakeEnemy）
+  makeFleet(e) {
+    const W = CFG.WING, n = e.t.fleet;
+    const F = { x: e.x, y: e.y, ang: rand(0, TAU), side: Math.random() < 0.5 ? 1 : -1, members: [e], fireT: W.fireCd, crossT: W.crossCd * 0.6, mode: 'form', modeT: 0, at: -1 };
+    e.fleet = F;
+    for (let i = 1; i < n; i++) {
+      const a = F.ang + i / n * TAU, k = new Enemy(e.type, ...Arena.clampIn(e.x + Math.cos(a) * W.radius, e.y + Math.sin(a) * W.radius, 20), e.hpScale);
+      k.zone = e.zone; k.alert = e.alert; k.home = e.home; k.spawnT = e.spawnT; k.fleet = F;
+      if (e.affixes) k.setAffixes(e.affixes, this.player.x, this.player.y);
+      F.members.push(k); this.enemies.push(k);
+    }
+    for (const m of F.members) { m.kids = F.members.filter(o => o !== m); m.grp = e.id; }  // 精英血條：整隊一條（一艘一段）
+    return F.members;
   },
   // o.intruder：精英亂入（o.affixes = 先抽好的詞綴）
   spawnEnemy(type, o = {}) {
@@ -390,12 +415,14 @@ const Game = {
     // 警戒（CFG.ALERT）：分區的戰鬥出場先待機；表上 awake 的（寶藏無人機）、精英亂入照舊直接行動
     if (this.usesAreas() && !e.t.awake && !o.intruder) { e.alert = false; e.home = [x, y]; }
     if (swarm) e.hp = e.maxHp *= S.hp;
-    if (type === 'elite') e.setAffixes(o.affixes || (C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
+    if (e.t.elite) e.setAffixes(o.affixes || (C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
     this.enemies.push(e);
+    const group = e.t.fleet ? this.makeFleet(e) : [e];  // 編隊一次出好幾艘
     if (e.t.treasure) { bannerFx(`✦ ${e.t.name}`, `${CFG.TREASURE.life} 秒內打掉：這場的三選一保證稀有晶片`, 2.5); Events.emit('treasureArrive', e); }
     if (o.intruder) {
-      e.intruder = { left: 1 };  // 分裂詞綴：分出來的那隻共用這個（left = 還沒打掉幾隻）
-      bannerFx(`⚠ 精英亂入：${eliteName(e)}`, `打掉：這場的三選一保證稀有晶片　${(e.affixes || []).map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　')}`, 3);
+      const I = { left: group.length };  // 同一個亂入的共用（left = 還沒打掉幾隻；分裂詞綴分出來的那隻也加進來）
+      for (const m of group) m.intruder = I;
+      bannerFx(`⚠ 精英亂入：${eliteName(e)}`, `打掉：這場的三選一保證稀有晶片　${affixBrief(e.affixes || [])}`, 3);
       Events.emit('eliteIntrude', e);
     }
     burst(x, y, e.t.color, 10, 90, 0.5, 2);
@@ -423,7 +450,7 @@ const Game = {
     // 精英亂入：這一區的敵人都出場了、剩不到一半時闖進來（先於「清完」判斷：同一幀清完也照樣闖進來）
     if (C.intrude === C.wave && !C.intruded && !C.pending.length && this.enemies.length <= C.waveN * CFG.INTRUDE.at) {
       C.intruded = true;
-      this.spawnEnemy('elite', { affixes: C.intrudeRoll, intruder: true });
+      this.spawnEnemy(C.intrudeType, { affixes: C.intrudeRoll, intruder: true });
     }
     if (C.pending.length) {
       C.spawnClock -= dt;
@@ -1053,8 +1080,9 @@ const Game = {
   onEnemyKilled(e) {
     this.kills++;
     const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
-    if (KR) { KR.kills++; if (e.type === 'elite') KR.elites = (KR.elites || 0) + 1; if (e.lastSrc === 'echo') KR.echoK = (KR.echoK || 0) + 1; }  // 精英、回響擊殺（解鎖進度）
-    const big = e.type === 'brute' || e.type === 'elite';
+    const lastOfGroup = !e.fleet || !e.fleet.members.some(m => m !== e && !m.dead);  // 編隊：最後一艘才算打倒一隻精英
+    if (KR) { KR.kills++; if (e.t.elite && lastOfGroup) KR.elites = (KR.elites || 0) + 1; if (e.lastSrc === 'echo') KR.echoK = (KR.echoK || 0) + 1; }  // 精英、回響擊殺（解鎖進度）
+    const big = e.type === 'brute' || e.t.elite;
     if (!this.isClient()) {
       this.infectBurst(e); this.payPlayTags(e); this.onStreakKill(e); this.onReloadKill(e);
       if (e.wild && e.burnT > 0) {  // 野火：燒著死掉 → 火噴到附近所有敵人
@@ -1071,7 +1099,7 @@ const Game = {
     Events.emit('enemyKilled', { e, big });
     if (e.t.treasure) this.bonusRare(e, 'treasure');
     if (e.intruder && --e.intruder.left === 0) this.bonusRare(e, 'intrude');
-    if (big) this.shake(e.type === 'elite' ? 14 : 6);
+    if (big) this.shake(e.t.elite ? 14 : 6);
     if (e.t.boss) {  // 母艦爆炸：清除所有小怪與敵彈
       this.shake(28);
       burst(e.x, e.y, e.t.color, 150, 600, 1.4, 3.5);
@@ -1085,7 +1113,7 @@ const Game = {
     for (let i = 0; i < base; i++) if (Math.random() < this.passives.greed) n++;
     for (let i = 0; i < n; i++)
       this.pickups.push({ id: this.nextId++, x: e.x + rand(-8, 8), y: e.y + rand(-8, 8), vx: rand(-80, 80), vy: rand(-80, 80), life: 14 });
-    if (e.type === 'elite' && this.combat.sandbox && COMPOSITE_IDS.length) {
+    if (e.t.elite && lastOfGroup && this.combat.sandbox && COMPOSITE_IDS.length) {
       const i = this.inventory.indexOf(null), id = pick(COMPOSITE_IDS);
       if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
     }
@@ -2140,6 +2168,28 @@ const Game = {
       }
     }
     this.eBullets = this.eBullets.filter(b => b.life > 0);
+  },
+  // 砲艦的砲擊（CFG.ARTILLERY）：在目標 p 附近放 n 個落點紅圈（第一個在 p 前進方向 lead 秒後的位置），跟王的落點轟炸一樣時間到才爆炸
+  artilleryVolley(e, p) {
+    const A = CFG.ARTILLERY;
+    for (let i = 0; i < A.n; i++) {
+      const a = rand(0, TAU), r = i ? rand(60, A.spread) : 0;
+      const [x, y] = Arena.clampIn(p.x + (p.vx || 0) * A.lead + Math.cos(a) * r, p.y + (p.vy || 0) * A.lead + Math.sin(a) * r, 20);
+      this.zones.push({ x, y, r: A.r, t: A.delay, max: A.delay, dmg: A.dmg, from: `${e.t.name}（砲擊）` });
+    }
+    burst(e.x + Math.cos(e.chargeA) * e.r, e.y + Math.sin(e.chargeA) * e.r, e.t.color, 12, 200, 0.3, 2);
+    Events.emit('enemyShot', e);
+  },
+  // 拖曳艦的牽引（CFG.TRACTOR）：被拉的船在自己的電腦上拉（房主拉自己、隊友拉自己；e.tgt = 被拉的號碼），拉到離牠 stop 為止；
+  //   衝刺中不拉（衝刺 = 掙脫，光束由房主那邊斷掉）。在飛船移動、撞牆之前呼叫（Player.update）
+  beamPull(P, dt) {
+    if (P.dashT > 0 || !this.enemies.length) return;
+    const me = this.slotOf(P), T = CFG.TRACTOR;
+    for (const e of this.enemies) {
+      if (e.mode !== 'pull' || e.tgt !== me || e.dead) continue;
+      const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1, k = Math.min(T.speed * dt, d - (e.r + P.r + T.stop));
+      if (k > 0) { P.x += dx / d * k; P.y += dy / d * k; }
+    }
   },
   // 王的落點轟炸：時間到就爆炸，圈裡的飛船受傷
   updateZones(dt) {

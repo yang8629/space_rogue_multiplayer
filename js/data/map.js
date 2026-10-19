@@ -8,7 +8,7 @@
 // desc：航圖下方的節點介紹（數字直接讀 CFG，改數值時說明會跟著變）
 const NODE_META = {
   combat: { label: '戰鬥', icon: '⚔', color: '#4cc9f0', desc: () => '2 個區域（第 4 層起 3 個），整場是一張不規則的大地圖，一區一波敵人：清完打開閘門，穿過去到下一區（不能回頭；地上的晶體直接收下）。打完最後一區後從 3 個晶片選 1 個。' },
-  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => `分成 2 個區域（大地圖），最後一區出現精英「虛空獵手」，每一區一半機率有行星或彗星。勝利後晶片三選一（跟一般戰鬥一樣），另外多一張「插槽 +1」可以選；刷新比一般戰鬥貴（◆${Game.shopPrice(CFG.REWARDS.elite.reroll)} 起）。之後至少有一條路通往維修站。` },
+  elite:  { label: '精英', icon: '☠', color: '#ffd400', desc: () => `分成 2 個區域（大地圖），最後一區出現一隻精英（${Object.keys(CFG.ELITE_POOL).map(k => ENEMY_TYPES[k].group || ENEMY_TYPES[k].name).join('、')} 隨機一種），每一區一半機率有行星或彗星。勝利後晶片三選一（跟一般戰鬥一樣），另外多一張「插槽 +1」可以選；刷新比一般戰鬥貴（◆${Game.shopPrice(CFG.REWARDS.elite.reroll)} 起）。之後至少有一條路通往維修站。` },
   workshop: { label: '改裝廠', icon: '🔧', color: '#9fe8ff', desc: () => `零件三選一（佔 1 個零件格）；也可以付 ◆${Game.shopPrice(PART_SWAP_PRICE)} 把 1 層零件換成另一種（價格隨星區上漲）。` },
   shop:   { label: '補給站', icon: '◆', color: '#2ee6a6',
     desc: () => `買晶片、補血（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）、電路擴充（◆${Game.shopPrice(CFG.SHOP_SLOT)}）。不賣武器升級。價格隨星區上漲（第 2 星區 ×${+(1 + CFG.SHOP_PRICE_UP).toFixed(2)}、第 3 星區 ×${+(1 + 4 * CFG.SHOP_PRICE_UP).toFixed(2)}）。` },

@@ -182,6 +182,7 @@ class Player {
       this.vx += (mx / l * spd - this.vx) * k;
       this.vy += (my / l * spd - this.vy) * k;
     }
+    Game.beamPull(this, dt);  // 拖曳艦的牽引（之後照常撞牆）
     const x0 = this.x, y0 = this.y, free0 = Objects.shipFree(this, x0, y0);
     if (Arena.rect) {
       this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
@@ -563,7 +564,17 @@ const ENEMY_TYPES = {
   brute:   { name: '刺殼', hp: 130, speed: 65, radius: 22, dmg: 25, color: '#ff9f1c', credits: 4, shape: 6 },  // 靠近時縮成球滾過來（見 updateBrute）
   spitter: { name: '噴吐者', hp: 40, speed: 110, radius: 13, dmg: 10, color: '#f72585', credits: 2, shape: 4,
     ranged: { range: 380, cd: 1.8, speed: 260, dmg: 12 } },
-  elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true },
+  // 精英（elite: true，行為在 ELITE_AI；出現機率 CFG.ELITE_POOL）：face = 畫面上船頭朝目標；noAffix = 不會抽到的詞綴
+  elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true, face: true,
+    desc: '蓄力衝鋒（有預警線）和兩圈錯開的環形彈輪流放。' },
+  artillery: { name: '砲艦', hp: 700, speed: 90, radius: 24, dmg: 25, color: '#ff8c42', credits: 12, shape: 6, elite: true, face: true,   // 保持距離砲擊（CFG.ARTILLERY）
+    desc: `跟你保持 ${CFG.ARTILLERY.keep[0]}～${CFG.ARTILLERY.keep[1]} 的距離，靠近就逃；每 ${CFG.ARTILLERY.cd} 秒砲擊 ${CFG.ARTILLERY.n} 個落點（紅圈 ${CFG.ARTILLERY.delay} 秒後爆炸，第一個瞄準你前進的方向）；被追到身邊會近身散射。` },
+  tractor: { name: '拖曳艦', hp: 850, speed: 85, radius: 25, dmg: 30, color: '#3fe0c5', credits: 12, shape: 4, elite: true, face: true,   // 牽引光束把你拉過去（CFG.TRACTOR）
+    desc: `鎖定你 ${CFG.TRACTOR.aim} 秒（紅色預警線）後用牽引光束把你往牠拉 ${CFG.TRACTOR.pull} 秒；拉的時候衝刺就能掙脫（牠會暈 ${CFG.TRACTOR.stun} 秒），沒掙脫被拉到身邊就吃近身散射。` },
+  // 三艦編隊：一次出 fleet 艘、共用一個編隊（CFG.WING）；晶體、亂入獎勵照艘數分；分裂（變 6 艘）、召喚（×3）、閃現（離隊）不抽
+  wing:    { name: '編隊艦', group: '三艦編隊', hp: 300, speed: 0, radius: 15, dmg: 20, color: '#ff5ec4', credits: 4, shape: 3, elite: true, face: true, fleet: 3, idleAct: true,
+    noAffix: ['split', 'summon', 'blink'],
+    desc: `3 艘小艦繞著同一個中心轉、輪流朝你開火，每 ${CFG.WING.crossCd} 秒交叉齊射（預警線）；打掉一艘，剩下的重新排隊形、轉得更快、開火更密。詞綴三艘都有（不會抽到分裂、召喚、閃現）。` },
   // 主題小兵（每場隨機抽幾種，越後面越多，見 Game.pickThemes）
   gunboat:  { name: '彈幕艇', hp: 60, speed: 70, radius: 16, dmg: 10, color: '#ff6b9d', credits: 3, shape: 8 },    // 停在 420～520 外，每 3 秒放一圈 8 發慢速彈（先閃 0.6 秒；從 8 根砲管射出，砲塔慢慢轉）
   worm:     { name: '列隊蟲', hp: 35, speed: 130, radius: 9, dmg: 8, color: '#c0ff4d', credits: 1, shape: 4 },    // 6 節排成一列蛇行，後面的跟著前一節；頭死了下一節變成頭
@@ -584,7 +595,7 @@ const ENEMY_TYPES = {
   boss:    { name: '星噬母艦', hp: 2000, speed: 45, radius: 50, dmg: 35, color: '#ff4d6d', credits: 40, shape: 8, boss: true,
     knockResist: 1.5, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring'],
     desc: '螺旋彈幕、扇形齊射、召喚蟲群、環形彈。' },
-  boss2:   { name: '裂界獵艦', hp: 2800, speed: 80, radius: 42, dmg: 35, color: '#b388ff', credits: 40, shape: 3, boss: true,
+  boss2:   { name: '裂界獵艦', hp: 2800, speed: 80, radius: 42, dmg: 35, color: '#b388ff', credits: 40, shape: 3, boss: true, face: true,
     knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy'],
     desc: '高速衝鋒（有預警線，衝鋒時往兩側灑彈）、旋轉十字彈流、三連狙擊、部署噴吐者。' },
   boss3:   { name: '終焉核心', hp: 3000, speed: 35, radius: 56, dmg: 40, color: '#2ee6a6', credits: 40, shape: 6, boss: true,
@@ -620,6 +631,26 @@ class Enemy {
     this.dead = false;
   }
   has(id) { return !!this.affixes && this.affixes.includes(id); }
+  // 出招速度倍率：無盡模式、精英「狂暴」（出招間隔 ×0.6）
+  atkRate() { return endlessAtk() / (this.enraged && this.has('rage') ? AFFIX.rage.cd : 1); }
+  // 精英射一發敵彈（往 a 方向、速度 sp）；精英「追蹤彈」：射出後 1.5 秒內轉向最近的玩家
+  eShot(x, y, a, sp, dmg, r = 6, life = 4) {
+    Game.eBullets.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r, dmg, life, from: this.t.group || this.t.name, home: this.has('homing') ? AFFIX.homing.t : 0 });
+  }
+  // 近身散射：以 a 為中心、扇形 arc 弧度內平均射 n 發（從船身邊緣射出）
+  fan(a, n, arc, sp, dmg) {
+    for (let i = 0; i < n; i++) { const b = a + (n > 1 ? (i / (n - 1) - 0.5) * arc : 0); this.eShot(this.x + Math.cos(b) * this.r, this.y + Math.sin(b) * this.r, b, sp, dmg); }
+    Events.emit('enemyShot', this);
+  }
+  // 到 q 的視線被擋住（行星、小行星、大地圖的牆）
+  losTo(q) { return !!((Game.objs.length && Objects.losBlocked(this.x, this.y, q.x, q.y, 6)) || Arena.losBlocked(this.x, this.y, q.x, q.y, 6)); }
+  // 拖曳艦的光束斷掉：自己暈 CFG.TRACTOR.stun 秒；escaped = 被目標衝刺掙脫（目標頭上跳「掙脫！」）
+  breakBeam(escaped) {
+    const q = this.tgtP;
+    if (escaped && q) floatText(q.x, q.y - 30, '掙脫！', this.t.color, true);
+    burst(this.x, this.y, this.t.color, 14, 180, 0.4, 2);
+    this.mode = 'stun'; this.modeT = CFG.TRACTOR.stun; this.tgt = 0; this.tgtP = null;
+  }
   // 精英詞綴：設定詞綴和各自的初始狀態（盾先朝向 (fx, fy)：通常是玩家）
   setAffixes(list, fx = this.x + 1, fy = this.y) {
     this.affixes = list.length ? [...list] : null;
@@ -669,11 +700,12 @@ class Enemy {
   doSplit() {
     const A = AFFIX.split, mx = this.maxHp * A.hp, keep = this.affixes.filter(id => id !== 'split');
     const a = rand(0, TAU), ux = Math.cos(a), uy = Math.sin(a);
+    this.grp = this.grp || this.id;  // 精英血條：兩隻還是同一隻精英（同一條、兩段）
     this.maxHp = this.hp = mx; this.r *= A.size; this.credits = Math.ceil(this.t.credits / 2);
     const [x, y] = Arena.clampIn(this.x - ux * this.r * 2, this.y - uy * this.r * 2, this.r);
     const k = new Enemy(this.type, x, y, this.hpScale);
     k.t = this.t; k.maxHp = k.hp = mx; k.r = this.r; k.credits = Math.floor(this.t.credits / 2); k.zone = this.zone; k.spawnT = 0;
-    k.setAffixes(keep, this.x, this.y);
+    k.setAffixes(keep, this.x, this.y); k.grp = this.grp;
     if (this.shieldA != null && k.shieldA != null) k.shieldA = this.shieldA;
     if (this.enraged) k.enraged = true;
     if (this.intruder) { k.intruder = this.intruder; this.intruder.left++; }  // 精英亂入：兩隻都打掉才算（Game.onEnemyKilled）
@@ -701,7 +733,7 @@ class Enemy {
     const [x, y] = this.blinkTo;
     burst(this.x, this.y, this.t.color, 20, 220, 0.4, 2);
     this.x = x; this.y = y; this.vx = this.vy = 0; this.blinkTo = null;
-    if (this.mode === 'windup' || this.mode === 'charge') this.mode = 'chase';  // 瞬移打斷衝鋒（不然從新位置照舊方向衝）
+    if (this.mode !== 'chase') this.mode = 'chase';  // 瞬移打斷招式（衝鋒、砲擊蓄力、牽引）：不然從新位置照舊方向衝
     burst(x, y, this.t.color, 20, 220, 0.4, 2);
   }
   move(dt) {
@@ -775,46 +807,15 @@ class Enemy {
       return;
     }
     const dx = p.x - this.x, dy = p.y - this.y, d = Math.hypot(dx, dy) || 1;
-    this.rot += dt * (this.type === 'brute' ? 0.8 : this.type === 'elite' ? 1.5 : this.type === 'boss' ? 0.4 : this.type === 'gunboat' ? 0.5 : 0);
+    this.rot += dt * (ENEMY_SPIN[this.type] || 0);
     if (!this.alert && this.idle(dt, d)) return;
     if (t.boss) { this.updateBoss(dt, dx, dy, d); return; }
     if (this.type === 'brute' && this.updateBrute(dt, dx, dy, d)) return;
     if (THEME_AI[this.type] && THEME_AI[this.type].call(this, dt, p, dx, dy, d)) return;
 
-    if (t.elite) {  // 精英：蓄力衝鋒 / 環形彈幕 交替
+    if (t.elite) {  // 精英：先跑詞綴，再照種類（ELITE_AI；回傳 true = 這一幀的移動處理完了，false = 照下面一般追擊）
       if (this.affixes) { this.affixTick(dt, p, d); if (this.dead) return; }
-      if (this.mode === 'windup') {
-        this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
-        if (this.modeT <= 0) {
-          const C = CFG.CHARGE.elite;
-          this.mode = 'charge'; this.modeT = C.t;
-          this.vx = Math.cos(this.chargeA) * C.speed; this.vy = Math.sin(this.chargeA) * C.speed;
-        }
-        return;
-      }
-      if (this.mode === 'charge') {
-        this.modeT -= dt; this.move(dt);
-        trail(this.x, this.y, t.color, 0.3, 6);
-        if (this.modeT <= 0) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
-        return;
-      }
-      // 環形彈：20 發，0.35 秒後錯開半格再放一圈（兩圈之間有縫可以鑽）
-      const eliteRing = off => { for (let i = 0; i < 20; i++) {
-        const a = (i + off) / 20 * TAU + this.rot;
-        Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 6, dmg: 14, life: 4, from: t.name,
-          home: this.has('homing') ? AFFIX.homing.t : 0 });  // 精英「追蹤彈」：射出後 1.5 秒內轉向最近的玩家
-      } };
-      if (this.ring2T > 0 && (this.ring2T -= dt) <= 0) eliteRing(0.5);
-      this.skillCd -= dt * endlessAtk() / (this.enraged && this.has('rage') ? AFFIX.rage.cd : 1);  // 狂暴：出招間隔 ×0.6
-      if (this.skillCd <= 0 && !Objects.inHole(this)) {
-        this.skillCd = 2.2;
-        if (this.nextSkill === 'charge') {
-          this.mode = 'windup'; this.modeT = 0.65; this.chargeA = Math.atan2(dy, dx); this.nextSkill = 'ring';
-        } else {
-          eliteRing(0); this.ring2T = 0.35;
-          this.nextSkill = 'charge';
-        }
-      }
+      if (ELITE_AI[this.type].call(this, dt, p, dx, dy, d)) return;
     }
 
     // 看不到玩家（中間有行星、小行星，或大地圖的牆）：照尋路方向繞過去或鑽縫
@@ -1225,6 +1226,137 @@ const THEME_AI = {
       this.kids.push(k); Game.enemies.push(k);
     }
     burst(this.x, this.y, this.t.color, 10, 120, 0.4, 2);
+    return true;
+  },
+};
+
+// 每秒轉幾弧度（e.rot：虛空獵手環形彈的起始角、彈幕艇的砲塔；畫面也用）
+const ENEMY_SPIN = { brute: 0.8, elite: 1.5, boss: 0.4, gunboat: 0.5 };
+
+// 精英的行為（詞綴在 affixTick 先跑過）：this = 敵人；p = 目標（最近的玩家或殘影）；dx, dy, d = 往目標的向量和距離
+//   回傳 true = 這一幀的移動處理完了；false = 照 Enemy.update 下面的一般追擊
+const ELITE_AI = {
+  elite(dt, p, dx, dy, d) {  // 虛空獵手：蓄力衝鋒／兩圈環形彈輪流
+    if (this.mode === 'windup') {
+      this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
+      if (this.modeT <= 0) {
+        const C = CFG.CHARGE.elite;
+        this.mode = 'charge'; this.modeT = C.t;
+        this.vx = Math.cos(this.chargeA) * C.speed; this.vy = Math.sin(this.chargeA) * C.speed;
+      }
+      return true;
+    }
+    if (this.mode === 'charge') {
+      this.modeT -= dt; this.move(dt);
+      trail(this.x, this.y, this.t.color, 0.3, 6);
+      if (this.modeT <= 0) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
+      return true;
+    }
+    // 環形彈：20 發，0.35 秒後錯開半格再放一圈（兩圈之間有縫可以鑽）
+    const ring = off => { for (let i = 0; i < 20; i++) this.eShot(this.x, this.y, (i + off) / 20 * TAU + this.rot, 200, 14); };
+    if (this.ring2T > 0 && (this.ring2T -= dt) <= 0) ring(0.5);
+    this.skillCd -= dt * this.atkRate();
+    if (this.skillCd <= 0 && !Objects.inHole(this)) {
+      this.skillCd = 2.2;
+      if (this.nextSkill === 'charge') { this.mode = 'windup'; this.modeT = 0.65; this.chargeA = Math.atan2(dy, dx); this.nextSkill = 'ring'; }
+      else { ring(0); this.ring2T = 0.35; this.nextSkill = 'charge'; }
+    }
+    return false;
+  },
+  // 砲艦：保持距離（太近就逃，被逼到牆角最好打）；蓄力後砲擊幾個落點（紅圈，Game.zones）；被追到身邊會近身散射
+  artillery(dt, p, dx, dy, d) {
+    const A = CFG.ARTILLERY, rate = this.atkRate();
+    if (this.mode === 'windup') {
+      this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
+      this.chargeA = Math.atan2(dy, dx);
+      if (this.modeT <= 0) { this.mode = 'chase'; Game.artilleryVolley(this, p); }
+      return true;
+    }
+    this.shotCd = (this.shotCd || 0) - dt * rate;
+    if (d < A.near && this.shotCd <= 0) { this.shotCd = A.shotCd; this.fan(Math.atan2(dy, dx), A.shot, A.arc, A.speed, A.sdmg); }
+    this.skillCd -= dt * rate;
+    if (this.skillCd <= 0 && d < A.keep[1] + 250 && !Objects.inHole(this)) {
+      this.skillCd = A.cd; this.mode = 'windup'; this.modeT = A.windup; this.chargeA = Math.atan2(dy, dx);
+      return true;
+    }
+    if (d < A.flee) { this.flee(dt, dx, dy, d, this.t.speed * 1.15, 0.3); return true; }
+    let [mx, my] = this.chaseDir(p, dx, dy, d);
+    if (d < A.keep[1]) {  // 在射程裡：橫著繞；比 keep[0] 近就邊繞邊退
+      const s = Math.sin(this.phase) > 0 ? 1 : -1;
+      mx = -dy / d * s - (d < A.keep[0] ? dx / d * 0.6 : 0); my = dx / d * s - (d < A.keep[0] ? dy / d * 0.6 : 0);
+    }
+    this.steerMove(dt, mx, my, this.t.speed);
+    return true;
+  },
+  // 拖曳艦：鎖定（aim，預警線）→ 牽引（pull：被拉的那艘船在自己的電腦上被拉，見 Game.beamPull）→ 拉完立刻近身散射
+  //   目標衝刺、被擋住、跑太遠就斷掉（stun）。tgt = 目標的號碼（同步給隊友）、tgtP = 目標的飛船（房主這邊）
+  tractor(dt, p, dx, dy, d) {
+    const T = CFG.TRACTOR, rate = this.atkRate();
+    if (this.mode === 'stun') {
+      this.modeT -= dt; this.vx *= 0.9; this.vy *= 0.9; this.move(dt);
+      if (this.modeT <= 0) this.mode = 'chase';
+      return true;
+    }
+    if (this.mode === 'aim' || this.mode === 'pull') {
+      const q = this.tgtP, alive = q && !q.dead && !q.gone, qd = alive ? Math.hypot(q.x - this.x, q.y - this.y) : Infinity;
+      if (!alive || qd > T.lose || this.losTo(q) || (this.mode === 'pull' && q.dashT > 0)) { this.breakBeam(alive && this.mode === 'pull' && q.dashT > 0); return true; }
+      this.chargeA = Math.atan2(q.y - this.y, q.x - this.x);
+      this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
+      if ((this.modeT -= dt) <= 0) {
+        if (this.mode === 'aim') { this.mode = 'pull'; this.modeT = T.pull; Events.emit('tractorPull', this); }
+        else { this.mode = 'chase'; this.tgt = 0; this.tgtP = null; this.shotCd = 0; }  // 拉完：沒掙脫就馬上吃近身散射
+      }
+      return true;
+    }
+    this.shotCd = (this.shotCd || 0) - dt * rate;
+    if (d < T.near && this.shotCd <= 0) { this.shotCd = T.shotCd; this.fan(Math.atan2(dy, dx), T.shot, T.arc, T.bspeed, T.bdmg); }
+    this.skillCd -= dt * rate;
+    if (this.skillCd <= 0 && !p.decoy && d > T.range[0] && d < T.range[1] && !Objects.inHole(this)) {
+      if (this.losTo(p)) this.skillCd = 0.3;  // 看不到：等一下再試
+      else { this.skillCd = T.cd; this.mode = 'aim'; this.modeT = T.aim; this.tgtP = p; this.tgt = Game.slotOf(p); this.chargeA = Math.atan2(dy, dx); return true; }
+    }
+    let [mx, my] = this.chaseDir(p, dx, dy, d);
+    if (d < 260) { const s = Math.sin(this.phase) > 0 ? 1 : -1; mx = -dy / d * s; my = dx / d * s; }
+    this.steerMove(dt, mx, my, this.t.speed);
+    return true;
+  },
+  // 編隊艦：同一隊（fleet）的幾艘繞著共同的中心轉；中心、開火由每幀第一艘更新的算一次（F.at）
+  //   F.mode 'windup' = 交叉齊射蓄力中（每艘的 mode、chargeA 照這個設，畫面畫預警線）
+  wing(dt, p, dx, dy, d) {
+    const W = CFG.WING, F = this.fleet;
+    if (!F) return false;  // 沒有編隊（靶場不動的）：照一般追擊（速度 0）
+    if (F.at !== Game.time) {
+      F.at = Game.time;
+      F.members = F.members.filter(m => !m.dead);
+      const n = F.members.length, lost = this.t.fleet - n, rate = this.atkRate();
+      F.ang += dt * W.spin * (1 + W.lost * lost) * (this.alert ? 1 : 0.4);
+      if (this.alert) {
+        const cx = p.x - F.x, cy = p.y - F.y, cd = Math.hypot(cx, cy) || 1;
+        let mx = cx / cd, my = cy / cd;
+        if (cd < W.keep[0]) { mx = -mx; my = -my; }
+        else if (cd < W.keep[1]) { mx = -cy / cd * F.side * 0.6; my = cx / cd * F.side * 0.6; }
+        const sp = W.speed * endlessSpd();
+        [F.x, F.y] = Arena.clampIn(F.x + mx * sp * dt, F.y + my * sp * dt, W.radius + 20);
+        if ((F.fireT -= dt * rate) <= 0) {
+          F.fireT = W.fireCd * (1 - W.fireLost * lost);
+          for (const m of F.members) if (!(m.spawnT > 0)) m.eShot(m.x, m.y, Math.atan2(p.y - m.y, p.x - m.x), W.bspeed, W.bdmg, 5);
+          Events.emit('enemyShot', this);
+        }
+        if (F.mode === 'windup') {
+          if ((F.modeT -= dt) <= 0) {
+            F.mode = 'form';
+            for (const m of F.members) for (let i = 0; i < W.line; i++) m.eShot(m.x, m.y, m.chargeA, W.lineSpd[0] + (W.lineSpd[1] - W.lineSpd[0]) * i / Math.max(1, W.line - 1), W.bdmg, 6);
+            Events.emit('enemyShot', this);
+          }
+        } else if ((F.crossT -= dt * rate) <= 0 && !Objects.inHole(this)) { F.crossT = W.crossCd; F.mode = 'windup'; F.modeT = W.windup; F.aim = [p.x, p.y]; }
+      }
+      F.members.forEach((m, i) => {
+        m.slotA = F.ang + i / n * TAU;
+        if (F.mode === 'windup') { m.mode = 'windup'; m.modeT = F.modeT; m.chargeA = Math.atan2(F.aim[1] - m.y, F.aim[0] - m.x); } else m.mode = 'chase';
+      });
+    }
+    const ax = F.x + Math.cos(this.slotA) * W.radius - this.x, ay = F.y + Math.sin(this.slotA) * W.radius - this.y;
+    this.steerMove(dt, ax, ay, Math.min(320, Math.hypot(ax, ay) * 6), 8);  // 回到自己在隊形裡的位置（被擊退也會歸隊）
     return true;
   },
 };

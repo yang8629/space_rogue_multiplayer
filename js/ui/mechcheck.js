@@ -2357,22 +2357,23 @@ const MechCheck = {
       out.push(nm);
       return { ok: !out.some(t => t.includes('錯誤')) && nm === '分裂・狂暴的虛空獵手', got: out.join('；') };
     }],
-    ['精英詞綴', '精英的場子', '精英戰最後一區：精英最先出場、護衛只有一般一波的 30% 左右、出場橫幅寫精英的名字；詞綴數照星區（第 2 星區 2 個）', M => {
+    ['精英詞綴', '精英的場子', '精英戰最後一區：精英（精英池抽的任一種）最先出場、護衛只有一般一波的 30% 左右、出場橫幅寫那種精英的名字；詞綴數照星區（第 2 星區 2 個）', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.sector = 2;
-      const cost = list => list.reduce((a, k) => a + (k === 'elite' ? 0 : k === 'swarmer' ? 1 : k === 'spitter' ? 3 : k === 'brute' ? 6 : THEMES[k] ? THEMES[k].cost : 0), 0);
-      let esc = 0, norm = 0, first = true, n = 0, banner = '';
+      const cost = list => list.reduce((a, k) => a + (ENEMY_TYPES[k].elite ? 0 : k === 'swarmer' ? 1 : k === 'spitter' ? 3 : k === 'brute' ? 6 : THEMES[k] ? THEMES[k].cost : 0), 0);
+      let esc = 0, norm = 0, first = true, n = 0, banner = '', want = '';
       for (let i = 0; i < 20; i++) {
         Game.startCombat({ level: 3, wavesTotal: 2, elites: 1 }); Game.startWave(2);
-        first = first && Game.combat.pending[0] === 'elite'; esc += cost(Game.combat.pending);
+        const e0 = ENEMY_TYPES[Game.combat.pending[0]];
+        first = first && e0.elite; esc += cost(Game.combat.pending);
         n = Game.combat.eliteRolls[0].length;
-        if (!i) banner = FX.banner ? FX.banner.text : '';
+        if (!i) { banner = FX.banner ? FX.banner.text : ''; want = e0.group || e0.name; }
         Game.startCombat({ level: 3, wavesTotal: 2, elites: 0 }); Game.startWave(2);
         norm += cost(Game.combat.pending);
       }
       Game.enemies = [];
       const k = esc / norm;
-      return { ok: first && k > 0.2 && k < 0.42 && n === 2 && banner.startsWith('⚠') && banner.includes('虛空獵手'),
+      return { ok: first && k > 0.2 && k < 0.42 && n === 2 && banner.startsWith('⚠') && banner.includes(want),
         got: `精英${first ? '最先出場' : '不是最先（錯誤）'}；護衛 = 一般一波的 ${(k * 100).toFixed(0)}%；詞綴 ${n} 個；橫幅「${banner}」` };
     }],
     ['精英詞綴', '護盾', '盾一開始朝著玩家，正面打過去的子彈反彈；玩家繞到背後，盾每秒最多轉 60°', M => {
@@ -2450,6 +2451,81 @@ const MechCheck = {
       const dn = h1 - near.hp, df = h2 - far.hp;
       return { ok: Math.abs(near.spdMul - 1.25) < 1e-9 && far.spdMul === 1 && Math.abs(dn - 80) < 0.01 && Math.abs(df - 100) < 0.01,
         got: `150 內：速度 ×${near.spdMul.toFixed(2)}、打 100 扣 ${dn.toFixed(0)}；500 外：速度 ×${far.spdMul.toFixed(2)}、打 100 扣 ${df.toFixed(0)}` };
+    }],
+    ['精英', '精英池', 'CFG.ELITE_POOL：第 1 星區只出 from ≤ 1 的，第 2 星區起全部都出；章節的 eliteW 再乘（第二章三艦編隊 ×2）；編隊不會抽到分裂、召喚、閃現', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const P = CFG.ELITE_POOL, cnt = (sector, ch) => { Game.chapterId = ch; const c = {}; for (let i = 0; i < 2000; i++) { const k = Game.pickElite(sector); c[k] = (c[k] || 0) + 1; } return c; };
+      const s1 = cnt(1, 1), s2 = cnt(2, 1), c2 = cnt(3, 2);
+      Game.chapterId = 1;
+      const want1 = Object.keys(P).filter(k => P[k].from <= 1), only1 = Object.keys(s1).every(k => want1.includes(k)) && want1.every(k => s1[k] > 0);
+      const all2 = Object.keys(P).every(k => s2[k] > 300), wing2 = c2.wing / 2000;  // 4 種、第二章編隊權重 2：2 / 5 = 40%
+      let bad = 0; for (let i = 0; i < 300; i++) if (rollAffixes(3, 'wing').some(id => ENEMY_TYPES.wing.noAffix.includes(id))) bad++;
+      return { ok: only1 && all2 && wing2 > 0.34 && wing2 < 0.46 && bad === 0,
+        got: `星區 1：${Object.entries(s1).map(([k, v]) => ENEMY_TYPES[k].name + v).join(' ')}；星區 2：${Object.entries(s2).map(([k, v]) => ENEMY_TYPES[k].name + v).join(' ')}；第二章編隊 ${(wing2 * 100).toFixed(0)}%（應約 40%）；編隊抽到不該有的詞綴 ${bad} 次` };
+    }],
+    ['精英', '砲艦', '蓄力 0.5 秒後砲擊 3 個落點（第一個在目標前進方向 0.5 秒後的位置，紅圈 1.2 秒後爆炸）；靠太近會逃；被追到 220 內近身散射 5 發', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const A = CFG.ARTILLERY, p = Game.player, e = M.targets([[500, 0]], 'artillery', false, 1)[0];
+      p.iframe = 1e9; p.vx = 100; p.vy = 0; Game.zones = []; e.skillCd = 0; e.shotCd = 1e9;
+      e.update(1 / 60, p);
+      const wind = e.mode === 'windup';
+      for (let i = 0; i < Math.ceil(A.windup * 60) + 1; i++) e.update(1 / 60, p);
+      const Z = Game.zones, z0 = Z[0], lead = z0 && Math.hypot(z0.x - (p.x + 100 * A.lead), z0.y - p.y);
+      const volley = Z.length === A.n && lead < 1 && Z.every(z => z.r === A.r && Math.abs(z.t - A.delay) < 1e-9 && Math.hypot(z.x - z0.x, z.y - z0.y) <= A.spread + 1);
+      // 靠太近：往外逃
+      const f = M.targets([[250, 0]], 'artillery', false, 1)[0]; f.skillCd = 1e9; f.shotCd = 1e9; p.vx = 0;
+      for (let i = 0; i < 60; i++) f.update(1 / 60, p);
+      const fled = Math.hypot(f.x - p.x, f.y - p.y) - 250;
+      // 近身散射
+      const g = M.targets([[150, 0]], 'artillery', false, 1)[0]; g.skillCd = 1e9; Game.eBullets = [];
+      g.update(1 / 60, p);
+      const fan = Game.eBullets.length;
+      Game.zones = []; Game.eBullets = [];
+      return { ok: wind && volley && fled > 30 && fan === A.shot,
+        got: `${wind ? '先蓄力' : '沒蓄力（錯誤）'}；砲擊 ${Z.length} 個落點、第一個離預測位置 ${lead != null ? lead.toFixed(1) : '?'}${volley ? '' : '（不對）'}；離 250 時 1 秒逃開 ${Math.round(fled)}；150 內散射 ${fan} 發` };
+    }],
+    ['精英', '拖曳艦', '鎖定 0.7 秒 → 牽引 1.8 秒（每秒把目標往牠拉 230，拉到身邊 90 停）；衝刺掙脫：光束斷、拖曳艦暈 1 秒；拉完沒掙脫立刻近身散射', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const T = CFG.TRACTOR, p = Game.player, e = M.targets([[400, 0]], 'tractor', false, 1)[0];
+      p.iframe = 1e9; e.skillCd = 0; e.shotCd = 1e9;
+      e.update(1 / 60, p);
+      const aim = e.mode === 'aim' && e.tgt === 1;
+      for (let i = 0; i < Math.ceil(T.aim * 60) + 1; i++) e.update(1 / 60, p);
+      const pull = e.mode === 'pull';
+      const d0 = Math.hypot(e.x - p.x, e.y - p.y);
+      for (let i = 0; i < 30; i++) { Game.beamPull(p, 1 / 60); e.update(1 / 60, p); }
+      const moved = d0 - Math.hypot(e.x - p.x, e.y - p.y);
+      p.dashT = 0.1; const x1 = p.x; Game.beamPull(p, 1 / 60); const dashNoPull = p.x === x1;
+      e.update(1 / 60, p); p.dashT = 0;
+      const broke = e.mode === 'stun' && e.tgt === 0;
+      // 沒掙脫：拉完整段 → 立刻散射
+      const f = M.targets([[300, 0]], 'tractor', false, 1)[0]; f.skillCd = 0; f.shotCd = 1e9; Game.eBullets = [];
+      for (let i = 0; i < Math.ceil((T.aim + T.pull) * 60) + 3; i++) { Game.beamPull(p, 1 / 60); f.update(1 / 60, p); }
+      const dEnd = Math.hypot(f.x - p.x, f.y - p.y), shot = Game.eBullets.length;
+      Game.eBullets = [];
+      return { ok: aim && pull && Math.abs(moved - T.speed * 0.5) < 15 && dashNoPull && broke && dEnd < f.r + p.r + T.stop + 20 && shot >= T.shot,
+        got: `${aim ? '鎖定 1P' : '沒鎖定（錯誤）'}→${pull ? '牽引' : '沒牽引（錯誤）'}；0.5 秒被拉近 ${Math.round(moved)}（應約 ${T.speed * 0.5}）；衝刺中${dashNoPull ? '不拉' : '還在拉（錯誤）'}、${broke ? '光束斷、拖曳艦暈' : '光束沒斷（錯誤）'}；沒掙脫：拉到距離 ${Math.round(dEnd)}、散射 ${shot} 發` };
+    }],
+    ['精英', '三艦編隊', '一次出 3 艘、共用編隊（繞同一個中心轉、詞綴一樣）；打掉一艘轉得更快、開火間隔變短；最後一艘打掉才算打倒一隻精英；叫醒一艘整隊一起醒', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      const W = CFG.WING, p = Game.player, e = M.targets([[350, 0]], 'wing', false, 1)[0];
+      p.iframe = 1e9; e.setAffixes(['shield'], p.x, p.y);
+      e.alert = false; const G = Game.makeFleet(e), F = e.fleet;
+      const three = G.length === 3 && Game.enemies.length === 3 && G.every(m => m.fleet === F && m.affixes && m.affixes[0] === 'shield' && m.alert === false);
+      Game.wakeEnemy(G[1]);
+      const woke = G.every(m => m.alert);
+      // 編隊每幀只算一次（照 Game.time 判斷），所以每幀要推進時間
+      const step = () => { const a = F.ang; Game.time += 1 / 60; for (const m of [...Game.enemies]) if (!m.dead) m.update(1 / 60, p); return F.ang - a; };
+      for (let i = 0; i < 120; i++) step();
+      const inForm = G.every(m => Math.abs(Math.hypot(m.x - F.x, m.y - F.y) - W.radius) < 12);
+      const s3 = step(), el0 = Game.runStats.elites || 0;
+      G[0].hurt(1e9, 0, 0);
+      const el1 = Game.runStats.elites || 0, s2 = step();
+      G[1].hurt(1e9, 0, 0); G[2].hurt(1e9, 0, 0);
+      const el3 = Game.runStats.elites || 0;
+      Game.enemies = [];
+      return { ok: three && woke && inForm && Math.abs(s2 / s3 - (1 + W.lost)) < 0.01 && el1 === el0 && el3 === el0 + 1,
+        got: `${three ? '3 艘同一隊、詞綴一樣' : '編隊不對（錯誤）'}；叫醒一艘：${woke ? '整隊醒' : '沒有整隊醒（錯誤）'}；2 秒後${inForm ? '都在隊形上' : '沒排好隊形（錯誤）'}；少一艘轉速 ×${(s2 / s3).toFixed(2)}；打倒精英：打掉 1 艘 +${el1 - el0}、全滅 +${el3 - el0}` };
     }],
     ['精英詞綴', '追蹤彈', '環形彈射出後 1.5 秒內轉向最近的玩家（每秒最多 40°），之後直線飛', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);

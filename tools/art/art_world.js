@@ -61,6 +61,9 @@ const ENEMIES = [
   { id: 'brute_ball', name: '刺殼（攻擊：旋轉滾動）', col: '#ff9f1c', n: 6, r: 22, note: '頭和大顎收進殼裡，六角殼帶著刺旋轉衝過來', face: true },
   { id: 'spitter', name: '噴吐者', col: '#f72585', n: 4, r: 13, note: '酸液囊：半透明肚子裡發光的酸液、肉質噴管（開火前鼓起）、背上一隻眼', face: true },
   { id: 'elite', name: '虛空獵手', col: '#ffd400', n: 5, r: 26, note: '吸光的虛空黑身體、只有邊緣透金光；鐮刀刃翼（拖出金色殘光）、發光眼縫、環繞碎晶', face: true },
+  { id: 'artillery', name: '砲艦（精英）', col: '#ff8c42', n: 6, r: 24, note: '六角砲座船身、兩根往前伸的粗砲管（蓄力時線圈由後往前亮）、背上裝甲艙蓋、觀測窗', face: true },
+  { id: 'tractor', name: '拖曳艦（精英）', col: '#3fe0c5', n: 4, r: 25, note: '寬扁鉗形船身、兩支鉗臂夾著牽引發射器（鎖定紅光、牽引青光）、線圈燈輪流亮', face: true },
+  { id: 'wing', name: '編隊艦（精英，三艘一隊）', col: '#ff5ec4', n: 3, r: 15, note: '小型箭形戰機：尖頭船身、後掠翼、翼尖燈、噴焰脈動', face: true },
   { id: 'gunboat', name: '彈幕艇', col: '#ff6b9d', n: 8, r: 16, note: '砲台碟：轉動的砲塔環、8 根砲管朝外、中央圓頂；蓄力時砲管由內往外亮' },
   { id: 'worm', name: '列隊蟲', col: '#c0ff4d', n: 4, r: 9, note: '蜈蚣：頭有大顎、每節圓甲殼＋划動的腳、尾刺', face: true },
   { id: 'worm_cut', name: '列隊蟲（頭被打掉）', col: '#c0ff4d', n: 4, r: 9, note: '頭爆開 → 下一節長出大顎和眼睛（0.3 秒）、整條變快；尾刺永遠在最後一節', face: true },
@@ -243,6 +246,68 @@ function drawElite(ctx, c, r, t) {
   const p = 0.6 + 0.4 * Math.sin(t * 4);  // 眼縫
   glow(ctx, r * 0.35, 0, r * 0.9, '#fff3a0', 0.5 + p * 0.4);
   ctx.fillStyle = mix('#fff3a0', '#ffffff', p * 0.5); ctx.beginPath(); ctx.ellipse(r * 0.35, 0, 2.2, r * 0.42, 0, 0, TAU); ctx.fill();
+}
+// 金屬零件：深色描邊＋上亮下暗的藍灰漸層（光從上來）
+function metalRect(ctx, x, y, w, h, rad = 2) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#b4bfd9'); g.addColorStop(1, '#2a3150');
+  ctx.fillStyle = g; ctx.strokeStyle = '#03050c'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.roundRect(x, y, w, h, rad); ctx.fill(); ctx.stroke();
+}
+// 砲艦：厚重的六角砲座船身＋往前伸的兩根粗砲管（蓄力 ch 0～1：砲管上的線圈由後往前亮）、船尾兩具推進器、背上裝甲艙蓋
+function drawArtillery(ctx, c, r, ch) {
+  for (const sg of [-1, 1]) {  // 推進器（船尾）
+    ADD(ctx, () => { ctx.fillStyle = rgba('#ffd2a8', 0.7); ctx.beginPath(); ctx.moveTo(-r * 0.9, sg * r * 0.5 - 3.5); ctx.lineTo(-r * 1.35, sg * r * 0.5); ctx.lineTo(-r * 0.9, sg * r * 0.5 + 3.5); ctx.closePath(); ctx.fill(); });
+    metalRect(ctx, -r * 1.0, sg * r * 0.5 - 5, r * 0.45, 10, 3);
+  }
+  for (const sg of [-1, 1]) {  // 砲管：粗管伸出船身＋砲口環＋三圈線圈（都在船身外面才看得到）
+    const y = sg * r * 0.32;
+    metalRect(ctx, r * 0.3, y - 4.5, r * 1.4, 9, 2);
+    ctx.fillStyle = '#03050c'; ctx.fillRect(r * 1.66, y - 6, 5, 12);
+    ctx.fillStyle = '#5a6584'; ctx.fillRect(r * 1.67, y - 5, 3, 10);
+    for (let k = 0; k < 3; k++) {
+      const x = r * (0.98 + k * 0.22), on = clamp(ch * 3 - k, 0, 1);
+      ctx.fillStyle = '#03050c'; ctx.fillRect(x - 2, y - 5.5, 4, 11);
+      ctx.fillStyle = on > 0 ? mix('#5a3a2a', '#ffb37a', on) : '#3a2a26'; ctx.fillRect(x - 1.2, y - 4.5, 2.4, 9);
+      if (on > 0) glow(ctx, x, y, 9, '#ff8c42', on * 0.8);
+    }
+  }
+  faceted(ctx, polyPts(6, r * 0.9, 0), c, { outline: 3.8 });  // 船身
+  faceted(ctx, [[r * 0.35, 0], [-r * 0.1, -r * 0.42], [-r * 0.6, -r * 0.3], [-r * 0.6, r * 0.3], [-r * 0.1, r * 0.42]], mix(c, '#000000', 0.3), { outline: 2.4 });  // 背上的裝甲艙蓋
+  ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.roundRect(r * 0.05, -r * 0.16, r * 0.3, r * 0.32, 2); ctx.fill();  // 觀測窗
+  glow(ctx, r * 0.2, 0, r * 0.55, '#ffcf8a', 0.4 + ch * 0.5);
+  ctx.fillStyle = mix('#ffcf8a', '#ffffff', ch * 0.5); ctx.beginPath(); ctx.roundRect(r * 0.1, -r * 0.1, r * 0.2, r * 0.2, 1.5); ctx.fill();
+}
+// 拖曳艦：寬扁的鉗形船身，前方兩支鉗臂夾著牽引發射器；船身上一圈線圈燈（u 0～1 一輪）
+//   on：0 平常（發射器暗）、1 鎖定（發射器紅光閃）、2 牽引（發射器青光大亮）
+function drawTractor(ctx, c, r, on, u) {
+  for (const sg of [-1, 1]) {  // 鉗臂：從船身兩側往前彎、尖端朝內
+    const arm = () => { ctx.beginPath(); ctx.moveTo(r * 0.1, sg * r * 0.55); ctx.quadraticCurveTo(r * 1.1, sg * r * 0.95, r * 1.35, sg * r * 0.28); ctx.lineTo(r * 1.1, sg * r * 0.3); ctx.quadraticCurveTo(r * 0.9, sg * r * 0.62, r * 0.25, sg * r * 0.3); ctx.closePath(); };
+    arm(); ctx.strokeStyle = '#03050c'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+    const g = ctx.createLinearGradient(0, -r, 0, r); g.addColorStop(0, '#b4bfd9'); g.addColorStop(1, '#2a3150'); ctx.fillStyle = g; ctx.fill();
+    ADD(ctx, () => { ctx.fillStyle = rgba(c, 0.8); ctx.beginPath(); ctx.arc(r * 1.25, sg * r * 0.3, 1.8, 0, TAU); ctx.fill(); });  // 鉗尖的燈
+  }
+  for (const sg of [-1, 1]) metalRect(ctx, -r * 1.05, sg * r * 0.62 - 4.5, r * 0.5, 9, 3);  // 推進器
+  faceted(ctx, [[r * 0.55, 0], [r * 0.2, -r * 0.75], [-r * 0.6, -r * 0.85], [-r * 0.95, -r * 0.3], [-r * 0.95, r * 0.3], [-r * 0.6, r * 0.85], [r * 0.2, r * 0.75]], c, { outline: 3.8 });  // 船身
+  for (let i = 0; i < 6; i++) {  // 線圈燈：輪流亮
+    const a = i / 6 * TAU, x = -r * 0.25 + Math.cos(a) * r * 0.42, y = Math.sin(a) * r * 0.42, k = 0.5 + 0.5 * Math.cos(a - u * TAU);
+    ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, TAU); ctx.fill();
+    ctx.fillStyle = mix('#1d5a52', '#bffff2', k); ctx.beginPath(); ctx.arc(x, y, 1.7, 0, TAU); ctx.fill();
+  }
+  litEllipse(ctx, -r * 0.25, 0, r * 0.26, r * 0.26, mix(c, '#000000', 0.25));  // 中央線圈核心
+  // 牽引發射器（鉗臂中間）
+  const ec = on === 2 ? '#bffff2' : on === 1 ? '#ff6b6b' : mix(c, '#000000', 0.4), ep = on ? 0.6 + 0.4 * Math.sin(u * TAU * 2) : 0;
+  ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.ellipse(r * 0.68, 0, r * 0.2, r * 0.26, 0, 0, TAU); ctx.fill();
+  if (on) glow(ctx, r * 0.72, 0, r * (on === 2 ? 1.3 : 0.8), on === 2 ? c : '#ff4d4d', 0.5 + ep * 0.4);
+  ctx.fillStyle = ec; ctx.beginPath(); ctx.ellipse(r * 0.7, 0, r * 0.13, r * 0.19, 0, 0, TAU); ctx.fill();
+}
+// 編隊艦：小型箭形戰機（三艘一隊）：尖頭船身、後掠翼、翼尖燈、船尾噴焰脈動；t 一輪 = TAU / 3
+function drawWing(ctx, c, r, t) {
+  const p = 0.5 + 0.5 * Math.sin(t * 3);
+  ADD(ctx, () => { ctx.fillStyle = rgba('#ffd0f0', 0.5 + 0.4 * p); ctx.beginPath(); ctx.moveTo(-r * 0.55, -3); ctx.lineTo(-r * (1.2 + 0.3 * p), 0); ctx.lineTo(-r * 0.55, 3); ctx.closePath(); ctx.fill(); });  // 噴焰
+  faceted(ctx, [[r * 1.25, 0], [-r * 0.2, -r * 1.05], [-r * 0.55, -r * 0.9], [-r * 0.35, -r * 0.25], [-r * 0.7, 0], [-r * 0.35, r * 0.25], [-r * 0.55, r * 0.9], [-r * 0.2, r * 1.05]], c, { outline: 2.8 });  // 船身＋後掠翼
+  faceted(ctx, [[r * 0.75, 0], [r * 0.05, -r * 0.3], [-r * 0.35, 0], [r * 0.05, r * 0.3]], mix(c, '#000000', 0.35), { outline: 1.8 });  // 中脊
+  for (const sg of [-1, 1]) { glow(ctx, -r * 0.4, sg * r * 0.95, 6, c, 0.5 + 0.4 * p); ctx.fillStyle = '#ffe0f4'; ctx.beginPath(); ctx.arc(-r * 0.4, sg * r * 0.95, 1.4, 0, TAU); ctx.fill(); }  // 翼尖燈
+  ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.ellipse(r * 0.35, 0, r * 0.22, r * 0.12, 0, 0, TAU); ctx.fill();  // 座艙
+  ctx.fillStyle = 'rgba(255,220,245,0.75)'; ctx.beginPath(); ctx.ellipse(r * 0.3, -r * 0.03, r * 0.1, r * 0.05, 0, 0, TAU); ctx.fill();
 }
 // 分裂體：3 塊碎片拼成，接縫發光；每塊各一隻小眼（死掉就分成這 3 塊＝碎裂體）
 const SPLIT_TRI = r => polyPts(3, r, 0);

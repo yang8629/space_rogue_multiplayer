@@ -10,7 +10,7 @@ function make(name) {
     performance: { now: () => now }, navigator: {} };
   vm.createContext(ctx);
   runFiles((code, opt) => vm.runInContext(code, ctx, opt));
-  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena, Hub };', ctx);
+  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena, Hub, Enemy };', ctx);
   return {
     T: ctx.__T,
     adv(ms) { now += ms; const due = timers.filter(x => x.t <= now); timers.splice(0, timers.length, ...timers.filter(x => x.t > now)); due.forEach(x => x.f()); },
@@ -90,6 +90,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 // ---- 跑完整個星區：投票 → 進節點 → 處理 → 回航圖 ----
 const both = f => { f(HA); f(HB); };
 let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
+let tractorChecked = false;  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
 let alertChecked = false;  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
@@ -172,6 +173,26 @@ while (!sector2 && guard++ < 40) {
       GA.boons.ward = 0;
       P.iframe = M.iframe = 0;
       P.hp = P.maxHp = 1e6; M.hp = M.maxHp = 1e6;
+    }
+    if (!tractorChecked && type === 'combat') {  // 拖曳艦（房主的敵人）拉隊友：隊友自己的電腦上被拉過去；隊友衝刺 → 房主那邊光束斷掉
+      tractorChecked = true;
+      const GA = HA.Game, CB = CL.T.Game, P = GA.player, AA = HA.Arena, me = CB.player;
+      const spot = (q, d) => { for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d; if (AA.f(x, y) > 60 && AA.clearLine(q.x, q.y, x, y, 10)) return [x, y]; } return null; };
+      for (const e of GA.enemies) e.dead = true; GA.enemies = []; GA.eBullets = []; step(2);
+      [P.x, P.y] = AA.randomIn(0, 40, [{ x: me.x, y: me.y }], 900);  // 房主離遠一點：拖曳艦鎖定最近的玩家 = 隊友
+      const at = spot(me, 300);
+      const tr = new HA.Enemy('tractor', at[0], at[1], 1); tr.spawnT = 0; tr.zone = me.zone; tr.skillCd = 0; tr.shotCd = 1e9; GA.enemies.push(tr);
+      P.iframe = me.iframe = GA.mates[0].iframe = 1e9;
+      step(Math.ceil(HA.CFG.TRACTOR.aim * 60) + 6);
+      const ce = CB.enemies.find(e => e.id === tr.id), d0 = Math.hypot(me.x - tr.x, me.y - tr.y);
+      const pulling = tr.mode === 'pull' && tr.tgt === 2 && ce && ce.mode === 'pull' && ce.tgt === 2;
+      step(20);
+      const pulled = d0 - Math.hypot(me.x - tr.x, me.y - tr.y);
+      CL.T.Input.dash = true; step(6);
+      ok(pulling && pulled > 40 && tr.mode === 'stun' && tr.tgt === 0,
+        `tractor: host's tractor pulls the client on the client's side (${pulling}, pulled ${Math.round(pulled)}), client dash breaks the beam (${tr.mode})`);
+      tr.dead = true; GA.enemies = GA.enemies.filter(e => e !== tr);
+      P.iframe = me.iframe = GA.mates[0].iframe = 0;
     }
     if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
       alertChecked = true;

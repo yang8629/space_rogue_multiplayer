@@ -123,6 +123,13 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     let sx = -b.vy / v, sy = b.vx / v; if (sx * rx + sy * ry < 0) { sx = -sx; sy = -sy; }
     const w = 3 * (1 - d / 200); mx += sx * w; my += sy * w; threat += w;
   }
+  // 落點紅圈（終焉核心的轟炸、砲艦的砲擊，2026-10-19 加）：在圈裡（含飛船半徑＋20）就往圈外走，越快爆越急
+  //   以前完全不躲：砲艦精英每 3 秒 3 個圈，電腦站著吃
+  for (const z of G.zones) {
+    const rx = p.x - z.x, ry = p.y - z.y, d = Math.hypot(rx, ry) || 1, R = z.r + p.r + 20;
+    if (d > R) continue;
+    const w = 3 + 3 * (1 - Math.max(0, z.t) / (z.max || 1)); mx += rx / d * w; my += ry / d * w; threat += w;
+  }
   // dodge:ram（熟練玩家）：高速衝過來的敵人（刺殼滾動、精英／潛伏者衝鋒、旗艦衝撞）也當子彈閃：照牠的速度預測路線，
   //   會撞到就往側邊躲；0.35 秒內就撞上時衝刺。一般電腦只閃子彈，撞擊是牠掉血最多的來源（用玩家配裝時佔 6 成）
   let ramHit = false;
@@ -175,6 +182,13 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   if (inHole && G.time - holeStuck.t > 2 && p.dashCd <= 0) I.dash = true;  // 黑洞裡被拖住：往外衝
   const danger = ramHit || !bait && G.eBullets.some(b => Math.hypot(b.x - p.x, b.y - p.y) < 60 && (b.vx * (p.x - b.x) + b.vy * (p.y - b.y)) > 0) || nd < 40;
   if (danger && p.dashCd <= 0) I.dash = true;
+  // 拖曳艦的牽引光束拉住自己（2026-10-19）：往遠離牠的方向衝刺掙脫（熟練玩家看到光束就衝）；衝刺還沒好就先往外走
+  const me = G.slotOf(p), puller = all.find(e => e.mode === 'pull' && e.tgt === me);
+  if (puller) {
+    const dx = p.x - puller.x, dy = p.y - puller.y, d = Math.hypot(dx, dy) || 1;
+    I.joy = { bx: 0, by: 0, x: dx / d * 60, y: dy / d * 60 };
+    if (p.dashCd <= 0) I.dash = true;
+  }
 }
 
 // 照配裝打：電路上有這些玩法晶片時，刻意照它們的玩法打（可以同時好幾種）

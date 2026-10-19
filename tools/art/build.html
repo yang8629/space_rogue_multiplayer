@@ -6,6 +6,7 @@
 <body style="background:#111;color:#ccc;font:13px sans-serif">
 <script>var Game = { time: 0 };</script>
 <script src="../../js/core/config.js"></script>
+<script src="../../js/data/parts.js"></script>
 <script src="../../js/data/ships.js"></script>
 <script src="../../js/ui/render.js"></script>
 <script src="art_world.js"></script>
@@ -27,6 +28,9 @@ function enemyFrames() {
   sq('e/brute_ball/0', E('brute').r * 2.0, R, c => drawBrute(c, E('brute').col, E('brute').r, 0, true));
   anim('spitter', 2.7, 8, 1, (c, col, r, t, u) => drawSpitter(c, col, r, 1.8 * (0.75 + 0.25 * u)));  // 第 0 格沒鼓起；之後是開火前鼓起的過程
   anim('elite', 2.5, 16, TAU / 1.1, (c, col, r, t) => drawElite(c, col, r, t));
+  for (let k = 0; k < 5; k++) sq(`e/artillery/${k}`, E('artillery').r * 1.6, R, c => drawArtillery(c, E('artillery').col, E('artillery').r, k / 4));  // 蓄力 0～1
+  for (let on = 0; on < 3; on++) for (let k = 0; k < 4; k++) sq(`e/tractor/${on * 4 + k}`, E('tractor').r * 1.6, R, c => drawTractor(c, E('tractor').col, E('tractor').r, on, k / 4));  // 平常／鎖定／牽引 × 線圈燈 4 格
+  anim('wing', 1.6, 6, TAU / 3, (c, col, r, t) => drawWing(c, col, r, t));
   for (let k = 0; k < 5; k++) sq(`e/gunboat/${k}`, E('gunboat').r * 1.5, R, c => drawGunboat(c, E('gunboat').col, E('gunboat').r, 0, k / 4, 0));  // 蓄力 0～1
   const w = E('worm');
   for (let g = 0; g < 4; g++) for (let k = 0; k < 4; k++) sq(`e/worm_head/${g * 4 + k}`, w.r * 1.7, 3, c => artWormSeg(c, w.col, w.r, 'head', k / 4 * TAU, g / 3));  // 大顎長出來（g）× 腳（k）

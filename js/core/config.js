@@ -40,6 +40,21 @@ const CFG = {
   // 稀有晶片（玩法晶片＋詞條，見 RARE）：三選一每一格玩法晶片 chance 機率變稀有；詞條等級 Lv1／Lv2／Lv3 的機率 lv
   RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
   ELITE_ESCORT: 0.3,         // 精英戰最後一區（精英的場子）的護衛：一般一波預算的幾倍
+  // 精英池（精英戰、精英亂入、沙盒從這裡抽）：from = 第幾星區開始出現、w = 權重；章節的 eliteW 再乘上去（CHAPTERS）
+  ELITE_POOL: { elite: { from: 1, w: 1 }, artillery: { from: 1, w: 1 }, tractor: { from: 2, w: 1 }, wing: { from: 2, w: 1 } },
+  // 砲艦：保持 keep[0]～keep[1] 的距離（比 flee 近就逃）；每 cd 秒蓄力 windup 秒後砲擊：n 發落點（第一發瞄準玩家前進的方向 lead 秒後的位置，其他散在 spread 內），
+  //   delay 秒後爆炸（半徑 r、傷害 dmg）；被追到 near 以內每 shotCd 秒近身散射 shot 發（扇形 arc、速度 speed、傷害 sdmg）
+  ARTILLERY: { keep: [420, 600], flee: 380, cd: 3, windup: 0.5, n: 3, lead: 0.5, spread: 150, delay: 1.2, r: 75, dmg: 22,
+    near: 220, shotCd: 1.5, shot: 5, arc: 0.7, speed: 260, sdmg: 12 },
+  // 拖曳艦：在 range[0]～range[1] 內、看得到目標時，鎖定 aim 秒（預警線）後用牽引光束拉 pull 秒（每秒把目標往牠拉 speed，拉到 stop 以內停）；
+  //   目標衝刺、被擋住、離開 lose 以外就斷掉，自己暈 stun 秒；每 cd 秒一次。近身 near 以內每 shotCd 秒散射 shot 發
+  TRACTOR: { range: [140, 480], aim: 0.7, pull: 1.8, speed: 230, stop: 90, lose: 700, stun: 1, cd: 4.5,
+    near: 200, shotCd: 1.6, shot: 7, arc: 0.9, bspeed: 260, bdmg: 12 },
+  // 三艦編隊：3 艘繞著同一個中心轉（半徑 radius、每秒 spin 弧度；每少一艘轉速再 +lost），中心跟玩家保持 keep[0]～keep[1]、速度 speed；
+  //   每 fireCd 秒每艘朝玩家射一發（速度 bspeed、傷害 bdmg；剩越少間隔越短：× (1 − fireLost × 少幾艘)）；
+  //   每 crossCd 秒蓄力 windup 秒後交叉齊射：每艘朝玩家射一排 line 發（速度 lineSpd[0]～[1]）
+  WING: { radius: 75, spin: 1.1, lost: 0.35, keep: [260, 380], speed: 75, fireCd: 1.5, fireLost: 0.2, bspeed: 240, bdmg: 12,
+    crossCd: 5, windup: 0.6, line: 5, lineSpd: [200, 320] },
   // 寶藏無人機（ENEMY_TYPES.treasure）：一般戰鬥 chance 機率在隨機一區出現；不攻擊、往離玩家的反方向逃，life 秒沒打掉就躍遷離開
   //   離最近的玩家超過 near 時速度 ×farMul（跑太遠追不到）；blink：剩幾秒開始閃（快逃走了）；打掉的獎勵見 BONUS.treasure
   TREASURE: { chance: 0.2, life: 15, near: 450, farMul: 0.55, blink: 3 },

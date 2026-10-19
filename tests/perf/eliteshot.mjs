@@ -31,7 +31,7 @@ await p.evaluate(() => {
     P.x = Arena.start.x; P.y = Arena.start.y + 120;
   }, 16);
   const R = ['split', 'rage', 'blink'];
-  bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, R.map(id => `${AFFIX[id].name}：${AFFIX[id].desc}`).join('　'), 30);
+  bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES.elite })}`, affixBrief(R), 30);
 });
 await new Promise(r => setTimeout(r, 1200));
 await p.screenshot({ path: SHOTS + '精英詞綴.png' });
