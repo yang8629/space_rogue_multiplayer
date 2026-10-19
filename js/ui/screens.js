@@ -44,6 +44,7 @@ const REWARD_TITLE = {
   eventPart: () => '⚖ 黑市：零件三選一',
 };
 const REVEAL_MS = 1600;  // 揭曉動畫：有稀有晶片時，其他卡先翻開，稀有那格醞釀到這時候才翻開
+const FLIP_BEAT_MS = 300;  // 三選一：畫面出來後等這麼久才開始翻卡片
 // 稀有版本、身上已經有這個晶片：身上那個變稀有。已有不同詞條時兩個按鈕：替換（新詞條從 1 級）／增強（原本的 +1 級）
 function rareButtons(id, wait) {
   const o = Game.ownedChip(baseOf(id)), old = o.arr[o.i], r0 = rareOf(old), r1 = rareOf(id), off = wait ? 'disabled' : '';
@@ -407,17 +408,26 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       const ok = Game.canAcquire(id) && !wait, label = Game.canAcquire(id) ? '選擇' : '倉庫已滿';
       return chipCard(id, rareOf(id) && Game.ownedChip(baseOf(id)) ? rareButtons(id, wait) : `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
     };
+    const flip = R.flipFor !== R.options;  // 每組卡片（新開、刷新）翻開一次；同一組重畫不再翻
+    R.flipFor = R.options;
     const cards = [...R.options, ...(R.slot ? ['slot'] : [])].map((id, i) => {  // slot：有電路擴充卡的三選一（CFG.REWARDS 的 slotCard）
       const html = cardOf(id), wait = rareOf(id) && !R.revealed;
-      return !R.revealed ? html.replace(/^<div class="card([^"]*)"(?: style="([^"]*)")?>/, (_, c, st) => wait ? `<div class="card${c} rare-wait"${st ? ` style="${st}"` : ''}><div class="rare-veil">✦</div>` : `<div class="card${c} flipin" style="${st ? st + ';' : ''}animation-delay:${i * 0.12}s">`)  // 卡片本身有 style（電路擴充的框色）就接在後面
+      // 卡片本身有 style（電路擴充的框色）就接在後面；稀有那格（蓋著）也跟著一起翻出來，之後才揭曉
+      return wait || flip ? html.replace(/^<div class="card([^"]*)"(?: style="([^"]*)")?>/, (_, c, st) => `<div class="card${c}${wait ? ' rare-wait' : ''}${flip ? ' flipin' : ''}"${flip || st ? ` style="${st ? st + ';' : ''}${flip ? `animation-delay:${i * 0.12}s` : ''}"` : ''}>${wait ? '<div class="rare-veil">✦</div>' : ''}`)
         : rareOf(id) && !R.popped ? html.replace('class="card', 'class="card rare-pop') : html;
     }).join('');
-    if (!R.revealed) setTimeout(() => { if (Game.reward === R && Game.state === 'reward') { R.revealed = true; this.reward(); } }, REVEAL_MS);
-    else R.popped = true;  // 翻開的動畫只播一次（之後重畫不再播）
+    const reveal = () => { if (!R.revealed) setTimeout(() => { if (Game.reward === R && Game.state === 'reward') { R.revealed = true; this.reward(); } }, REVEAL_MS); };
+    if (R.revealed) R.popped = true;  // 翻開的動畫只播一次（之後重畫不再播）
+    if (flip) requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {  // 畫面先出來（等真的畫上去），慢一拍才開始翻；翻開、揭曉都從這時候算
+      const el = this.el.querySelector('.cards.flip-hold');
+      if (el) el.classList.remove('flip-hold');
+      if (Game.reward === R) reveal();
+    }, FLIP_BEAT_MS)));
+    else reveal();
     this.show(`<div class="scr">
       <div class="between"><div><h2>${REWARD_TITLE[R.kind]()}</h2>
         <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
-      <div class="cards">${cards}</div>
+      <div class="cards${flip ? ' flip-hold' : ''}">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
         <button data-act="reroll" ${Game.credits < R.reroll ? 'disabled' : ''}>刷新（◆ ${R.reroll}）</button>
