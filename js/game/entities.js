@@ -567,8 +567,9 @@ const ENEMY_TYPES = {
   // 精英（elite: true，行為在 ELITE_AI；出現機率 CFG.ELITE_POOL）：face = 畫面上船頭朝目標；noAffix = 不會抽到的詞綴
   elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true, face: true,
     desc: '蓄力衝鋒（有預警線）和兩圈錯開的環形彈輪流放。' },
-  artillery: { name: '砲艦', hp: 700, speed: 90, radius: 24, dmg: 25, color: '#ff8c42', credits: 12, shape: 6, elite: true, face: true,   // 保持距離砲擊（CFG.ARTILLERY）
-    desc: `跟你保持 ${CFG.ARTILLERY.keep[0]}～${CFG.ARTILLERY.keep[1]} 的距離，靠近就逃；每 ${CFG.ARTILLERY.cd} 秒砲擊 ${CFG.ARTILLERY.n} 個落點（紅圈 ${CFG.ARTILLERY.delay} 秒後爆炸，第一個瞄準你前進的方向）；被追到身邊會近身散射。` },
+  // 砲艦不抽護盾：牠會逃、被逼到牆邊就背貼牆，盾一直對著你又繞不到背後，只能慢慢磨（2026-10-19 使用者實玩）
+  artillery: { name: '砲艦', hp: 700, speed: 90, radius: 24, dmg: 25, color: '#ff8c42', credits: 12, shape: 6, elite: true, face: true, noAffix: ['shield'],   // 保持距離砲擊（CFG.ARTILLERY）
+    desc: `跟你保持 ${CFG.ARTILLERY.keep[0]}～${CFG.ARTILLERY.keep[1]} 的距離，靠近就逃；每 ${CFG.ARTILLERY.cd} 秒砲擊 ${CFG.ARTILLERY.n} 個落點（紅圈 ${CFG.ARTILLERY.delay} 秒後爆炸，第一個瞄準你前進的方向）；被追到身邊會近身散射。不會抽到護盾詞綴。` },
   tractor: { name: '拖曳艦', hp: 850, speed: 85, radius: 25, dmg: 30, color: '#3fe0c5', credits: 12, shape: 4, elite: true, face: true,   // 牽引光束把你拉過去（CFG.TRACTOR）
     desc: `鎖定你 ${CFG.TRACTOR.aim} 秒（紅色預警線）後用牽引光束把你往牠拉 ${CFG.TRACTOR.pull} 秒；拉的時候衝刺就能掙脫（牠會暈 ${CFG.TRACTOR.stun} 秒），沒掙脫被拉到身邊就吃近身散射。` },
   // 三艦編隊：一次出 fleet 艘、共用一個編隊（CFG.WING）；晶體、亂入獎勵照艘數分；分裂（變 6 艘）、召喚（×3）、閃現（離隊）不抽

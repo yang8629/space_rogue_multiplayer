@@ -2494,16 +2494,16 @@ const MechCheck = {
       return { ok: centered && n0 === 0 && warnOk && onOk && Math.abs(turned - W.spin) < 0.01 && rage3 && att && fromRing === 0,
         got: `${centered ? '核心在正中間、4 座砲塔' : '位置或砲塔不對（錯誤）'}；一開始光束 ${n0} 條；預警 ${warn.length} 條${warnOk ? '' : '（不對）'}；開 ${on.length} 條${onOk ? '' : '（不對）'}；1 秒轉 ${turned.toFixed(2)}；暴走 ${rage3 ? '3 條' : '不是 3 條（錯誤）'}；砲塔${att ? '貼著核心' : '沒貼著核心（錯誤）'}；拆掉環形砲塔後它的子彈 ${fromRing} 發` };
     }],
-    ['精英', '精英池', 'CFG.ELITE_POOL：第 1 星區只出 from ≤ 1 的，第 2 星區起全部都出；章節的 eliteW 再乘（第二章三艦編隊 ×2）；編隊不會抽到分裂、召喚、閃現', M => {
+    ['精英', '精英池', 'CFG.ELITE_POOL：第 1 星區只出 from ≤ 1 的，第 2 星區起全部都出；章節的 eliteW 再乘（第二章三艦編隊 ×2）；編隊不會抽到分裂、召喚、閃現，砲艦不會抽到護盾', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const P = CFG.ELITE_POOL, cnt = (sector, ch) => { Game.chapterId = ch; const c = {}; for (let i = 0; i < 2000; i++) { const k = Game.pickElite(sector); c[k] = (c[k] || 0) + 1; } return c; };
       const s1 = cnt(1, 1), s2 = cnt(2, 1), c2 = cnt(3, 2);
       Game.chapterId = 1;
       const want1 = Object.keys(P).filter(k => P[k].from <= 1), only1 = Object.keys(s1).every(k => want1.includes(k)) && want1.every(k => s1[k] > 0);
       const all2 = Object.keys(P).every(k => s2[k] > 300), wing2 = c2.wing / 2000;  // 4 種、第二章編隊權重 2：2 / 5 = 40%
-      let bad = 0; for (let i = 0; i < 300; i++) if (rollAffixes(3, 'wing').some(id => ENEMY_TYPES.wing.noAffix.includes(id))) bad++;
+      let bad = 0; for (let i = 0; i < 300; i++) for (const ty of ['wing', 'artillery']) if (rollAffixes(3, ty).some(id => ENEMY_TYPES[ty].noAffix.includes(id))) bad++;  // 編隊不抽分裂、召喚、閃現；砲艦不抽護盾
       return { ok: only1 && all2 && wing2 > 0.34 && wing2 < 0.46 && bad === 0,
-        got: `星區 1：${Object.entries(s1).map(([k, v]) => ENEMY_TYPES[k].name + v).join(' ')}；星區 2：${Object.entries(s2).map(([k, v]) => ENEMY_TYPES[k].name + v).join(' ')}；第二章編隊 ${(wing2 * 100).toFixed(0)}%（應約 40%）；編隊抽到不該有的詞綴 ${bad} 次` };
+        got: `星區 1：${Object.entries(s1).map(([k, v]) => ENEMY_TYPES[k].name + v).join(' ')}；星區 2：${Object.entries(s2).map(([k, v]) => ENEMY_TYPES[k].name + v).join(' ')}；第二章編隊 ${(wing2 * 100).toFixed(0)}%（應約 40%）；編隊、砲艦抽到不該有的詞綴 ${bad} 次` };
     }],
     ['精英', '砲艦', '蓄力 0.5 秒後砲擊 3 個落點（第一個在目標前進方向 0.5 秒後的位置，紅圈 1.2 秒後爆炸）；靠太近會逃；被追到 220 內近身散射 5 發', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
