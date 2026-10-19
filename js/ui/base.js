@@ -155,7 +155,7 @@ Object.assign(Screen, {
       return `<div class="card" style="border-color:${W.color}">${this.newTag(fresh, 'weapon', id)}${weaponCardBody(id)}
         <div class="ty">用它打倒旗艦 ${P.bossW[id] || 0} 次</div></div>`;
     }).join('');
-    return `<div class="cards left full">${cards}</div>`;
+    return `<div class="cards left">${cards}</div>`;
   },
 
   // ---------- 晶片庫：玩法晶片、組件、觸發器 ----------

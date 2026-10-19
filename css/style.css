@@ -550,10 +550,6 @@ body.detail .detail-hint button { background: #1c3a6e; }
 i.new { position: absolute; top: -7px; right: -7px; font-style: normal; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 6px; border-radius: 9px;
   background: #ffd166; color: #1a1205; box-shadow: 0 0 10px rgba(255, 209, 102, .7); pointer-events: none; z-index: 1; }
 .card { position: relative; }
-/* 軍械庫：一律顯示完整說明（不用按 Shift） */
-.cards.full .card .det { display: flex; flex-direction: column; gap: 8px; }
-.cards.full .card .det .ds { flex: none; }
-.cards.full .card .brief { display: none; }
 /* 說明卡、發射台 */
 .hg-desc .det { display: block; }  /* 機庫：一句話＋完整的能力說明都顯示 */
 .hg-desc .brief { color: #fff; margin-bottom: 6px; }
