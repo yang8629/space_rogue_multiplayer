@@ -195,8 +195,13 @@ const Hub = {
     for (const b of this.shots) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt;
       if (!hubFree(HUB, b.x, b.y, 1)) { spark(b, b.x - b.vx * dt, b.y - b.vy * dt); continue; }
-      const ti = HUB.targets.findIndex(T => Math.hypot(T.x - b.x, T.y - b.y) < T.r + b.r);
-      if (ti >= 0) { spark(b, b.x, b.y); this.hits.push({ i: ti, t: this.t, dmg: b.dmg }); this.num(b.x, b.y - 10, b.dmg); continue; }
+      // 打中標靶：照武器的穿透值穿過去（穿透 N = 最多打中 N+1 個，跟戰鬥一樣），同一顆不重複打同一個靶
+      const ti = HUB.targets.findIndex((T, i) => !b.done.has(i) && Math.hypot(T.x - b.x, T.y - b.y) < T.r + b.r);
+      if (ti >= 0) {
+        b.done.add(ti); this.hits.push({ i: ti, t: this.t, dmg: b.dmg }); this.num(b.x, b.y - 10, b.dmg);
+        if (b.pierce > 0) { b.pierce--; this.sparks.push({ x: b.x, y: b.y, t: 0.2, col: b.col }); } else spark(b, b.x, b.y);
+        continue;
+      }
       if (b.sl && Math.hypot(s.x - b.x, s.y - b.y) < s.r + b.r + 4) {  // 別人的子彈打到自己
         const sp = Math.hypot(b.vx, b.vy) || 1;
         this.kick.x += b.vx / sp * HUB.KNOCK; this.kick.y += b.vy / sp * HUB.KNOCK; this.hitT = 0.25; this.hitN++;
@@ -218,12 +223,17 @@ const Hub = {
     const P = weaponParams({ id: w, path: null, final: null }), n = P.count;
     for (let i = 0; i < n && this.shots.length < Hub.MAX_SHOTS; i++) {
       const a = aim + (n > 1 ? (i / (n - 1) - 0.5) * P.spread : 0);
-      this.shots.push({ x, y, vx: Math.cos(a) * P.speed, vy: Math.sin(a) * P.speed, t: P.life, life: P.life, r: P.radius, col: P.color, w, sl, dmg: Math.round(P.damage) });
+      this.shots.push({ x, y, vx: Math.cos(a) * P.speed, vy: Math.sin(a) * P.speed, t: P.life, life: P.life, r: P.radius, col: P.color, w, sl, dmg: Math.round(P.damage), pierce: P.pierce || 0, done: new Set() });  // done：打過的標靶
     }
   },
   num(x, y, v) { this.nums.push({ x: x + rand(-8, 8), y, v, t: 0.8 }); },
-  // 標靶機 i 最近 DPS_WIN 秒的每秒傷害（畫在靶上面）
-  dps(i) { let sum = 0; for (const h of this.hits) if (h.i === i) sum += h.dmg; return Math.round(sum / HUB.DPS_WIN); },
+  // 標靶機 i 的每秒傷害（畫在靶上面）：最近 DPS_WIN 秒的傷害 ÷ 從這段裡第一發到現在的時間（最少 1 秒）
+  //   以前一律除以 DPS_WIN：剛開始打的前幾秒偏低（軌道砲第一發 30 只顯示 10）
+  dps(i) {
+    let sum = 0, t0 = Infinity;
+    for (const h of this.hits) if (h.i === i) { sum += h.dmg; t0 = Math.min(t0, h.t); }
+    return sum ? Math.round(sum / clamp(this.t - t0, 1, HUB.DPS_WIN)) : 0;
+  },
   MAX_SHOTS: 200,
   // 出發動畫：開到發射台正中（off = 多人時左右錯開）、船頭轉向跑道 → 發射台蓄能 → 沿跑道加速衝出出口 → then()
   //   只在基地真的畫在畫面上時播；模擬、測試（沒有畫面）、死亡畫面的「重新開始」直接 then()

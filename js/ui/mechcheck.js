@@ -2866,7 +2866,7 @@ const MechCheck = {
         if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
       }
     }],
-    ['局外成長', '基地靶場', '軍械庫的標靶機：打中跳傷害數字、頭上算每秒傷害（照武器傷害）；多人房間裡別人的子彈打到自己：被往子彈方向推開、閃白，不會掉血', M => {
+    ['局外成長', '基地靶場', '軍械庫的標靶機：打中跳傷害數字、頭上算每秒傷害（傷害 ÷ 從第一發到現在，最少 1 秒）；子彈照武器的穿透值穿過標靶；多人房間裡別人的子彈打到自己：被往子彈方向推開、閃白，不會掉血', M => {
       const st = Game.state, down = Input.down, hw = Hub.weaponId, keep = { x: Hub.ship && Hub.ship.x, y: Hub.ship && Hub.ship.y, aim: Hub.ship && Hub.ship.aim };
       try {
         Game.state = 'title'; Hub.enter(); Hub.shots = []; Hub.sparks = []; Hub.nums = []; Hub.hits = []; Hub.fireCd = 0; Hub.kick = { x: 0, y: 0 }; Hub.hitN = 0;
@@ -2875,7 +2875,13 @@ const MechCheck = {
         for (let i = 0; i < 40; i++) Hub.updateShots(0.016);
         Input.down = false;
         const dmg = Math.round(weaponParams({ id: 'laser', path: null, final: null }).damage), hit = Hub.hits.filter(h => h.i === 0), dps = Hub.dps(0);
-        const okT = hit.length > 0 && hit.every(h => h.dmg === dmg) && dps === Math.round(hit.length * dmg / HUB.DPS_WIN) && Hub.nums.length > 0;
+        const span = clamp(Hub.t - Math.min(...hit.map(h => h.t)), 1, HUB.DPS_WIN);  // 每秒傷害 ＝ 傷害 ÷ 從第一發到現在（最少 1 秒）
+        const okT = hit.length > 0 && hit.every(h => h.dmg === dmg) && dps === Math.round(hit.length * dmg / span) && Hub.nums.length > 0;
+        // 軌道砲：第一發就顯示一發的傷害；穿透 3 → 打中靶之後子彈還在、穿透剩 2，同一個靶不會再打一次
+        Hub.shots = []; Hub.hits = []; Hub.addFire(0, T.x - 60, T.y, 0, 'railgun');
+        const rail = Hub.shots[0], rdmg = Math.round(weaponParams({ id: 'railgun', path: null, final: null }).damage);
+        for (let i = 0; i < 10; i++) Hub.updateShots(0.016);
+        const okRail = Hub.hits.length === 1 && Hub.dps(0) === rdmg && Hub.shots.includes(rail) && rail.pierce === weaponParams({ id: 'railgun', path: null, final: null }).pierce - 1;
         // 別人（2P）在自己左邊朝右開火：子彈打到自己 → 往右推
         Hub.shots = []; s.x = T.x - 300; s.y = T.y + 200; const hp = Game.player ? Game.player.hp : 0;
         Hub.addFire(2, s.x - 120, s.y, 0, 'laser');
@@ -2884,8 +2890,8 @@ const MechCheck = {
         Hub.addFire(0, s.x - 120, s.y, 0, 'laser'); const n0 = Hub.hitN;  // 自己的子彈不會打到自己
         for (let i = 0; i < 30; i++) Hub.updateShots(0.016);
         const selfSafe = Hub.hitN === n0, noHp = !Game.player || Game.player.hp === hp;
-        return { ok: okT && okHit && selfSafe && noHp,
-          got: `標靶機打中 ${hit.length} 發、每發 ${hit.length ? hit[0].dmg : 0}（雷射 ${dmg}）、每秒 ${dps}${okT ? '' : '（錯誤）'}；2P 的子彈打到自己：${okHit ? `被推（推力 ${Math.round(Hub.kick.x)}）` : '沒反應（錯誤）'}；自己的子彈${selfSafe ? '不會' : '會（錯誤）'}打到自己；血量${noHp ? '不變' : '變了（錯誤）'}` };
+        return { ok: okT && okRail && okHit && selfSafe && noHp,
+          got: `標靶機打中 ${hit.length} 發、每發 ${hit.length ? hit[0].dmg : 0}（雷射 ${dmg}）、每秒 ${dps}${okT ? '' : '（錯誤）'}；軌道砲第一發每秒 ${Hub.dps(0)}（應為 ${rdmg}）、${okRail ? '穿過去了' : '沒穿過去或重複打（錯誤）'}；2P 的子彈打到自己：${okHit ? `被推（推力 ${Math.round(Hub.kick.x)}）` : '沒反應（錯誤）'}；自己的子彈${selfSafe ? '不會' : '會（錯誤）'}打到自己；血量${noHp ? '不變' : '變了（錯誤）'}` };
       } finally {
         Input.down = down; Game.state = st; Hub.weaponId = hw; Hub.shots = []; Hub.sparks = []; Hub.nums = []; Hub.hits = []; Hub.kick = { x: 0, y: 0 }; Hub.hitT = 0;
         if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);

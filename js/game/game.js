@@ -860,16 +860,17 @@ const Game = {
     this.pauseMenu = false;
     if (this.freePlay()) { this.state = 'title'; this.inArena = false; this.view(); return; }  // 靶場、沙盒：沒有結算，直接回標題
     this.saveRecord('retired');
-    this.state = 'ended'; this.inArena = false;
+    this.state = 'ended'; this.endCleared = false; this.inArena = false;
     this.view();
     if (this.mode === 'coop') Net.leave();  // 雙人：自己離開，隊友可以一個人繼續（跟隊友離線一樣）
   },
   // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到基地
   finishRun() {
     this.saveRecord(this.chapterDone() ? 'cleared' : 'retired');
-    if (this.mode === 'coop') {  // 雙人：房主決定結束，兩人一起回到房間
+    if (this.mode === 'coop') {  // 雙人：房主決定結束；之後每個人各自看結算、各自按「回到房間」（不用等房主，除非房主關掉房間）
       if (Net.role === 'host') Net.send({ t: 'finish' });
-      Net.backToRoom();
+      this.state = 'ended'; this.endCleared = this.chapterDone(); this.inArena = false;
+      this.view();
       return;
     }
     this.state = 'title'; this.inArena = false;

@@ -413,6 +413,16 @@ ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.ma
   CL = E; HE.Net.join = fakeJoin(E); HE.Net.renderLobby(); HE.Net.join('TEST', null); pump(); step(3);
   ok(HA.Net.linked && !HA.Net.solo && !HA.Game.mates[0].gone && HE.Game.mode === 'coop' && ['map', 'play'].includes(HE.Game.state),
     `teammate rejoined a solo run (client state ${HE.Game.state})`);
+  // 結束遠征：房主在旗艦結算按結束 → 兩邊各自看結算（隊友不會被拉回房間）；隊友先回房間，房主還在結算；房主再回來
+  for (const H of [HA, HE]) { H.Game.inArena = false; H.Game.state = 'victory'; H.Game.victory = { pick: 'part', boss: H.Game.bossId }; }
+  HA.Game.finishRun(); pump();
+  const s1 = [HA.Game.state, HE.Game.state].join('/');
+  HE.Net.backToRoom(); pump();
+  const s2 = [HA.Game.state, HE.Game.state].join('/');
+  HA.Net.backToRoom(); pump();
+  const s3 = [HA.Game.state, HE.Game.state].join('/');
+  ok(s1 === 'ended/ended' && s2 === 'ended/pick' && s3 === 'pick/pick' && HA.Net.peers[0].inRoom,
+    `finish run: each player leaves the results on their own (finish ${s1}, client back ${s2}, host back ${s3})`);
 }
 console.log('traffic', (bytes / 1024).toFixed(0), 'KB');
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');
