@@ -1393,17 +1393,20 @@ const MechCheck = {
         && e.used === 0 && e.off === 5 && e.count < d.count && a.count > b.count && idleOk && bm === 0 && g === 0;
       return { ok, got: `容量 99：用 ${a.used}、沒電 ${a.off}｜8：${b.map}（用 ${b.used}；黏著 ⚡1 放得下也不接）｜6：${c.map}｜3：${d.map}｜1：沒電 ${e.off}、每發 ${e.count} 顆（3：${d.count}；反向有電 99：${a.count}、沒電 8：${b.count}）｜編輯器擋${idleOk ? '：沒有' : '了'}｜沒電的迴旋傷害 ${bm}、玩法擊殺 ${g}` };
     }],
-    ['構築系統', '子彈上限防呆', '我方子彈超過 CFG.BULLET_CAP.mine、敵方超過 enemy：刪最舊的（陣列前面的，標成消失），留最新的；觸發記進遊玩紀錄（幾幀、刪幾顆、最多幾顆、在哪）', M => {
-      M.setup('run', 'vanguard', 'laser', null, null, ['weapon'], []);
-      const C = CFG.BULLET_CAP, mk = n => Array.from({ length: n }, (_, i) => ({ id: i, dead: false }));
+    ['構築系統', '子彈上限防呆', '我方子彈超過 CFG.BULLET_CAP.mine、敵方超過 enemy：刪最舊的（陣列前面的，標成消失），留最新的；觸發記進遊玩紀錄（幾幀、刪幾顆、最多幾顆、在哪、第一次在哪、最多那次的子彈來源前 3 名和當時電路）', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'trigger'], []);
+      // 我方：每 3 顆有 2 顆是分裂的回響子彈、1 顆是武器的；敵方都是盾衛反彈的
+      const C = CFG.BULLET_CAP, mk = n => Array.from({ length: n }, (_, i) => ({ id: i, dead: false, att: { src: i % 3 ? 'split' : 'weapon' }, depth: i % 3 ? 1 : 0, from: '盾衛' }));
       const B = mk(C.mine + 100), E = mk(C.enemy + 50), old = B[0];
-      Game.bullets = B; Game.eBullets = E; Game.runStats.cap = { n: 0, cut: 0, max: 0, at: '' };
+      Game.bullets = B; Game.eBullets = E; Game.runStats.cap = { n: 0, cut: 0, max: 0, at: '', first: '', src: [], chain: [] };
       Game.capBullets();
       const R = Game.runStats.cap, okB = Game.bullets.length === C.mine && Game.bullets[0].id === 100 && old.dead, okE = Game.eBullets.length === C.enemy && Game.eBullets[0].id === 50;
       const n1 = R.n; Game.capBullets(); const still = n1 === 1 && R.n === 1;  // 同一幀兩邊都超過算 1 幀；沒超過就不再觸發
       Game.bullets = []; Game.eBullets = [];
-      return { ok: okB && okE && still && R.cut === 150 && R.max === C.mine + 100,
-        got: `我方 ${C.mine + 100} → ${okB ? C.mine + '（刪掉最舊的 100 顆）' : '不對（錯誤）'}；敵方 ${C.enemy + 50} → ${okE ? C.enemy : '不對（錯誤）'}；紀錄：觸發 ${R.n} 幀、刪 ${R.cut} 顆、最多 ${R.max} 顆（${R.at}）${still ? '' : '（沒超過也記了，錯誤）'}` };
+      const src = R.src.map(([k, v]) => k + v).join(' '), wantSrc = `${CHIPS.split.name}・回響${Math.floor((C.mine + 100) * 2 / 3)} ${CHIPS.weapon.name}${Math.ceil((C.mine + 100) / 3)}`;
+      const okSrc = src === wantSrc && R.chain.join('｜') === `${CHIPS.weapon.name}｜${CHIPS.trigger.name}` && !!R.first;
+      return { ok: okB && okE && still && okSrc && R.cut === 150 && R.max === C.mine + 100,
+        got: `我方 ${C.mine + 100} → ${okB ? C.mine + '（刪掉最舊的 100 顆）' : '不對（錯誤）'}；敵方 ${C.enemy + 50} → ${okE ? C.enemy : '不對（錯誤）'}；紀錄：觸發 ${R.n} 幀、刪 ${R.cut} 顆、最多 ${R.max} 顆（${R.at}）、第一次（${R.first}）${still ? '' : '（沒超過也記了，錯誤）'}；來源 ${src}${src === wantSrc ? '' : `（應為 ${wantSrc}，錯誤）`}；電路 ${R.chain.join('｜')}` };
     }],
     ['構築系統', '奇異點：強化格子', '投入 1 個晶片 → 隨機一格得到屬性（晶片消失）；效果 ×1.5 放在觸發器那格：插在觸發器上的倍增 +150%（回響 5 → 12.5）；能量歸零', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'trigger', 'amp', null], ['split']);

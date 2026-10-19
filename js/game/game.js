@@ -139,7 +139,7 @@ const Game = {
       // 遊玩紀錄用的判斷資料：受到的傷害來源、被打中次數、衝刺次數、走過的節點、取得的晶片、武器升級、各關摘要
       taken: {}, hits: 0, dashes: 0, path: [], got: [], upgrades: [], sectors: [],
       perf: { worst: 0, worstAt: '', slow: 0 },  // 效能：戰鬥中最慢的一幀（ms）、在哪裡、超過 100ms 的幀數
-      cap: { n: 0, cut: 0, max: 0, at: '' } };  // 子彈上限防呆：觸發幾幀、刪了幾顆、最多幾顆、在哪裡（最多那次）
+      cap: { n: 0, cut: 0, max: 0, at: '', first: '', src: [], chain: [] } };  // 子彈上限防呆：觸發幾幀、刪了幾顆、最多幾顆、在哪裡（最多那次）、第一次在哪、最多那次的子彈來源和電路
     this.sectorStats = { chips: {}, t0: 0, kills0: 0, dmg0: 0 };  // 「本關」＝目前這個星區
     this.nodeLog = null;
     this.lastHit = '';
@@ -174,11 +174,28 @@ const Game = {
       const arr = this[k], over = arr.length - cap;
       if (over <= 0) continue;
       hit = true;
-      if (R && R.cap) { R.cap.cut += over; if (arr.length > R.cap.max) { R.cap.max = arr.length; R.cap.at = `${this.whereNow()}（${k === 'bullets' ? '我方' : '敵方'}）`; } }
+      if (R && R.cap) {
+        const at = `${this.whereNow()}（${k === 'bullets' ? '我方' : '敵方'}）`;
+        if (!R.cap.first) R.cap.first = at;
+        R.cap.cut += over;
+        // 最多那次：記下子彈從哪來（數量最多的 3 種）和當下的電路，才追得到是哪個組合爆量（電路之後可能換掉）
+        //   只在數量創新高時數一次（一萬多顆約 0.1ms）
+        if (arr.length > R.cap.max) { R.cap.max = arr.length; R.cap.at = at; R.cap.src = this.bulletSources(arr, k === 'bullets'); R.cap.chain = this.chain.map((id, i) => id ? lvName(id, slotLv(i)) + ((this.socks[i] || []).length ? `［${this.socks[i].map(c => CHIPS[c].name).join('、')}］` : '') : '空'); }
+      }
       for (let i = 0; i < over; i++) arr[i].dead = true;
       arr.splice(0, over);
     }
     if (hit && R && R.cap) R.cap.n++;  // 這一幀觸發（我方、敵方都超過也只算一幀）
+  },
+  // 子彈來源前 3 名（[名稱, 顆數]）：我方照產生它的晶片（att.src，回響產生的加「・回響」），敵方照哪種敵人（from）
+  bulletSources(arr, mine) {
+    const cnt = {}, SRC = { weapon: '武器', ship: '機體', comet: '彗星' };
+    for (const b of arr) {
+      const s = mine ? (b.att && b.att.src) || 'weapon' : b.from || '?';
+      const key = mine ? (CHIPS[s] ? CHIPS[s].name : SRC[s] || s) + (b.depth > 0 ? '・回響' : '') : s;
+      cnt[key] = (cnt[key] || 0) + 1;
+    }
+    return Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 3);
   },
   totalDmg() { return this.runStats ? Object.values(this.runStats.dmg).reduce((a, b) => a + b, 0) : 0; },
   logNodeStart(node) {
