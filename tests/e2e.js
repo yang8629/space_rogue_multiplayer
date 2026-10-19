@@ -413,6 +413,29 @@ ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.ma
   CL = E; HE.Net.join = fakeJoin(E); HE.Net.renderLobby(); HE.Net.join('TEST', null); pump(); step(3);
   ok(HA.Net.linked && !HA.Net.solo && !HA.Game.mates[0].gone && HE.Game.mode === 'coop' && ['map', 'play'].includes(HE.Game.state),
     `teammate rejoined a solo run (client state ${HE.Game.state})`);
+  // 延遲廣播（pg）：隊友那邊收到房主量的每個人的延遲（JSON 的 key 是字串，以前讀成 0 號、全部丟掉）
+  step(130);
+  ok(HE.Net.pings[HE.Net.slot] != null && HE.Net.pings[HE.Net.slot] === HA.Net.pingOf(HE.Net.slot), `client got the ping broadcast (${JSON.stringify(HE.Net.pings)} / host ${HA.Net.pingOf(HE.Net.slot)})`);
+  // 全隊投票的事件（求救訊號）：兩人同票 → 就是那個；不同票 → 房主抽籤，兩邊結果一樣（一起變難、一起拿同一種獎勵）
+  {
+    const node = { id: 'e2e-sos', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'sos' };
+    const open = () => { for (const H of [HA, HE]) { H.Game.inArena = false; H.Game.sos = null; H.Game.openEvent(node); } };
+    open(); HA.Game.evChoose(0); pump();
+    const waitHost = HA.Game.ev && !HA.Game.ev.res && HA.Game.ev.vote === 0;  // 隊友還沒投：房主只是投了票
+    HE.Game.evChoose(0); pump();
+    const same = [HA, HE].every(H => H.Game.ev && H.Game.ev.res && H.Game.sos && H.Game.sos.mul === HA.CFG.EVENT.sos.full.mul && H.Game.sosPay(H.Game.sos) === 'full');
+    for (const H of [HA, HE]) H.Game.evNext();
+    const back = HA.Game.state === 'map' && HE.Game.state === 'map';
+    let agree = 0;
+    for (let k = 0; k < 6; k++) {
+      open(); HA.Game.evChoose(0); HE.Game.evChoose(2); pump();
+      const a = HA.Game.sos ? HA.Game.sos.mul : 1, b = HE.Game.sos ? HE.Game.sos.mul : 1;
+      if (a === b && HA.Game.ev.res && HE.Game.ev.res && HA.Game.ev.res.msg === HE.Game.ev.res.msg) agree++;
+      for (const H of [HA, HE]) H.Game.evNext();
+    }
+    ok(waitHost && same && back && agree === 6, `team event vote: waits for everyone (${waitHost}), same vote applies to both (${same}), split votes give both the same result (${agree}/6)`);
+    for (const H of [HA, HE]) H.Game.sos = null;
+  }
   // 結束遠征：房主在旗艦結算按結束 → 兩邊各自看結算（隊友不會被拉回房間）；隊友先回房間，房主還在結算；房主再回來
   for (const H of [HA, HE]) { H.Game.inArena = false; H.Game.state = 'victory'; H.Game.victory = { pick: 'part', boss: H.Game.bossId }; }
   HA.Game.finishRun(); pump();

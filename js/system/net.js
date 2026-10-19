@@ -52,7 +52,7 @@ const Net = {
   slot: 1,             // 隊友：房主分配給自己的號碼
   picks: {},           // 隊友：每個人選的配裝（號碼 → pick，房主轉告）
   roomMates: {},       // 房間裡其他人的飛船：號碼 → { x, y, a, s, m, r, b, at }（位置、朝向、飛船、在動、準備好、在看面板、收到的時間）
-  meReady: false, roomAcc: 0, pings: {},  // 自己在房間裡按了準備；位置同步的計時；pings：房主廣播的每個人的延遲（隊友這邊用）
+  meReady: false, roomAcc: 0, pings: {}, evVotes: {}, evEnd: 0,  // 自己在房間裡按了準備；位置同步的計時；pings：房主廣播的每個人的延遲（隊友這邊用）
   hold: null,          // 隊友：房主因為別的隊友斷線而暫停的原因
   // 下面幾個是「所有隊友」彙總出來的（房主由 refreshPeers 從 peers 算；隊友這邊就是房主的狀態）
   linked: false,       // 有隊友已經握手成功
@@ -136,8 +136,11 @@ const Net = {
       this.stats.lastRecv = 0;
     if (Game.mode === 'coop') {
       if (this.role === 'host' && this.voteEnd && performance.now() >= this.voteEnd && !this.pauseReason()) this.tryResolve(true);  // 投票時間到
+      if (this.role === 'host' && this.evEnd && performance.now() >= this.evEnd && !this.pauseReason()) this.tryResolveEv(true);  // 全隊事件的投票時間到：照已經投的抽
       const vt = document.getElementById('voteTimer'), left = this.voteLeft();
       if (vt) vt.textContent = left != null ? `剩 ${left} 秒` : '';
+      const et = document.getElementById('evTimer'), el = this.evLeft();  // 全隊事件的投票倒數
+      if (et) et.textContent = el != null ? `（剩 ${el} 秒）` : '';
       const gl = this.goUntil && document.getElementById('goLeft');  // 出發倒數
       if (gl) gl.textContent = Math.max(1, Math.ceil((this.goUntil - performance.now()) / 1000));
     }
@@ -663,10 +666,14 @@ const Net = {
         break;
       case 'chap': if (client) { this.chapter = Game.chapterId = this.cleanChapter(m.chapter); this.roomStatus(); } break;
       case 'hp': this.onRoomPos(m, q); break;
+      case 'evv': if (host) this.onEvVote(m, q); break;  // 全隊投票的事件：隊友的票
+      case 'evp': if (client && m.v && typeof m.v === 'object') { this.evVotes = {}; for (const k in m.v) this.evVotes[Math.floor(Number(k))] = Math.floor(num(m.v[k])); if (m.s != null) this.evEnd = performance.now() + clamp(num(m.s), 0, 60) * 1000; if (Game.state === 'event') Screen.event(); } break;  // 投票進度、剩幾秒
+      case 'evr': if (client && m.v && typeof m.v === 'object') { const v = {}; for (const k in m.v) v[Math.floor(Number(k))] = Math.floor(num(m.v[k])); this.evVotes = {}; this.evEnd = 0; Game.evResolve(Math.floor(num(m.i)), v); } break;  // 房主抽的結果
       case 'pg':  // 房主廣播的每個人的延遲
         if (client && m.p && typeof m.p === 'object') {
           this.pings = {};
-          for (const k in m.p) { const s = Math.floor(num(k)), v = Math.round(num(m.p[k], -1)); if (s >= 2 && s <= NET_MAX && v >= 0 && v < 60000) this.pings[s] = v; }
+          // k 是字串（JSON 的 key）：num() 只認數字，要用 Number（以前讀成 0 號、全部丟掉）
+          for (const k in m.p) { const s = Math.floor(Number(k)), v = Math.round(num(m.p[k], -1)); if (s >= 2 && s <= NET_MAX && v >= 0 && v < 60000) this.pings[s] = v; }
           this.showPing();
         }
         break;
@@ -890,6 +897,7 @@ const Net = {
   // ---------- 共同闖關：星圖、投票、共用的錢、各自的配裝 ----------
   resetRun() {
     this.votes = {}; this.at = {}; this.voteEnd = 0;  // votes：幾號 → 投的節點 id
+    this.evVotes = {}; this.evEnd = 0;  // 全隊投票的事件（evVote）
     for (const q of this.peers) q.at = null;
     this.mateEditing = false; this.myEditing = false; this.solo = false;
     for (const q of this.peers) q.editing = false;
@@ -958,7 +966,7 @@ const Net = {
     const node = Game.nodeById(id);
     if (!node) return;
     this.at = {}; for (const q of this.peers) q.at = null;
-    this.voteEnd = 0; this.votes = {};
+    this.voteEnd = 0; this.votes = {}; this.evVotes = {}; this.evEnd = 0;  // 新的節點：上一個事件沒投完的票不算
     this.nudge(false);
     const label = NODE_META[node.type].label;
     const T = !NODE_META[node.type].fight ? 0 : this.goTime != null ? this.goTime : NET_GO_TIME;  // 只有要打的節點倒數（補給站、維修站這些直接進去）；goTime：模擬用（電腦不用等，設 0）
@@ -983,6 +991,34 @@ const Net = {
     Events.emit('nudge');
   },
   voteLeft() { return this.voteEnd ? Math.max(0, Math.ceil((this.voteEnd - performance.now()) / 1000)) : null; },
+  // ---------- 全隊投票的事件（EVENTS 的 team，例如求救訊號）：每人一票（evVotes：幾號 → 第幾個選項），
+  //   到齊、或第一票之後 NET_VOTE_TIME 秒，由房主照票數抽籤（一人一票），結果全隊一樣（Game.evResolve）
+  evVote(i) {
+    this.evVotes[this.mySlot()] = i;
+    if (this.role === 'host') { if (!this.evEnd) this.evEnd = performance.now() + NET_VOTE_TIME * 1000; this.send({ t: 'evp', v: this.evVotes, s: this.evLeft() }); this.tryResolveEv(); }
+    else this.send({ t: 'evv', i });
+  },
+  onEvVote(m, q) {  // 房主收到隊友的票
+    const i = Math.floor(num(m.i, -1));
+    if (!q || !q.slot || i < 0 || i > 9) return;
+    this.evVotes[q.slot] = i;
+    if (!this.evEnd) this.evEnd = performance.now() + NET_VOTE_TIME * 1000;
+    this.send({ t: 'evp', v: this.evVotes, s: this.evLeft() });  // 投票進度給所有人看
+    if (Game.state === 'event') Screen.event();
+    this.tryResolveEv();
+  },
+  tryResolveEv(force = false) {
+    const V = Game.ev, E = V && EVENTS[V.id];
+    if (this.role !== 'host' || Game.state !== 'event' || !E || !E.team || V.res) return;
+    const who = this.voters(), cast = who.filter(s => this.evVotes[s] != null);
+    if (!cast.length || (!force && cast.length < who.length)) return;
+    const votes = Object.fromEntries(cast.map(s => [s, this.evVotes[s]])), i = votes[pick(cast)];  // 一人一票，照票數比例抽
+    this.evVotes = {}; this.evEnd = 0;
+    this.send({ t: 'evr', i, v: votes });
+    Game.evResolve(i, votes);
+  },
+  evLeft() { return this.evEnd ? Math.max(0, Math.ceil((this.evEnd - performance.now()) / 1000)) : null; },
+  evWho() { return this.role === 'host' ? this.voters() : [this.slot, ...Game.mates.filter(m => !m.gone).map(m => m.slot)].sort((a, b) => a - b); },  // 這次全隊投票有哪些人（畫面列出每個人投了沒）
 
 
   // 配裝：隊友改了電路／倉庫／武器就傳給房主（房主模擬隊友的子彈要用）

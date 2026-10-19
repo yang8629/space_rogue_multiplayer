@@ -10,6 +10,7 @@
 //   target(node, byId)：（可省略）產生航圖時決定的參數，存在 node.evArg、跟著航圖同步；回傳 null = 這個節點不能放這個事件
 // 雙人：每個人各自選、各自賭；扣血、晶體、三選一、護殼都是自己的。
 //   下一場變難（求救訊號、星圖情報被發現）和寶藏星域是全隊的：誰觸發都告訴所有人（Game.addSos、Game.markHoard）
+//   team：全隊投票的事件（多人時選項＝投票，到齊或時間到由房主照票數抽籤，結果全隊一樣；Game.evResolve、Net.evVote）
 const pctTxt = v => `${Math.round(v * 100)}%`;
 const leaveOpt = (lab, msg) => ({ lab, txt: () => lab, go: () => msg });
 const chanceTxt = v => `🎲 ${pctTxt(v)}`;
@@ -56,8 +57,8 @@ const EVENTS = {
       leaveOpt('不交易，離開', '黑市商人消失在星塵裡'),
     ],
   },
-  sos: {
-    name: '求救訊號', icon: '📡', color: '#ff6b6b',
+  sos: {  // 全隊投票：一起變難、一起拿同一種獎勵（2026-10-19 使用者：兩邊的選擇結果要一起）
+    name: '求救訊號', icon: '📡', color: '#ff6b6b', team: true,
     text: () => '一支被圍攻的運輸船隊在求救。趕過去的話，下一場戰鬥會撞上追兵；全力救下整支船隊，他們會拿最好的貨答謝，只護送幾艘出去就輕鬆一點。',
     opts: [
       { lab: '全力救援', txt: () => `全力救援：${sosTxt('full')}`, go: G => { G.addSos('full'); return '已回應求救訊號：下一場戰鬥敵人變多'; } },

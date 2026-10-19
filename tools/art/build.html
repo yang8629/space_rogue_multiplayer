@@ -81,7 +81,8 @@ function fxFrames() {
   sq('eb_rim', 2.05, 16, artEBRim); sq('eb_fill', 1, 16, artEBFill); sq('b/ebw', 2.05, 16, artEBWhite);  // 反彈的子彈
   sq('p/sq', 0.5, 8, artSquare);
   sq('glow', 1, 64, artGlow);
-  sq('pickup', 6.5, 3, artPickup);
+  sq('pickup', 7.5, 4, artPickup);
+  sq('pickup_spark', 6.5, 4, artPickupSpark);
 }
 // ---- 地圖物件 ----
 function objFrames() {
@@ -111,7 +112,7 @@ function buildAtlas() {
   enemyFrames(); shipFrames(); fxFrames(); objFrames(); wallFrames();
   const P = 2048, PAD = 2, items = ENTRIES.map(e => ({ e, pw: Math.ceil(e.w * e.res) + PAD * 2, ph: Math.ceil(e.h * e.res) + PAD * 2 }));
   // 子彈、粒子這組放在第 0 頁、自己一頁（遊戲用粒子容器一次畫，同一個容器的貼圖要在同一頁）
-  const FX = n => /^(b\/|p\/)|^(eb|eb_rim|eb_fill|glow|pickup)$/.test(n);  // 子彈、粒子、敵彈（含反彈的）：同一個 ParticleContainer 的貼圖要在同一頁
+  const FX = n => /^(b\/|p\/)|^(eb|eb_rim|eb_fill|glow|pickup|pickup_spark)$/.test(n);  // 子彈、粒子、敵彈（含反彈的）：同一個 ParticleContainer 的貼圖要在同一頁
   items.sort((a, b) => (FX(b.e.name) - FX(a.e.name)) || b.ph - a.ph || b.pw - a.pw);
   const pages = [], frames = {};
   let page = null, x = 0, y = 0, rowH = 0;

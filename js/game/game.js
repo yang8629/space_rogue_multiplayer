@@ -954,17 +954,34 @@ const Game = {
   evChoose(i) {
     const V = this.ev, E = V && EVENTS[V.id], o = E && E.opts[i];
     if (this.state !== 'event' || !o || V.res || (o.can && !o.can(this, V.node))) return;
+    if (E.team && this.mode === 'coop' && Net.linked) {  // 全隊投票的事件：這一下是投票，結果等房主抽（evResolve）
+      if (V.vote == null) { V.vote = i; Net.evVote(i); this.view(); }
+      return;
+    }
     const r = o.go(this, V.node);
     if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}${r && typeof r === 'object' ? ' → ' + r.msg : ''}`);
     if (r && typeof r === 'object') { V.res = r; this.view(); return; }
     this.ev = null;
     if (r === true) this.view(); else this.showMap(r || '');
   },
+  // 全隊投票的結果（房主抽的，全隊一樣）：照第 i 個選項做，事件畫面寫出每個人投什麼、抽中哪個，按「繼續」回航圖
+  evResolve(i, votes) {
+    const V = this.ev, E = V && EVENTS[V.id], o = E && E.opts[i];
+    if (this.state !== 'event' || !o || V.res) return;
+    this.evTeamNow = true;  // 全隊各自套用同一個結果：addSos 不用再廣播
+    const r = o.go(this, V.node);
+    this.evTeamNow = false;
+    const who = Object.keys(votes).map(Number).sort((a, b) => a - b).map(s => `${s}P 投「${E.opts[votes[s]] ? E.opts[votes[s]].lab : '?'}」`).join('、');
+    const drawn = new Set(Object.values(votes)).size > 1;
+    if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}（全隊投票）`);
+    V.res = { msg: `${drawn ? '🎲 抽中：' : '全隊：'}${o.lab}`, sub: who, color: E.color, then: () => false, map: typeof r === 'string' ? r : '' };  // sub：每個人投了什麼（小字）
+    this.view();
+  },
   evNext() {
     const r = this.ev && this.ev.res;
     if (this.state !== 'event' || !r) return;
     this.ev = null;
-    if (r.then && r.then(this)) this.view(); else this.showMap(r.msg);
+    if (r.then && r.then(this)) this.view(); else this.showMap(r.map != null ? r.map : r.msg);  // map：回航圖時的提示（全隊投票的結果用選項自己的文字）
   },
   evHp(k) { return Math.round(this.player.maxHp * k); },  // 事件：最大 HP 的 k 是多少
   evHurt(k) { const p = this.player, hp = this.evHp(k); p.hp = Math.max(1, p.hp - hp); return hp; },  // 事件扣血：最少留 1 HP
@@ -976,7 +993,7 @@ const Game = {
     cur.mul = Math.max(cur.mul, S.mul);
     if (fromNet) { if (!cur.team || S.mul > CFG.EVENT.sos[cur.team].mul) cur.team = key; } else cur.mine = key;
     this.sos = cur;
-    if (!fromNet && this.mode === 'coop') Net.sendSos(key);
+    if (!fromNet && this.mode === 'coop' && !this.evTeamNow) Net.sendSos(key);  // 全隊投票的結果：每個人各自套用，不用廣播
   },
   // 進下一場戰鬥：帶上變難的倍數（sos）和自己的獎勵（sosKey），用掉
   takeSos() {

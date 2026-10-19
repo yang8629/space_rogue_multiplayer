@@ -71,10 +71,16 @@ const GLWorld = {
       this.gAdd.circle(q.x, q.y, q.r).stroke({ width: 1.5, color: 0xc77dff, alpha: 0.35 });
       this.gAdd.circle(q.x, q.y, q.r * k).stroke({ width: 3, color: 0xe0b3ff, alpha: 0.4 + 0.5 * (1 - k) });
     }
-    const pt = GLR.T('pickup'), pr = GLR.res('pickup');
+    // 晶體：金色光暈（呼吸）＋寶石（輕輕上下浮）＋不定時閃一下白光；每顆照 id 錯開（跟分裂體這些實心切面的敵人分得開）
+    const pt = GLR.T('pickup'), pr = GLR.res('pickup'), gt = GLR.T('glow'), gr = GLR.res('glow'), st = GLR.T('pickup_spark'), sr = GLR.res('pickup_spark'), t = G.time;
+    const put = (tex, x, y, sc, blend, alpha, tint = 0xffffff, rot = 0) => { const s = GLR.sprite(this.pPick, tex); s.position.set(x, y); s.scale.set(sc); s.blendMode = blend; s.alpha = alpha; s.tint = tint; s.rotation = rot; };
     for (const p of G.pickups) {
       if (p.gone || (p.life < 3 && Math.floor(p.life * 8) % 2)) continue;
-      const s = GLR.sprite(this.pPick, pt); s.position.set(p.x, p.y); s.scale.set(1 / pr); s.rotation = G.time * 3;
+      const ph = (p.id || 0) * 1.7, y = p.y + Math.sin(t * 3 + ph) * 1.5;
+      put(gt, p.x, y, 13 / gr, 'add', 0.45 + 0.25 * Math.sin(t * 5 + ph), 0xffc94a);
+      put(pt, p.x, y, 1 / pr, 'normal', 1);
+      const tw = Math.sin(t * 2.3 + ph * 2.1);  // 閃光：每顆大概 2.7 秒閃一下
+      if (tw > 0.82) { const k = (tw - 0.82) / 0.18; put(st, p.x + 2, y - 3, (0.6 + 0.6 * k) / sr, 'add', k, 0xffffff, t * 2); }
     }
   },
 

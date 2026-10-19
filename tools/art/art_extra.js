@@ -49,8 +49,17 @@ function artGlow(ctx) {  // 光暈（半徑 1，白色，遊戲裡染色、加�
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.25, 'rgba(255,255,255,0.45)'); g.addColorStop(0.6, 'rgba(255,255,255,0.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();
 }
-function artPickup(ctx) {  // 晶體：金色菱形（半徑 5）
-  faceted(ctx, polyPts(4, 5, 0), '#ffd166', { outline: 1.6 });
+// 晶體：金色的尖頭寶石（上下尖、中間寬，左上受光），中間一條白色高光；遊戲裡底下再疊金色光暈、不定時閃白光（gl_world.js）
+//   2026-10-19 使用者：「錢跟分裂體看起來太像」（以前是金色切面菱形，跟橘金色的分裂體、碎裂體同一套）→ 保留金色，改成會發光閃爍的寶石
+function artPickup(ctx) {
+  const pts = [[0, -6.5], [3.6, -1.8], [3.6, 1.8], [0, 6.5], [-3.6, 1.8], [-3.6, -1.8]];
+  faceted(ctx, pts, '#ffd166', { outline: 1.4, bright: 0.55 });
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.moveTo(-0.6, -4.6); ctx.lineTo(0.9, -1.6); ctx.lineTo(-0.6, 1.2); ctx.lineTo(-1.6, -1.6); ctx.closePath(); ctx.fill();
+}
+function artPickupSpark(ctx) {  // 晶體的閃光：白色四角星（遊戲裡用加法疊在晶體上）
+  ctx.fillStyle = '#ffffff'; ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const a = i / 8 * TAU - Math.PI / 2, r = i % 2 ? 1.1 : 6; i ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+  ctx.closePath(); ctx.fill();
 }
 
 // ---------- 列隊蟲（每節是一隻敵人）：頭、身體、尾巴；腳的擺動 4 格動畫 ----------

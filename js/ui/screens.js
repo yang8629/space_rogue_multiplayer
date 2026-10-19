@@ -260,8 +260,11 @@ const Screen = {
   event() {
     const V = Game.ev, E = V && EVENTS[V.id];
     if (!E) return;
-    const btns = V.res ? `<div class="ev-res" style="color:${V.res.color}">${V.res.msg}</div><button class="big" data-act="evnext">繼續</button>`  // 賭運氣的結果
-      : E.opts.map((o, i) => `<button class="${i === 0 ? 'big ' : ''}ev-opt" data-act="evopt" data-arg="${i}" ${o.can && !o.can(Game, V.node) ? 'disabled' : ''}>${o.txt(Game, V.node)}</button>`).join('');
+    // 全隊投票的事件（多人）：選項＝投票；投了之後按鈕鎖住，下面列出每個人投了什麼、還剩幾秒
+    const team = E.team && Game.mode === 'coop' && Net.linked, voted = team && V.vote != null;
+    const tally = team ? `<div class="sub" style="margin-top:6px;color:${E.color}">👥 全隊投票，結果大家一樣（意見不同照票數抽籤）：${Net.evWho().map(s => { const v = s === Net.mySlot() ? V.vote : Net.evVotes[s]; return `${s}P ${v != null && E.opts[v] ? `投「${E.opts[v].lab}」` : '還沒投'}`; }).join('、')}　<span id="evTimer">${Net.evLeft() != null ? `（剩 ${Net.evLeft()} 秒）` : ''}</span></div>` : '';
+    const btns = V.res ? `<div class="ev-res" style="color:${V.res.color}">${V.res.msg}</div>${V.res.sub ? `<div class="sub" style="text-align:center">${V.res.sub}</div>` : ''}<button class="big" data-act="evnext">繼續</button>`  // 賭運氣的結果、全隊投票的結果（sub：每個人投了什麼）
+      : E.opts.map((o, i) => `<button class="${i === 0 ? 'big ' : ''}ev-opt" data-act="evopt" data-arg="${i}" ${(o.can && !o.can(Game, V.node)) || voted ? 'disabled' : ''}${voted && V.vote === i ? ` style="border-color:${E.color};opacity:1"` : ''}>${o.txt(Game, V.node)}${voted && V.vote === i ? '　✓ 你的票' : ''}</button>`).join('') + tally;
     this.show(`<div class="scr">
       <div class="between"><div><h2 style="color:${E.color}">${E.icon} ${E.name}</h2><div class="sub">? 事件</div></div>${this.status()}</div>
       <div class="ev-text" style="border-color:${E.color}">${E.text(Game, V.node)}</div>

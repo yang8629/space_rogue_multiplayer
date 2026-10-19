@@ -96,7 +96,7 @@ button.big:active:not(:disabled) { background: linear-gradient(180deg, #134467, 
 .ev-opts { display: flex; flex-direction: column; gap: 10px; max-width: 720px; margin: 0 auto; }
 .ev-opts button { text-align: left; white-space: normal; line-height: 1.5; }
 .ev-res { text-align: center; font-size: 26px; font-weight: 700; margin: 6px 0 10px; animation: evpop .35s ease-out; }
-.ev-opts .ev-res + button { text-align: center; }
+.ev-opts .ev-res ~ button { text-align: center; }  /* 結果下面的「繼續」（中間可能隔著投票明細的小字） */
 @keyframes evpop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .toast { margin-top: 10px; color: #9dff6b; font-size: 13px; min-height: 18px; }
 .nlegs { margin-top: 8px; font-size: 12px; color: #c9d4ff; }
