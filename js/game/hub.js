@@ -89,16 +89,21 @@ Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
 // 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間或開口裡
 function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h); }
 
+const HUB_LAST_KEY = 'v2_lastPick';  // 上次選的飛船、武器存在瀏覽器的名稱：{ ship, weapon }
 const Hub = {
   shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈（多人時別人的也在：sl = 誰射的，自己的 0）、打到東西的火花（只是好玩：沒有血量）
   nums: [], hits: [], kick: { x: 0, y: 0 }, hitT: 0, hitN: 0, mateHit: {},  // 跳出的傷害數字；標靶機每一發 { i, t, dmg }；被打中往後推的速度、閃白剩幾秒、被打中幾次；其他人的閃白
   ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
 
-  // 進基地：飛船在大廳正中（spawn）；機庫選的飛船沒解鎖（例如存檔重來）就換成第一艘解鎖的
+  // 上次選的飛船、武器（存在瀏覽器 HUB_LAST_KEY：重新整理、下次打開遊戲還記得）；壞掉的存檔當成沒有
+  last() { try { const o = JSON.parse(localStorage.getItem(HUB_LAST_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } },
+  saveLast() { try { localStorage.setItem(HUB_LAST_KEY, JSON.stringify({ ship: this.shipId, weapon: this.weaponId })); } catch (e) {} },
+  // 進基地：飛船在大廳正中（spawn）；選的飛船（這次開著的 → 上次存的）沒解鎖（例如存檔重來）就換成第一艘解鎖的
+  //   存的排在 Game.weapon 前面：遊戲一打開 Game.weapon 就是預設的雷射（真的 Chrome 測到存的武器被它蓋掉）；存的每次換都會更新，一定是最新的
   enter() {
-    const ids = Object.keys(SHIPS), want = this.shipId || Game.shipId;
+    const L = this.last(), ids = Object.keys(SHIPS), want = this.shipId || L.ship || Game.shipId;
     this.shipId = SHIPS[want] && isUnlocked('ship', want) ? want : ids.find(id => isUnlocked('ship', id)) || ids[0];
-    const ws = Object.keys(WEAPONS), ww = this.weaponId || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
+    const ws = Object.keys(WEAPONS), ww = this.weaponId || L.weapon || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
     this.weaponId = WEAPONS[ww] && isUnlocked('weapon', ww) ? ww : ws.find(id => isUnlocked('weapon', id)) || ws[0];
     const P = HUB.spawn;
     if (!this.ship || this.seq) this.ship = { x: P.x, y: P.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };  // 出發過（飛出去了）：回來從大廳正中開始
@@ -118,7 +123,7 @@ const Hub = {
   pick(id) {
     if (!SHIPS[id] || !isUnlocked('ship', id) || id === this.shipId || (this.coop() && Net.meReady)) return false;  // 多人：準備好了就不能換
     const pad = this.zone('pad:' + id), s = this.ship;
-    this.setShip(id);
+    this.setShip(id); this.saveLast();
     if (pad) { s.x = pad.x; s.y = pad.y; s.vx = s.vy = 0; }
     Events.emit('hubSwap', id);
     return true;
@@ -126,7 +131,7 @@ const Hub = {
   // 裝武器：沒解鎖的不能裝；多人準備好了不能換
   equip(id) {
     if (!WEAPONS[id] || !isUnlocked('weapon', id) || id === this.weaponId || (this.coop() && Net.meReady)) return false;
-    this.weaponId = this.ship.weaponId = id;
+    this.weaponId = this.ship.weaponId = id; this.saveLast();
     Events.emit('hubSwap', id);
     return true;
   },

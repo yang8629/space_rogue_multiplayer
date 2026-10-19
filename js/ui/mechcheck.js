@@ -2825,6 +2825,26 @@ const MechCheck = {
         got: `現在 ${Math.round(HUB.W)}×${Math.round(HUB.H)}：${allNow ? '每樣都有位置' : '有東西沒位置（錯誤）'}${b1.length ? '；' + b1.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}；`
           + `假的 8 艘／7 把／3 台：${Math.round(big.W)}×${Math.round(big.H)}${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}` };
     }],
+    ['局外成長', '記住上次的飛船和武器', '換船、換武器就存進瀏覽器（HUB_LAST_KEY）；重新整理後（記憶體裡沒有選擇）進基地，拿回存的那組', M => {
+      const keep = localStorage.getItem(HUB_LAST_KEY), g0 = [Game.shipId, Game.weapon, Hub.shipId, Hub.weaponId];
+      const S = Object.keys(SHIPS).filter(id => isUnlocked('ship', id)), W = Object.keys(WEAPONS).filter(id => isUnlocked('weapon', id));
+      const s1 = S[S.length - 1], w1 = W[W.length - 1];
+      try {
+        localStorage.setItem(HUB_LAST_KEY, JSON.stringify({ ship: s1, weapon: w1 }));
+        Game.shipId = null; Game.weapon = { id: 'laser', path: null, final: null }; Hub.shipId = Hub.weaponId = null;  // 剛打開遊戲：基地沒有選擇，Game.weapon 是預設的雷射（不能蓋掉存的）
+        Hub.enter();
+        const back = Hub.shipId === s1 && Hub.weaponId === w1;
+        Hub.pick(S[0]); Hub.equip(W[0]);
+        const L = Hub.last(), saved = L.ship === S[0] && L.weapon === W[0];
+        localStorage.setItem(HUB_LAST_KEY, '{壞掉'); Hub.shipId = Hub.weaponId = null; Hub.enter();
+        const broken = Hub.shipId === S[0] && Hub.weaponId === W[0];  // 存檔壞掉：當成沒有，用第一個解鎖的
+        return { ok: S.length > 1 && W.length > 1 && back && saved && broken,
+          got: `存 ${SHIPS[s1].name}＋${WEAPONS[w1].name} → 重新整理後${back ? '拿回來了' : `是 ${Hub.shipId}＋${Hub.weaponId}（錯誤）`}；換成 ${SHIPS[S[0]].name}＋${WEAPONS[W[0]].name} → 存的${saved ? '跟著變' : '沒變（錯誤）'}；存檔壞掉${broken ? '用第一個解鎖的' : '出錯（錯誤）'}` };
+      } finally {
+        if (keep == null) localStorage.removeItem(HUB_LAST_KEY); else localStorage.setItem(HUB_LAST_KEY, keep);
+        [Game.shipId, Game.weapon, Hub.shipId, Hub.weaponId] = g0;
+      }
+    }],
     ['局外成長', '基地射擊', '基地按住左鍵用裝備的武器射：照武器的射速、一次幾發（散彈 4 發）；子彈撞牆就消失、在那裡爆火花；放開就停', M => {
       const st = Game.state, down = Input.down, hw = Hub.weaponId, keep = { x: Hub.ship && Hub.ship.x, y: Hub.ship && Hub.ship.y, aim: Hub.ship && Hub.ship.aim };
       try {
