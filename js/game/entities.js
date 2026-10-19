@@ -567,8 +567,9 @@ const ENEMY_TYPES = {
   elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true, face: true,
     desc: '蓄力衝鋒（有預警線）和兩圈錯開的環形彈輪流放。' },
   // 砲艦不抽護盾：牠會逃、被逼到牆邊就背貼牆，盾一直對著你又繞不到背後，只能慢慢磨（2026-10-19 使用者實玩）
-  artillery: { name: '砲艦', hp: 700, speed: 90, radius: 24, dmg: 25, color: '#ff8c42', credits: 12, shape: 6, elite: true, face: true, noAffix: ['shield'],   // 保持距離砲擊（CFG.ARTILLERY）
-    desc: `跟你保持 ${CFG.ARTILLERY.keep[0]}～${CFG.ARTILLERY.keep[1]} 的距離，靠近就逃；每 ${CFG.ARTILLERY.cd} 秒砲擊 ${CFG.ARTILLERY.n} 個落點（紅圈 ${CFG.ARTILLERY.delay} 秒後爆炸，第一個瞄準你前進的方向）；被追到身邊會近身散射。不會抽到護盾詞綴。` },
+  // 也不抽隱形：牠一直保持 420 以上的距離，隱形要靠近 200 內才現形 → 幾乎整場看不見、自動瞄準鎖不到
+  artillery: { name: '砲艦', hp: 700, speed: 90, radius: 24, dmg: 25, color: '#ff8c42', credits: 12, shape: 6, elite: true, face: true, noAffix: ['shield', 'cloak'],   // 保持距離砲擊（CFG.ARTILLERY）
+    desc: `跟你保持 ${CFG.ARTILLERY.keep[0]}～${CFG.ARTILLERY.keep[1]} 的距離，靠近就逃；每 ${CFG.ARTILLERY.cd} 秒砲擊 ${CFG.ARTILLERY.n} 個落點（紅圈 ${CFG.ARTILLERY.delay} 秒後爆炸，第一個瞄準你前進的方向）；被追到身邊會近身散射。不會抽到護盾、隱形詞綴。` },
   tractor: { name: '拖曳艦', hp: 850, speed: 85, radius: 25, dmg: 30, color: '#3fe0c5', credits: 12, shape: 4, elite: true, face: true,   // 牽引光束把你拉過去（CFG.TRACTOR）
     desc: `鎖定你 ${CFG.TRACTOR.aim} 秒（紅色預警線）後用牽引光束把你往牠拉 ${CFG.TRACTOR.pull} 秒；拉的時候衝刺就能掙脫（牠會暈 ${CFG.TRACTOR.stun} 秒），沒掙脫被拉到身邊就吃近身散射。` },
   // 三艦編隊：一次出 fleet 艘、共用一個編隊（CFG.WING）；晶體、亂入獎勵照艘數分；分裂（變 6 艘）、召喚（×3）、閃現（離隊）不抽
@@ -610,11 +611,11 @@ const ENEMY_TYPES = {
     desc: `待在場地正中間不動：旋轉光束掃過全場（開之前有細的預警線；暴走後 3 條），核心定時放環形彈；身邊 4 座砲塔各管一招（瞄準射擊、環形彈、轟炸、召喚蟲群），打掉一座那招就沒了。` },
   // 星環守門者的砲塔：跟著核心轉（anchored，不吃擊退）；turret = 出招間隔 cd 秒、出什麼招（fire，this = 砲塔，q = 最近的玩家）
   wt_aim:  { name: '瞄準砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ff8a5c', credits: 0, shape: 6, anchored: true,
-    turret: { cd: 2.2, fire(q) { const a = Math.atan2(q.y - this.y, q.x - this.x); for (const o of [-0.08, 0, 0.08]) this.shootAt(a + o, 340, 5, 14); } } },
+    turret: { cd: 1.8, fire(q) { const a = Math.atan2(q.y - this.y, q.x - this.x); for (const o of [-0.08, 0, 0.08]) this.shootAt(a + o, 340, 5, 14); } } },
   wt_ring: { name: '環形砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ffd166', credits: 0, shape: 6, anchored: true,
-    turret: { cd: 3.5, fire() { this.ring(16, 160, rand(0, TAU)); } } },
+    turret: { cd: 3, fire() { this.ring(16, 160, rand(0, TAU)); } } },
   wt_bomb: { name: '轟炸砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ff5a5a', credits: 0, shape: 6, anchored: true,
-    turret: { cd: 4, fire(q) {
+    turret: { cd: 3.4, fire(q) {
       for (let i = 0; i < 2; i++) { const a = rand(0, TAU), r = i ? rand(80, 180) : 0, [x, y] = Arena.clampIn(q.x + Math.cos(a) * r, q.y + Math.sin(a) * r, 20); Game.zones.push({ x, y, r: 90, t: 1.3, max: 1.3, dmg: 22, from: `${this.t.name}（轟炸）` }); }
     } } },
   wt_call: { name: '召喚砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#c77dff', credits: 0, shape: 6, anchored: true,
@@ -1144,10 +1145,10 @@ class Enemy {
       case 'charge': {
         const s = ships[P.k++ % ships.length], q = Game.nearestPlayer(s.x, s.y) || Game.player;
         s.mode = 'windup'; s.modeT = rage ? 0.55 : 0.8; s.chargeA = Math.atan2(q.y - s.y, q.x - s.x);
-        this.skillCd = rage ? 2.4 : 3; break;
+        this.skillCd = rage ? 2.1 : 2.6; break;
       }
-      case 'fan': for (const s of ships) s.volley = { kind: 'fan', n: rage ? 3 : 2, T: 0, every: 0.4 }; this.skillCd = rage ? 2.6 : 3.2; break;
-      case 'snipe': for (const s of ships) s.volley = { kind: 'snipe', n: rage ? 3 : 2, T: 0, every: 0.3 }; this.skillCd = rage ? 2.2 : 2.8; break;
+      case 'fan': for (const s of ships) s.volley = { kind: 'fan', n: rage ? 4 : 3, T: 0, every: 0.4 }; this.skillCd = rage ? 2.2 : 2.8; break;
+      case 'snipe': for (const s of ships) s.volley = { kind: 'snipe', n: rage ? 4 : 3, T: 0, every: 0.3 }; this.skillCd = rage ? 1.9 : 2.4; break;
       case 'deploy': for (const s of ships) s.summon('spitter', rage ? 2 : 1, 90, 0.7); this.skillCd = rage ? 2.6 : 3.2; break;
     }
   }

@@ -123,11 +123,11 @@ const CFG = {
   BOSS_ORDER: ['boss', 'boss2', 'boss3', 'boss4', 'boss5'],  // 全部的旗艦（沙盒輪流、無盡模式隨機抽）；各章每個星區的王見 chapters.js
   // 雙子獵艦（boss4）：兩艘共用一條血，繞著同一個中心轉（半徑 orbit、每秒 spin 弧度，暴走 spinRage），中心每秒往最近的玩家飄 drift；
   //   兩艘都在隊形上（沒在衝鋒）時中間連著光束（寬 beamW，碰到受 beamDmg）；衝鋒見 CHARGE.boss4
-  TWIN: { orbit: 230, spin: 0.55, spinRage: 0.85, drift: 45, beamW: 14, beamDmg: 18 },
+  TWIN: { orbit: 230, spin: 0.65, spinRage: 1, drift: 45, beamW: 14, beamDmg: 24 },  // 10-19 加強（模擬比終焉核心不致命、拖比較久）：轉速 0.55／0.85、光束 18
   // 星環守門者（boss5）：核心在場地正中間不動；光束 beam 秒（2 條，暴走 3 條）、停 rest 秒，停的最後 warn 秒先畫細的預警線；
   //   光束跟著核心轉（每秒 spin 弧度，暴走 spinRage），寬 beamW、碰到受 beamDmg；核心每 ringCd 秒（暴走 ringCdRage）放一圈 ring 發
   //   4 座砲塔（WARDEN_TURRETS）繞在核心旁 turretR、各管一招，打掉那招就沒了；暴走時砲塔出招間隔 × rageCd
-  WARDEN: { beam: 5, rest: 2.5, warn: 0.9, spin: 0.38, spinRage: 0.55, beamW: 16, beamDmg: 20, ringCd: 5, ringCdRage: 3.5, ring: 20, turretR: 110, rageCd: 0.7 },
+  WARDEN: { beam: 5, rest: 2, warn: 0.9, spin: 0.38, spinRage: 0.55, beamW: 16, beamDmg: 24, ringCd: 4, ringCdRage: 3, ring: 20, turretR: 110, rageCd: 0.7 },  // 10-19 加強：停 2.5、光束 20、環形彈 5／3.5 秒
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
 };
 
