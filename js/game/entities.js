@@ -604,7 +604,7 @@ const ENEMY_TYPES = {
     desc: '連續缺口環形波、雙向螺旋、落點轟炸、慢速彈牆、召喚刺殼護衛。' },
   // 章節專屬的王：twin = 一次出兩艘、共用一條血（CFG.TWIN）；beams = 旋轉光束、turrets = 身邊的砲塔（CFG.WARDEN）；center = 出現在場地正中間
   boss4:   { name: '雙子獵艦', hp: 3000, speed: 80, radius: 34, dmg: 30, color: '#7c9cff', credits: 40, shape: 3, boss: true, face: true, twin: true,
-    knockResist: 2.5, rage: '雙子同步過載', skills: ['charge', 'fan', 'snipe', 'deploy'],
+    knockResist: 2.5, rage: '雙子同步過載', skills: ['charge', 'fan', 'snipe', 'deploy'], shotMul: 1.6,  // 子彈 ×1.6：10-20 整局模擬（第二章 3-7，66 場）加強光束、出招後陣亡 14%（終焉核心 26%），扣血主要來自子彈；×1.2 → 17%、×1.6 → 21%
     desc: `兩艘共用一條血，繞著同一個中心轉，中間連著光束（碰到受傷；一艘衝鋒時光束斷掉）；輪流衝鋒、兩艘一起扇形齊射、狙擊、部署噴吐者。` },
   boss5:   { name: '星環守門者', hp: 3200, speed: 0, radius: 54, dmg: 40, color: '#ffb86b', credits: 40, shape: 8, boss: true, anchored: true, center: true, beams: true,
     syncCd: true, knockResist: 99, rage: '守門者全開', skills: ['pulse'], shotMul: 1, turrets: ['wt_aim', 'wt_ring', 'wt_bomb', 'wt_call'],
@@ -975,7 +975,7 @@ class Enemy {
   //   星噬母艦：螺旋彈幕 / 扇形齊射 / 召喚蟲群 / 環形彈
   //   裂界獵艦：預警衝鋒（兩側灑彈）/ 旋轉十字彈流 / 三連狙擊 / 部署噴吐者
   //   終焉核心：缺口環形波 / 雙向螺旋 / 慢速彈牆 / 刺殼護衛
-  shootAt(a, spd, r = 6, dmg = 14) {  // 子彈傷害 × t.shotMul（整局模擬調的）：前兩隻王 ×0.85（第一星區旗艦原本是斷層）、終焉核心 ×1.15（第三星區原本太簡單）
+  shootAt(a, spd, r = 6, dmg = 14) {  // 子彈傷害 × t.shotMul（整局模擬調的）：前兩隻王 ×0.85（第一星區旗艦原本是斷層）、終焉核心 ×1.15（第三星區原本太簡單）、雙子獵艦 ×1.6
     Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.t.shotMul || 1), life: 10, from: this.t.name, boss: !!this.t.boss });  // 王的子彈存在 10 秒；boss：會削行星、打碎小行星
   }
   ring(n, spd, offset, gap = 0) {  // gap：連續空出幾發，讓玩家有縫可鑽
