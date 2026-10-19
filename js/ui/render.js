@@ -385,8 +385,11 @@ function drawHUD() {
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
     const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;
     hudBar(22, y + 2, mw, 8, Math.max(0, m.hp) / m.maxHp, m.dead ? '#555555' : Game.colorOf(m));
-    hudText(m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
-      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`, mw + 32, y + 11, m.dead ? '#ff4d6d' : '#cfe8ff', '11px Microsoft JhengHei');  // ⛨：還有終焉護殼
+    const line = m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
+      : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`;  // ⛨：還有終焉護殼
+    hudText(line, mw + 32, y + 11, m.dead ? '#ff4d6d' : '#cfe8ff', '11px Microsoft JhengHei');
+    const ms = m.gone ? null : Net.pingOf(m.slot);  // 這個隊友到房主的延遲（房主自己不寫）
+    if (ms != null) { ctx.font = '11px Microsoft JhengHei'; hudText(`　${ms}ms`, mw + 32 + ctx.measureText(line).width, y + 11, Net.pingColor(ms), '11px Microsoft JhengHei'); }
   });
 
   ctx.textAlign = 'right';

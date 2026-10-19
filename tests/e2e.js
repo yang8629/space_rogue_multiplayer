@@ -90,7 +90,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 // ---- 跑完整個星區：投票 → 進節點 → 處理 → 回航圖 ----
 const both = f => { f(HA); f(HB); };
 let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
-let tractorChecked = false, beamChecked = false;  // beamChecked：守門者的光束在隊友那邊轉得順  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
+let tractorChecked = false, beamChecked = false, nonFightChecked = false;  // nonFightChecked：補給站這類節點不倒數  // beamChecked：守門者的光束在隊友那邊轉得順  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
 let alertChecked = false;  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
@@ -120,10 +120,15 @@ while (!sector2 && guard++ < 40) {
   step(2);
   if (HA.Game.state !== 'map' || HB.Game.state !== 'map') { console.error('not both on map', HA.Game.state, HB.Game.state); fails++; break; }
   const reach = HA.Game.reachable();
-  const a = reach[0], b = reach[reach.length - 1];
+  // 補給站這類不用打的節點：投完票直接進去，沒有倒數（只有 NODE_META 的 fight 才倒數）
+  const FIGHT = ['combat', 'elite', 'boss'];  // 測試自己寫（不照遊戲的 fight 標記：不然標記錯了檢查也跟著錯）
+  const nf = goChecked && !nonFightChecked ? reach.find(n => !FIGHT.includes(n.type)) : null;
+  const a = nf || reach[0], b = nf || reach[reach.length - 1];
   HA.Net.vote(a.id); HB.Net.vote(b.id); pump();
   if (a !== b) drawn++;
-  step(120); if (!goChecked) { goChecked = true; ok(HA.Game.state === "going" && HB.Game.state === "going", `2 秒時還在出發倒數（${HA.Game.state} / ${HB.Game.state}）`); }
+  if (nf) { nonFightChecked = true; step(2); ok(HA.Game.state !== 'going' && HB.Game.state !== 'going' && HA.Game.node === nf && HB.Game.node && HB.Game.node.id === nf.id, `non-fight node enters right away, no countdown (${nf.type}: ${HA.Game.state} / ${HB.Game.state})`); }
+  const fight = FIGHT.includes(a.type) && FIGHT.includes(b.type);  // 兩個候選都是要打的：一定會倒數
+  step(120); if (!goChecked && fight) { goChecked = true; ok(HA.Game.state === "going" && HB.Game.state === "going", `2 秒時還在出發倒數（${HA.Game.state} / ${HB.Game.state}）`); }
   step(80);  // 抽籤畫面、出發倒數 3 秒
   ok(HA.Game.node && HB.Game.node && HA.Game.node.id === HB.Game.node.id, `both entered ${HA.Game.node && HA.Game.node.type} ${HA.Game.node && HA.Game.node.id}${a !== b ? '（抽籤）' : ''}`);
   const type = HA.Game.node.type;

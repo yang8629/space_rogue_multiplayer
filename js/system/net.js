@@ -36,7 +36,7 @@ const Net = {
   slot: 1,             // 隊友：房主分配給自己的號碼
   picks: {},           // 隊友：每個人選的配裝（號碼 → pick，房主轉告）
   roomMates: {},       // 房間裡其他人的飛船：號碼 → { x, y, a, s, m, r, b, at }（位置、朝向、飛船、在動、準備好、在看面板、收到的時間）
-  meReady: false, roomAcc: 0,  // 自己在房間裡按了準備；位置同步的計時
+  meReady: false, roomAcc: 0, pings: {},  // 自己在房間裡按了準備；位置同步的計時；pings：房主廣播的每個人的延遲（隊友這邊用）
   hold: null,          // 隊友：房主因為別的隊友斷線而暫停的原因
   // 下面幾個是「所有隊友」彙總出來的（房主由 refreshPeers 從 peers 算；隊友這邊就是房主的狀態）
   linked: false,       // 有隊友已經握手成功
@@ -88,7 +88,7 @@ const Net = {
   resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; },
   close() {
     const peer = this.peer, conns = [this.conn, ...this.peers.map(q => q.conn), ...this.pending.map(q => q.conn)];
-    this.peer = this.conn = null; this.role = null; this.ping = null; this.fxBuf = [];
+    this.peer = this.conn = null; this.role = null; this.ping = null; this.pings = {}; this.fxBuf = [];
     this.peers = []; this.pending = []; this.slot = 1; this.at = {}; this.myAway = false; this.hold = null; this.picks = {}; this.roomMates = {}; this.meReady = false;
     this.linked = false; this.mateInRoom = false; this.mateEditing = false; this.mateAway = false; this.myPick = this.matePick = null; this.code = '';
     this.chapter = 1;
@@ -246,9 +246,17 @@ const Net = {
     if (Screen.hubOn) Screen.hubView();
     else if (Screen.el.querySelector('[data-act="depart"], [data-act="netchapter"]')) Screen.basePanel('launch');
   },
-  // 房間列的連線延遲（每秒一次，只改那一段字）
-  pingHtml() { return `<span style="color:${this.pingColor(this.ping)}">延遲 ${this.ping == null ? '…' : this.ping + ' ms'}</span>`; },
-  showPing() { const el = typeof document !== 'undefined' && document.getElementById('roomPing'); if (el) el.innerHTML = this.pingHtml(); },
+  // 每個人到房主的延遲（ms，來回；房主自己 null）：房主照自己量的（q.ping），隊友照房主廣播的（pg 訊息，每個人獨立）
+  pingOf(slot) {
+    if (slot === 1) return null;
+    if (this.role === 'host') { const q = this.peers.find(o => o.slot === slot && o.linked); return q ? q.ping : null; }
+    return this.pings[slot] != null ? this.pings[slot] : slot === this.slot ? this.ping : null;
+  },
+  // slot 那個人的訊息到自己的畫面單程大概多久（秒）：房主和隊友之間直接；隊友之間要經過房主轉（兩段加起來）
+  oneWay(slot) { return ((this.pingOf(this.mySlot()) || 0) + (this.pingOf(slot) || 0)) / 2000; },
+  // 號碼旁邊的延遲（房間列、戰鬥中的隊友列）；每秒更新一次，只改那幾段字
+  pingTag(slot) { const ms = this.pingOf(slot); return ms == null ? '' : `<span style="color:${this.pingColor(ms)}">${ms}ms</span>`; },
+  showPing() { if (typeof document !== 'undefined') for (const el of document.querySelectorAll('[data-pslot]')) el.innerHTML = this.pingTag(+el.dataset.pslot); },
   // 房間裡的人：[號碼, 準備好了沒, 是不是自己]（自己 + 房主這邊的隊友／隊友這邊收到位置的人）
   roomList() {
     const me = [this.mySlot(), this.meReady, true];
@@ -282,9 +290,10 @@ const Net = {
   // 其他人的船在畫面上的位置（dx, dy）：照收到的位置＋速度往前推，再平滑地拉過去；差太遠（傳送、回到基地）直接跳過去
   //   往前推 = 收到之後過了多久＋單程延遲（來回延遲的一半）＋平滑本身的落後，最多 0.25 秒
   smoothRoom(dt) {
-    const now = performance.now(), k = Math.min(1, dt * 12), lead = (this.ping || 0) / 2000 + 0.08;  // 平滑 12、平滑落後 0.08 秒：tests/roomlag.js 比過（平滑 20 在延遲 100ms 急轉時推過頭、跳 2 倍）
-    for (const p of Object.values(this.roomMates)) {
-      const age = Math.min(0.25, Math.max(0, (now - p.at) / 1000) + lead), tx = p.x + p.vx * age, ty = p.y + p.vy * age;
+    const now = performance.now(), k = Math.min(1, dt * 12);  // 平滑 12、平滑落後 0.08 秒：tests/roomlag.js 比過（平滑 20 在延遲 100ms 急轉時推過頭、跳 2 倍）
+    for (const [s, p] of Object.entries(this.roomMates)) {
+      // 單程延遲照那個人（隊友之間經過房主轉，兩段加起來）
+      const age = Math.min(0.25, Math.max(0, (now - p.at) / 1000) + this.oneWay(+s) + 0.08), tx = p.x + p.vx * age, ty = p.y + p.vy * age;
       if (Math.hypot(tx - p.dx, ty - p.dy) > 200) { p.dx = tx; p.dy = ty; } else { p.dx += (tx - p.dx) * k; p.dy += (ty - p.dy) * k; }
     }
   },
@@ -647,6 +656,13 @@ const Net = {
         break;
       case 'chap': if (client) { this.chapter = Game.chapterId = this.cleanChapter(m.chapter); this.roomStatus(); } break;
       case 'hp': this.onRoomPos(m, q); break;
+      case 'pg':  // 房主廣播的每個人的延遲
+        if (client && m.p && typeof m.p === 'object') {
+          this.pings = {};
+          for (const k in m.p) { const s = Math.floor(num(k)), v = Math.round(num(m.p[k], -1)); if (s >= 2 && s <= NET_MAX && v >= 0 && v < 60000) this.pings[s] = v; }
+          this.showPing();
+        }
+        break;
       case 'hf': this.onHubFire(m, q); break;
       case 'hold': if (client) this.hold = typeof m.why === 'string' ? m.why.slice(0, 40) : null; break;
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
@@ -765,7 +781,10 @@ const Net = {
       case 'pong': {
         const ms = Math.round(now - num(m.at, now));
         if (ms < 0 || ms > 60000) break;
-        if (host) { q.ping = ms; this.refreshPeers(); } else this.ping = ms;
+        if (host) {  // 大家的延遲廣播給所有人（隊友之間互相不知道）
+          q.ping = ms; this.refreshPeers();
+          this.send({ t: 'pg', p: Object.fromEntries(this.peers.filter(o => o.linked && o.ping != null).map(o => [o.slot, o.ping])) });
+        } else this.ping = ms;
         if (S && Game.state === 'play' && S.pings.length < 3600) S.pings.push(ms);
         this.showPing();
         break;
@@ -935,7 +954,7 @@ const Net = {
     this.voteEnd = 0; this.votes = {};
     this.nudge(false);
     const label = NODE_META[node.type].label;
-    const T = this.goTime != null ? this.goTime : NET_GO_TIME;  // goTime：模擬用（電腦不用等，設 0）
+    const T = !NODE_META[node.type].fight ? 0 : this.goTime != null ? this.goTime : NET_GO_TIME;  // 只有要打的節點倒數（補給站、維修站這些直接進去）；goTime：模擬用（電腦不用等，設 0）
     if (!(T > 0)) { Game.enterNode(node); return; }
     Game.state = 'going';
     this.goUntil = performance.now() + T * 1000;  // 大家都選好（或投票時間到）：倒數 3 秒再進關卡

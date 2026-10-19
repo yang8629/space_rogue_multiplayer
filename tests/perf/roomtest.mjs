@@ -46,6 +46,12 @@ await B.keyboard.down('a'); const pos = await samp; await B.keyboard.up('a');
 const mv = pos.slice(16).map((p, i) => p && pos[i + 15] ? Math.hypot(p[0] - pos[i + 15][0], p[1] - pos[i + 15][1]) : NaN).filter(Number.isFinite);  // 前 15 幀是起步（跳過）
 const still = mv.filter(m => m < 0.01).length, mx = Math.max(...mv), avg = mv.reduce((a, b) => a + b, 0) / mv.length;
 ok(mv.length > 40 && still === 0 && mx < avg * 3, `房主：2P 移動時每幀都在動（沒動 ${still}/${mv.length} 幀、每幀平均 ${avg.toFixed(1)}px、最多 ${mx.toFixed(1)}px）`);
+// 延遲寫在每個人的號碼旁邊（每個人獨立：隊友那邊的 2P 延遲是房主廣播的，要跟房主量的一樣）
+await wait(2500);
+const pA = await A.evaluate(() => [Net.pingOf(1), Net.pingOf(2), (document.querySelector('[data-pslot="2"]') || {}).textContent || '']);
+const pB = await B.evaluate(() => [Net.pingOf(1), Net.pingOf(2), (document.querySelector('[data-pslot="2"]') || {}).textContent || '']);
+ok(pA[0] == null && pA[1] != null && /ms/.test(pA[2]) && pB[1] != null && /ms/.test(pB[2]) && Math.abs(pA[1] - pB[1]) <= 60,
+  `延遲寫在號碼旁邊：房主畫面 2P「${pA[2]}」、隊友畫面 2P「${pB[2]}」（房主自己不寫：${pA[0] == null ? '對' : '錯'}）`);
 await A.screenshot({ path: SHOTS + '房間測試_房主畫面.png' });
 await B.screenshot({ path: SHOTS + '房間測試_隊友畫面.png' });
 

@@ -32,9 +32,10 @@ for (const [X, role] of [[H, 'host'], [C, 'client']]) await X.p.evaluate(role =>
 }, role);
 await C.p.evaluate(() => Net.send({ t: 'hello', v: CFG.VERSION })); await wait(500);
 // 大廳 → 選配裝 → 航圖
-await H.p.evaluate(() => { Net.mateInRoom = true; Net.beginPick(); }); await wait(500);
+await H.p.evaluate(() => Net.setChapter(1)); await wait(500);  // 打完招呼就在共用的基地（房間），房主選章
 await C.p.evaluate(() => Net.ready('gate', 'railgun', 'split')); await wait(300);
-await H.p.evaluate(() => Net.ready('wraith', 'plasma', 'amp')); await wait(1200);
+await H.p.evaluate(() => Net.ready('wraith', 'plasma', 'amp'));
+for (let i = 0; i < 60 && !(await H.p.evaluate(() => Game.state === 'map') && await C.p.evaluate(() => Game.state === 'map')); i++) await wait(200);  // 出發動畫播完才到航圖
 console.log('狀態', await H.p.evaluate(() => Game.state), await C.p.evaluate(() => Game.state));
 // 投票進同一個戰鬥節點
 const nid = await H.p.evaluate(() => { const r = Game.reachable(); return (r.find(n => n.type === 'combat') || r[0]).id; });

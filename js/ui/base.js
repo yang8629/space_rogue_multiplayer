@@ -48,12 +48,12 @@ Object.assign(Screen, {
     this.checkVersion();
     Game.unlockFresh = [];  // 新達成的解鎖只顯示一次
   },
-  // 多人房間列：房號（📋 複製）、章節（房主在發射台選）、每個人（號碼色，✓ = 準備好了）、延遲
+  // 多人房間列：房號（📋 複製）、章節（房主在發射台選）、每個人（號碼色，✓ = 準備好了，後面是他到房主的延遲；房主自己不寫）
   roomBar() {
-    const who = Net.roomList().map(([s, r, me]) => `<b style="color:${Game.slotColor(s)}"${me ? ' class="me" title="你"' : ''}>${s}P</b>${r ? '<span class="ok">✓</span>' : '<span class="ty">…</span>'}`).join(' ');
+    const who = Net.roomList().map(([s, r, me]) => `<b style="color:${Game.slotColor(s)}"${me ? ' class="me" title="你"' : ''}>${s}P</b>${r ? '<span class="ok">✓</span>' : '<span class="ty">…</span>'}<span class="ty" data-pslot="${s}">${Net.pingTag(s)}</span>`).join('　');
     const alone = Net.role === 'host' && !Net.peers.some(q => q.linked);
     return `<div class="ulk-fresh hub-coop">👥 房號 <b class="code">${Net.code}</b><button data-act="copycode" title="複製房號，貼給朋友">📋 複製</button>　${chapterById(Net.chapter).name.split('　')[0]}　${alone ? '<span class="ty">把房號告訴朋友，等隊友加入…</span>' : who}
-      <span id="roomPing" class="ty">${Net.linked ? Net.pingHtml() : ''}</span><button data-act="title">離開</button></div>`;
+      <button data-act="title">離開</button></div>`;
   },
   // 靠近的東西的說明卡（hubNear 事件）：停機坪 = 飛船的能力、數值（沒解鎖 = 條件和進度），門、發射台、終端機 = 按 E 做什麼
   hubInfo(z) {
