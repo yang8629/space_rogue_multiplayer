@@ -124,6 +124,6 @@ console.log(fails ? `\n${fails} 項沒通過，不上傳` : '\n全部通過');
 if (fails) { git('reset', '-q'); process.exit(1); }
 if (!push) { git('reset', '-q'); console.log('（只檢查；加 --push 才會提交並上傳）'); process.exit(0); }
 if (git('diff', '--cached', '--name-only').trim())
-  git('commit', '-q', '-m', `${tag}：版號更新`, '-m', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>');
+  git('commit', '-q', '-m', `${tag}：版號更新`);  // 不加 Claude 署名（使用者 2026-10-19）
 git('push', '-q');
 console.log(`已上傳：${git('log', '--oneline', '-1').trim()}`);
