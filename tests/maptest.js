@@ -6,7 +6,7 @@ const T = vm.runInThisContext('({ genMap, genMapOnce, mapOk })');
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('FAIL:', m); } else console.log('ok  ', m); };
 
-const N = 3000;
+const N = +((process.argv.find(a => a.startsWith('--n=')) || '').slice(4)) || 3000;  // --n=1000：release.js 拆成 3 份同時跑（一份 1000 張）
 let bad = 0, once = 0, maxHoles = 0, holeL = new Set(), repairs = 0, holesTotal = 0, dup = 0;
 for (let i = 0; i < N; i++) {
   if (T.mapOk(T.genMapOnce())) once++;
