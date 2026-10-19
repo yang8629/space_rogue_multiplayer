@@ -186,10 +186,14 @@ const GLHub = {
     const R = HUB.rooms, Z = HUB.zones, WT = HUB.WT, D = this.decor = { paths: [], lamps: [], beacons: [], drones: [], leds: [] };
     const hall = R.hall, hg = R.hangar, ar = R.armory, lab = R.lab, deck = R.deck, rec = R.records, bay = R.bay;
     const L = Z.find(z => z.kind === 'launch');
-    // 每間房上牆一排燈（燈座畫在牆邊，地板的光每幀畫）；信號燈放在大廳四角
+    // 每間房上牆一排燈（燈座畫在牆邊，地板的光每幀畫）；戰績室的上牆掛獎盃，燈改到左右牆上段（門口上面）；信號燈放在大廳四角
+    //   燈：[x, y, 光往哪照（0 下、1 右、-1 左）]
     const onDoor = (x, y) => HUB.doors.some(d => x > d.x - 20 && x < d.x + d.w + 20 && y > d.y - 10 && y < d.y + d.h + 10);  // 燈不要擺在開口上
-    for (const r of Object.values(R)) for (let x = r.x + 110; x < r.x + r.w - 80; x += 220) if (!onDoor(x, r.y + 4)) D.lamps.push([x, r.y + 4]);
-    for (const [x, y] of D.lamps) g.rect(x - 14, y - 6, 28, 8).fill(0xfff2c4).stroke({ width: 2, color: HUB_INK });
+    for (const r of Object.values(R)) {
+      if (r.id === 'records') { for (const sd of [1, -1]) D.lamps.push([sd > 0 ? r.x + 4 : r.x + r.w - 4, r.y + 70, sd]); continue; }
+      for (let x = r.x + 110; x < r.x + r.w - 80; x += 220) if (!onDoor(x, r.y + 4)) D.lamps.push([x, r.y + 4, 0]);
+    }
+    for (const [x, y, sd] of D.lamps) (sd ? g.rect(x - 6, y - 14, 8, 28) : g.rect(x - 14, y - 6, 28, 8)).fill(0xfff2c4).stroke({ width: 2, color: HUB_INK });
     D.beacons = [[hall.x + 14, hall.y + 14], [hall.x + hall.w - 14, hall.y + 14], [hall.x + 14, hall.y + hall.h - 14], [hall.x + hall.w - 14, hall.y + hall.h - 14]];
     for (const [x, y] of D.beacons) g.circle(x, y, 6).fill(0x2a3350).stroke({ width: 2, color: HUB_INK });
     // 大廳：能量導管從機庫、軍械庫的開口沿大廳下緣、穿過甲板的開口接到發射台（飛船、武器的能量送去發射）；跑道出口兩側警示條紋
@@ -329,7 +333,7 @@ const GLHub = {
         left -= l;
       }
     }
-    for (const [i, [x, y]] of D.lamps.entries()) this.glow(x, y + 30, 80, 0xfff2c4, 0.11 + 0.02 * Math.sin(t * 7 + i * 1.7));
+    for (const [i, [x, y, sd]] of D.lamps.entries()) this.glow(x + sd * 30, y + (sd ? 0 : 30), 80, 0xfff2c4, 0.11 + 0.02 * Math.sin(t * 7 + i * 1.7));
     if (D.turntable) {  // 機庫轉盤：燈座的燈槽慢慢亮暗（每個錯開一點，不轉），光往盤面灑一點；中間的溝槽是一圈淡淡的燈帶
       const { x: tx, y: ty } = D.turntable;
       for (const L of D.ttLamps) {
