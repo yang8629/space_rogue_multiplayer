@@ -205,7 +205,8 @@ while (!sector2 && guard++ < 40) {
       for (let i = 0; i < 90; i++) { step(1); const ce = CB.enemies.find(e => e.id === core.id); rows.push([core.rot, ce ? ce.rot : NaN]); }
       const dC = rows.slice(1).map((r, i) => r[1] - rows[i][1]), dH = rows[60][0] - rows[59][0];
       const lag = Math.abs(rows[80][0] - rows[80][1]), still = dC.filter(d => !(d > 1e-6)).length, fast = Math.max(...dC);
-      ok(still === 0 && fast < dH * 2 && lag < 0.02, `warden beam turns smoothly on the client (still frames ${still}/${dC.length}, max ${(fast / dH).toFixed(2)}x host, lag ${lag.toFixed(3)} rad)`);
+      // 門檻照實測（2026-10-19，跑 8 次）：修好後最快每次都是房主的 1.47 倍（假網路的時間固定）、跟房主差最多 0.003 弧度；修之前 3.16 倍、45 幀不動
+      ok(still === 0 && fast < dH * 1.6 && lag < 0.01, `warden beam turns smoothly on the client (still frames ${still}/${dC.length}, max ${(fast / dH).toFixed(2)}x host, lag ${lag.toFixed(3)} rad)`);
       core.dead = true; GA.enemies = GA.enemies.filter(e => e !== core); GA.player.iframe = GA.mates[0].iframe = 0;
     }    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
       alertChecked = true;
