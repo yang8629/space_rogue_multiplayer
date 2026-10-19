@@ -22,6 +22,7 @@ for (const name of want) {
   if (!ok) { console.log(name, '找不到房間'); continue; }
   await new Promise(r => setTimeout(r, 400));
   await p.screenshot({ path: SHOTS + `基地_${name}.png` });
+  if (name === '機庫中間') { const c = await p.evaluate(() => { const h = HUB.rooms.hangar; return [(h.cx - Hub.cam.x) * Hub.k, (h.cy - Hub.cam.y) * Hub.k]; }); await p.screenshot({ path: SHOTS + '基地_機庫轉盤特寫.png', clip: { x: c[0] - 160, y: c[1] - 160, width: 320, height: 320 } }); }
   console.log('拍好', name);
 }
 await b.close();

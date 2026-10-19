@@ -11,7 +11,7 @@
 //   kind 決定按 E 做什麼（Hub.ACT）：pad 停機位、rack 武器架、console 房間裡的操作台（打開面板）、launch 發射台、term 終端機
 const HUB = {
   WT: 40, MARGIN: 140, TOP: 100,          // 牆厚；基地外圍留白（看得到太空）；畫面上方標題列的高度（螢幕 px）
-  SPEED: 320, DASH: 900, DASH_T: 0.16, DASH_CD: 0.6,
+  SPEED: 320,                            // 移動速度；衝刺照戰鬥（CFG.DASH_SPEED、DASH_TIME，冷卻照飛船的 dashCd）
   HALL_W: 860, HALL_H: 640,               // 中央大廳（最小）
   BAY_W: 320, BAY_H: 400, BAY_DOOR: 230,   // 發射甲板（大廳下面延伸出去）：寬、高、跟大廳之間的開口寬
   BAY_ARC: 200, RING_MIN: 230, RING_GAP: 1.3, PAD_R: 60,  // 機庫：每個停機位佔的弧長、圓圈最小半徑、對著大廳那側的缺口（弧度）
@@ -94,7 +94,7 @@ const Hub = {
   dfx: [], puffs: [],  // 衝刺的效果（飛船能力：瞬移的電光、殘影、砲台、星門；sl = 誰的，自己 0）、衝刺噴的粒子
   shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈（多人時別人的也在：sl = 誰射的，自己的 0）、打到東西的火花（只是好玩：沒有血量）
   nums: [], hits: [], kick: { x: 0, y: 0 }, hitT: 0, hitN: 0, mateHit: {},  // 跳出的傷害數字；標靶機每一發 { i, t, dmg }；被打中往後推的速度、閃白剩幾秒、被打中幾次；其他人的閃白
-  ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0, dashT: 0, dashCd: 0, dashA: 0, dashSX: 0, dashSY: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
+  ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
 
   // 上次選的飛船、武器（存在瀏覽器 HUB_LAST_KEY：重新整理、下次打開遊戲還記得）；壞掉的存檔當成沒有
   last() { try { const o = JSON.parse(localStorage.getItem(HUB_LAST_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } },
@@ -107,7 +107,7 @@ const Hub = {
     const ws = Object.keys(WEAPONS), ww = this.weaponId || L.weapon || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
     this.weaponId = WEAPONS[ww] && isUnlocked('weapon', ww) ? ww : ws.find(id => isUnlocked('weapon', id)) || ws[0];
     const P = HUB.spawn;
-    if (!this.ship || this.seq) this.ship = { x: P.x, y: P.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, overdrive: 0 };  // 出發過（飛出去了）：回來從大廳正中開始
+    if (!this.ship || this.seq) this.ship = { x: P.x, y: P.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, dashCd: 0, dashA: 0, overdrive: 0 };  // 出發過（飛出去了）：回來從大廳正中開始
     this.seq = null;
     this.setShip(this.shipId);
     this.ship.weaponId = this.weaponId;  // 飛船物件帶著裝的武器（GLActors.ship 畫在船頭，跟戰鬥中同一段）
@@ -149,12 +149,10 @@ const Hub = {
     if (K.has('d') || K.has('arrowright')) mx += 1;
     const len = Math.hypot(mx, my);
     s.moving = len > 0;
-    this.dashCd -= dt;
-    const wasDash = this.dashT > 0, x0 = s.x, y0 = s.y;
-    if (Input.dash) { Input.dash = false; if (this.dashCd <= 0) { this.dashT = HUB.DASH_T; this.dashCd = HUB.DASH_CD; this.dashA = len ? Math.atan2(my, mx) : s.aim; this.startDash(); } }
-    if (this.dashT > 0) { this.dashT -= dt; const sp = s.ship.ability === 'phase' ? 0 : HUB.DASH; s.vx = Math.cos(this.dashA) * sp; s.vy = Math.sin(this.dashA) * sp; }  // 相位跳躍：已經瞬移過去，剩下的衝刺時間停在落點
+    const wasDash = s.dashT > 0, x0 = s.x, y0 = s.y;
+    if (Dash.input(s, dt, len ? Math.atan2(my, mx) : s.aim, s.ship.dashCd, true, (x, y) => this.free(x, y, s.r))) this.startDash();  // 衝刺：跟戰鬥同一套（Dash，冷卻照飛船）
+    if (Dash.move(s, dt)) { if (s.ship.ability !== 'phase') this.puffs.push({ x: s.x, y: s.y, vx: 0, vy: 0, t: 0.25, col: s.ship.color }); }  // 衝的時候船尾的光跡（戰鬥的 trail）
     else { const k = Math.min(1, dt * 12), l = Math.max(1, len); s.vx += (mx / l * HUB.SPEED - s.vx) * k; s.vy += (my / l * HUB.SPEED - s.vy) * k; }
-    s.dashT = Math.max(0, this.dashT);
     // 撞牆、撞柱子：x、y 分開試，擋住的那個方向停下（可以貼著牆滑）
     const kd = Math.exp(-6 * dt), nx = s.x + (s.vx + this.kick.x) * dt, ny = s.y + (s.vy + this.kick.y) * dt;  // kick：被別人打中的推力（慢慢消失）
     this.kick.x *= kd; this.kick.y *= kd; this.hitT = Math.max(0, this.hitT - dt);
@@ -162,11 +160,11 @@ const Hub = {
     if (this.free(s.x, ny, s.r)) s.y = ny; else { s.vy = 0; this.kick.y = 0; }
     const hop = this.hop(s, s.r, x0, y0);
     if (hop && !this.free(s.x, s.y, s.r)) [s.x, s.y] = hop;  // 從門出來的地方卡牆：停在門上
-    if (wasDash && this.dashT <= 0 && s.ship.ability === 'portal' && Math.hypot(s.x - this.dashSX, s.y - this.dashSY) >= 40) this.dash('portal', this.dashSX, this.dashSY, s.x, s.y, s.aim);  // 星門號：衝刺結束在起點、落點開門
+    if (wasDash && s.dashT <= 0 && s.ship.ability === 'portal' && Math.hypot(s.x - s.dashSX, s.y - s.dashSY) >= 40) this.dash('portal', s.dashSX, s.dashSY, s.x, s.y, s.aim);  // 星門號：衝刺結束在起點、落點開門
     const wx = Input.mx / this.k + this.cam.x, wy = Input.my / this.k + this.cam.y;
     if (Input.mouseMoved) s.aim = Math.atan2(wy - s.y, wx - s.x);
     else if (s.moving) s.aim = Math.atan2(my, mx);
-    this.follow();
+    this.follow(dt);
     this.updateDash(dt);
     this.updateShots(dt);
     // 最近的互動點（自己開的那艘的停機坪、裝著的武器的架子也算：看數據，按 E 不會換）
@@ -234,15 +232,9 @@ const Hub = {
   },
   // ---------- 衝刺：跟戰鬥一樣噴粒子、播音效，飛船能力做出樣子（基地沒有敵人：殘影不吸引火力；砲台打標靶機） ----------
   //   多人房間：hubDash 事件（net.js 轉給其他人），對方用 dashFx 畫出同樣的效果；砲台的子彈走 hubFire
-  startDash() {
+  startDash() {  // Dash.input 已經衝了（先鋒號已經瞬移：可以穿牆，落點要在房間或開口裡）：畫出效果、告訴其他人
     const s = this.ship, ab = s.ship.ability;
-    this.dashSX = s.x; this.dashSY = s.y;
-    if (ab === 'phase') { this.phaseJump(); this.dashT = CFG.PHASE.t; }  // 先鋒號：朝衝刺方向瞬移（可以穿牆，落點要在房間或開口裡）
-    this.dash(['phase', 'decoy', 'turret'].includes(ab) ? ab : 'dash', this.dashSX, this.dashSY, s.x, s.y, s.aim);
-  },
-  phaseJump() {
-    const s = this.ship, c = Math.cos(this.dashA), n = Math.sin(this.dashA);
-    for (let d = CFG.PHASE.dist; d > 0; d -= 4) if (this.free(s.x + c * d, s.y + n * d, s.r)) { s.x += c * d; s.y += n * d; return; }
+    this.dash(['phase', 'decoy', 'turret'].includes(ab) ? ab : 'dash', s.dashSX, s.dashSY, s.x, s.y, s.aim);
   },
   dash(k, x0, y0, x1, y1, a) {
     this.dashFx(0, k, x0, y0, x1, y1, a, this.shipId);
@@ -319,7 +311,7 @@ const Hub = {
     this.seq = { t: 0, then, x0: s.x, y0: s.y, a0: s.aim, x1: L.x + off, y1: L.y, y2: HUB.H + 240 };
     const ships = this.coop() ? Net.roomShips() : [];
     this.mateSeq = mates.map(m => { const o = ships.find(o => o.slot === m.slot); return o && { slot: m.slot, s: o.s, w: o.w, x0: o.x, y0: o.y, a0: o.a, x1: L.x + m.off, y1: L.y, y2: HUB.H + 240 }; }).filter(Boolean);
-    s.vx = s.vy = 0; this.shots = []; this.dashT = 0; this.dfx = [];
+    s.vx = s.vy = 0; this.shots = []; s.dashT = 0; this.dfx = [];
     if (this.near) { this.near = null; Events.emit('hubNear', null); }
     Events.emit('hubLaunch');
   },
@@ -351,11 +343,14 @@ const Hub = {
   // 衝出去那段播到哪（0～1，畫尾焰用；還沒衝 = 0）
   flyK() { const q = this.seq, T = this.LAUNCH; return q ? clamp((q.t - T.move - T.charge) / T.fly, 0, 1) : 0; },
   // 鏡頭跟著飛船（飛船在標題列以下那塊的正中間），不超出基地外圍太多；縮放照畫面大小（1280×800 = 1）
-  follow() {
+  // 鏡頭跟著飛船：dt 有給 = 平滑跟上（跟戰鬥一樣每秒 8 倍差距；先鋒號瞬移時鏡頭不會一下跳過去）；沒給 = 直接對準（進基地、出發動畫）
+  follow(dt) {
     const room = VH - HUB.TOP, k = this.k = clamp(Math.min(VW / 1280, VH / 800), 0.7, 1.3), s = this.ship;
     const vw = VW / k, vh = room / k, top = HUB.TOP / k;
-    this.cam.x = vw >= HUB.W ? HUB.W / 2 - vw / 2 : clamp(s.x - vw / 2, 0, HUB.W - vw);
-    this.cam.y = (vh >= HUB.H ? HUB.H / 2 - vh / 2 : clamp(s.y - vh / 2, 0, HUB.H - vh)) - top;
+    const tx = vw >= HUB.W ? HUB.W / 2 - vw / 2 : clamp(s.x - vw / 2, 0, HUB.W - vw);
+    const ty = (vh >= HUB.H ? HUB.H / 2 - vh / 2 : clamp(s.y - vh / 2, 0, HUB.H - vh)) - top;
+    const a = dt == null ? 1 : Math.min(1, dt * 8);
+    this.cam.x += (tx - this.cam.x) * a; this.cam.y += (ty - this.cam.y) * a;
   },
   // 靠近的東西按 E 有沒有作用（自己開的那艘、裝著的武器：只看數據）；畫面照這個決定要不要顯示 E
   actable(z) { return !!z && !(z.kind === 'pad' && z.ship === this.shipId) && !(z.kind === 'rack' && z.weapon === this.weaponId); },

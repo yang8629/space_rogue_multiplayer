@@ -39,6 +39,8 @@ const HUB_FLOOR = {
   records: { base: 0x1b1914, tile: 80, pattern: null },
 };
 
+// 轉了角度的矩形（中心 cx, cy、寬 w、高 h、轉 a）→ poly 用的點
+const hubRect = (cx, cy, w, h, a) => { const c = Math.cos(a), n = Math.sin(a), out = []; for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) out.push(cx + (u * w * c - v * h * n) / 2, cy + (u * w * n + v * h * c) / 2); return out; };
 const GLHub = {
   init() {
     const L = GLR.L;
@@ -205,6 +207,19 @@ const GLHub = {
       glArc(g, hx, hy, ring + 80, a - half * 0.7, a + half * 0.7); g.stroke({ width: 3, color: 0xb89a45, alpha: 0.55 });
     }
     this.hexPad(g, hx, hy, 92, 0x1a2238, 12);  // 中間的轉盤（顏色貼近地板：10-20 使用者說太亮、跟地板配不起來）
+    // 盤面：6 個嵌在切面上的燈座（深色外殼、金屬邊框、一條燈槽，沿著盤的切線擺；燈在 draw 每幀亮）、中間一圈溝槽（燈帶）＋6 道接縫、正中一個小台座
+    //   燈不轉、不是光點：10-20 使用者說轉的燈、光點都突兀，要細節一點
+    D.ttLamps = [];
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * TAU, x = hx + Math.cos(a) * 75, y = hy + Math.sin(a) * 75;
+      g.poly(hubRect(x, y, 26, 11, a + Math.PI / 2)).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK });  // 外殼
+      g.poly(hubRect(x - Math.cos(a), y - Math.sin(a), 22, 7, a + Math.PI / 2)).fill(0x3a4466);  // 金屬邊框（左上光：外殼裡面的斜面）
+      g.poly(hubRect(x, y, 18, 3.5, a + Math.PI / 2)).fill(0x141c34);  // 燈槽（沒亮的時候）
+      D.ttLamps.push({ x, y, a: a + Math.PI / 2, ph: i * 0.9 });
+    }
+    g.circle(hx, hy, 34).stroke({ width: 2, color: HUB_INK, alpha: 0.8 });
+    for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; g.moveTo(hx + Math.cos(a) * 34, hy + Math.sin(a) * 34).lineTo(hx + Math.cos(a) * 57, hy + Math.sin(a) * 57).stroke({ width: 1.5, color: HUB_INK, alpha: 0.6 }); }
+    this.hexPad(g, hx, hy, 16, 0x2a3454);
     D.turntable = { x: hx, y: hy };
     this.tank(g, hg.x + 50, hg.y + hg.h - 50, 30); this.tank(g, hg.x + 112, hg.y + hg.h - 40, 22);
     this.crate(g, hg.x + 18, hg.y + 104, 62, 62, 0x5a4a32); this.crate(g, hg.x + hg.w - 80, hg.y + hg.h - 76, 62, 62, 0x3f5a46); this.crate(g, hg.x + hg.w - 80, hg.y + 14, 62, 62, 0x5a4a32);
@@ -296,16 +311,22 @@ const GLHub = {
       }
     }
     for (const [i, [x, y]] of D.lamps.entries()) this.glow(x, y + 30, 80, 0xfff2c4, 0.11 + 0.02 * Math.sin(t * 7 + i * 1.7));
+    if (D.turntable) {  // 機庫轉盤：燈座的燈槽慢慢亮暗（每個錯開一點，不轉），光往盤面灑一點；中間的溝槽是一圈淡淡的燈帶
+      const { x: tx, y: ty } = D.turntable;
+      for (const L of D.ttLamps) {
+        const k = 0.55 + 0.35 * Math.sin(t * 1.4 + L.ph);
+        g.poly(hubRect(L.x, L.y, 18, 3.5, L.a)).fill({ color: 0x9fd4ff, alpha: 0.35 + 0.6 * k });
+        g.poly(hubRect(L.x, L.y, 10, 1.5, L.a)).fill({ color: 0xffffff, alpha: 0.5 * k });
+        this.glow(L.x, L.y, 22, 0x7fb4ff, 0.3 * k);
+      }
+      g.circle(tx, ty, 34).stroke({ width: 1.5, color: 0x7fb4ff, alpha: 0.18 + 0.08 * Math.sin(t * 1.4) });
+    }
     for (const [i, [x, y]] of D.pylons.entries()) { const k = 0.6 + 0.4 * Math.sin(t * 1.6 + i * Math.PI / 2); g.circle(x, y, 4).fill({ color: 0x9fe8ff, alpha: k }); this.glow(x, y, 34, 0x4cc9f0, 0.35 * k); }  // 大廳的導航燈柱：慢慢一明一暗
     for (const [i, [x, y]] of D.beacons.entries()) { const on = Math.sin(t * 2.4 + i * Math.PI / 2) > 0.6; g.circle(x, y, 3.5).fill(on ? 0xff4d6d : 0x5a1f2e); if (on) this.glow(x, y, 26, 0xff4d6d, 0.5); }
     for (const e of D.leds) {
       if (e.trophy) { CONSOLE_ICON.stats(g, e.x, e.y, e.col, 0.95); this.glow(e.x, e.y, 30, e.col, 0.3); }
       else if (e.screen) g.rect(e.x - 3, e.y - 50, 6, 100).fill({ color: e.col, alpha: 0.25 + 0.15 * Math.sin(t * 2 + e.x) });
       else { const on = Math.sin(t * 3 + e.k) > 0; g.circle(e.x, e.y, 2.5).fill(on ? e.col : 0x1a3a30); if (on) this.glow(e.x, e.y, 10, e.col, 0.5); }
-    }
-    if (D.turntable) {  // 機庫中間轉盤：嵌在盤面上的 4 盞燈，不動、慢慢呼吸（以前一圈燈在轉，跟地板配不起來）
-      const { x, y } = D.turntable, k = 0.55 + 0.25 * Math.sin(t * 1.6);
-      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2, lx = x + Math.cos(a) * 74, ly = y + Math.sin(a) * 74; g.circle(lx, ly, 3).fill({ color: 0x7fb4ff, alpha: k }); this.glow(lx, ly, 14, 0x7fb4ff, 0.3 * k); }
     }
     for (const Rd of D.drones) {  // 無人機：影子、四支螺旋臂、機身（左上亮）、一閃一閃的燈
       const a = t * Rd.sp + Rd.ph, x = Rd.cx + Math.cos(a) * Rd.rx, y = Rd.cy + Math.sin(a) * Rd.ry, h = Math.sin(t * 3 + Rd.ph) * 2;

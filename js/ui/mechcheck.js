@@ -1617,7 +1617,7 @@ const MechCheck = {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
       const q = Game.player, g = Arena.gates[0], side = () => (q.x - g.x) * g.nx + (q.y - g.y) * g.ny;
-      const jump = (x, y, a, zone) => { q.x = x; q.y = y; q.zone = zone; q.dashA = a; q.phaseJump(); Arena.collide(q, q.r, Arena.shipPass(q)); Arena.updateZone(q); };
+      const jump = (x, y, a, zone) => { q.x = x; q.y = y; q.zone = zone; q.dashA = a; Dash.phase(q, (x, y) => q.phaseFree(x, y)); q.dashT = 0; Arena.collide(q, q.r, Arena.shipPass(q)); Arena.updateZone(q); };
       const fwd = Math.atan2(g.ny, g.nx);
       g.open = false; jump(g.x - g.nx * 60, g.y - g.ny * 60, fwd, 0);
       const closed = q.zone === 0 && side() <= 0;
@@ -2946,7 +2946,7 @@ const MechCheck = {
         Game.state = 'title'; CFG.UNLOCK_ALL = true; Hub.enter(); Hub.weaponId = 'laser';
         const T = HUB.targets[0], s = Hub.ship, keys = new Set(Input.keys);
         const dash = (id, n = 20) => {  // 站在靶左邊 260 朝右衝，跑 n 幀
-          Hub.dfx = []; Hub.puffs = []; Hub.shots = []; Hub.hits = []; Hub.setShip(id); Hub.dashCd = 0; Hub.dashT = 0;
+          Hub.dfx = []; Hub.puffs = []; Hub.shots = []; Hub.hits = []; Hub.setShip(id); Hub.ship.dashCd = 0; Hub.ship.dashT = 0;
           s.x = T.x - 260; s.y = T.y; s.vx = s.vy = 0; s.aim = 0; Input.keys.clear(); Input.dash = true;
           const x0 = s.x, puff = [];
           for (let i = 0; i < n; i++) { Hub.update(0.016); puff.push(Hub.puffs.length); }
@@ -2967,7 +2967,7 @@ const MechCheck = {
         return { ok: okV && w.fx.includes('decoy') && g.fx.includes('portal') && okT && !b.fx.length && b.puff > 0 && hopOk && swapOk,
           got: `先鋒號瞬移 ${v.dx}（應為 ${CFG.PHASE.dist}）、粒子 ${v.puff}；幻影號 ${w.fx.join(',') || '沒有效果'}；星門號 ${g.fx.join(',') || '沒有效果'}、穿門${hopOk ? '成功' : '失敗（錯誤）'}；哨兵號 ${t.fx.join(',') || '沒有效果'}、打中標靶 ${turretHits} 發（每發應為 ${tdmg}）；堡壘號效果 ${b.fx.join(',') || '只有粒子'}；換船${swapOk ? '留在原地' : '位置變了（錯誤）'}` };
       } finally {
-        Game.state = st; CFG.UNLOCK_ALL = ulk; Hub.weaponId = hw; Hub.setShip(hs); Hub.dfx = []; Hub.puffs = []; Hub.shots = []; Hub.hits = []; Hub.nums = []; Hub.dashT = 0; Input.dash = false;
+        Game.state = st; CFG.UNLOCK_ALL = ulk; Hub.weaponId = hw; Hub.setShip(hs); Hub.dfx = []; Hub.puffs = []; Hub.shots = []; Hub.hits = []; Hub.nums = []; if (Hub.ship) Hub.ship.dashT = 0; Input.dash = false;
         if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
       }
     }],

@@ -9,7 +9,7 @@ await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 2500));
 await p.evaluate(() => { CFG.UNLOCK_ALL = true; Input.mouseMoved = false; });
 for (const [id, wait] of [['vanguard', 120], ['wraith', 300], ['gate', 400], ['sentry', 1500], ['bulwark', 120]]) {
   const r = await p.evaluate((id) => {
-    Hub.dfx = []; Hub.puffs = []; Hub.setShip(id); Hub.dashCd = 0;
+    Hub.dfx = []; Hub.puffs = []; Hub.setShip(id); Hub.ship.dashCd = 0;
     const T = HUB.targets[0], s = Hub.ship;  // 站在標靶機左邊 260，朝右衝
     s.x = T.x - 260; s.y = T.y; s.vx = s.vy = 0; s.aim = 0; Hub.follow();
     Input.keys.add('d'); Input.dash = true;

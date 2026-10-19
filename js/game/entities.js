@@ -5,6 +5,38 @@
 // =====================================================================
 // ENTITIES
 // =====================================================================
+// 衝刺：戰鬥的飛船（Player）和基地的飛船（Hub.ship）共用同一套——按鍵、冷卻、速度、時間、先鋒號的瞬移都在這裡
+//   o 要有 x, y, aim, ship（SHIPS 的那艘）、dashT, dashCd, dashA；衝刺的起點記在 dashSX, dashSY（星門號開門、殘影、砲台用）
+//   各自的效果（粒子、殘影、砲台、星門、傷害）由呼叫的人在 input 回傳 true 時做
+const Dash = {
+  // 每幀：冷卻倒數；按了衝刺鍵（或按住、冷卻一好）就開始衝 → 回傳 true。dir = 衝的方向；cd = 這次的冷卻；hold = 按住可以連衝
+  //   free(x, y)：先鋒號瞬移的落點能不能放（戰鬥：場地、區域、障礙物；基地：房間和開口裡）
+  input(o, dt, dir, cd, hold, free) {
+    o.dashCd -= dt;
+    if (!(Input.dash || (hold && Input.dashHeld && o.dashCd <= 0))) return false;  // 按住衝刺鍵：冷卻一好就再衝（不靠系統的按鍵重複，按別的鍵也不會斷）
+    Input.dash = false;
+    if (o.dashCd > 0) return false;
+    o.dashT = CFG.DASH_TIME; o.dashCd = cd; o.dashA = dir;
+    o.dashSX = o.x; o.dashSY = o.y;  // 衝刺起點：在瞬移之前記
+    if (o.ship.ability === 'phase') this.phase(o, free);
+    return true;
+  },
+  // 先鋒號・相位跳躍：朝 dashA 瞬移 CFG.PHASE.dist（落點不能放就往回找最遠的），之後停 CFG.PHASE.t（算衝刺中）
+  phase(o, free) {
+    const c = Math.cos(o.dashA), s = Math.sin(o.dashA);
+    for (let d = CFG.PHASE.dist; d > 0; d -= 4) if (free(o.x + c * d, o.y + s * d)) { o.x += c * d; o.y += s * d; break; }
+    o.dashT = CFG.PHASE.t;
+  },
+  // 衝刺中：照 dashA 衝（先鋒號已經瞬移過去，剩下的時間停在落點）；回傳這一幀是不是在衝
+  move(o, dt) {
+    if (!(o.dashT > 0)) return false;
+    o.dashT -= dt;
+    const sp = o.ship.ability === 'phase' ? 0 : CFG.DASH_SPEED;
+    o.vx = Math.cos(o.dashA) * sp; o.vy = Math.sin(o.dashA) * sp;
+    return true;
+  },
+};
+
 class Player {
   constructor(ship) {
     this.ship = ship;
@@ -100,18 +132,13 @@ class Player {
       spawnShots(list, this.x, this.y, 0, 0, null);
     }
   }
-  // 相位跳躍（先鋒號）：朝 dashA 瞬移 CFG.PHASE.dist；可以穿過牆、行星、小行星，落點在裡面就往回找最遠的空地；
+  // 相位跳躍（先鋒號，Dash.phase）的落點能不能放：可以穿過牆、行星、小行星，但落點不能在裡面；
   //   不能落到別區：只能留在這一區，或穿過這一區打開的閘門到下一區（關著的閘門、走過的區域都跳不過去）
-  phaseJump() {
-    const c = Math.cos(this.dashA), s = Math.sin(this.dashA), x0 = this.x, y0 = this.y, r = this.r;
-    const z = Arena.rect ? 0 : this.zone != null ? this.zone : Arena.zoneOf(x0, y0), g = !Arena.rect && Arena.gates[z];
-    const zoneOk = (x, y) => { const k = Arena.zoneOf(x, y); return k === z || (g && g.open && k === z + 1); };
-    for (let d = CFG.PHASE.dist; d > 0; d -= 4) {
-      const x = x0 + c * d, y = y0 + s * d;
-      if (Arena.rect ? x < r || y < r || x > CFG.WORLD_W - r || y > CFG.WORLD_H - r : x < r || y < r || x > Arena.W - r || y > Arena.H - r || !zoneOk(x, y)) continue;
-      if (!Objects.shipFree(this, x, y)) continue;
-      this.x = x; this.y = y; return;
-    }
+  phaseFree(x, y) {
+    const r = this.r, z = Arena.rect ? 0 : this.zone != null ? this.zone : Arena.zoneOf(this.x, this.y), g = !Arena.rect && Arena.gates[z];
+    const zoneOk = () => { const k = Arena.zoneOf(x, y); return k === z || (g && g.open && k === z + 1); };
+    if (Arena.rect ? x < r || y < r || x > CFG.WORLD_W - r || y > CFG.WORLD_H - r : x < r || y < r || x > Arena.W - r || y > Arena.H - r || !zoneOk()) return false;
+    return Objects.shipFree(this, x, y);
   }
   phaseFx() {  // 瞬移：起點收縮的圈、落點擴散的圈、中間一道電光
     const c = this.ship.color, sx = this.dashSX, sy = this.dashSY;
@@ -152,30 +179,16 @@ class Player {
       this.autoMode = false;
     }
 
-    this.dashCd -= dt;
-    if (Input.dash || (Input.dashHeld && this.dashCd <= 0 && Game.state === 'play')) {  // 按住衝刺鍵：冷卻一好就再衝
-      Input.dash = false;
-      if (this.dashCd <= 0) {
-        const M = Game.mech;
-        this.dashT = CFG.DASH_TIME;
-        this.dashCd = this.ship.dashCd * (1 - P.dashCd) * M.dashCd;
-        this.dashA = this.moving ? Math.atan2(my, mx) : this.aim;
-        this.dashSX = this.x; this.dashSY = this.y;  // 衝刺起點（星門號的第一個門）：在瞬移之前記
-        if (this.ship.ability === 'phase') { this.phaseJump(); this.dashT = CFG.PHASE.t; this.iframe = Math.max(this.iframe, CFG.DASH_TIME); this.phaseFx(); }  // 無敵時間跟一般衝刺一樣（停在落點的時間比較短，用 iframe 補足）
-        this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
-        burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
-        if (Game.runStats) Game.runStats.dashes++;
-        Events.emit('dash', this);
-        this.onDash();
-      }
+    if (Dash.input(this, dt, this.moving ? Math.atan2(my, mx) : this.aim, this.ship.dashCd * (1 - P.dashCd) * Game.mech.dashCd, Game.state === 'play', (x, y) => this.phaseFree(x, y))) {  // 衝刺：Dash（跟基地同一套）
+      if (this.ship.ability === 'phase') { this.iframe = Math.max(this.iframe, CFG.DASH_TIME); this.phaseFx(); }  // 無敵時間跟一般衝刺一樣（停在落點的時間比較短，用 iframe 補足）
+      this.dashSeq = (this.dashSeq || 0) + 1;  // 連線時告訴房主「衝刺了一次」
+      burst(this.x, this.y, this.ship.color, 10, 160, 0.3, 2);
+      if (Game.runStats) Game.runStats.dashes++;
+      Events.emit('dash', this);
+      this.onDash();
     }
-    if (this.dashT > 0) {
-      this.dashT -= dt;
-      const sp = this.ship.ability === 'phase' ? 0 : CFG.DASH_SPEED;  // 相位跳躍：已經瞬移過去，剩下的衝刺時間停在落點
-      this.vx = Math.cos(this.dashA) * sp;
-      this.vy = Math.sin(this.dashA) * sp;
-      trail(this.x, this.y, this.ship.color, 0.25, 5);
-    } else if (this.kbT > 0) {  // 被彈開（盾衛的盾）：這段時間不吃操控，速度慢慢減
+    if (Dash.move(this, dt)) trail(this.x, this.y, this.ship.color, 0.25, 5);
+    else if (this.kbT > 0) {  // 被彈開（盾衛的盾）：這段時間不吃操控，速度慢慢減
       this.kbT -= dt; const f = Math.max(0, 1 - dt * 4); this.vx *= f; this.vy *= f;
     } else {
       const l = Math.max(1, Math.hypot(mx, my)), spd = this.ship.speed * (1 + P.speed) * Game.mech.speed * (this.frostT > 0 ? 1 - OBJ.COMET_FROST.slow : 1), k = Math.min(1, dt * 12);
