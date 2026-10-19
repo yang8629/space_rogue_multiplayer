@@ -52,6 +52,7 @@ const GLHub = {
   glow(x, y, r, col, a) { return GLActors.glowAt(this.pG, x, y, r, col, a); },
 
   // ---------- 不會動的部分：第一次畫的時候畫一次（配置換了把 built 設回 false） ----------
+  padLamps: new Map(),  // 停機位的燈座位置（shipPad 算好，draw 每幀點亮）
   build() {
     const g = this.gBase, WT = HUB.WT, R = HUB.rooms, rooms = Object.values(R);
     g.clear();
@@ -79,7 +80,7 @@ const GLHub = {
     this.decorBuild(g);
     // 3) 停機位、武器架、操作台、發射台、終端機的底座
     for (const z of HUB.zones) {
-      if (z.kind === 'pad') this.hexPad(g, z.x, z.y, z.r, 0x2b3654);
+      if (z.kind === 'pad') this.shipPad(g, z);
       else if (z.kind === 'rack') this.rackPlate(g, z.x, z.y);
       else if (z.kind === 'console') { this.hexPad(g, z.x, z.y + 8, 40, 0x2b3654, 8); g.circle(z.x, z.y + 8, 18).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); }
       else if (z.kind === 'launch') { const bay = R.bay; this.launchPad(g, z, bay.y + bay.h); g.rect(z.x - HUB.RUNWAY_W / 2 - 8, bay.y + bay.h - 2, HUB.RUNWAY_W + 16, WT + 2).fill(0x02030a).stroke({ width: 3, color: HUB_INK }); }
@@ -151,6 +152,19 @@ const GLHub = {
     g.rect(x - 50, y - 28, 100, 56).stroke({ width: 2.5, color: HUB_INK });
     g.rect(x - 44, y - 18, 88, 36).fill(0x141a2e).stroke({ width: 2, color: HUB_INK });
     for (const cx of [x - 22, x + 18]) for (const sg of [-1, 1]) g.rect(cx, sg < 0 ? y - 21 : y + 15, 8, 6).fill(0x8a9ac4).stroke({ width: 1.5, color: HUB_INK });
+  },
+  // 機庫的停機位：跟中間的轉盤同一套——深色切面台座、中間凹下去一圈、3 個嵌在切面上的燈座（燈在 draw 照船的顏色亮）
+  shipPad(g, z) {
+    this.hexPad(g, z.x, z.y, z.r, 0x1a2238);
+    const lamps = [];
+    for (let i = 0; i < 3; i++) {
+      const a = i / 3 * TAU + Math.PI / 6, R = z.r * 0.8, x = z.x + Math.cos(a) * R, y = z.y + Math.sin(a) * R;  // 隔一個切面放一個
+      g.poly(hubRect(x, y, 18, 9, a + Math.PI / 2)).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK });
+      g.poly(hubRect(x - Math.cos(a), y - Math.sin(a), 14, 5, a + Math.PI / 2)).fill(0x3a4466);
+      g.poly(hubRect(x, y, 11, 3, a + Math.PI / 2)).fill(0x141c34);
+      lamps.push({ x, y, a: a + Math.PI / 2 });
+    }
+    this.padLamps.set(z.id, lamps);
   },
   // 切面的多邊形台座：n 邊，每一邊一個三角形切面，亮度照切面朝向
   hexPad(g, cx, cy, r, base, n = 6) {
@@ -341,10 +355,14 @@ const GLHub = {
       const near = Hub.near === z, col = glColor(z.color);
       if (z.kind === 'pad') {
         const S = SHIPS[z.ship], ok = isUnlocked('ship', z.ship), mine = z.ship === Hub.shipId;
-        const pc = ok ? col : 0x3a4566, pulse = 0.5 + 0.5 * Math.sin(t * 3 + z.x);
-        g.circle(z.x, z.y, z.r * 0.82).stroke({ width: 3, color: pc, alpha: ok ? 0.75 : 0.5 });
+        const pc = ok ? col : 0x3a4566, pulse = 0.5 + 0.5 * Math.sin(t * 3 + z.x), k = ok ? (near ? 0.75 + 0.25 * pulse : 0.6 + 0.2 * Math.sin(t * 1.4 + z.x)) : 0.15;
+        for (const L of this.padLamps.get(z.id) || []) {  // 燈座：船的顏色（沒解鎖的暗暗的）；靠近時一閃一閃
+          g.poly(hubRect(L.x, L.y, 11, 3, L.a)).fill({ color: pc, alpha: 0.35 + 0.65 * k });
+          if (ok) { g.poly(hubRect(L.x, L.y, 6, 1.2, L.a)).fill({ color: 0xffffff, alpha: 0.5 * k }); this.glow(L.x, L.y, 18, pc, 0.3 * k); }
+        }
+        g.circle(z.x, z.y, z.r * 0.62).stroke({ width: 1.5, color: pc, alpha: ok ? 0.35 : 0.15 });  // 中間凹槽的邊：淡淡的燈帶
         if (near) g.circle(z.x, z.y, z.r + 6 + pulse * 4).stroke({ width: 3, color: pc, alpha: 0.8 });
-        this.glow(z.x, z.y, z.r * 1.3, pc, ok ? 0.18 + 0.08 * pulse : 0.08);
+        this.glow(z.x, z.y, z.r * 1.2, pc, ok ? 0.1 + 0.05 * pulse : 0.04);
         if (mine || !S) continue;  // 自己開走的那艘：停機位空著
         const ghost = { x: z.x, y: z.y, aim: z.face || 0, r: 12, ship: S, parts: S.parts, moving: false, iframe: 0, dashT: 0, overdrive: 0 };  // 船頭朝機庫中間
         if (ok) GLActors.ship(ghost, '');
