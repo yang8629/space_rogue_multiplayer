@@ -1153,6 +1153,7 @@ const Net = {
       for (const e of G.enemies) {
         e.modeT -= dt;
         if (e.cd !== undefined) e.cd -= dt;
+        if (e.t.beams && !(e.spawnT > 0)) e.rot += dt * (e.enraged ? CFG.WARDEN.spinRage : CFG.WARDEN.spin) * endlessAtk();  // 星環守門者的光束照轉速往前轉（同步 1/30 秒一次，不然光束每兩幀才跳一次）
         if (e.spawnT > 0) e.spawnT -= dt;
         else { e.x += e.vx * dt; e.y += e.vy * dt; }
       }
@@ -1229,6 +1230,7 @@ const Net = {
         affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined };
     }).filter(Boolean);
     for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
+    for (const e of G.enemies) { const o = e.t.beams && prev.get(e.id); if (o && o !== e) e.rot = o.rot + angleDiff(o.rot, e.rot) * 0.5; }  // 守門者的光束：往同步來的角度修一半（自己照轉速推算的跟房主差一點，直接蓋掉會一下快一下慢）
     const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）
     for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;  // 沿用的那節也要重接（前面那節可能換成新的物件）
     const pal = arr(s.pal);

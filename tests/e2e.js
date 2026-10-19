@@ -90,7 +90,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 // ---- 跑完整個星區：投票 → 進節點 → 處理 → 回航圖 ----
 const both = f => { f(HA); f(HB); };
 let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
-let tractorChecked = false;  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
+let tractorChecked = false, beamChecked = false;  // beamChecked：守門者的光束在隊友那邊轉得順  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
 let alertChecked = false;  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
@@ -195,7 +195,19 @@ while (!sector2 && guard++ < 40) {
       tr.dead = true; GA.enemies = GA.enemies.filter(e => e !== tr); GA.objs = objs0;
       P.iframe = me.iframe = GA.mates[0].iframe = 0;
     }
-    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
+    if (!beamChecked && type === 'combat') {  // 星環守門者的光束：隊友那邊每幀都要轉（同步 1/30 秒一次，以前每兩幀才跳一次、末端一次跳 17px）
+      beamChecked = true;
+      const GA = HA.Game, CB = CL.T.Game, me = CB.player;
+      const core = new HA.Enemy('boss5', me.x + 300, me.y, 1); core.spawnT = 0; core.skillCd = 1e9; core.cd = 7.4; GA.enemies.push(core);
+      GA.player.iframe = GA.mates[0].iframe = 1e9;
+      step(10);
+      const rows = [];
+      for (let i = 0; i < 90; i++) { step(1); const ce = CB.enemies.find(e => e.id === core.id); rows.push([core.rot, ce ? ce.rot : NaN]); }
+      const dC = rows.slice(1).map((r, i) => r[1] - rows[i][1]), dH = rows[60][0] - rows[59][0];
+      const lag = Math.abs(rows[80][0] - rows[80][1]), still = dC.filter(d => !(d > 1e-6)).length, fast = Math.max(...dC);
+      ok(still === 0 && fast < dH * 2 && lag < 0.02, `warden beam turns smoothly on the client (still frames ${still}/${dC.length}, max ${(fast / dH).toFixed(2)}x host, lag ${lag.toFixed(3)} rad)`);
+      core.dead = true; GA.enemies = GA.enemies.filter(e => e !== core); GA.player.iframe = GA.mates[0].iframe = 0;
+    }    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
       alertChecked = true;
       HA.Game.spawnEnemy('alarm'); const al = HA.Game.enemies[HA.Game.enemies.length - 1]; al.spawnT = 0;
       const idle = !al.alert;
