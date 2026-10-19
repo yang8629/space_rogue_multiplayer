@@ -1230,7 +1230,15 @@ const Net = {
         affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined };
     }).filter(Boolean);
     for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
-    for (const e of G.enemies) { const o = e.t.beams && prev.get(e.id); if (o && o !== e) e.rot = o.rot + angleDiff(o.rot, e.rot) * 0.5; }  // 守門者的光束：往同步來的角度修一半（自己照轉速推算的跟房主差一點，直接蓋掉會一下快一下慢）
+    // 守門者的光束：同步來的角度是單程延遲之前的，再往前轉「轉速 × 單程延遲（來回延遲的一半）」才跟房主判定用的對齊
+    //   （tests/beamlag.js 量過：不補的話單程延遲 100ms 時，隊友看到光束碰到船之前 133ms 就被扣血）；
+    //   往目標修一半（自己照轉速推算的跟房主差一點，直接蓋掉會一下快一下慢）
+    const lead = (this.ping || 0) / 2000;
+    for (const e of G.enemies) {
+      if (!e.t.beams) continue;
+      const want = e.rot + lead * (e.enraged ? CFG.WARDEN.spinRage : CFG.WARDEN.spin) * endlessAtk(), o = prev.get(e.id);
+      e.rot = o && o !== e ? o.rot + angleDiff(o.rot, want) * 0.5 : want;
+    }
     const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）
     for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;  // 沿用的那節也要重接（前面那節可能換成新的物件）
     const pal = arr(s.pal);

@@ -14,7 +14,7 @@ const GIT = process.env.GIT || (() => {
   return win && fs.existsSync(win) ? win : 'git';
 })();
 const REPO = path.join(__dirname, '..');
-const TESTS = ['smoke.js', 'range.js', 'e2e.js', 'maptest.js', 'editortest.js'];  // 插座檢查已經併進機制檢查（SockCheck）
+const TESTS = ['smoke.js', 'range.js', 'e2e.js', 'maptest.js', 'editortest.js', 'beamlag.js'];  // 插座檢查已經併進機制檢查（SockCheck）
 const args = process.argv.slice(2);
 const push = args.includes('--push');
 const newVer = args.find(a => /^\d+(\.\d+)+$/.test(a));
