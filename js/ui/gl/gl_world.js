@@ -231,11 +231,13 @@ const GLWorld = {
       } else if (o.type === 'comet') this.comet(o);
     }
     for (const [o, H] of this.holes) if (!seen.has(o)) { H.c.destroy({ children: true }); this.holes.delete(o); }
-    for (const q of G.portals) {  // 星門
-      const a = Math.min(1, q.t * 2), col = glColor(q.color);
-      for (const [x, y] of [[q.ax, q.ay], [q.bx, q.by]]) { gO.circle(x, y, 22).stroke({ width: 3, color: col, alpha: a }); glArc(gO, x, y, 14, t * 4, t * 4 + 4); gO.stroke({ width: 1.5, color: col, alpha: a }); }
-      gO.moveTo(q.ax, q.ay).lineTo(q.bx, q.by).stroke({ width: 1.5, color: col, alpha: 0.12 * a });
-    }
+    for (const q of G.portals) this.portal(gO, q.ax, q.ay, q.bx, q.by, q.color, Math.min(1, q.t * 2), t);  // 星門
+  },
+  // 一對星門：兩個圈＋裡面轉的弧，中間一條淡線（基地的衝刺效果也用：Hub.dfx）
+  portal(g, ax, ay, bx, by, color, a, t) {
+    const col = glColor(color);
+    for (const [x, y] of [[ax, ay], [bx, by]]) { g.circle(x, y, 22).stroke({ width: 3, color: col, alpha: a }); glArc(g, x, y, 14, t * 4, t * 4 + 4); g.stroke({ width: 1.5, color: col, alpha: a }); }
+    g.moveTo(ax, ay).lineTo(bx, by).stroke({ width: 1.5, color: col, alpha: 0.12 * a });
   },
   hole(o) {
     let H = this.holes.get(o);

@@ -204,7 +204,7 @@ const GLHub = {
       const a = z.face + Math.PI;
       glArc(g, hx, hy, ring + 80, a - half * 0.7, a + half * 0.7); g.stroke({ width: 3, color: 0xb89a45, alpha: 0.55 });
     }
-    this.hexPad(g, hx, hy, 92, 0x26304c, 12);  // 中間的轉盤
+    this.hexPad(g, hx, hy, 92, 0x1a2238, 12);  // 中間的轉盤（顏色貼近地板：10-20 使用者說太亮、跟地板配不起來）
     D.turntable = { x: hx, y: hy };
     this.tank(g, hg.x + 50, hg.y + hg.h - 50, 30); this.tank(g, hg.x + 112, hg.y + hg.h - 40, 22);
     this.crate(g, hg.x + 18, hg.y + 104, 62, 62, 0x5a4a32); this.crate(g, hg.x + hg.w - 80, hg.y + hg.h - 76, 62, 62, 0x3f5a46); this.crate(g, hg.x + hg.w - 80, hg.y + 14, 62, 62, 0x5a4a32);
@@ -231,10 +231,11 @@ const GLHub = {
       g.rect(bx, by, 90, 110).stroke({ width: 3, color: 0xb89a45, alpha: 0.6 });
       g.poly([bx + 45, by + 22, bx + 63, by + 44, bx + 55, by + 44, bx + 45, by + 34, bx + 35, by + 44, bx + 27, by + 44]).fill({ color: 0xb89a45, alpha: 0.5 });
     }
-    // 戰績室：上牆一排獎盃（旗艦的顏色），左右牆的顯示螢幕
+    // 戰績室：上牆一排獎盃（旗艦的顏色），左右牆下段的顯示螢幕
     const bosses = Object.values(ENEMY_TYPES).filter(t => t.boss);
     bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * 100, y = rec.y + 30; g.rect(x - 30, rec.y + 4, 60, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
-    for (const sg of [0, 1]) { const x = sg ? rec.x + rec.w - 14 : rec.x + 6; g.rect(x, rec.y + 120, 8, 120).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: rec.y + 180, col: 0xffd166, screen: true }); }
+    const sy0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 14, sh = rec.y + rec.h - 14 - sy0;  // 螢幕放在左牆門口（往觀景台）的下面，右牆對稱（以前疊在門口上）
+    for (const sg of [0, 1]) { const x = sg ? rec.x + rec.w - 14 : rec.x + 6; g.rect(x, sy0, 8, sh).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: sy0 + sh / 2, col: 0xffd166, screen: true }); }
     // 外牆的窗戶：機庫左牆、軍械庫右牆
     for (const [x, y] of [[hg.x - WT + 8, hg.y + hg.h * 0.3], [hg.x - WT + 8, hg.y + hg.h * 0.7], [ar.x + ar.w + 8, ar.y + ar.h * 0.3], [ar.x + ar.w + 8, ar.y + ar.h * 0.7]]) this.window(g, x, y - 40, WT - 16, 80, false);
     // 巡邏的維修無人機：大廳繞圈、機庫走道上下、實驗室繞圈
@@ -302,9 +303,9 @@ const GLHub = {
       else if (e.screen) g.rect(e.x - 3, e.y - 50, 6, 100).fill({ color: e.col, alpha: 0.25 + 0.15 * Math.sin(t * 2 + e.x) });
       else { const on = Math.sin(t * 3 + e.k) > 0; g.circle(e.x, e.y, 2.5).fill(on ? e.col : 0x1a3a30); if (on) this.glow(e.x, e.y, 10, e.col, 0.5); }
     }
-    if (D.turntable) {  // 機庫中間轉盤：一圈慢慢轉的燈
-      const { x, y } = D.turntable;
-      for (let i = 0; i < 12; i++) { const a = t * 0.6 + i / 12 * TAU, on = (i % 3) === 0; g.circle(x + Math.cos(a) * 70, y + Math.sin(a) * 70, on ? 4 : 2.5).fill({ color: 0x7fb4ff, alpha: on ? 0.9 : 0.4 }); if (on) this.glow(x + Math.cos(a) * 70, y + Math.sin(a) * 70, 18, 0x7fb4ff, 0.4); }
+    if (D.turntable) {  // 機庫中間轉盤：嵌在盤面上的 4 盞燈，不動、慢慢呼吸（以前一圈燈在轉，跟地板配不起來）
+      const { x, y } = D.turntable, k = 0.55 + 0.25 * Math.sin(t * 1.6);
+      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2, lx = x + Math.cos(a) * 74, ly = y + Math.sin(a) * 74; g.circle(lx, ly, 3).fill({ color: 0x7fb4ff, alpha: k }); this.glow(lx, ly, 14, 0x7fb4ff, 0.3 * k); }
     }
     for (const Rd of D.drones) {  // 無人機：影子、四支螺旋臂、機身（左上亮）、一閃一閃的燈
       const a = t * Rd.sp + Rd.ph, x = Rd.cx + Math.cos(a) * Rd.rx, y = Rd.cy + Math.sin(a) * Rd.ry, h = Math.sin(t * 3 + Rd.ph) * 2;
@@ -365,10 +366,12 @@ const GLHub = {
       }
     }
     if (Hub.coop()) {  // 多人房間：其他人的飛船（位置同步來的），船底號碼色的光
-      for (const o of Net.roomShips()) {
+      const ML = Hub.mateLaunch();  // 出發動畫中：其他人的船照同一套動畫畫（不用同步來的位置）
+      for (const o of ML || Net.roomShips()) {
         const S = SHIPS[o.s], col = glColor(Game.slotColor(o.slot));
+        if (ML) this.launchTrail(g, o);
         this.glow(o.x, o.y, 34, col, 0.45);
-        GLActors.ship({ x: o.x, y: o.y, aim: o.a, r: 12, ship: S, parts: S.parts, weaponId: o.w, moving: o.m, iframe: 0, dashT: 0, overdrive: 0 }, '');
+        GLActors.ship({ x: o.x, y: o.y, aim: ML ? o.aim : o.a, r: 12, ship: S, parts: S.parts, weaponId: o.w, moving: ML ? o.moving : o.m, iframe: 0, dashT: ML ? o.dashT : 0, overdrive: 0 }, '');
       }
       this.glow(s.x, s.y, 34, glColor(Game.slotColor(Net.mySlot())), 0.45);
     }
@@ -383,14 +386,35 @@ const GLHub = {
     if (Hub.hitT > 0) this.glow(s.x, s.y, 44, 0xffffff, 3 * Hub.hitT);  // 自己被打中：閃白
     for (const o of Hub.coop() ? Net.roomShips() : []) if (Hub.mateHit[o.slot] > 0) this.glow(o.x, o.y, 44, 0xffffff, 3 * Hub.mateHit[o.slot]);
     for (const k of Hub.sparks) { const c = glColor(k.col), q = 1 - k.t / 0.3; g.circle(k.x, k.y, 4 + q * 14).stroke({ width: 2, color: c, alpha: 1 - q }); this.glow(k.x, k.y, 26, c, 0.6 * (1 - q)); }
-    const fk = Hub.flyK();
-    if (fk > 0 && fk < 1) {  // 出發動畫衝出去：船尾拖一道能量光跡（越快越長）
-      const y0 = Math.max(Hub.seq.y1, s.y - 30 - 320 * fk);
-      g.moveTo(s.x, y0).lineTo(s.x, s.y - 6).stroke({ width: 12, color: 0x4cc9f0, alpha: 0.3 });
-      g.moveTo(s.x, (y0 + s.y) / 2).lineTo(s.x, s.y - 6).stroke({ width: 4, color: 0xffffff, alpha: 0.85 });
-      this.glow(s.x, s.y - 12, 46, 0x4cc9f0, 0.7);
-    }
+    this.launchTrail(g, s);
+    this.dashFx(g, t);
     GLActors.ship(s, '');  // 自己開的船（船頭的武器也在裡面畫）
+  },
+  // 衝刺的效果（Hub.dfx、Hub.puffs）：跟戰鬥同樣的畫法——星門、殘影、砲台；先鋒號瞬移 = 起點收縮的圈、落點擴散的圈、中間一道電光；噴的粒子
+  dashFx(g, t) {
+    const F = Hub.dfx, col = f => f.col;
+    for (const f of F) if (f.k === 'portal') GLWorld.portal(g, f.x, f.y, f.x1, f.y1, f.col, Math.min(1, f.t * 2), t);
+    const dec = F.filter(f => f.k === 'decoy'), tur = F.filter(f => f.k === 'turret');
+    if (dec.length) GLActors.decoys(dec, col, t);
+    if (tur.length) GLActors.turrets(tur, col);
+    for (const f of F) {
+      if (f.k !== 'phase') continue;
+      const c = glColor(f.col), q = 1 - f.t / f.max;
+      g.circle(f.x, f.y, 28 * (1 - q)).stroke({ width: 2, color: c, alpha: 1 - q });
+      g.circle(f.x1, f.y1, 34 * q + 6).stroke({ width: 2, color: c, alpha: 1 - q });
+      g.moveTo(f.x, f.y).lineTo(f.x1, f.y1).stroke({ width: 2, color: 0xffffff, alpha: 0.9 * (1 - q) });
+      g.moveTo(f.x, f.y).lineTo(f.x1, f.y1).stroke({ width: 6, color: c, alpha: 0.35 * (1 - q) });
+    }
+    for (const p of Hub.puffs) { const c = glColor(p.col), k = p.t / 0.3; g.circle(p.x, p.y, 2).fill({ color: c, alpha: k }); this.glow(p.x, p.y, 10, c, 0.5 * k); }
+  },
+  // 出發動畫衝出去：船尾拖一道能量光跡（越快越長）；o = 自己的船或其他人（mateLaunch）
+  launchTrail(g, o) {
+    const fk = Hub.flyK();
+    if (!(fk > 0 && fk < 1)) return;
+    const y0 = Math.max(Hub.seq.y1, o.y - 30 - 320 * fk);
+    g.moveTo(o.x, y0).lineTo(o.x, o.y - 6).stroke({ width: 12, color: 0x4cc9f0, alpha: 0.3 });
+    g.moveTo(o.x, (y0 + o.y) / 2).lineTo(o.x, o.y - 6).stroke({ width: 4, color: 0xffffff, alpha: 0.85 });
+    this.glow(o.x, o.y - 12, 46, 0x4cc9f0, 0.7);
   },
   // 沒解鎖的飛船：黑色剪影＋一圈淡淡的灰光（看得出形狀）
   silhouette(S, x, y, rot = 0) {

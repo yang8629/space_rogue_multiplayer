@@ -86,6 +86,11 @@ await A.screenshot({ path: SHOTS + '房間測試_隊友準備好.png' });
 await prepare(A, 'scatter');
 ok(await until(B, () => !!Hub.seq, 3000), '全員準備好：隊友也播出發動畫');
 ok(await A.evaluate(() => Game.state === 'pick' && !!Hub.seq), '房主：出發動畫播完才開始');
+// 兩邊都看得到對方的船跟著播出發動畫（開到發射台 → 沿跑道衝出去）：每 0.4 秒記一次對方船的 y
+const track = p => p.evaluate(async () => { const ys = []; for (let i = 0; i < 5 && Hub.seq; i++) { const m = Hub.mateLaunch(); ys.push(m && m[0] ? Math.round(m[0].y) : null); await new Promise(r => setTimeout(r, 400)); } return ys; });
+const [yA, yB] = await Promise.all([track(A), track(B), wait(950).then(() => A.screenshot({ path: SHOTS + '房間測試_一起出發.png' }))]);  // 截圖：衝出去那段
+const goesOut = ys => ys.length >= 3 && ys.every(y => y != null) && ys[ys.length - 1] > ys[0] + 100;
+ok(goesOut(yA) && goesOut(yB), `出發動畫：兩邊都看到對方的船衝出去（房主看隊友 y ${yA.join('→')}；隊友看房主 y ${yB.join('→')}）`);
 ok(await until(A, () => Game.state === 'map' && Game.mode === 'coop'), '房主準備 → 開始，房主到航圖');
 ok(await until(B, () => Game.state === 'map' && Game.mode === 'coop'), '隊友也到航圖');
 ok(await B.evaluate(() => Game.shipId === 'bulwark' && Game.weapon.id === 'laser'), '隊友用的是自己選的堡壘號＋雷射');

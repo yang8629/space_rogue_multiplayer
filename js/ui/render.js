@@ -279,7 +279,8 @@ function drawHubHud() {
   for (const [i, T] of HUB.targets.entries()) { const v = Hub.dps(i); if (v) label(`每秒 ${v}`, sx(T.x), sy(T.y - T.r - 22), '#ffd166', 13); }  // 標靶機：最近 3 秒的每秒傷害
   if (Hub.coop()) {  // 多人房間：每艘船頭上的號碼（號碼色），✓ = 準備好了，📖 = 在看面板
     const tag = (slot, x, y, r, b) => label(`${slot}P${r ? ' ✓' : ''}${b ? ' 📖' : ''}`, sx(x), sy(y) - 24, Game.slotColor(slot), 13);
-    for (const o of Net.roomShips()) tag(o.slot, o.x, o.y, o.r, o.b);
+    const ML = Hub.mateLaunch();  // 出發動畫中：名牌跟著動畫裡的船（Hub.mateLaunch），不是同步來的位置
+    for (const o of Net.roomShips()) { const m = ML && ML.find(q => q.slot === o.slot); tag(o.slot, m ? m.x : o.x, m ? m.y : o.y, o.r, o.b); }
     if (!Hub.actable(Hub.near)) tag(Net.mySlot(), Hub.ship.x, Hub.ship.y, Net.meReady, false);
   }
   if (Hub.actable(Hub.near)) {  // 靠近（按 E 有作用的）：船上方的「E」

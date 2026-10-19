@@ -2940,6 +2940,37 @@ const MechCheck = {
         if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
       }
     }],
+    ['局外成長', '基地衝刺', '基地裡衝刺跟戰鬥一樣噴粒子，飛船能力做出樣子：先鋒號瞬移 CFG.PHASE.dist、幻影號留殘影、星門號衝完開一對門（飛船、子彈穿過去從另一個門出來）、哨兵號留砲台打標靶機（傷害 ×CFG.TURRET.dmg）；換船留在原地', M => {
+      const st = Game.state, hw = Hub.weaponId, hs = Hub.shipId, ulk = CFG.UNLOCK_ALL, keep = { x: Hub.ship && Hub.ship.x, y: Hub.ship && Hub.ship.y, aim: Hub.ship && Hub.ship.aim };
+      try {
+        Game.state = 'title'; CFG.UNLOCK_ALL = true; Hub.enter(); Hub.weaponId = 'laser';
+        const T = HUB.targets[0], s = Hub.ship, keys = new Set(Input.keys);
+        const dash = (id, n = 20) => {  // 站在靶左邊 260 朝右衝，跑 n 幀
+          Hub.dfx = []; Hub.puffs = []; Hub.shots = []; Hub.hits = []; Hub.setShip(id); Hub.dashCd = 0; Hub.dashT = 0;
+          s.x = T.x - 260; s.y = T.y; s.vx = s.vy = 0; s.aim = 0; Input.keys.clear(); Input.dash = true;
+          const x0 = s.x, puff = [];
+          for (let i = 0; i < n; i++) { Hub.update(0.016); puff.push(Hub.puffs.length); }
+          return { dx: Math.round(s.x - x0), fx: Hub.dfx.map(f => f.k), puff: Math.max(...puff) };
+        };
+        const v = dash('vanguard', 1), w = dash('wraith'), g = dash('gate'), t = dash('sentry', 90);
+        const turretHits = Hub.hits.length, tdmg = Math.round(weaponParams({ id: 'laser', path: null, final: null }).damage * CFG.TURRET.dmg);
+        const okT = t.fx.includes('turret') && turretHits > 0 && Hub.hits.every(h => h.dmg === tdmg);  // 砲台的子彈打中標靶機（飛船自己沒開火）
+        const b = dash('bulwark'), okV = v.dx === CFG.PHASE.dist && v.fx.includes('phase') && v.puff >= 20;
+        // 星門：衝完開門；飛船從起點那個門走進去 → 從落點那個門出來
+        dash('gate'); const P = Hub.dfx.find(f => f.k === 'portal');
+        let hopOk = false;
+        if (P) { s.x = P.x - 60; s.y = P.y; s.vx = s.vy = 0; Input.keys.clear(); Input.keys.add('d'); for (let i = 0; i < 30 && !hopOk; i++) { Hub.update(0.016); hopOk = Math.hypot(s.x - P.x1, s.y - P.y1) < 50; } }
+        Input.keys.clear(); keys.forEach(k => Input.keys.add(k));
+        // 換船：站在停機位旁邊換，位置不動
+        Hub.setShip('vanguard'); const z = Hub.zone('pad:wraith'); s.x = z.x + 20; s.y = z.y + 15;
+        const swapOk = Hub.pick('wraith') && s.x === z.x + 20 && s.y === z.y + 15;
+        return { ok: okV && w.fx.includes('decoy') && g.fx.includes('portal') && okT && !b.fx.length && b.puff > 0 && hopOk && swapOk,
+          got: `先鋒號瞬移 ${v.dx}（應為 ${CFG.PHASE.dist}）、粒子 ${v.puff}；幻影號 ${w.fx.join(',') || '沒有效果'}；星門號 ${g.fx.join(',') || '沒有效果'}、穿門${hopOk ? '成功' : '失敗（錯誤）'}；哨兵號 ${t.fx.join(',') || '沒有效果'}、打中標靶 ${turretHits} 發（每發應為 ${tdmg}）；堡壘號效果 ${b.fx.join(',') || '只有粒子'}；換船${swapOk ? '留在原地' : '位置變了（錯誤）'}` };
+      } finally {
+        Game.state = st; CFG.UNLOCK_ALL = ulk; Hub.weaponId = hw; Hub.setShip(hs); Hub.dfx = []; Hub.puffs = []; Hub.shots = []; Hub.hits = []; Hub.nums = []; Hub.dashT = 0; Input.dash = false;
+        if (Hub.ship && keep.x != null) Object.assign(Hub.ship, keep);
+      }
+    }],
     ['局外成長', '晶片池上鎖', '上鎖時三選一（含稀有、保底組件）、商店、開局晶片都不會出現沒解鎖的晶片；條件達成後就會出現；UNLOCK_ALL 時全部都會出現', M => {
       const keep = [UNLOCK_KEY, CHAPTER_KEY, RECORDS_KEY].map(k => [k, localStorage.getItem(k)]), all = CFG.UNLOCK_ALL;
       const seen = () => {  // 抽很多次，看出現過哪些晶片

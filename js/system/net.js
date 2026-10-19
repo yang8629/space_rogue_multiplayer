@@ -343,12 +343,21 @@ const Net = {
     if (!had || wasReady !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
   },
   // 基地裡開火（hubFire 事件）：告訴其他人（房主轉給其他隊友），對方用 Hub.addFire 生出同樣的子彈
-  sendHubFire(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hf', sl: this.mySlot(), x: Math.round(d.x), y: Math.round(d.y), a: r2(d.a), w: d.w }); },
+  sendHubFire(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hf', sl: this.mySlot(), x: Math.round(d.x), y: Math.round(d.y), a: r2(d.a), w: d.w, ...(d.m ? { m: d.m } : {}) }); },  // m：傷害倍率（砲台）
   onHubFire(m, q) {
     const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
     if (!slot || slot === this.mySlot() || Game.state !== 'pick' || !WEAPONS[m.w]) return;
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
-    Hub.addFire(slot, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H), num(m.a), m.w);
+    Hub.addFire(slot, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H), num(m.a), m.w, clamp(num(m.m, 1), 0, 1));
+  },
+  // 基地裡衝刺（hubDash 事件）：告訴其他人，對方用 Hub.dashFx 畫出同樣的效果（瞬移、殘影、砲台、星門）
+  sendHubDash(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hd', sl: this.mySlot(), k: d.k, x0: Math.round(d.x0), y0: Math.round(d.y0), x1: Math.round(d.x1), y1: Math.round(d.y1), a: r2(d.a), s: d.s }); },
+  onHubDash(m, q) {
+    const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
+    if (!slot || slot === this.mySlot() || Game.state !== 'pick' || !['dash', 'phase', 'decoy', 'turret', 'portal'].includes(m.k) || !SHIPS[m.s]) return;
+    if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
+    const X = v => clamp(num(v), 0, HUB.W), Y = v => clamp(num(v), 0, HUB.H);
+    Hub.dashFx(slot, m.k, X(m.x0), Y(m.y0), X(m.x1), Y(m.y1), num(m.a), m.s);
   },
   // 其他人的飛船畫在哪（netMove 記的差距還沒收完的部分加上去）
   drawPos(o) { return [o.x + (o.ex || 0), o.y + (o.ey || 0)]; },
@@ -732,6 +741,7 @@ const Net = {
         }
         break;
       case 'hf': this.onHubFire(m, q); break;
+      case 'hd': this.onHubDash(m, q); break;
       case 'hold': if (client) this.hold = typeof m.why === 'string' ? m.why.slice(0, 40) : null; break;
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
       case 'room':
@@ -740,7 +750,7 @@ const Net = {
         break;
       case 'full': this.lost(NET_MAX === 2 ? '這個房間已經有兩個人了' : `這個房間已經滿了（最多 ${NET_MAX} 人）`); break;
       case 'ready': this.onMateReady(m, q); break;
-      case 'launch': if (client && Game.state === 'pick') Hub.launch(null, this.launchOff(this.slot, clamp(Math.floor(num(m.n, 2)), 2, NET_MAX))); break;  // 一起出發：播自己的動畫，飛出去等房主的 start
+      case 'launch': if (client && Game.state === 'pick') { const n = clamp(Math.floor(num(m.n, 2)), 2, NET_MAX); Hub.launch(null, this.launchOff(this.slot, n), this.launchMates(n)); } break;  // 一起出發：播自己的動畫，飛出去等房主的 start
       case 'start': if (client) this.startClient(m); break;
       case 'i': if (host) this.applyInput(m, q); break;
       case 's': if (client) this.applySnap(m); break;
@@ -871,9 +881,10 @@ const Net = {
     if (this.role !== 'host' || Game.state !== 'pick' || !this.meReady || !this.allReady() || Hub.seq) return;
     const n = this.peers.length + 1;
     this.send({ t: 'launch', n });
-    Hub.launch(() => { if (Game.state === 'pick' && this.meReady && this.allReady()) this.startHost(); else Screen.hubPick(); }, this.launchOff(1, n));  // 播完再確認一次（有人中途離開就回基地）
+    Hub.launch(() => { if (Game.state === 'pick' && this.meReady && this.allReady()) this.startHost(); else Screen.hubPick(); }, this.launchOff(1, n), this.launchMates(n));  // 播完再確認一次（有人中途離開就回基地）
   },
-  launchOff(slot, n) { return (slot - 1 - (n - 1) / 2) * 26; },  // 出發動畫：照號碼在跑道上左右錯開
+  launchOff(slot, n) { return (slot - 1 - (n - 1) / 2) * Math.min(40, HUB.RUNWAY_W / Math.max(1, n - 1)); },  // 出發動畫：照號碼在跑道上左右錯開（間隔 40，人多時縮到跑道寬放得下；以前 26，兩人的名牌疊在一起）
+  launchMates(n) { return this.roomShips().map(o => ({ slot: o.slot, off: this.launchOff(o.slot, n) })); },  // 其他人（房間裡看得到的）：號碼、跑道上的位置
   ready(ship, weapon, chip) {
     if (this.role === 'client' && !this.linked) { this.lost(); return; }  // 房主一個人也可以先準備
     this.myPick = this.cleanPick({ ship, weapon, chip });
@@ -1445,3 +1456,4 @@ document.addEventListener('visibilitychange', () => {
   if (Net.role === 'host') { Net.myAway = document.hidden; Net.pushPause(); } else Net.send({ t: 'away', on: document.hidden });
 });
 Events.on('hubFire', d => Net.sendHubFire(d));  // 基地裡開火：多人房間時告訴其他人
+Events.on('hubDash', d => Net.sendHubDash(d));  // 基地裡衝刺：多人房間時告訴其他人

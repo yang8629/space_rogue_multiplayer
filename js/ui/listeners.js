@@ -34,6 +34,7 @@
 {
   const S = (ev, name) => Events.on(ev, () => SFX.play(name));
   S('dash', 'dash');
+  S('hubDash', 'dash');  // 基地裡衝刺
   S('overheat', 'hurt');
   S('enemyShot', 'eshot');
   S('bossSkill', 'boss');
