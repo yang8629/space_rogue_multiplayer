@@ -262,7 +262,8 @@ const GLHub = {
     }
     // 戰績室：上牆一排獎盃（旗艦的顏色），左右牆下段的顯示螢幕
     const bosses = Object.values(ENEMY_TYPES).filter(t => t.boss);
-    bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * 100, y = rec.y + 30; g.rect(x - 30, rec.y + 4, 60, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
+    const step = Math.min(100, (rec.w - 40) / bosses.length), pw = Math.min(60, step - 14);  // 旗艦多了就排密一點，整排留在房間裡（5 隻時 100 一個會超出牆）
+    bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * step, y = rec.y + 30; g.rect(x - pw / 2, rec.y + 4, pw, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
     const sy0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 14, sh = rec.y + rec.h - 14 - sy0;  // 螢幕放在左牆門口（往觀景台）的下面，右牆對稱（以前疊在門口上）
     for (const sg of [0, 1]) { const x = sg ? rec.x + rec.w - 14 : rec.x + 6; g.rect(x, sy0, 8, sh).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: sy0 + sh / 2, col: 0xffd166, screen: true }); }
     // 外牆的窗戶：機庫左牆、軍械庫右牆
