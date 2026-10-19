@@ -29,7 +29,7 @@ await B.evaluate(id => Net.vote(id), nid);
 ok(await until(A, () => Game.state === 'play' && Game.inArena, 30000) && await until(B, () => Game.state === 'play' && Game.inArena, 30000), '兩邊進戰鬥');
 await wait(1500);
 // 隊友那邊數「收到的同步訊息裡最多幾顆子彈」
-await B.evaluate(() => { window.__maxB = 0; const f = () => { window.__maxB = Math.max(window.__maxB, Game.bullets.length); requestAnimationFrame(f); }; f(); });
+await B.evaluate(() => { window.__maxB = 0; window.__worst = 0; let last = performance.now(); const f = now => { if (now) { window.__worst = Math.max(window.__worst, now - last); last = now; } window.__maxB = Math.max(window.__maxB, Game.bullets.length); requestAnimationFrame(f); }; f(); });  // 也記隊友最慢的一幀（收到大訊息那一下會不會卡）
 const size = await A.evaluate(() => {
   for (const e of Game.enemies) e.dead = true;
   Game.player.iframe = 1e9; Game.mates[0].iframe = 1e9;
@@ -39,7 +39,8 @@ const size = await A.evaluate(() => {
   return new TextEncoder().encode(JSON.stringify(Game.bullets.map(b => [Math.round(b.x), Math.round(b.y), 0, 20, 4, 0, 'dot', 0, 0, 3, 0]))).length;
 });
 await wait(1500);
-const r = await B.evaluate(() => ({ max: window.__maxB, linked: Net.linked, state: Game.state }));
+const r = await B.evaluate(() => ({ max: window.__maxB, linked: Net.linked, state: Game.state, worst: Math.round(window.__worst) }));
+console.log(`     隊友那邊最慢的一幀：${r.worst}ms`);
 const hostSees = await A.evaluate(() => ({ linked: Net.peers.some(q => q.linked && q.conn && q.conn.open), state: Game.state }));
 ok(r.max >= 600 && r.linked && r.state === 'play' && hostSees.linked, `房主一次放 600 顆（光子彈就約 ${Math.round(size / 1024)}KB，超過 PeerJS 的 16KB）：隊友收到最多 ${r.max} 顆、隊友還連著 ${r.linked}、房主看隊友還連著 ${hostSees.linked}`);
 // 結算畫面時隊友按「離開房間」：房主不跳錯誤、不等重連，結算照看，還能自己回房間
