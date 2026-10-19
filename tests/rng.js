@@ -54,11 +54,10 @@ function noFx() {
 }
 
 // 每一局開始時重設遊戲裡不會自己歸零的東西（不然同一個局號，前面跑過幾局結果就不一樣，--only 重現不了）：
-//   Game.time（一直累加；電腦閃避的左右擺動、成長標記都照它算）、電弧計時、敵人尋路的計時器和快取、子彈的齊射編號
+//   Game.time（一直累加；電腦閃避的左右擺動、成長標記都照它算）、電弧計時、敵人尋路的計時器和快取
 function resetRun(T) {
   T.Game.time = 0; T.Game.arcT = 0;
   if (T.Objects) { T.Objects.flowT = 0; if (T.Objects.fields && T.Objects.fields.clear) T.Objects.fields.clear(); }  // 敵人尋路每 0.25 秒重算一次：計時器不歸零，重算的時間點會跟著前一局錯開
-  require('vm').runInThisContext('volleySeq = 0; curVolley = 0;');
 }
 
 module.exports = { seed, splitEnemyRng, noFx, resetRun, SPLIT };

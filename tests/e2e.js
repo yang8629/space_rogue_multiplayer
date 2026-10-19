@@ -13,6 +13,7 @@ function make(name) {
   vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena, Hub, Enemy };', ctx);
   return {
     T: ctx.__T,
+    run: code => vm.runInContext(code, ctx),
     adv(ms) { now += ms; const due = timers.filter(x => x.t <= now); timers.splice(0, timers.length, ...timers.filter(x => x.t > now)); due.forEach(x => x.f()); },
   };
 }
@@ -24,7 +25,11 @@ const ok = (c, m) => { if (!c) { fails++; console.error('FAIL:', m); } else cons
 // 假網路：送出的訊息先排隊，pump 時才送達（和真的一樣是非同步）
 const qA = [], qB = [];
 let bytes = 0;
-const wire = (q) => ({ open: true, send: m => { const s = JSON.stringify(m); bytes += s.length; q.push(JSON.parse(s)); }, close() {} });
+// PeerJS 的 json 模式：一則 ≥16300 位元組的訊息不送出、報錯（真的遊戲會當成斷線）→ 這裡照樣不送，記在 tooBig
+let tooBig = 0, tooBigMax = 0;
+const wire = (q) => ({ open: true, send: m => { const s = JSON.stringify(m), n = Buffer.byteLength(s); bytes += s.length;
+  if (n >= 16300) { tooBig++; tooBigMax = Math.max(tooBigMax, n); return; }
+  q.push(JSON.parse(s)); }, close() {} });
 HA.Net.peer = { destroyed: false, destroy() {}, on() {}, reconnect() {} };  // 房主的房間（假的 PeerJS）
 HA.Net.role = 'host'; HB.Net.role = 'client';
 for (const H of [HA, HB]) { H.Net.resetStats(); H.Net.code = 'TEST'; }
@@ -198,6 +203,13 @@ while (!sector2 && guard++ < 40) {
       ok(pulling && pulled > 40 && tr.mode === 'stun' && tr.tgt === 0,
         `tractor: host's tractor pulls the client on the client's side (${pulling}, pulled ${Math.round(pulled)}), client dash breaks the beam (${tr.mode})`);
       tr.dead = true; GA.enemies = GA.enemies.filter(e => e !== tr); GA.objs = objs0;
+      // 很長的同步訊息（散彈＋環繞放開那一刻）：以前一則超過 PeerJS 的上限就送不出去、被當成斷線；現在切段送，隊友照樣收到
+      const big0 = tooBig;
+      A.run(`{ const M = Game.mates[0]; for (let i = 0; i < 600; i++) spawnShots([shot({ speed: 20, life: 3 })], M.x, M.y, i / 600 * TAU, 0, null); }`);
+      step(2);
+      const sent = GA.bullets.length, got = CB.bullets.length;
+      ok(tooBig === big0 && sent >= 600 && got >= 600 && CL.T.Net.linked, `long snapshot is split, client still gets it (host ${sent} bullets, client ${got}, oversized messages ${tooBig - big0})`);
+      for (const b of GA.bullets) b.dead = true;
       P.iframe = me.iframe = GA.mates[0].iframe = 0;
     }
     if (!beamChecked && type === 'combat') {  // 星環守門者的光束：隊友那邊每幀都要轉（同步 1/30 秒一次，以前每兩幀才跳一次、末端一次跳 17px）
@@ -446,7 +458,18 @@ ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.ma
   const s3 = [HA.Game.state, HE.Game.state].join('/');
   ok(s1 === 'ended/ended' && s2 === 'ended/pick' && s3 === 'pick/pick' && HA.Net.peers[0].inRoom,
     `finish run: each player leaves the results on their own (finish ${s1}, client back ${s2}, host back ${s3})`);
+  // 在看結算時有人離開（關掉、斷線）：不跳錯誤、不等重連；房主可以自己回房間，隊友的結算照看（按鈕換成回到基地）
+  for (const H of [HA, HE]) { H.Game.inArena = false; H.Game.state = 'victory'; H.Game.victory = { pick: 'part', boss: H.Game.bossId }; }
+  HA.Game.finishRun(); pump();
+  HA.Net.lost(undefined, HA.Net.peers[0]);  // 隊友那條連線斷了
+  const hostOk = HA.Game.state === 'ended' && !HA.Net.waiting && HA.Net.peers.length === 0 && HA.Net.roomOpen();
+  HE.Net.lost();  // 隊友那邊：房主斷了
+  const cliOk = HE.Game.state === 'ended' && !HE.Net.rejoin && !HE.Net.role;
+  HA.Net.backToRoom();
+  ok(hostOk && cliOk && HA.Game.state === 'pick',
+    `leaving during results: no error, no rejoin wait (host ${HA.Game.state}, waiting ${!!HA.Net.waiting}; client ${HE.Game.state}, rejoin ${!!HE.Net.rejoin})`);
 }
+ok(tooBig === 0, `no message over the PeerJS json limit (${tooBig}, biggest ${tooBigMax} bytes)`);
 console.log('traffic', (bytes / 1024).toFixed(0), 'KB');
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');
 process.exitCode = fails ? 1 : 0;

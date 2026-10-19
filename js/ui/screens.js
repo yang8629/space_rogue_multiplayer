@@ -521,7 +521,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     const rec = ['run', 'coop'].includes(Game.mode), coop = Game.mode === 'coop';
     const where = coop ? Net.whereText() : Game.mode === 'run' ? Game.buildRecord('retired').where : `第 ${Game.combat ? Game.combat.wave : 0} 波`;
     const head = Game.endCleared ? `<h1 style="color:#ffd166;text-shadow:0 0 18px #ffd166">${Game.chapter().name}　完成！</h1>` : '<h1 style="color:#8fa3d9;text-shadow:0 0 18px #8fa3d9">中途結束</h1>';
-    const back = coop && Net.linked ? '<button class="big" data-act="netroom">回到房間</button><button data-act="title">離開房間</button>' : '<button class="big" data-act="title">回到基地</button>';
+    const back = coop && Net.roomOpen() ? '<button class="big" data-act="netroom">回到房間</button><button data-act="title">離開房間</button>' : '<button class="big" data-act="title">回到基地</button>';
     this.show(`<div class="scr title-wrap">
       ${head}
       <div class="sub">結束在 ${where} · 剩餘晶體 ${Game.credits}${rec ? '<br><span style="color:#6a79ad">這一局已存入「遊玩紀錄」</span>' : ''}</div>
@@ -540,8 +540,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
         ${Net.teamSummaryHtml()}
         ${this.runSummary()}
-        <div class="row">${Net.linked ? '<button class="big" data-act="netroom">回到房間</button>' : '<span class="sub" style="color:#ff4d6d">隊友已離線</span>'}
-          <button data-act="title">離開房間</button></div>
+        <div class="row">${Net.roomOpen() ? '<button class="big" data-act="netroom">回到房間</button><button data-act="title">離開房間</button>' : '<button class="big" data-act="title">回到基地</button>'}</div>
         <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div>
         <div id="copyBox"></div></div>`);
       return;

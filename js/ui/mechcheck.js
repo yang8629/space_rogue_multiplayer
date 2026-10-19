@@ -700,7 +700,7 @@ const MechCheck = {
           got: lockAt == null ? '沒有過熱' : `${lockAt.toFixed(2)} 秒過熱，4 秒內開火 ${n} 次` };
       },
     ])],
-    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 10 發，散彈一次的全部彈丸算一發），碰到敵人照打、打到就消失；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒速度與傷害 ×1.5；搭加速時從 1.5 往上加（不相乘）', M => {
+    ['電路晶片', '環繞', '按住射擊時存在飛船旁繞圈（Lv1 最多 10 發，散彈一次的全部彈丸算一發），碰到敵人照打、打到就消失，還按著就補上；衝刺不會放出；放開後全部從所在位置朝滑鼠那一點射出，Lv1 繞滿 3 秒速度與傷害 ×1.5；搭加速時從 1.5 往上加（不相乘）', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p = Game.player; p.wantFire = true;
       M.run(180);
@@ -721,8 +721,18 @@ const MechCheck = {
       const am = a ? a.accelMul : 0;
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'orbit', null, null]); M.targets([]);
       const p3 = Game.player; p3.wantFire = true; M.run(400); const sc = Game.bullets.filter(b => b.mode === 'orbit').length;
-      return { ok: sc === SN() * 10 && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
-        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發（散彈存了 ${sc} 顆 = 10 發）；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
+      // 被敵人撞掉幾顆就補幾顆：每發散彈各掉一顆（以前照「發」數，那幾發還有別的彈丸在轉就不補）
+      Game.bullets.filter(b => b.mode === 'orbit').filter((b, i) => i % SN() === 0).slice(0, 5).forEach(b => { b.dead = true; });
+      M.run(90); const refill = Game.bullets.filter(b => b.mode === 'orbit' && !b.dead).length;
+      // 每次開火補一發：撞掉 3 發的量，之後每次開火最多多一發（散彈一次的那幾顆）
+      const nOrb = () => Game.bullets.filter(b => b.mode === 'orbit' && !b.dead).length;
+      Game.bullets.filter(b => b.mode === 'orbit').slice(0, SN() * 3).forEach(b => { b.dead = true; });
+      let most = 0, shots = 0;
+      const fire0 = p3.fire; p3.fire = function () { const n = nOrb(); fire0.call(this); const d = nOrb() - n; if (d > 0) shots++; most = Math.max(most, d); };
+      M.run(120); p3.fire = fire0;
+      const prev = nOrb();
+      return { ok: sc === SN() * 10 && refill === sc && most === SN() && shots === 3 && prev === sc && kept && stored === 10 && hit > 0 && orb.length < 10 && out === orb.length && out > 0 && dmgOk && am > 1.52 && am < 1.7,
+        got: `${kept ? '' : '衝刺時就射出了！'}存了 ${stored} 發（散彈存了 ${sc} 顆 = 10 發，撞掉 5 顆後補回 ${refill} 顆；撞掉 3 發後開火 ${shots} 次補回、每次最多 ${most} 顆、補回 ${prev} 顆）；繞圈打敵人 ${Math.round(hit)}，剩 ${orb.length} 發；放開後 ${out} 發朝滑鼠那一點射出，速度與傷害倍率 ${orb.length && orb[0].accelMul.toFixed(2)}；搭加速放出後 ${am.toFixed(2)}（從 1.5 往上加，不相乘）` };
     }],
     ['電路晶片', '佈雷', '子彈飛到射程一半停住變成地雷（不擋敵彈，相刃也停得住）；敵人靠近就衝出去打中（×1.2）', M => {
       M.setup('sandbox', 'vanguard', 'blade', null, null, ['weapon', 'stasis', null, null]); M.targets([]);

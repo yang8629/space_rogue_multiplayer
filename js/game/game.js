@@ -1622,10 +1622,10 @@ const Game = {
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
     buildEnemyGrid();  // 共用的敵人格子（追蹤、地雷、迴旋折返、找最近的敵人用；見 spatial.js）
     Objects.buildGrid();  // 地圖物件格子（子彈打行星、小行星、彗星、黑洞）
-    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbV（存著的「發」）由存著的子彈每幀重新數
+    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbN（存著幾顆）由存著的子彈每幀重新數
       p.orbHeld = p.orbT || 0;
-      p.orbT = p.orbV && p.orbV.size && p.wantFire ? (p.orbT || 0) + dt : 0;
-      p.orbV = new Set();
+      p.orbT = p.orbN && p.wantFire ? (p.orbT || 0) + dt : 0;
+      p.orbN = 0;
     }
     // 敵人空間格子（碰撞用）：每幀把敵人照中心點分進 GS 大小的格子，子彈只跟路徑附近幾格的敵人比
     //   （以前每發子彈都跟全部敵人比：7000 發 × 40 隻 = 每幀 28 萬次）。結果跟以前一樣：候選照敵人在 E 裡的順序檢查（先打到排前面的），

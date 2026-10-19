@@ -53,7 +53,7 @@ function artGlow(ctx) {  // 光暈（半徑 1，白色，遊戲裡染色、加�
 //   2026-10-19 使用者：「錢跟分裂體看起來太像」（以前是金色切面菱形，跟橘金色的分裂體、碎裂體同一套）→ 保留金色，改成會發光閃爍的寶石
 function artPickup(ctx) {
   const pts = [[0, -6.5], [3.6, -1.8], [3.6, 1.8], [0, 6.5], [-3.6, 1.8], [-3.6, -1.8]];
-  faceted(ctx, pts, '#ffd166', { outline: 1.4, bright: 0.55 });
+  faceted(ctx, pts, '#9ff0ff', { outline: 1.4, bright: 0.55 });  // 青白色：敵人大多是暖色（分裂體、碎裂體是橘金色）
   ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.moveTo(-0.6, -4.6); ctx.lineTo(0.9, -1.6); ctx.lineTo(-0.6, 1.2); ctx.lineTo(-1.6, -1.6); ctx.closePath(); ctx.fill();
 }
 function artPickupSpark(ctx) {  // 晶體的閃光：白色四角星（遊戲裡用加法疊在晶體上）

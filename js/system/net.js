@@ -40,6 +40,9 @@ function coast(o, dt) {
 const trimRow = a => { while (a.length && (a[a.length - 1] === 0 || a[a.length - 1] == null)) a.pop(); return a; };  // 尾巴的 0／null 不送（隊友那邊讀不到就當 0／null）
 
 const NET_MAX = 4;  // 一個房間最多幾人（含房主）
+// 一則訊息超過幾個字就切段送（Net.put）：PeerJS json 模式的上限是 16300 位元組；4000 字最壞每字 3 位元組（中文）＋包裝 ≈ 12KB
+//   NET_PIECE_MAX：最多幾段（約 1MB，再大的不收）
+const NET_PIECE = 4000, NET_PIECE_MAX = 250;
 
 const Net = {
   role: null,          // null = 單人；'host' = 房主；'client' = 加入的隊友
@@ -68,9 +71,35 @@ const Net = {
   // 送訊息：隊友 → 房主；房主 → 所有隊友（只送給某一個用 sendTo）
   send(msg) {
     if (this.role === 'host') { for (const q of this.peers) this.sendTo(q, msg); return; }
-    try { if (this.conn && this.conn.open) this.conn.send(msg); } catch (e) {}
+    this.put(this.conn, msg);
   },
-  sendTo(q, msg) { try { if (q && q.conn && q.conn.open) q.conn.send(msg); } catch (e) {} },
+  sendTo(q, msg) { if (q) this.put(q.conn, msg); },
+  // 送到一條連線：太長的切成幾段（pc）送，收到的那邊在 onPiece 拼回來
+  //   PeerJS 的 json 模式一則訊息 ≥16300 位元組就報錯（不送出、觸發 error，我們當成斷線）：散彈＋環繞放開那一刻同步訊息會衝過去
+  put(conn, msg) {
+    try {
+      if (!conn || !conn.open) return;
+      const s = JSON.stringify(msg);
+      if (s.length <= NET_PIECE) { conn.send(msg); return; }
+      const n = Math.ceil(s.length / NET_PIECE), id = this.pieceN = (this.pieceN || 0) + 1;
+      for (let i = 0; i < n; i++) conn.send({ t: 'pc', id, i, n, d: s.slice(i * NET_PIECE, (i + 1) * NET_PIECE) });
+    } catch (e) {}
+  },
+  // 收到一段：同一條連線照順序到（可靠通道），收齊了當成一則完整的訊息處理
+  onPiece(m, q) {
+    const B = this.pieceBuf || (this.pieceBuf = new Map()), k = q || 0;
+    const n = Math.floor(num(m.n)), i = Math.floor(num(m.i, -1));
+    if (typeof m.d !== 'string' || !(n > 1 && n <= NET_PIECE_MAX) || i < 0 || i >= n) return;
+    let b = B.get(k);
+    if (i === 0 || !b || b.id !== m.id || b.parts.length !== i) b = { id: m.id, parts: [] };  // 新的一則（或少了一段：丟掉重來）
+    if (b.parts.length !== i) { B.delete(k); return; }
+    b.parts.push(m.d); B.set(k, b);
+    if (b.parts.length < n) return;
+    B.delete(k);
+    let full = null;
+    try { full = JSON.parse(b.parts.join('')); } catch (e) { return; }
+    if (full && full.t !== 'pc') this.onData(full, q);
+  },
   reply(q, msg) { if (q) this.sendTo(q, msg); else this.send(msg); },  // 回給送訊息來的那個人（房主：那個隊友；隊友：房主）
   // ---------- 房主：每個隊友 ----------
   mateOf(q) { return Game.mates.find(m => m.slot === q.slot) || null; },
@@ -104,7 +133,7 @@ const Net = {
   resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; },
   close() {
     const peer = this.peer, conns = [this.conn, ...this.peers.map(q => q.conn), ...this.pending.map(q => q.conn)];
-    this.peer = this.conn = null; this.role = null; this.ping = null; this.pings = {}; this.fxBuf = [];
+    this.peer = this.conn = null; this.role = null; this.ping = null; this.pings = {}; this.fxBuf = []; this.pieceBuf = null;
     this.peers = []; this.pending = []; this.slot = 1; this.at = {}; this.myAway = false; this.hold = null; this.picks = {}; this.roomMates = {}; this.meReady = false;
     this.linked = false; this.mateInRoom = false; this.mateEditing = false; this.mateAway = false; this.myPick = this.matePick = null; this.code = '';
     this.chapter = 1;
@@ -229,7 +258,7 @@ const Net = {
   },
   // 一局結束後回到同一個房間（連線不斷）
   backToRoom() {
-    if (!this.linked) { this.lobby('<span style="color:#ff4d6d">連線已經中斷，請重新開房或加入</span>'); return; }
+    if (!this.roomOpen()) { this.lobby('<span style="color:#ff4d6d">連線已經中斷，請重新開房或加入</span>'); return; }
     this.send({ t: 'room' });
     if (this.role === 'client') this.sendProgress();  // 這一局可能剛通關：房主照新的進度開放章節
     this.enterRoom();
@@ -396,7 +425,11 @@ const Net = {
     this.lost(msg);
   },
   // 正在進行的雙人遠征（斷線時可以等隊友重連）
-  inRun() { return Game.mode === 'coop' && !!this.runId && !['lobby', 'title', 'pick'].includes(Game.state); },
+  inRun() { return Game.mode === 'coop' && !!this.runId && !['lobby', 'title', 'pick', 'ended', 'dead'].includes(Game.state); },
+  // 一局打完、在看結算（結束遠征、全員覆滅）：各自看，有人斷線或離開不用等、不跳錯誤
+  afterRun() { return Game.mode === 'coop' && ['ended', 'dead'].includes(Game.state); },
+  // 回得去房間：房主的房間還開著（只剩自己也可以），隊友要還連著房主
+  roomOpen() { return this.role === 'host' ? !!this.peer && !this.peer.destroyed : this.linked; },
   // 斷線：q = 房主這邊斷掉的那個隊友（null：隊友斷了和房主的連線，或房主自己的連線元件出錯）
   lost(msg = '隊友已離線', q = null) {
     if (!this.role) return;
@@ -405,15 +438,16 @@ const Net = {
       if (q && !this.peers.includes(q)) return;
       const list = q ? [q] : this.peers.filter(o => o.linked);
       if (this.inRun() && this.peer && !this.peer.destroyed) { for (const o of list) this.waitForMate(msg, o); if (list.length) return; }
-      if (q && (this.peers.length > 1 || Game.state === 'pick')) {  // 還沒開始：只讓他離開，房間留著（只剩房主也一樣）
+      if (q && (this.peers.length > 1 || Game.state === 'pick' || this.afterRun())) {  // 還沒開始、在看結算：只讓他離開，房間留著（只剩房主也一樣）
         this.peers = this.peers.filter(o => o !== q); this.refreshPeers(); delete this.roomMates[q.slot];
-        if (Game.state === 'pick') this.roomStatus(); else this.backToRoom();
+        if (Game.state === 'pick') this.roomStatus(); else if (!this.afterRun()) this.backToRoom();
         return;
       }
       this.endLost(msg);
       return;
     }
     if (this.inRun()) { this.clientLost(msg); return; }
+    if (this.afterRun()) { this.close(); this.runId = null; Screen[Game.state](); return; }  // 房主關掉了：結算照看，按鈕換成回到基地
     this.endLost(msg);
   },
   endLost(msg) {  // 放棄這一局：存紀錄、回到「連線中斷」畫面
@@ -621,6 +655,7 @@ const Net = {
   onData(m, q = null) {
     if (!m || typeof m !== 'object') return;
     if (this.role === 'host' && q && m.t !== 'hello' && !this.peers.includes(q)) return;  // 還沒打招呼的連線只收 hello
+    if (m.t === 'pc') { this.onPiece(m, q); return; }  // 切段送的長訊息（Net.put）
     const now = performance.now(), S = this.stats;
     if (S && (m.t === 's' || m.t === 'i')) {  // 同步訊息之間最長隔多久（卡頓的指標；暫停中不算）
       if (Game.state === 'play' && !this.pauseReason()) {
