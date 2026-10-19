@@ -379,6 +379,11 @@ const Game = {
   // 雙子獵艦（CFG.TWIN）：e 是主艦（血量在它身上），另一艘 share = e；兩艘共用隊形 P（中心、轉角，BOSS_MOVE.boss4）
   makeTwin(e) {
     const C = CFG.TWIN, P = { x: e.x, y: e.y, ang: rand(0, TAU), dir: Math.random() < 0.5 ? 1 : -1, k: 0, members: [e], at: -1 };
+    // 兩艘都要落在空地上：出生點靠近牆時，有些角度會把其中一艘放進牆裡很深（clampIn 推不出來：牆裡深處推的方向算不出來，一直往右推）
+    //   窄的地方哪個角度都放不下兩艘：中心換到離牆至少轉圈半徑的地方（王關裡 40 局有 3～5 局，tests/twinwall.js）
+    const open = a => [1, -1].every(s => Arena.f(P.x + s * Math.cos(a) * C.orbit, P.y + s * Math.sin(a) * C.orbit) >= e.r + 10);
+    const fit = () => { for (let i = 0; i < 16 && !open(P.ang); i++) P.ang += TAU / 16; return open(P.ang); };
+    if (!fit() && !Arena.rect) { [P.x, P.y] = Arena.randomIn(e.zone || 0, C.orbit + e.r + 10, this.players(), 500); fit(); }
     [e.x, e.y] = Arena.clampIn(P.x + Math.cos(P.ang) * C.orbit, P.y + Math.sin(P.ang) * C.orbit, e.r + 10);
     const k = new Enemy(e.type, ...Arena.clampIn(P.x - Math.cos(P.ang) * C.orbit, P.y - Math.sin(P.ang) * C.orbit, e.r + 10), e.hpScale);
     k.share = e; k.spawnT = e.spawnT; k.spawnMax = e.spawnMax; k.zone = e.zone; k.alert = e.alert;
