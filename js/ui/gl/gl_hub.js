@@ -44,6 +44,9 @@ const hubRect = (cx, cy, w, h, a) => { const c = Math.cos(a), n = Math.sin(a), o
 const GLHub = {
   init() {
     const L = GLR.L;
+    this.sky = new PIXI.Container(); L.hub.addChild(this.sky);  // 站體後面的太空：中子星（skyDraw）
+    this.gSky = new PIXI.Graphics(); this.sky.addChild(this.gSky);
+    this.pSky = GLR.pool('hubSky', this.sky, () => new PIXI.Sprite());
     this.gBase = new PIXI.Graphics(); L.hub.addChild(this.gBase);   // 不會動的：牆、地板、擺設、停機位、武器架、操作台、發射台的底座
     this.gAnim = new PIXI.Graphics(); L.hub.addChild(this.gAnim);   // 會動的：光圈、操作台螢幕、導管光點、燈、無人機、發射台的箭頭
     this.pG = GLR.pool('hubGlow', L.hub, () => new PIXI.Sprite());  // 加法發光
@@ -314,6 +317,7 @@ const GLHub = {
     if (!this.built) this.build();
     const g = this.gAnim, t = Hub.t, s = Hub.ship, seen = unlockSeen(), D = this.decor;
     g.clear(); GLActors.gS.clear();
+    this.skyDraw(t);
     // 導管的光點、燈照在地板上、信號燈、伺服器的燈、獎盃、無人機
     for (const P of D.paths) {  // 左右兩條同時出發（對稱）
       const d = (t * 110) % (P.len + 160);
@@ -334,7 +338,10 @@ const GLHub = {
         g.poly(hubRect(L.x, L.y, 10, 1.5, L.a)).fill({ color: 0xffffff, alpha: 0.5 * k });
         this.glow(L.x, L.y, 22, 0x7fb4ff, 0.3 * k);
       }
-      g.circle(tx, ty, 34).stroke({ width: 1.5, color: 0x7fb4ff, alpha: 0.18 + 0.08 * Math.sin(t * 1.4) });
+      const rk = 0.5 + 0.15 * Math.sin(t * 1.4);  // 溝槽裡的燈帶：畫在深色溝槽線的內側（疊在上面會被蓋住）
+      g.circle(tx, ty, 30).stroke({ width: 2.5, color: 0x7fb4ff, alpha: rk });
+      g.circle(tx, ty, 30).stroke({ width: 1, color: 0xffffff, alpha: 0.35 * rk });
+      this.glow(tx, ty, 46, 0x7fb4ff, 0.18 * rk);
     }
     for (const [i, [x, y]] of D.pylons.entries()) { const k = 0.6 + 0.4 * Math.sin(t * 1.6 + i * Math.PI / 2); g.circle(x, y, 4).fill({ color: 0x9fe8ff, alpha: k }); this.glow(x, y, 34, 0x4cc9f0, 0.35 * k); }  // 大廳的導航燈柱：慢慢一明一暗
     for (const [i, [x, y]] of D.beacons.entries()) { const on = Math.sin(t * 2.4 + i * Math.PI / 2) > 0.6; g.circle(x, y, 3.5).fill(on ? 0xff4d6d : 0x5a1f2e); if (on) this.glow(x, y, 26, 0xff4d6d, 0.5); }
@@ -361,7 +368,7 @@ const GLHub = {
           g.poly(hubRect(L.x, L.y, 11, 3, L.a)).fill({ color: pc, alpha: 0.35 + 0.65 * k });
           if (ok) { g.poly(hubRect(L.x, L.y, 6, 1.2, L.a)).fill({ color: 0xffffff, alpha: 0.5 * k }); this.glow(L.x, L.y, 18, pc, 0.3 * k); }
         }
-        g.circle(z.x, z.y, z.r * 0.62).stroke({ width: 1.5, color: pc, alpha: ok ? 0.35 : 0.15 });  // 中間凹槽的邊：淡淡的燈帶
+        g.circle(z.x, z.y, z.r * 0.62 - 3).stroke({ width: 2.5, color: pc, alpha: ok ? 0.55 + 0.15 * Math.sin(t * 1.4 + z.x) : 0.2 });  // 中間凹槽裡的燈帶：畫在凹槽邊線的內側（疊在上面會被蓋住）
         if (near) g.circle(z.x, z.y, z.r + 6 + pulse * 4).stroke({ width: 3, color: pc, alpha: 0.8 });
         this.glow(z.x, z.y, z.r * 1.2, pc, ok ? 0.1 + 0.05 * pulse : 0.04);
         if (mine || !S) continue;  // 自己開走的那艘：停機位空著
@@ -455,6 +462,36 @@ const GLHub = {
     g.moveTo(o.x, y0).lineTo(o.x, o.y - 6).stroke({ width: 12, color: 0x4cc9f0, alpha: 0.3 });
     g.moveTo(o.x, (y0 + o.y) / 2).lineTo(o.x, o.y - 6).stroke({ width: 4, color: 0xffffff, alpha: 0.85 });
     this.glow(o.x, o.y - 12, 46, 0x4cc9f0, 0.7);
+  },
+  // 背景的中子星（站體右上方的太空）：很亮的白核、一圈傾斜的吸積盤（暖色，上面幾個亮點繞著轉）、兩道慢慢掃過的脈衝光束、大片藍色光暈
+  //   放在戰績室右邊、軍械庫上面那片空的太空；視差 SKY_PAR：鏡頭移動時它少動一點（看起來在站體後面、比較遠）；被站體擋住的部分在站體後面
+  SKY_PAR: 0.25,
+  skyDraw(t) {
+    const g = this.gSky, P = this.pSky, ar = HUB.rooms.armory, rec = HUB.rooms.records;
+    g.clear();
+    const bx = (rec.x + rec.w + ar.x + ar.w) / 2 + 40, by = (rec.y + ar.y) / 2;  // 鏡頭正對這一點時它就在這裡；鏡頭離開時只跟著移動 SKY_PAR
+    const x = bx + (Hub.cam.x - (bx - VW / 2 / Hub.k)) * this.SKY_PAR, y = by + (Hub.cam.y - (by - VH / 2 / Hub.k)) * this.SKY_PAR;
+    GLActors.glowAt(P, x, y, 420, 0x3a5cff, 0.16);  // 大片光暈
+    // 脈衝光束：兩道相反方向的細長光錐，每 18 秒轉一圈
+    const b = t * TAU / 18;
+    for (const s of [0, Math.PI]) {
+      const a = b + s, L = 1100;
+      for (const [w, al] of [[0.07, 0.07], [0.025, 0.16]]) {
+        g.poly([x, y, x + Math.cos(a - w) * L, y + Math.sin(a - w) * L, x + Math.cos(a + w) * L, y + Math.sin(a + w) * L]).fill({ color: 0x9fe8ff, alpha: al });
+      }
+    }
+    // 吸積盤：傾斜的橢圓，外暖內熱（三圈）；亮點沿著盤繞
+    const tilt = -0.38, ell = (rx, ry) => { const pts = []; for (let i = 0; i < 64; i++) { const u = i / 64 * TAU, ex = Math.cos(u) * rx, ey = Math.sin(u) * ry; pts.push(x + ex * Math.cos(tilt) - ey * Math.sin(tilt), y + ex * Math.sin(tilt) + ey * Math.cos(tilt)); } return pts; };
+    for (const [rx, w, c, al] of [[118, 10, 0xc77dff, 0.18], [96, 7, 0xff9f6b, 0.32], [76, 4, 0xffd9a0, 0.5]]) g.poly(ell(rx, rx * 0.3)).stroke({ width: w, color: c, alpha: al });
+    for (let i = 0; i < 4; i++) {
+      const u = t * (0.9 - i * 0.12) + i * 1.7, rx = 80 + i * 12, ex = Math.cos(u) * rx, ey = Math.sin(u) * rx * 0.3;
+      const px = x + ex * Math.cos(tilt) - ey * Math.sin(tilt), py = y + ex * Math.sin(tilt) + ey * Math.cos(tilt);
+      g.circle(px, py, 2).fill({ color: 0xffffff, alpha: 0.8 }); GLActors.glowAt(P, px, py, 16, 0xffb36b, 0.5);
+    }
+    // 核心：白色小點＋兩層藍白光
+    GLActors.glowAt(P, x, y, 110, 0x7fd4ff, 0.55 + 0.1 * Math.sin(t * 9));
+    GLActors.glowAt(P, x, y, 36, 0xeaf8ff, 1);
+    g.circle(x, y, 7).fill(0xffffff);
   },
   // 沒解鎖的飛船：黑色剪影＋一圈淡淡的灰光（看得出形狀）
   silhouette(S, x, y, rot = 0) {
