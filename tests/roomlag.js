@@ -6,7 +6,7 @@
 const vm = require('vm');
 const { runFiles } = require('./load_game');
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
-const LATS = (arg('lat') || '0,50,100').split(',').map(Number);
+const LATS = (arg('lat') || '0,50,100').split(',').map(Number), JIT = +(arg('jit') || 30);  // JIT：網路抖動（毫秒）
 
 function make() {
   let now = 0;
@@ -26,7 +26,7 @@ function trial(LAT) {
   HA.Net.peer = { destroyed: false, destroy() {}, on() {}, reconnect() {} };
   HA.Net.role = 'host'; HB.Net.role = 'client';
   for (const H of [HA, HB]) { H.Net.resetStats(); H.Net.code = 'TEST'; }
-  HB.Net.conn = wire(qA); const hostConn = wire(qB);
+  HB.Net.conn = wire(qA, 'a'); const hostConn = wire(qB, 'b');
   const rec = { conn: hostConn, slot: 0, linked: false }; hostConn.rec = rec; HA.Net.pending.push(rec);
   const pump = () => { for (let i = 0; i < 20; i++) {
     const a = qA.filter(x => x.at <= clock), b = qB.filter(x => x.at <= clock);
@@ -59,19 +59,20 @@ function trial(LAT) {
   const speed = rows.reduce((a, r) => Math.max(a, r.realMove), 0);  // 對方實際每幀最多動多少
   const still = moves.filter((m, i) => m < 0.01 && rows[i + 1].realMove > 0.5).length;
   const jump = Math.max(...moves.filter(Number.isFinite));
+  if (process.env.RL_DBG) { const i = moves.indexOf(jump); console.log('DBG 跳最大在第', i, '幀；前後實際每幀移動', rows.slice(Math.max(0, i - 4), i + 4).map(r => r.realMove.toFixed(1)).join(' '), '｜畫面上每幀移動', moves.slice(Math.max(0, i - 4), i + 4).map(m => m.toFixed(1)).join(' ')); }
   const err = rows.slice(60).map(r => r.seen ? Math.hypot(r.seen[0] - r.real[0], r.seen[1] - r.real[1]) : NaN), errMax = Math.max(...err), errAvg = err.reduce((a, b) => a + b, 0) / err.length;
   return { still, n: moves.length, jump, speed, errMax, errAvg };
 }
 
-// 門檻照實測（2026-10-19，隊友每 0.5 秒急轉）：修之前（每秒 12 次、沒補）8 成的幀不動、一次跳實際速度的 5.07 倍、平均位置差 15／32／46px（延遲 0／50／100ms）；
-//   修之後（每秒 30 次、往前推、平滑 12）0 幀不動、最多 1.06／1.43／1.81 倍、平均差 4／12／21px
-const LIMIT = { still: 0, jumpX: 2, errAvg: 30 };
+// 門檻照實測（2026-10-19，每 0.5 秒急轉、網路抖動 0～30ms）：房間和戰鬥共用 netMove／coast 之後，每幀最多 1.03～1.18 倍；
+//   平均位置差（不補延遲，≈ 速度 × 延遲）房間 7／24／38px、戰鬥 2／19／31px（延遲 0／50／100ms）。以前直接蓋過去：抖動時跳 2 倍
+const LIMIT = { still: 0, jumpX: 1.5, err: { 0: 12, 50: 32, 100: 48 } };
 let fail = 0;
 console.log('隊友在基地裡開船（一直在動），房主畫面上那艘船：');
 for (const L of LATS) {
   const r = trial(L);
   if (r.err) { console.log(`單程延遲 ${L}ms：${r.err}`); fail++; continue; }
-  const bad = r.still > LIMIT.still || r.jump > r.speed * LIMIT.jumpX || r.errAvg > LIMIT.errAvg;
+  const bad = r.still > LIMIT.still || r.jump > r.speed * LIMIT.jumpX || r.errAvg > (LIMIT.err[L] != null ? LIMIT.err[L] : Infinity);
   if (bad) fail++;
   console.log(`${bad ? 'FAIL' : 'ok  '} 單程延遲 ${String(L).padStart(3)}ms：沒動的幀 ${r.still}/${r.n}｜每幀最多動 ${r.jump.toFixed(1)}px（實際最快 ${r.speed.toFixed(1)}px，${(r.jump / r.speed).toFixed(2)} 倍）｜跟實際位置差 平均 ${Math.round(r.errAvg)}px、最多 ${Math.round(r.errMax)}px`);
 }

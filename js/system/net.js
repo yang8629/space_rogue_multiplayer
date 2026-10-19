@@ -21,6 +21,22 @@ const NET_ROOM_STALE = 2000;   // 多久沒收到某人的位置就不畫他（m
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
 const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; return a ? a.id : 0; };
+// 其他人的飛船（戰鬥中的隊友、房間裡的其他人，同一套）：
+//   x, y = 遊戲判定用的位置：收到新位置就換成新的，兩次同步之間照速度往前推（coast）
+//   畫面上的位置 = x, y ＋ ex, ey（Net.drawPos）：收到新位置時畫面不跳，把差距記在 ex, ey，之後每秒收掉 NET_EASE 倍（指數）；差超過 NET_SNAP（瞬移、傳送）直接跳
+//   為什麼：訊息時快時慢（網路抖動），直接蓋過去會先被晚到的舊位置拉回、下一幀一口氣跳 2 倍（tests/matelag.js、roomlag.js 加抖動量到）
+const NET_EASE = 12, NET_SNAP = 150;
+function netMove(o, x, y) {
+  if (Number.isFinite(o.x) && Number.isFinite(o.y)) {
+    const ex = (o.ex || 0) + o.x - x, ey = (o.ey || 0) + o.y - y, far = Math.hypot(ex, ey) > NET_SNAP;
+    o.ex = far ? 0 : ex; o.ey = far ? 0 : ey;
+  }
+  o.x = x; o.y = y;
+}
+function coast(o, dt) {
+  o.x += o.vx * dt; o.y += o.vy * dt;
+  if (o.ex || o.ey) { const k = Math.exp(-NET_EASE * dt); o.ex *= k; o.ey *= k; }
+}
 const trimRow = a => { while (a.length && (a[a.length - 1] === 0 || a[a.length - 1] == null)) a.pop(); return a; };  // 尾巴的 0／null 不送（隊友那邊讀不到就當 0／null）
 
 const NET_MAX = 4;  // 一個房間最多幾人（含房主）
@@ -113,7 +129,7 @@ const Net = {
     if (!this.linked) return;
     if (Game.state === 'pick') {
       this.roomAcc += dt; if (this.roomAcc >= NET_ROOM_RATE) { this.roomAcc = Math.min(this.roomAcc - NET_ROOM_RATE, NET_ROOM_RATE); this.sendRoomPos(); }
-      this.smoothRoom(dt);
+      for (const p of Object.values(this.roomMates)) coast(p, dt);  // 兩次同步之間照速度往前推（跟戰鬥中的隊友同一套）
     }
     // 暫停中（Tab、切到背景）、不在戰鬥、隊友倒下（倒下時不送操作）：同步間隔不累積，恢復後從下一則訊息重新算
     if (this.stats && (Game.state !== 'play' || this.pauseReason() || (this.role === 'host' && Game.mates.some(m => m.dead))))
@@ -252,8 +268,6 @@ const Net = {
     if (this.role === 'host') { const q = this.peers.find(o => o.slot === slot && o.linked); return q ? q.ping : null; }
     return this.pings[slot] != null ? this.pings[slot] : slot === this.slot ? this.ping : null;
   },
-  // slot 那個人的訊息到自己的畫面單程大概多久（秒）：房主和隊友之間直接；隊友之間要經過房主轉（兩段加起來）
-  oneWay(slot) { return ((this.pingOf(this.mySlot()) || 0) + (this.pingOf(slot) || 0)) / 2000; },
   // 號碼旁邊的延遲（房間列、戰鬥中的隊友列）；每秒更新一次，只改那幾段字
   pingTag(slot) { const ms = this.pingOf(slot); return ms == null ? '' : `<span style="color:${this.pingColor(ms)}">${ms}ms</span>`; },
   showPing() { if (typeof document !== 'undefined') for (const el of document.querySelectorAll('[data-pslot]')) el.innerHTML = this.pingTag(+el.dataset.pslot); },
@@ -273,11 +287,12 @@ const Net = {
   onRoomPos(m, q) {
     const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
     if (!slot || slot === this.mySlot()) return;
-    const had = this.roomMates[slot], p = { x: clamp(num(m.x), 0, HUB.W), y: clamp(num(m.y), 0, HUB.H), vx: clamp(num(m.vx), -2000, 2000), vy: clamp(num(m.vy), -2000, 2000), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() };
-    p.dx = had ? had.dx : p.x; p.dy = had ? had.dy : p.y;  // 畫面上的位置接著上一次的（smoothRoom 慢慢拉過去）
+    const had = this.roomMates[slot], wasReady = had && had.r, p = had || {};  // 同一個物件接著用：畫面位置的差距（ex, ey）要延續
+    netMove(p, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H));
+    Object.assign(p, { vx: clamp(num(m.vx), -2000, 2000), vy: clamp(num(m.vy), -2000, 2000), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() });
     this.roomMates[slot] = p;
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
-    if (!had || had.r !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
+    if (!had || wasReady !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
   },
   // 基地裡開火（hubFire 事件）：告訴其他人（房主轉給其他隊友），對方用 Hub.addFire 生出同樣的子彈
   sendHubFire(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hf', sl: this.mySlot(), x: Math.round(d.x), y: Math.round(d.y), a: r2(d.a), w: d.w }); },
@@ -287,20 +302,12 @@ const Net = {
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
     Hub.addFire(slot, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H), num(m.a), m.w);
   },
-  // 其他人的船在畫面上的位置（dx, dy）：照收到的位置＋速度往前推，再平滑地拉過去；差太遠（傳送、回到基地）直接跳過去
-  //   往前推 = 收到之後過了多久＋單程延遲（來回延遲的一半）＋平滑本身的落後，最多 0.25 秒
-  smoothRoom(dt) {
-    const now = performance.now(), k = Math.min(1, dt * 12);  // 平滑 12、平滑落後 0.08 秒：tests/roomlag.js 比過（平滑 20 在延遲 100ms 急轉時推過頭、跳 2 倍）
-    for (const [s, p] of Object.entries(this.roomMates)) {
-      // 單程延遲照那個人（隊友之間經過房主轉，兩段加起來）
-      const age = Math.min(0.25, Math.max(0, (now - p.at) / 1000) + this.oneWay(+s) + 0.08), tx = p.x + p.vx * age, ty = p.y + p.vy * age;
-      if (Math.hypot(tx - p.dx, ty - p.dy) > 200) { p.dx = tx; p.dy = ty; } else { p.dx += (tx - p.dx) * k; p.dy += (ty - p.dy) * k; }
-    }
-  },
-  // 現在要畫的其他人（太久沒收到的不畫）：x, y 是畫面上的位置（smoothRoom）
+  // 其他人的飛船畫在哪（netMove 記的差距還沒收完的部分加上去）
+  drawPos(o) { return [o.x + (o.ex || 0), o.y + (o.ey || 0)]; },
+  // 現在要畫的其他人（太久沒收到的不畫）：x, y 是畫面上的位置
   roomShips() {
     const now = performance.now();
-    return Object.entries(this.roomMates).filter(([, p]) => now - p.at < NET_ROOM_STALE).map(([s, p]) => ({ slot: +s, ...p, x: p.dx, y: p.dy }));
+    return Object.entries(this.roomMates).filter(([, p]) => now - p.at < NET_ROOM_STALE).map(([s, p]) => { const [x, y] = this.drawPos(p); return { slot: +s, ...p, x, y }; });
   },
   setMsg(html) { const el = document.getElementById('netMsg'); if (el) el.innerHTML = html; },
   // ---------- 章節：房主在發射台選，所有人都解鎖的章節才能選 ----------
@@ -1088,7 +1095,7 @@ const Net = {
   applyInput(m, q) {  // 隊友 q 傳來的位置與操作
     const p = this.mateOf(q);
     if (!p || p.dead || Game.state !== 'play') return;
-    p.x = clamp(num(m.x, p.x), p.r, Arena.W - p.r); p.y = clamp(num(m.y, p.y), p.r, Arena.H - p.r);
+    netMove(p, clamp(num(m.x, p.x), p.r, Arena.W - p.r), clamp(num(m.y, p.y), p.r, Arena.H - p.r));  // 畫面上不跳（見 netMove）
     Arena.updateZone(p);  // 大地圖：隊友在第幾區（跟自己的飛船同一套：穿過打開的閘門才 +1；新戰鬥收到上一場的舊座標不會跳區）
     p.vx = num(m.vx); p.vy = num(m.vy); p.aim = num(m.a, p.aim);
     p.moving = !!m.mv; p.dashT = clamp(num(m.dT), 0, CFG.DASH_TIME); p.wantFire = !!m.f;
@@ -1100,8 +1107,8 @@ const Net = {
   hostUpdateMates(dt) { for (const m of Game.mates) this.hostUpdateMate(m, dt); },
   hostUpdateMate(m, dt) {
     if (m.dead || m.gone) return;
-    m.x = clamp(m.x + m.vx * dt, m.r, Arena.W - m.r);  // 兩次輸入之間先照速度往前推
-    m.y = clamp(m.y + m.vy * dt, m.r, Arena.H - m.r);
+    coast(m, dt);  // 兩次輸入之間先照速度往前推
+    m.x = clamp(m.x, m.r, Arena.W - m.r); m.y = clamp(m.y, m.r, Arena.H - m.r);
     m.iframe -= dt; m.overdrive -= dt; m.dashT -= dt; if (m.frostT > 0) m.frostT -= dt;  // 冰凍時間在房主這邊倒數（隊友那邊照同步的剩餘秒數變慢）
     Game.withLoadout(m.L, () => { m.tickDash(); m.tickFire(dt, m.wantFire); });  // 開火（蓄力、過熱）與衝刺相關的晶片
     Objects.hostCheckMate(m);
@@ -1201,7 +1208,7 @@ const Net = {
         if (bd < 20 * 20) c.gone = true;
       }
       G.pickups = G.pickups.filter(c => !c.gone || G.time - (c.goneT = c.goneT || G.time) < 1);  // 藏起來的留 1 秒，免得下一次同步又冒出來
-      for (const m of G.mates) if (!m.dead) { m.x += m.vx * dt; m.y += m.vy * dt; m.iframe -= dt; m.dashT -= dt; }
+      for (const m of G.mates) if (!m.dead) { coast(m, dt); m.iframe -= dt; m.dashT -= dt; }
       this.inAcc += dt;
       if (this.inAcc >= NET_RATE && !P.dead) {
         this.inAcc = Math.min(this.inAcc - NET_RATE, NET_RATE);
@@ -1220,7 +1227,7 @@ const Net = {
     for (const row of arr(s.p)) {  // 其他人的飛船：[號碼, 17 項狀態, 零件, 拾取範圍, 離線]（見 hostSend）
       const m = Array.isArray(row) && G.mates.find(q => q.slot === row[0]), p = m && row.slice(1);
       if (!m) continue;
-      m.x = num(p[0], m.x); m.y = num(p[1], m.y); m.aim = num(p[2]); m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
+      netMove(m, num(p[0], m.x), num(p[1], m.y)); m.aim = num(p[2]);  // 畫面上不跳（見 netMove） m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
       m.dashT = num(p[5]); m.iframe = num(p[6]); m.overdrive = p[7] ? 1 : 0; m.moving = !!p[8]; m.dead = !!p[9];
       m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
       m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0; m.revengeT = p[16] ? 0.2 : 0;  // 逆襲中（畫那艘船發紅光）

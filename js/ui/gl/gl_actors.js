@@ -284,7 +284,9 @@ const GLActors = {
     }
   },
   ship(p, tag) {
-    const G = Game, g = this.gS, t = G.time, S = p.ship, A = SHIP_ART.get(S), own = p === G.player, P = this.pS;
+    const own = p === Game.player;
+    if (!own && (p.ex || p.ey)) { const [x, y] = Net.drawPos(p); p = Object.assign(Object.create(p), { x, y }); }  // 別人的船畫在畫面位置（收到同步時不跳，見 net.js netMove）；其他欄位照讀原本的
+    const G = Game, g = this.gS, t = G.time, S = p.ship, A = SHIP_ART.get(S), P = this.pS;
     const parts = own ? G.parts : p.L ? p.L.parts : p.parts || {};
     const n = id => (parts && parts[id]) || 0, a = p.aim, ca = Math.cos(a), sa = Math.sin(a);
     const L = (lx, ly) => [p.x + lx * ca - ly * sa, p.y + lx * sa + ly * ca];  // 船的座標 → 世界座標
