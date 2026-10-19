@@ -29,7 +29,7 @@ const Range = {
       }
       if (!this.spawnKill) e.immortal = true;
       G.enemies.push(e);
-      if (this.spawnMove && e.t.fleet) for (const k of G.makeFleet(e)) { k.manual = true; k.immortal = e.immortal; }  // 編隊：會動的才補齊整隊
+      if (this.spawnMove) for (const k of G.spawnParts(e)) { k.manual = true; k.immortal = e.immortal; }  // 編隊、雙子獵艦、守門者的砲塔：會動的才補齊整組
     }
   },
   // 生成的位置：鍵盤 G = 滑鼠指的地方；按鈕（手機）= 飛船前方 300

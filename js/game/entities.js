@@ -562,7 +562,7 @@ function telegraphLen(e) {
 const ENEMY_TYPES = {
   swarmer: { name: '蟲群', hp: 18, speed: 150, radius: 10, dmg: 10, color: '#ff4d6d', credits: 1, shape: 3 },
   brute:   { name: '刺殼', hp: 130, speed: 65, radius: 22, dmg: 25, color: '#ff9f1c', credits: 4, shape: 6 },  // 靠近時縮成球滾過來（見 updateBrute）
-  spitter: { name: '噴吐者', hp: 40, speed: 110, radius: 13, dmg: 10, color: '#f72585', credits: 2, shape: 4,
+  spitter: { name: '噴吐者', hp: 40, speed: 110, radius: 13, dmg: 10, color: '#f72585', credits: 2, shape: 4, syncCd: true,
     ranged: { range: 380, cd: 1.8, speed: 260, dmg: 12 } },
   // 精英（elite: true，行為在 ELITE_AI；出現機率 CFG.ELITE_POOL）：face = 畫面上船頭朝目標；noAffix = 不會抽到的詞綴
   elite:   { name: '虛空獵手', hp: 800, speed: 95, radius: 26, dmg: 30, color: '#ffd400', credits: 12, shape: 5, elite: true, face: true,
@@ -582,7 +582,7 @@ const ENEMY_TYPES = {
   splitter: { name: '分裂體', hp: 70, speed: 80, radius: 18, dmg: 15, color: '#ffb347', credits: 0, shape: 5 },   // 死掉時分成 3 隻碎裂體（本體不掉晶體，晶體都在碎裂體身上）
   splitling:{ name: '碎裂體', hp: 30, speed: 140, radius: 10, dmg: 8, color: '#ffb347', credits: 1, shape: 3 },  // 每隻掉 1 顆（一隻分裂體總共 3 顆，跟以前一樣）
   lurker:   { name: '潛伏者', hp: 40, speed: 120, radius: 12, dmg: 18, color: '#9d8cff', credits: 3, shape: 3 },   // 平常幾乎透明（有殘影），離 140 內現形 0.4 秒後撲過去
-  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true, idleAct: true },  // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不算玩法擊殺）；待機時也照生（生出來的在旁邊晃，idleAct）
+  hive:     { name: '母巢', hp: 300, speed: 0, radius: 30, dmg: 15, color: '#e05d2e', credits: 8, shape: 9, anchored: true, idleAct: true, syncCd: true },  // 不會動（anchored：不吃擊退、吸引拉不動，2026-10-10），每 4 秒生 2 隻蟲群（最多 8 隻；不掉晶體、不算玩法擊殺）；待機時也照生（生出來的在旁邊晃，idleAct）
   // 寶藏無人機（CFG.TREASURE）：不攻擊、沒有撞擊傷害、不掉晶體，往離玩家的反方向逃；打掉這場的三選一保證稀有晶片
   //   awake：沒有待機（出場就逃，見 CFG.ALERT）
   treasure:{ name: '寶藏無人機', hp: 156, speed: 230, radius: 18, dmg: 0, color: '#ffd166', credits: 0, shape: 4, treasure: true, awake: true },
@@ -593,14 +593,32 @@ const ENEMY_TYPES = {
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
   boss:    { name: '星噬母艦', hp: 2000, speed: 45, radius: 50, dmg: 35, color: '#ff4d6d', credits: 40, shape: 8, boss: true,
-    knockResist: 1.5, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring'],
+    knockResist: 1.5, shotMul: 0.85, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring'],
     desc: '螺旋彈幕、扇形齊射、召喚蟲群、環形彈。' },
   boss2:   { name: '裂界獵艦', hp: 2800, speed: 80, radius: 42, dmg: 35, color: '#b388ff', credits: 40, shape: 3, boss: true, face: true,
-    knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy'],
+    knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy'], shotMul: 0.85,
     desc: '高速衝鋒（有預警線，衝鋒時往兩側灑彈）、旋轉十字彈流、三連狙擊、部署噴吐者。' },
   boss3:   { name: '終焉核心', hp: 3000, speed: 35, radius: 56, dmg: 40, color: '#2ee6a6', credits: 40, shape: 6, boss: true,
-    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'bomb', 'wall', 'guard'],
+    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'bomb', 'wall', 'guard'], shotMul: 1.15,
     desc: '連續缺口環形波、雙向螺旋、落點轟炸、慢速彈牆、召喚刺殼護衛。' },
+  // 章節專屬的王：twin = 一次出兩艘、共用一條血（CFG.TWIN）；beams = 旋轉光束、turrets = 身邊的砲塔（CFG.WARDEN）；center = 出現在場地正中間
+  boss4:   { name: '雙子獵艦', hp: 3000, speed: 80, radius: 34, dmg: 30, color: '#7c9cff', credits: 40, shape: 3, boss: true, face: true, twin: true,
+    knockResist: 2.5, rage: '雙子同步過載', skills: ['charge', 'fan', 'snipe', 'deploy'],
+    desc: `兩艘共用一條血，繞著同一個中心轉，中間連著光束（碰到受傷；一艘衝鋒時光束斷掉）；輪流衝鋒、兩艘一起扇形齊射、狙擊、部署噴吐者。` },
+  boss5:   { name: '星環守門者', hp: 3200, speed: 0, radius: 54, dmg: 40, color: '#ffb86b', credits: 40, shape: 8, boss: true, anchored: true, center: true, beams: true,
+    syncCd: true, knockResist: 99, rage: '守門者全開', skills: ['pulse'], shotMul: 1, turrets: ['wt_aim', 'wt_ring', 'wt_bomb', 'wt_call'],
+    desc: `待在場地正中間不動：旋轉光束掃過全場（開之前有細的預警線；暴走後 3 條），核心定時放環形彈；身邊 4 座砲塔各管一招（瞄準射擊、環形彈、轟炸、召喚蟲群），打掉一座那招就沒了。` },
+  // 星環守門者的砲塔：跟著核心轉（anchored，不吃擊退）；turret = 出招間隔 cd 秒、出什麼招（fire，this = 砲塔，q = 最近的玩家）
+  wt_aim:  { name: '瞄準砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ff8a5c', credits: 0, shape: 6, anchored: true,
+    turret: { cd: 2.2, fire(q) { const a = Math.atan2(q.y - this.y, q.x - this.x); for (const o of [-0.08, 0, 0.08]) this.shootAt(a + o, 340, 5, 14); } } },
+  wt_ring: { name: '環形砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ffd166', credits: 0, shape: 6, anchored: true,
+    turret: { cd: 3.5, fire() { this.ring(16, 160, rand(0, TAU)); } } },
+  wt_bomb: { name: '轟炸砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ff5a5a', credits: 0, shape: 6, anchored: true,
+    turret: { cd: 4, fire(q) {
+      for (let i = 0; i < 2; i++) { const a = rand(0, TAU), r = i ? rand(80, 180) : 0, [x, y] = Arena.clampIn(q.x + Math.cos(a) * r, q.y + Math.sin(a) * r, 20); Game.zones.push({ x, y, r: 90, t: 1.3, max: 1.3, dmg: 22, from: `${this.t.name}（轟炸）` }); }
+    } } },
+  wt_call: { name: '召喚砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#c77dff', credits: 0, shape: 6, anchored: true,
+    turret: { cd: 6, fire() { if (Game.enemies.filter(e => e.summoned && !e.dead).length < 8) this.summon('swarmer', 3, 60, 0.8); } } },
 };
 
 // 無盡模式：每過一個星區，敵人攻擊頻率 ×1.1、移動速度 ×1.05（乘算；攻擊力另外在受傷時 ×1.25）
@@ -774,7 +792,10 @@ class Enemy {
         this.burnL.length = w; if (!w) this.burnL = null;
       }
       this.burnAcc += dps * dt;
-      if (this.burnAcc >= 1) {
+      if (this.burnAcc >= 1 && this.share && !this.share.dead) {  // 雙子獵艦的另一艘：燒的傷害也算在共用的那條血上
+        const d = Math.floor(this.burnAcc);
+        this.burnAcc -= d; this.share.hurt(d, 0, 0, 'burn', this.burnAtt, null, true); this.hp = this.share.hp;
+      } else if (this.burnAcc >= 1) {
         const d = Math.floor(this.burnAcc);
         this.burnAcc -= d;
         Game.recordDamage('burn', Math.min(d, Math.max(0, this.hp)), this.burnAtt);
@@ -953,8 +974,8 @@ class Enemy {
   //   星噬母艦：螺旋彈幕 / 扇形齊射 / 召喚蟲群 / 環形彈
   //   裂界獵艦：預警衝鋒（兩側灑彈）/ 旋轉十字彈流 / 三連狙擊 / 部署噴吐者
   //   終焉核心：缺口環形波 / 雙向螺旋 / 慢速彈牆 / 刺殼護衛
-  shootAt(a, spd, r = 6, dmg = 14) {  // 旗艦子彈傷害（整局模擬調的）：前兩隻 ×0.85（第一星區旗艦原本是斷層）、終焉核心 ×1.15（第三星區原本太簡單）
-    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.type === 'boss3' ? 1.15 : this.t.boss ? 0.85 : 1), life: 10, from: this.t.name, boss: !!this.t.boss });  // 王的子彈存在 10 秒；boss：會削行星、打碎小行星
+  shootAt(a, spd, r = 6, dmg = 14) {  // 子彈傷害 × t.shotMul（整局模擬調的）：前兩隻王 ×0.85（第一星區旗艦原本是斷層）、終焉核心 ×1.15（第三星區原本太簡單）
+    Game.eBullets.push({ x: this.x, y: this.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg: dmg * (this.t.shotMul || 1), life: 10, from: this.t.name, boss: !!this.t.boss });  // 王的子彈存在 10 秒；boss：會削行星、打碎小行星
   }
   ring(n, spd, offset, gap = 0) {  // gap：連續空出幾發，讓玩家有縫可鑽
     const g0 = gap ? randInt(0, n - 1) : -1;
@@ -985,6 +1006,7 @@ class Enemy {
     return opts[opts.length - 1];
   }
   updateBoss(dt, dx, dy, d) {
+    if (this.share) { this.hp = this.share.hp; this.maxHp = this.share.maxHp; this.enraged = this.share.enraged; }  // 雙子獵艦的另一艘：血量、暴走跟主艦同一份
     const t = this.t, rage = this.hp < this.maxHp * 0.5;
     this.blocked = (Game.objs.length ? Objects.losBlocked(this.x, this.y, this.x + dx, this.y + dy, 6) : null) || Arena.losPoint(this.x, this.y, this.x + dx, this.y + dy, 6);  // 大地圖：牆、柱子也算
     if (rage && !this.enraged) {
@@ -993,10 +1015,10 @@ class Enemy {
       Game.shake(14);
       burst(this.x, this.y, t.color, 60, 380, 0.8, 3);
     }
-    if (this.mode === 'windup') {  // 裂界獵艦：蓄力（畫面上有預警線），期間慢慢停下
+    if (this.mode === 'windup') {  // 裂界獵艦、雙子獵艦：蓄力（畫面上有預警線），期間慢慢停下
       this.modeT -= dt; this.vx *= 0.85; this.vy *= 0.85; this.move(dt);
       if (this.modeT <= 0) {
-        const C = CFG.CHARGE.boss2;
+        const C = CFG.CHARGE[this.type];
         this.mode = 'charge'; this.modeT = C.t; this.fireAcc = 0;
         this.vx = Math.cos(this.chargeA) * C.speed; this.vy = Math.sin(this.chargeA) * C.speed;
         Game.shake(6);
@@ -1011,7 +1033,8 @@ class Enemy {
       trail(this.x, this.y, t.color, 0.35, 8);
       const wall = Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN;  // 大地圖：撞牆（move 記下的 wallN）
       if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
-    } else {
+    } else if (BOSS_MOVE[this.type]) BOSS_MOVE[this.type].call(this, dt, rage);
+    else {
       // 與玩家保持距離並緩慢繞行（獵艦貼得比較近，核心幾乎不動）
       const [far, near, orbit] = this.type === 'boss2' ? [300, 180, 60] : this.type === 'boss3' ? [460, 260, 18] : [340, 220, 35];
       const want = d > far ? 1 : d < near ? -1 : 0;
@@ -1059,8 +1082,9 @@ class Enemy {
     this.ringQ = this.ringQ.filter(q => q.t > 0);
 
     this.skillCd -= dt * endlessAtk();
-    if (this.skillCd > 0 || this.mode !== 'chase') return;
+    if (this.share || this.skillCd > 0 || this.mode !== 'chase') return;  // 雙子獵艦：出招由主艦決定（twinSkill 分給兩艘）
     this.skill = this.pickSkill(d);
+    if (this.pair) { this.twinSkill(this.skill, rage); return; }
     switch (this.skill) {
       // 星噬母艦
       case 'spiral':
@@ -1105,6 +1129,26 @@ class Enemy {
         this.summon('brute', rage ? 2 : 1, 110, 0.6);
         this.summon('swarmer', rage ? 6 : 4, 80, 0.8);
         this.skillCd = rage ? 3 : 3.6; break;
+      // 星環守門者（光束、砲塔另外跑：BOSS_MOVE.boss5、THEME_AI 的砲塔）
+      case 'pulse': {
+        const W = CFG.WARDEN;
+        this.ring(W.ring, 150, this.rot, 2);
+        this.skillCd = rage ? W.ringCdRage : W.ringCd; break;
+      }
+    }
+  }
+  // 雙子獵艦的出招（主艦選招，分給兩艘）：衝鋒輪流一艘、扇形和狙擊兩艘一起、部署兩艘各叫
+  twinSkill(skill, rage) {
+    const P = this.pair, ships = P.members.filter(s => !s.dead);
+    switch (skill) {
+      case 'charge': {
+        const s = ships[P.k++ % ships.length], q = Game.nearestPlayer(s.x, s.y) || Game.player;
+        s.mode = 'windup'; s.modeT = rage ? 0.55 : 0.8; s.chargeA = Math.atan2(q.y - s.y, q.x - s.x);
+        this.skillCd = rage ? 2.4 : 3; break;
+      }
+      case 'fan': for (const s of ships) s.volley = { kind: 'fan', n: rage ? 3 : 2, T: 0, every: 0.4 }; this.skillCd = rage ? 2.6 : 3.2; break;
+      case 'snipe': for (const s of ships) s.volley = { kind: 'snipe', n: rage ? 3 : 2, T: 0, every: 0.3 }; this.skillCd = rage ? 2.2 : 2.8; break;
+      case 'deploy': for (const s of ships) s.summon('spitter', rage ? 2 : 1, 90, 0.7); this.skillCd = rage ? 2.6 : 3.2; break;
     }
   }
   // knock：子彈的擊退值（只有子彈命中會帶）。旗艦只有在擊退值超過自己的抗擊退時才會被推，力道只看超過的部分；
@@ -1117,9 +1161,18 @@ class Enemy {
     const v1 = Math.hypot(this.vx, this.vy);
     if (v1 > lim) { this.vx *= lim / v1; this.vy *= lim / v1; }
   }
-  hurt(dmg, kx, ky, source = 'direct', att = null, knock = null) {
-    const vul = (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，各自算、相加，沒有上限
+  // raw：傷害已經算過弱點、破甲（雙子獵艦的另一艘轉過來的），不再乘一次
+  hurt(dmg, kx, ky, source = 'direct', att = null, knock = null, raw = false) {
+    const vul = raw ? 0 : (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，各自算、相加，沒有上限
     if (vul > 0) dmg *= 1 + vul;
+    if (this.share && !this.share.dead) {  // 雙子獵艦的另一艘：傷害算在共用的那條血（主艦）上，擊退照自己
+      this.flash = 0.08;
+      const over = knock == null ? 0 : knock - this.t.knockResist, l = Math.hypot(kx, ky);
+      if (over > 0 && l > 0 && this.mode !== 'charge') this.push(kx / l * over * CFG.BOSS_KNOCK, ky / l * over * CFG.BOSS_KNOCK);
+      this.share.hurt(dmg, 0, 0, source, att, null, true);
+      this.hp = this.share.hp;
+      return;
+    }
     if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
     this.lastSrc = source;  // 最後一下的傷害方式（回響 echo 擊殺算進解鎖進度）
@@ -1227,6 +1280,43 @@ const THEME_AI = {
     }
     burst(this.x, this.y, this.t.color, 10, 120, 0.4, 2);
     return true;
+  },
+};
+
+// 星環守門者的砲塔：釘在核心旁邊、跟著核心轉（slotA = 在核心的哪個角度）；照 t.turret 出招，核心暴走時出招間隔 × rageCd
+function wardenTurret(dt) {
+  const c = this.core, W = CFG.WARDEN, T = this.t.turret;
+  this.vx = this.vy = 0;
+  if (c && !c.dead) { const a = c.rot + this.slotA, R = c.r + W.turretR; this.x = c.x + Math.cos(a) * R; this.y = c.y + Math.sin(a) * R; this.rot = a; }
+  this.cd -= dt * endlessAtk() / (c && c.enraged ? W.rageCd : 1);
+  if (this.cd <= 0) { this.cd = T.cd; T.fire.call(this, Game.nearestPlayer(this.x, this.y) || Game.player); Events.emit('enemyShot', this); }
+  return true;
+}
+for (const k of Object.keys(ENEMY_TYPES)) if (ENEMY_TYPES[k].turret) THEME_AI[k] = wardenTurret;
+
+// 旗艦平常的移動（沒在蓄力、衝鋒時）：有寫的照這裡，沒寫的照 updateBoss 原本的（跟玩家保持距離、慢慢繞）。this = 旗艦
+const BOSS_MOVE = {
+  // 雙子獵艦：兩艘回到隊形上自己的位置（中心 pair.x/y 的兩端）；中心、轉角由主艦每幀算一次
+  boss4(dt, rage) {
+    const C = CFG.TWIN, P = this.pair;
+    if (!P) { this.vx = this.vy = 0; return; }  // 沒有隊形（靶場手動生的）：不動
+    if (!this.share && P.at !== Game.time) {
+      P.at = Game.time;
+      const q = Game.nearestPlayer(P.x, P.y) || Game.player, vx = q.x - P.x, vy = q.y - P.y, l = Math.hypot(vx, vy) || 1, s = Math.min(l, C.drift * endlessSpd() * dt);
+      [P.x, P.y] = Arena.clampIn(P.x + vx / l * s, P.y + vy / l * s, C.orbit + 40);  // 中心離牆至少轉圈半徑：兩艘都在空地上（不然一艘卡在牆裡）
+      P.ang += dt * (rage ? C.spinRage : C.spin) * endlessAtk() * P.dir;
+    }
+    const a = P.ang + (this.share ? Math.PI : 0), ax = P.x + Math.cos(a) * C.orbit - this.x, ay = P.y + Math.sin(a) * C.orbit - this.y;
+    const l = Math.hypot(ax, ay) || 1, sp = Math.min(380, l * 5) * this.spdMul, k = Math.min(1, dt * 6);
+    this.vx += (ax / l * sp - this.vx) * k; this.vy += (ay / l * sp - this.vy) * k;
+    this.move(dt);
+  },
+  // 星環守門者：不動；核心跟著光束轉（rot），光束的開／停照 cd 倒數（syncCd：同步給隊友畫）
+  boss5(dt, rage) {
+    const W = CFG.WARDEN;
+    this.vx = this.vy = 0;
+    this.rot += dt * (rage ? W.spinRage : W.spin) * endlessAtk();
+    if ((this.cd -= dt) <= 0) this.cd += W.beam + W.rest;  // cd > rest：光束開著；cd < warn：快開了（預警線）
   },
 };
 

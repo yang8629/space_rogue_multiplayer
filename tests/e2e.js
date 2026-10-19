@@ -145,8 +145,7 @@ while (!sector2 && guard++ < 40) {
       // 救援：隊友倒下 → 房主離很遠不會救 → 靠近 2 秒救起，房主分出一半血量
       const GA = HA.Game, P = GA.player, M = GA.mates[0], R = HA.CFG.REVIVE;
       P.iframe = M.iframe = 1e9;
-      P.hp = 80; P.maxHp = M.maxHp = 100; M.hp = 100;
-      const AA = HA.Arena, near = (q, d) => { for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d; if (AA.f(x, y) > 40 && AA.clearLine(q.x, q.y, x, y, 10)) return [x, y]; } return [q.x, q.y]; };  // 大地圖：找空地上的點（寫死的座標可能在牆裡）
+      P.hp = 80; P.maxHp = M.maxHp = 100; M.hp = 100;      const AA = HA.Arena, near = (q, d) => { for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d; if (AA.f(x, y) > 40 && AA.clearLine(q.x, q.y, x, y, 10)) return [x, y]; } return [q.x, q.y]; };  // 大地圖：找空地上的點（寫死的座標可能在牆裡）
       HB.Game.player.x = AA.start.x; HB.Game.player.y = AA.start.y; step(5);
       [P.x, P.y] = AA.randomIn(0, 40, [{ x: AA.start.x, y: AA.start.y }], 700);
       GA.playerDown(M); step(5);
@@ -178,9 +177,11 @@ while (!sector2 && guard++ < 40) {
       tractorChecked = true;
       const GA = HA.Game, CB = CL.T.Game, P = GA.player, AA = HA.Arena, me = CB.player;
       const spot = (q, d) => { for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d; if (AA.f(x, y) > 60 && AA.clearLine(q.x, q.y, x, y, 10)) return [x, y]; } return null; };
-      for (const e of GA.enemies) e.dead = true; GA.enemies = []; GA.eBullets = []; step(2);
+      for (const e of GA.enemies) e.dead = true; GA.enemies = []; GA.eBullets = [];
+      const objs0 = GA.objs; GA.objs = []; step(2);  // 拿掉地圖物件：行星、小行星擋在中間時拖曳艦看不到目標、不會鎖定（spot 只避開牆）
       [P.x, P.y] = AA.randomIn(0, 40, [{ x: me.x, y: me.y }], 900);  // 房主離遠一點：拖曳艦鎖定最近的玩家 = 隊友
-      const at = spot(me, 300);
+      const at = (() => { let best = null, bd = -1; for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, x = me.x + Math.cos(a) * 300, y = me.y + Math.sin(a) * 300, dp = Math.hypot(x - P.x, y - P.y);  // 隊友身邊 300、離房主最遠的空地（拖曳艦鎖定最近的玩家）
+        if (AA.f(x, y) > 60 && AA.clearLine(me.x, me.y, x, y, 10) && dp > bd) { bd = dp; best = [x, y]; } } return best; })();
       const tr = new HA.Enemy('tractor', at[0], at[1], 1); tr.spawnT = 0; tr.zone = me.zone; tr.skillCd = 0; tr.shotCd = 1e9; GA.enemies.push(tr);
       P.iframe = me.iframe = GA.mates[0].iframe = 1e9;
       step(Math.ceil(HA.CFG.TRACTOR.aim * 60) + 6);
@@ -191,7 +192,7 @@ while (!sector2 && guard++ < 40) {
       CL.T.Input.dash = true; step(6);
       ok(pulling && pulled > 40 && tr.mode === 'stun' && tr.tgt === 0,
         `tractor: host's tractor pulls the client on the client's side (${pulling}, pulled ${Math.round(pulled)}), client dash breaks the beam (${tr.mode})`);
-      tr.dead = true; GA.enemies = GA.enemies.filter(e => e !== tr);
+      tr.dead = true; GA.enemies = GA.enemies.filter(e => e !== tr); GA.objs = objs0;
       P.iframe = me.iframe = GA.mates[0].iframe = 0;
     }
     if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數

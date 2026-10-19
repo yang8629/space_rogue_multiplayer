@@ -46,6 +46,9 @@ function enemyFrames() {
   anim('boss', 1.05, 16, 2, (c, col, r, t) => artBoss1Body(c, col, r, t));
   sq('e/boss_ring/0', E('boss').r * 1.27, R, c => artBoss1Ring(c, E('boss').col, E('boss').r));
   anim('boss2', 1.75, 4, TAU / 7, (c, col, r, t) => drawBoss2(c, col, r, t));
+  anim('boss4', 1.6, 6, TAU / 5, (c, col, r, t) => drawTwin(c, col, r, t));
+  for (let k = 0; k < 8; k++) sq(`e/boss5/${k}`, E('boss5').r * 1.5, R, c => drawWardenCore(c, E('boss5').col, E('boss5').r, 0.5 + 0.5 * Math.sin(k / 8 * TAU)));  // 核心脈動 8 格
+  for (const [id, role] of [['wt_aim', 'aim'], ['wt_ring', 'ring'], ['wt_bomb', 'bomb'], ['wt_call', 'call']]) sq(`e/${id}/0`, 20 * 1.6, R, c => drawWardenTurret(c, WT_COL[id], 20, role));
   const b3 = E('boss3');
   for (let k = 0; k < 8; k++) sq(`e/boss3_core/${k}`, b3.r * 0.95, R, c => artBoss3Core(c, b3.col, b3.r, 0.5 + 0.5 * Math.sin(k / 8 * TAU)));
   sq('e/boss3_ring_out/0', b3.r * 1.4, R, c => {  // 底下墊深色圓盤（到外環內緣）：環之間看起來還是空的，但底下的敵彈不會透出來

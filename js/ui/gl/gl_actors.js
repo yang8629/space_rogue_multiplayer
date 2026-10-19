@@ -65,6 +65,7 @@ const GLActors = {
       this.enemy(e);
     }
     for (const e of G.enemies) this.telegraph(e);
+    this.bossBeams();
     const tg = G.player.target;
     if (Input.touch && tg && !tg.dead) {  // 自動攻擊的鎖定框
       const r = tg.r + 10, s = G.time * 3;
@@ -138,6 +139,13 @@ const GLActors = {
         break;
       }
       case 'boss2': main = base('boss2', 4, TAU / 7); main.tint = 0xdcd6ec; if (e.enraged) this.glowAt(this.pE, e.x, e.y, e.r * 1.2, 0xffd166, 0.3); break;
+      case 'boss4': main = base('boss4', 6, TAU / 5); if (e.enraged) this.glowAt(this.pE, e.x, e.y, e.r * 1.3, 0xffd166, 0.3); break;
+      case 'boss5': {  // 核心跟著光束轉（rot = 第一條光束的方向）
+        if (e.enraged) this.glowAt(this.pE, e.x, e.y, e.r * 1.4, 0xffd166, 0.35 + 0.25 * Math.sin(t * 12));
+        main = this.spr(this.frame('boss5', Math.floor(t / 1.6 * 8) % 8), e.x, e.y, k / 2, e.rot || 0);
+        break;
+      }
+      case 'wt_aim': case 'wt_ring': case 'wt_bomb': case 'wt_call': main = this.spr(this.frame(ty, 0), e.x, e.y, k / 2, e.rot || 0); break;  // 守門者的砲塔：砲口朝外
       case 'boss3': {
         const o = this.spr(this.frame('boss3_ring_out', 0), e.x, e.y, k / 2, t * 0.35); o.alpha = alpha;
         const i = this.spr(this.frame('boss3_ring_in', 0), e.x, e.y, k / 2, -t * 0.6); i.alpha = alpha;
@@ -204,11 +212,23 @@ const GLActors = {
     else if (e.type === 'wing') { len = 520; alpha = 0.2 + 0.4 * Math.sin(t * 30) ** 2; w = 3; }  // 交叉齊射的彈道
     else if (e.type === 'artillery') { g.circle(e.x, e.y, e.r + 6 + 34 * Math.max(0, e.modeT) / CFG.ARTILLERY.windup).stroke({ width: 3, color: 0xff2a2a, alpha: 0.35 + 0.4 * Math.sin(t * 30) ** 2 }); return; }
     else if (e.type === 'brute') { len = telegraphLen(e); alpha = e.modeT <= CFG.BRUTE.lock ? 0.55 : 0.2; }
-    else if (e.type === 'boss2') { len = telegraphLen(e); alpha = 0.25 + 0.45 * Math.sin(t * 30) ** 2; }
+    else if (e.t.boss && CFG.CHARGE[e.type]) { len = telegraphLen(e); alpha = 0.25 + 0.45 * Math.sin(t * 30) ** 2; }  // 裂界獵艦、雙子獵艦的衝鋒
     else if (e.type === 'lurker') { len = telegraphLen(e); alpha = 0.3 + 0.5 * Math.sin(t * 30) ** 2; }
     else if (e.type === 'gunboat') { g.circle(e.x, e.y, e.r + 6 + 40 * Math.max(0, e.modeT) / 0.6).stroke({ width: 3, color: 0xff2a2a, alpha: 0.35 + 0.4 * Math.sin(t * 30) ** 2 }); return; }
     else return;
     g.moveTo(e.x, e.y).lineTo(e.x + Math.cos(e.chargeA) * len, e.y + Math.sin(e.chargeA) * len).stroke({ width: w, color: 0xff2a2a, alpha });
+  },
+  // 旗艦的光束（Game.bossBeams）：預警 = 細的紅線閃；開著 = 外層淡紅＋紅芯＋白芯，兩端發光
+  bossBeams() {
+    const g = this.gE, t = Game.time;
+    for (const B of Game.bossBeams()) {
+      if (B.warn) { g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: 2, color: 0xff2a2a, alpha: 0.3 + 0.5 * Math.sin(t * 30) ** 2 }); continue; }
+      const f = 0.85 + 0.15 * Math.sin(t * 40);
+      g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: B.w * 2.2, color: 0xff3b5c, alpha: 0.18 * f });
+      g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: B.w, color: 0xff3b5c, alpha: 0.75 * f });
+      g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: B.w * 0.3, color: 0xffffff, alpha: 0.9 });
+      this.glowAt(this.pE, B.x1, B.y1, B.w * 2.2, 0xff3b5c, 0.6); this.glowAt(this.pE, B.x2, B.y2, B.w * 2.6, 0xff3b5c, 0.6);
+    }
   },
   // 拖曳艦：aim = 細的紅色鎖定線（閃）；pull = 粗的青色光束（加法發光、往船這邊流的光點）
   beam(e) {

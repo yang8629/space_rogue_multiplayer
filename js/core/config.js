@@ -106,7 +106,7 @@ const CFG = {
   RICOCHET_RANGE: 420,      // 彈射尋找下一個目標的距離
   ARC_RANGE: 260,           // 電弧（軌道砲・磁暴線圈）找附近敵人的距離
   // 刺殼：距離 range 內開始縮球 windup 秒（最後 lock 秒鎖定方向）→ 以 rollSpeed 滾 rollT 秒 → 暈眩 stunT 秒 → 冷卻 cooldown 秒
-  CHARGE: { elite: { speed: 800, t: 0.45 }, boss2: { speed: 760, t: 0.6 }, lurker: { speed: 520, t: 0.4 } },  // 衝鋒：速度、時間（預警線長度也照這個算，見 telegraphLen）
+  CHARGE: { elite: { speed: 800, t: 0.45 }, boss2: { speed: 760, t: 0.6 }, boss4: { speed: 700, t: 0.5 }, lurker: { speed: 520, t: 0.4 } },  // 衝鋒：速度、時間（預警線長度也照這個算，見 telegraphLen）
   BRUTE: { range: 350, windup: 0.7, lock: 0.3, rollSpeed: 520, rollT: 0.9, stunT: 1, cooldown: 1.5 },
   BOSS_KNOCK: 30,          // 推王：每超過抗擊退 1 點，每次命中推 30（王會慢慢拉回自己的速度）
   REPAIR_RATIO: 0.5,        // 維修站修復 50% 最大 HP
@@ -120,7 +120,14 @@ const CFG = {
   VERSION: 'mp-2.24.0（2026-10-19 03:30）',  // 雙人版版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   // 無盡模式：每過一個星區（乘算）敵人攻擊 ×1.25、攻擊頻率 ×1.1、移動速度 ×1.05、血量 ×1.2（另外還有本來的每層血量成長）
   ENDLESS_DMG: 1.25, ENDLESS_ATK: 1.1, ENDLESS_SPD: 1.05, ENDLESS_HP: 1.2,
-  BOSS_ORDER: ['boss', 'boss2', 'boss3'],  // 全部的旗艦（沙盒輪流、無盡模式隨機抽）；各章每個星區的王見 chapters.js
+  BOSS_ORDER: ['boss', 'boss2', 'boss3', 'boss4', 'boss5'],  // 全部的旗艦（沙盒輪流、無盡模式隨機抽）；各章每個星區的王見 chapters.js
+  // 雙子獵艦（boss4）：兩艘共用一條血，繞著同一個中心轉（半徑 orbit、每秒 spin 弧度，暴走 spinRage），中心每秒往最近的玩家飄 drift；
+  //   兩艘都在隊形上（沒在衝鋒）時中間連著光束（寬 beamW，碰到受 beamDmg）；衝鋒見 CHARGE.boss4
+  TWIN: { orbit: 230, spin: 0.55, spinRage: 0.85, drift: 45, beamW: 14, beamDmg: 18 },
+  // 星環守門者（boss5）：核心在場地正中間不動；光束 beam 秒（2 條，暴走 3 條）、停 rest 秒，停的最後 warn 秒先畫細的預警線；
+  //   光束跟著核心轉（每秒 spin 弧度，暴走 spinRage），寬 beamW、碰到受 beamDmg；核心每 ringCd 秒（暴走 ringCdRage）放一圈 ring 發
+  //   4 座砲塔（WARDEN_TURRETS）繞在核心旁 turretR、各管一招，打掉那招就沒了；暴走時砲塔出招間隔 × rageCd
+  WARDEN: { beam: 5, rest: 2.5, warn: 0.9, spin: 0.38, spinRage: 0.55, beamW: 16, beamDmg: 20, ringCd: 5, ringCdRage: 3.5, ring: 20, turretR: 110, rageCd: 0.7 },
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
 };
 

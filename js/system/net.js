@@ -1106,7 +1106,7 @@ const Net = {
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, ti(e.mode), r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 || e.burnL ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
         e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0),  // 盾衛的盾方向、潛伏者的隱形程度
-        e.type === 'spitter' || e.type === 'hive' ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 開火倒數（噴吐者鼓起、母巢脈動）、弱點標記／破甲
+        e.t.syncCd ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 倒數（t.syncCd：噴吐者鼓起、母巢脈動、星環守門者的光束）、弱點標記／破甲
         e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
         e.affixes ? e.affixes.join(',') : null, e.r !== e.t.radius ? r2(e.r) : null, e.ledT > 0 ? 1 : 0,  // 精英詞綴、體型（分裂後變小）、被統帥加成
         e.alertT > 0 ? r2(e.alertT) : 0, e.tgt || 0,  // 剛發現玩家（頭上「!」還顯示幾秒）、拖曳艦鎖定／牽引的玩家號碼（被拉的人自己拉自己，Game.beamPull）

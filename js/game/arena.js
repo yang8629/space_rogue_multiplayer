@@ -46,7 +46,7 @@ const Arena = {
   // ---------- 方形場地（旗艦戰、沙盒、靶場；雙人的隊友收到種子之前也先用這個） ----------
   reset() {
     this.rect = true; this.W = CFG.WORLD_W; this.H = CFG.WORLD_H; this.seed = 0; this.n = 0; this.bossId = null; this.cuts = [];
-    this.areas = []; this.gates = []; this.start = { x: this.W / 2, y: this.H / 2 };
+    this.areas = []; this.gates = []; this.start = { x: this.W / 2, y: this.H / 2 }; this.center = { x: this.W / 2, y: this.H / 2 };
     this.val = this.owner = this.path = null; this.exitFlow = null;
   },
 
@@ -109,6 +109,7 @@ const Arena = {
   //   星噬母艦 boss ：圓形大廳＋外圍 5 個小凹室（像艙口；可以躲，叫出來的蟲群也從凹室湧出）
   //   裂界獵艦 boss2：細長的菱形（像船身），讓衝鋒有距離，撞到牆就停
   //   終焉核心 boss3：圓形場地，中間四根柱子排成十字（擋慢速彈牆、環形波）
+  //   星環守門者 boss5：空曠的大圓（核心在正中間）；雙子獵艦 boss4 用星噬母艦的圓形大廳＋凹室（可以躲光束）
   genBoss(seed, bossId) {
     const R = seededRand(seed), rr = (a, b) => a + (b - a) * R();
     this.rect = false; this.seed = seed; this.n = 1; this.bossId = bossId; this.sc = 1;
@@ -120,6 +121,9 @@ const Arena = {
         const w = 1 - Math.abs(x) / 1750;
         shapes.push({ kind: 'c', x, y: rr(-15, 15), r: 170 + 700 * Math.pow(w, 1.2), nz: noise(0.6) });
       }
+    } else if (bossId === 'boss5') {  // 星環守門者：空曠的大圓（旋轉光束要掃得到），出生點在下方
+      shapes.push({ kind: 'c', x: 0, y: 0, r: rr(1080, 1120), nz: noise(0.6) });
+      A.sy = 780;
     } else if (bossId === 'boss3') {
       shapes.push({ kind: 'c', x: 0, y: 0, r: rr(1080, 1120), nz: noise() });
       const a0 = rr(0, Math.PI / 2);
@@ -247,6 +251,7 @@ const Arena = {
     for (let k = 0; k < N; k++) if (val[k] <= 0) val[k] = -D[k];
     if (!cuts.length) this.openThinWalls(val, owner, NX, NY);  // 終焉核心的柱子是掩護，不削
     this.start = { x: areas[0].cx + (areas[0].sx || 0), y: areas[0].cy + (areas[0].sy || 0) };
+    this.center = { x: areas[0].cx, y: areas[0].cy };  // 第一區的中心（王關：星環守門者的核心放這裡）
     this.exitFlow = null;
     this.buildPath();
   },
@@ -361,6 +366,15 @@ const Arena = {
     const L = Math.hypot(bx - ax, by - ay), n = Math.ceil(L / 16);
     for (let i = 1; i < n; i++) if (this.f(ax + (bx - ax) * i / n, ay + (by - ay) * i / n) < pad) return true;
     return false;
+  },
+  // 從 (x, y) 往 a 方向走多遠撞到牆（最多 max；每 16 取樣一次）：星環守門者的光束長度
+  rayLen(x, y, a, max) {
+    const c = Math.cos(a), s = Math.sin(a);
+    for (let L = 16; L < max; L += 16) {
+      const px = x + c * L, py = y + s * L;
+      if (this.rect ? px < 0 || py < 0 || px > this.W || py > this.H : this.f(px, py) < 0) return L;
+    }
+    return max;
   },
   // 直線上第一個被牆擋住的點（回傳 { x, y }，給王「射線被擋住就橫移」用）；沒擋住回傳 null
   losPoint(ax, ay, bx, by, pad) {

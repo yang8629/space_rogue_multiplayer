@@ -22,6 +22,14 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (hd < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (hive.x - p.x) / hd * 60, y: (hive.y - p.y) / hd * 60 };
     if (!E.some(e => e !== hive && Math.hypot(e.x - p.x, e.y - p.y) < 150)) { near = hive; nd = hd; }
   }
+  // 星環守門者的砲塔（2026-10-19）：熟練玩家會先拆砲塔（召喚砲塔最優先，不然蟲群打不完、一直打不到核心）。
+  //   身邊 150 內沒有其他敵人時瞄準最近的砲塔（召喚的先），走位也以它為準；以前一直打召喚出來的蟲群，400 秒核心只掉 5%
+  const tur = E.filter(e => e.t.turret).sort((a, b) => (b.type === 'wt_call') - (a.type === 'wt_call') || Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+  if (tur && !E.some(e => !e.t.turret && !e.t.boss && Math.hypot(e.x - p.x, e.y - p.y) < 150)) {
+    const td = Math.hypot(tur.x - p.x, tur.y - p.y) || 1;
+    if (td < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (tur.x - p.x) / td * 60, y: (tur.y - p.y) / td * 60 };
+    near = tur; nd = td;
+  }
   // 警報艇響著（被打到過，CFG.ALARM）：真人會先集火打掉（它邊逃邊叫醒附近的敵人）。瞄準它；身邊 150 內沒有其他敵人時走位也以它為準
   const alm = E.find(e => e.t.alarm && e.ringT != null);
   if (alm) {
@@ -130,6 +138,16 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (d > R) continue;
     const w = 3 + 3 * (1 - Math.max(0, z.t) / (z.max || 1)); mx += rx / d * w; my += ry / d * w; threat += w;
   }
+  // 旗艦的光束（雙子獵艦中間的、星環守門者的旋轉光束，2026-10-19 加）：離光束 80 內就往垂直方向離開（預警線也躲，越近越急）；
+  //   壓在光束上、衝刺好了就衝刺（衝刺有無敵時間，直接穿過去）
+  let beamHit = false;
+  for (const B of G.bossBeams()) {
+    const vx = B.x2 - B.x1, vy = B.y2 - B.y1, L2 = vx * vx + vy * vy || 1, u = Math.max(0, Math.min(1, ((p.x - B.x1) * vx + (p.y - B.y1) * vy) / L2));
+    const cx = B.x1 + vx * u, cy = B.y1 + vy * u, rx = p.x - cx, ry = p.y - cy, d = Math.hypot(rx, ry) || 1, R = p.r + B.w / 2 + 80;
+    if (d > R) continue;
+    const w = (B.warn ? 2 : 4) * (1 - d / R) + 1; mx += rx / d * w; my += ry / d * w; threat += w;
+    if (!B.warn && d < p.r + B.w / 2 + 12) beamHit = true;
+  }
   // dodge:ram（熟練玩家）：高速衝過來的敵人（刺殼滾動、精英／潛伏者衝鋒、旗艦衝撞）也當子彈閃：照牠的速度預測路線，
   //   會撞到就往側邊躲；0.35 秒內就撞上時衝刺。一般電腦只閃子彈，撞擊是牠掉血最多的來源（用玩家配裝時佔 6 成）
   let ramHit = false;
@@ -180,7 +198,7 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   I.joy = l > 0.01 ? { bx: 0, by: 0, x: mx / l * m, y: my / l * m } : null;
   if (chase) I.dash = true;
   if (inHole && G.time - holeStuck.t > 2 && p.dashCd <= 0) I.dash = true;  // 黑洞裡被拖住：往外衝
-  const danger = ramHit || !bait && G.eBullets.some(b => Math.hypot(b.x - p.x, b.y - p.y) < 60 && (b.vx * (p.x - b.x) + b.vy * (p.y - b.y)) > 0) || nd < 40;
+  const danger = ramHit || beamHit || !bait && G.eBullets.some(b => Math.hypot(b.x - p.x, b.y - p.y) < 60 && (b.vx * (p.x - b.x) + b.vy * (p.y - b.y)) > 0) || nd < 40;
   if (danger && p.dashCd <= 0) I.dash = true;
   // 拖曳艦的牽引光束拉住自己（2026-10-19）：往遠離牠的方向衝刺掙脫（熟練玩家看到光束就衝）；衝刺還沒好就先往外走
   const me = G.slotOf(p), puller = all.find(e => e.mode === 'pull' && e.tgt === me);

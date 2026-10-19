@@ -55,6 +55,7 @@ function oldPoly(ctx, n, r, rot, col, w = 2) {  // 對照：現在遊戲的畫�
 }
 
 // ---------- 敵人 ----------
+const WT_COL = { wt_aim: '#ff8a5c', wt_ring: '#ffd166', wt_bomb: '#ff5a5a', wt_call: '#c77dff' };  // 星環守門者的砲塔（顏色同 ENEMY_TYPES）
 const ENEMIES = [
   { id: 'swarmer', name: '蟲群', col: '#ff4d6d', n: 3, r: 10, note: '小飛蟲：箭頭身體、拍動的半透明翅膀、分節腹部、觸角、紅眼', face: true },
   { id: 'brute', name: '刺殼', col: '#ff9f1c', n: 6, r: 22, note: '六角甲殼（外殼＋錯開的內層甲片）、六根長刺、前方大顎和發光小眼', face: true },
@@ -77,6 +78,8 @@ const ENEMIES = [
   { id: 'dummy', name: '標靶', col: '#9fb4ff', n: 8, r: 18, note: '練習用無人機：靶面＋三腳支架＋彈痕' },
   { id: 'boss', name: '星噬母艦', col: '#ff4d6d', n: 8, r: 50, note: '有機機械母艦：機庫艙門輪流打開（看得到蟲群）、外圈螺旋砲環、中央豎瞳大眼', boss: 4 },
   { id: 'boss2', name: '裂界獵艦', col: '#b388ff', n: 3, r: 42, note: '刀刃狀戰艦：中線發光的裂界縫、長狙擊炮管、兩側推進器和吊艙', boss: 3 },
+  { id: 'boss4', name: '雙子獵艦（兩艘一起）', col: '#7c9cff', n: 3, r: 34, note: '細長的雙叉戰艦：前叉中間是光束發射口（連到另一艘）、船尾推進器、中線發光', boss: 3 },
+  { id: 'boss5', name: '星環守門者', col: '#ffb86b', n: 8, r: 54, note: '核心：多層八角裝甲＋節點燈、發光的星環核心、兩側光束發射器；身邊 4 座砲塔', boss: 8 },
   { id: 'boss3', name: '終焉核心', col: '#2ee6a6', n: 6, r: 56, note: '機械核心球：兩圈反向轉、有缺口的六角裝甲環（節點發光），裡面發光的核心', boss: 6 },
 ];
 function artEnemy(ctx, E, t) {
@@ -308,6 +311,54 @@ function drawWing(ctx, c, r, t) {
   for (const sg of [-1, 1]) { glow(ctx, -r * 0.4, sg * r * 0.95, 6, c, 0.5 + 0.4 * p); ctx.fillStyle = '#ffe0f4'; ctx.beginPath(); ctx.arc(-r * 0.4, sg * r * 0.95, 1.4, 0, TAU); ctx.fill(); }  // 翼尖燈
   ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.ellipse(r * 0.35, 0, r * 0.22, r * 0.12, 0, 0, TAU); ctx.fill();  // 座艙
   ctx.fillStyle = 'rgba(255,220,245,0.75)'; ctx.beginPath(); ctx.ellipse(r * 0.3, -r * 0.03, r * 0.1, r * 0.05, 0, 0, TAU); ctx.fill();
+}
+// 雙子獵艦：細長的雙叉戰艦（兩根前叉中間是光束發射口，連到另一艘）、船尾兩具推進器、中線發光；t 一輪 = TAU / 5
+function drawTwin(ctx, c, r, t) {
+  const p = 0.6 + 0.4 * Math.sin(t * 5);
+  for (const sg of [-1, 1]) {  // 推進器噴焰＋吊艙
+    ADD(ctx, () => { ctx.fillStyle = rgba('#cfd8ff', 0.6 + 0.3 * p); ctx.beginPath(); ctx.moveTo(-r * 0.8, sg * r * 0.42 - 4); ctx.lineTo(-r * (1.35 + 0.15 * p), sg * r * 0.42); ctx.lineTo(-r * 0.8, sg * r * 0.42 + 4); ctx.closePath(); ctx.fill(); });
+    metalRect(ctx, -r * 0.95, sg * r * 0.42 - 5, r * 0.55, 10, 3);
+  }
+  for (const sg of [-1, 1]) {  // 前叉
+    faceted(ctx, [[r * 1.3, sg * r * 0.3], [r * 0.2, sg * r * 0.62], [-r * 0.1, sg * r * 0.25], [r * 0.6, sg * r * 0.18]], mix(c, '#000000', 0.2), { outline: 2.8 });
+  }
+  faceted(ctx, [[r * 0.75, 0], [r * 0.1, -r * 0.5], [-r * 0.85, -r * 0.4], [-r * 0.6, 0], [-r * 0.85, r * 0.4], [r * 0.1, r * 0.5]], c, { outline: 3.6 });  // 船身
+  ADD(ctx, () => {  // 中線發光
+    ctx.strokeStyle = rgba('#e3e9ff', 0.3 * p); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(r * 0.6, 0); ctx.lineTo(-r * 0.55, 0); ctx.stroke();
+    ctx.strokeStyle = 'rgba(240,244,255,0.85)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(r * 0.6, 0); ctx.lineTo(-r * 0.55, 0); ctx.stroke();
+  });
+  glow(ctx, r * 0.95, 0, r * 0.6, c, 0.5 + 0.4 * p);  // 兩叉中間的光束發射口
+  ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.arc(r * 0.95, 0, r * 0.14, 0, TAU); ctx.fill();
+  ctx.fillStyle = mix(c, '#ffffff', 0.5 + 0.3 * p); ctx.beginPath(); ctx.arc(r * 0.95, 0, r * 0.09, 0, TAU); ctx.fill();
+  eye(ctx, r * 0.1, 0, r * 0.11, '#0a1030');
+}
+// 星環守門者：核心（多層裝甲環＋發光的星環核心）；光束從核心兩側（暴走 3 側）射出，遊戲裡照 rot 轉。p 0～1 = 核心脈動
+function drawWardenCore(ctx, c, r, p) {
+  glow(ctx, 0, 0, r * 1.6, c, 0.25 + 0.2 * p);
+  faceted(ctx, polyPts(8, r, Math.PI / 8), mix(c, '#000000', 0.25), { outline: 4.5 });  // 外層裝甲
+  for (let i = 0; i < 8; i++) {  // 裝甲上的節點燈
+    const a = i / 8 * TAU, x = Math.cos(a) * r * 0.82, y = Math.sin(a) * r * 0.82;
+    ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, TAU); ctx.fill();
+    ctx.fillStyle = mix('#5a3a1a', '#ffe2b0', 0.4 + 0.6 * p); ctx.beginPath(); ctx.arc(x, y, 2.1, 0, TAU); ctx.fill();
+  }
+  faceted(ctx, polyPts(8, r * 0.66, 0), c, { outline: 3 });  // 內層
+  ctx.strokeStyle = '#03050c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, r * 0.42, 0, TAU); ctx.stroke();  // 星環
+  ADD(ctx, () => { ctx.strokeStyle = rgba('#fff0d0', 0.5 + 0.4 * p); ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(0, 0, r * 0.42, 0, TAU); ctx.stroke(); });
+  glow(ctx, 0, 0, r * 0.7, '#ffd9a0', 0.5 + 0.4 * p);
+  const g = ctx.createRadialGradient(-r * 0.08, -r * 0.08, 0, 0, 0, r * 0.28); g.addColorStop(0, '#fffaf0'); g.addColorStop(0.5, '#ffcf8a'); g.addColorStop(1, '#a8541a');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r * 0.28, 0, TAU); ctx.fill();
+  for (const a of [0, Math.PI]) { ctx.save(); ctx.rotate(a); metalRect(ctx, r * 0.7, -6, r * 0.42, 12, 3); ADD(ctx, () => { ctx.fillStyle = rgba('#ff6b6b', 0.6 + 0.4 * p); ctx.fillRect(r * 1.02, -3, 4, 6); }); ctx.restore(); }  // 光束發射器（朝 rot 方向）
+}
+// 守門者的砲塔：金屬底座＋各自的招式樣子（role：aim 三管、ring 環形噴口、bomb 迫擊砲口、call 孵化艙）；砲口朝 +x
+function drawWardenTurret(ctx, c, r, role) {
+  faceted(ctx, polyPts(6, r, 0), '#6a7896', { outline: 3 });  // 底座（金屬藍灰）
+  if (role === 'aim') for (const y of [-0.32, 0, 0.32]) metalRect(ctx, r * 0.2, y * r - 2.5, r * 1.05, 5, 1.5);
+  if (role === 'bomb') { metalRect(ctx, r * 0.1, -r * 0.35, r * 0.85, r * 0.7, 3); ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.arc(r * 0.95, 0, r * 0.3, 0, TAU); ctx.fill(); }
+  faceted(ctx, polyPts(role === 'ring' ? 8 : 5, r * 0.62, 0), c, { outline: 2.6 });  // 招式的顏色
+  if (role === 'ring') for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; ctx.fillStyle = '#03050c'; ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, 2.4, 0, TAU); ctx.fill(); }
+  if (role === 'call') { ctx.fillStyle = '#16050a'; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.32, r * 0.22, 0, 0, TAU); ctx.fill(); ctx.fillStyle = rgba('#ff4d6d', 0.9); ctx.beginPath(); ctx.moveTo(r * 0.18, 0); ctx.lineTo(-r * 0.1, -r * 0.1); ctx.lineTo(-r * 0.1, r * 0.1); ctx.closePath(); ctx.fill(); }
+  glow(ctx, 0, 0, r * 0.7, c, 0.5);
+  ctx.fillStyle = mix(c, '#ffffff', 0.6); ctx.beginPath(); ctx.arc(0, 0, r * 0.14, 0, TAU); ctx.fill();
 }
 // 分裂體：3 塊碎片拼成，接縫發光；每塊各一隻小眼（死掉就分成這 3 塊＝碎裂體）
 const SPLIT_TRI = r => polyPts(3, r, 0);

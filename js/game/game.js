@@ -372,6 +372,31 @@ const Game = {
     for (let i = 0; i < ids.length; i++) if ((r -= w[i]) < 0) return ids[i];
     return ids[ids.length - 1];
   },
+  // 一次出好幾個的：編隊（t.fleet）、雙子獵艦（t.twin）、星環守門者的砲塔（t.turrets）；回傳整組（第一個是 e，其他的已經放進 enemies）
+  spawnParts(e) {
+    return e.t.fleet ? this.makeFleet(e) : e.t.twin ? this.makeTwin(e) : e.t.turrets ? this.makeTurrets(e) : [e];
+  },
+  // 雙子獵艦（CFG.TWIN）：e 是主艦（血量在它身上），另一艘 share = e；兩艘共用隊形 P（中心、轉角，BOSS_MOVE.boss4）
+  makeTwin(e) {
+    const C = CFG.TWIN, P = { x: e.x, y: e.y, ang: rand(0, TAU), dir: Math.random() < 0.5 ? 1 : -1, k: 0, members: [e], at: -1 };
+    [e.x, e.y] = Arena.clampIn(P.x + Math.cos(P.ang) * C.orbit, P.y + Math.sin(P.ang) * C.orbit, e.r + 10);
+    const k = new Enemy(e.type, ...Arena.clampIn(P.x - Math.cos(P.ang) * C.orbit, P.y - Math.sin(P.ang) * C.orbit, e.r + 10), e.hpScale);
+    k.share = e; k.spawnT = e.spawnT; k.spawnMax = e.spawnMax; k.zone = e.zone; k.alert = e.alert;
+    e.pair = k.pair = P; P.members.push(k); this.enemies.push(k);
+    return P.members;
+  },
+  // 星環守門者的砲塔（t.turrets，CFG.WARDEN）：繞在核心旁邊、各管一招（wardenTurret）；第一次出招錯開
+  makeTurrets(e) {
+    const W = CFG.WARDEN, out = [e];
+    e.cd = W.rest;  // 一開始光束先停 rest 秒（最後 warn 秒有預警線）
+    e.t.turrets.forEach((type, i) => {
+      const a = Math.PI / 4 + i * Math.PI / 2, R = e.r + W.turretR;
+      const k = new Enemy(type, e.x + Math.cos(e.rot + a) * R, e.y + Math.sin(e.rot + a) * R, e.hpScale);
+      k.core = e; k.slotA = a; k.spawnT = e.spawnT; k.spawnMax = e.spawnMax; k.zone = e.zone; k.cd = k.t.turret.cd * (0.6 + 0.4 * i / 3);
+      out.push(k); this.enemies.push(k);
+    });
+    return out;
+  },
   // 編隊（ENEMY_TYPES[type].fleet）：e 是第一艘，在旁邊補上其他艘，共用一個編隊 F（CFG.WING、ELITE_AI.wing）；詞綴、待機照 e
   //   kids = 同隊的其他艘：叫醒一艘整隊一起醒（wakeEnemy）
   makeFleet(e) {
@@ -416,8 +441,9 @@ const Game = {
     if (this.usesAreas() && !e.t.awake && !o.intruder) { e.alert = false; e.home = [x, y]; }
     if (swarm) e.hp = e.maxHp *= S.hp;
     if (e.t.elite) e.setAffixes(o.affixes || (C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
+    if (e.t.center && !Arena.rect) { e.x = Arena.center.x; e.y = Arena.center.y; }  // 星環守門者：場地正中間
     this.enemies.push(e);
-    const group = e.t.fleet ? this.makeFleet(e) : [e];  // 編隊一次出好幾艘
+    const group = this.spawnParts(e);  // 編隊、雙子獵艦、守門者的砲塔：一次出好幾個
     if (e.t.treasure) { bannerFx(`✦ ${e.t.name}`, `${CFG.TREASURE.life} 秒內打掉：這場的三選一保證稀有晶片`, 2.5); Events.emit('treasureArrive', e); }
     if (o.intruder) {
       const I = { left: group.length };  // 同一個亂入的共用（left = 還沒打掉幾隻；分裂詞綴分出來的那隻也加進來）
@@ -1509,6 +1535,7 @@ const Game = {
       this.updateEnemyBullets(dt);
       this.capBullets();
       this.updateZones(dt);
+      this.beamHits();
       this.updatePickups(dt);
       if (this.mates.length) this.updateRevive(dt);
     }
@@ -2189,6 +2216,32 @@ const Game = {
       if (e.mode !== 'pull' || e.tgt !== me || e.dead) continue;
       const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1, k = Math.min(T.speed * dt, d - (e.r + P.r + T.stop));
       if (k > 0) { P.x += dx / d * k; P.y += dy / d * k; }
+    }
+  },
+  // 旗艦的光束：雙子獵艦兩艘中間的（兩艘都在隊形上才連著）、星環守門者的旋轉光束（cd 倒數：> rest 開著、< warn 預警）
+  //   回傳 [{ x1, y1, x2, y2, w, dmg, from, warn }]；房主算傷害、畫面、模擬電腦都用這個，只讀欄位（隊友那邊的敵人是同步來的資料）；同一幀只算一次
+  bossBeams() {
+    if (this.beamMemo && this.beamMemo.t === this.time && this.beamMemo.n === this.enemies) return this.beamMemo.list;
+    const list = [], up = e => !e.dead && !(e.spawnT > 0), C = CFG.TWIN, W = CFG.WARDEN;
+    const tw = this.enemies.filter(e => e.t.twin && up(e));
+    if (tw.length === 2 && tw.every(e => e.mode === 'chase')) list.push({ x1: tw[0].x, y1: tw[0].y, x2: tw[1].x, y2: tw[1].y, w: C.beamW, dmg: C.beamDmg, from: `${tw[0].t.name}（光束）`, warn: false });
+    for (const e of this.enemies) if (e.t.beams && up(e)) {
+      const on = e.cd > W.rest, warn = !on && e.cd < W.warn;
+      if (!on && !warn) continue;
+      const n = e.enraged ? 3 : 2;
+      for (let k = 0; k < n; k++) {
+        const a = e.rot + k * TAU / n, c = Math.cos(a), s = Math.sin(a), L = Arena.rayLen(e.x, e.y, a, 1500);
+        list.push({ x1: e.x + c * e.r, y1: e.y + s * e.r, x2: e.x + c * L, y2: e.y + s * L, w: warn ? 3 : W.beamW, dmg: warn ? 0 : W.beamDmg, from: `${e.t.name}（光束）`, warn });
+      }
+    }
+    this.beamMemo = { t: this.time, n: this.enemies, list };
+    return list;
+  },
+  // 光束打到飛船（房主算，隊友的也是）：碰到就受傷，之後的無敵時間內不會再扣
+  beamHits() {
+    for (const B of this.bossBeams()) {
+      if (B.warn) continue;
+      for (const p of this.players()) if (segDist2(B.x1, B.y1, B.x2, B.y2, p.x, p.y) < (p.r + B.w / 2) ** 2) this.hurtPlayer(B.dmg, B.from, p, p.x, p.y);
     }
   },
   // 王的落點轟炸：時間到就爆炸，圈裡的飛船受傷

@@ -2452,6 +2452,48 @@ const MechCheck = {
       return { ok: Math.abs(near.spdMul - 1.25) < 1e-9 && far.spdMul === 1 && Math.abs(dn - 80) < 0.01 && Math.abs(df - 100) < 0.01,
         got: `150 內：速度 ×${near.spdMul.toFixed(2)}、打 100 扣 ${dn.toFixed(0)}；500 外：速度 ×${far.spdMul.toFixed(2)}、打 100 扣 ${df.toFixed(0)}` };
     }],
+    ['敵人', '雙子獵艦', '一次出兩艘、共用一條血（打另一艘、燒另一艘都扣同一條）；兩艘都在隊形上時中間連著光束，碰到受傷；一艘衝鋒時光束斷掉', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = 'boss4'; Game.startCombat({ level: 6, wavesTotal: 1, elites: 0, boss: true });
+      Game.startWave(1); Game.spawnEnemy(Game.combat.pending.shift());
+      const S = Game.enemies.filter(e => e.type === 'boss4'), A = S.find(e => !e.share), B = S.find(e => e.share);
+      const two = S.length === 2 && A && B && B.share === A && A.pair === B.pair;
+      for (const e of S) { e.spawnT = 0; e.skillCd = 1e9; }
+      const h0 = A.hp; B.hurt(100, 0, 0); const shared = Math.abs(h0 - A.hp - 100) < 0.01 && B.hp === A.hp;
+      B.burnT = 1; B.burnDps = 60; B.burnAcc = 0; const h1 = A.hp; for (let i = 0; i < 30; i++) B.update(1 / 60, Game.player); B.burnT = 0;
+      const burned = h1 - A.hp > 20;
+      const p = Game.player; p.iframe = 0; p.hp = p.maxHp = 1000;
+      Game.time += 1 / 60; const L = Game.bossBeams().filter(x => !x.warn);  // 光束同一幀只算一次（照 Game.time）
+      [p.x, p.y] = [(A.x + B.x) / 2, (A.y + B.y) / 2]; const hp0 = p.hp; Game.beamHits(); const hit = hp0 - p.hp;
+      B.mode = 'charge'; Game.time += 1 / 60; const off = Game.bossBeams().length === 0; B.mode = 'chase';
+      Game.enemies = [];
+      return { ok: two && shared && burned && L.length === 1 && hit > 0 && off,
+        got: `${two ? '兩艘、另一艘接到主艦' : '不是兩艘（錯誤）'}；打另一艘 100：主艦${shared ? '也扣 100' : '沒扣（錯誤）'}；燒另一艘 0.5 秒主艦掉 ${Math.round(h1 - A.hp)}；光束 ${L.length} 條、站在中間扣 ${Math.round(hit)}；一艘衝鋒時光束${off ? '斷掉' : '還在（錯誤）'}` };
+    }],
+    ['敵人', '星環守門者', '核心在場地正中間不動、身邊 4 座砲塔；光束先停（最後 0.9 秒預警線）再開 5 秒（2 條、暴走 3 條，碰到受傷）；打掉環形砲塔就不再放它的環形彈', M => {
+      M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+      Game.node = { type: 'boss', L: 6, id: 'mc' }; Game.bossId = 'boss5'; Game.startCombat({ level: 6, wavesTotal: 1, elites: 0, boss: true });
+      Game.startWave(1); Game.spawnEnemy(Game.combat.pending.shift());
+      const W = CFG.WARDEN, C = Game.enemies.find(e => e.type === 'boss5'), T = Game.enemies.filter(e => e.t.turret);
+      const centered = C && Math.hypot(C.x - Arena.center.x, C.y - Arena.center.y) < 1 && T.length === 4 && T.every(k => k.core === C);
+      for (const e of Game.enemies) e.spawnT = 0;
+      C.skillCd = 1e9; const p = Game.player; p.iframe = 1e9;
+      const step = sec => { for (let i = 0; i < Math.round(sec * 60); i++) { Game.time += 1 / 60; for (const e of [...Game.enemies]) if (!e.dead) e.update(1 / 60, p); } };
+      const n0 = Game.bossBeams().length;
+      step(W.rest - W.warn + 0.1); const warn = Game.bossBeams(), warnOk = warn.length === 2 && warn.every(b => b.warn && !b.dmg);
+      step(W.warn); const on = Game.bossBeams(), onOk = on.length === 2 && on.every(b => !b.warn && b.dmg > 0);
+      const a0 = C.rot; step(1); const turned = C.rot - a0;
+      C.enraged = true; Game.time += 1 / 60; const rage3 = Game.bossBeams().length === 3; C.enraged = false;
+      // 砲塔跟著核心轉
+      const k0 = T[1], att = Math.abs(Math.hypot(k0.x - C.x, k0.y - C.y) - (C.r + W.turretR)) < 1;
+      // 打掉環形砲塔：之後不再有它的環形彈
+      const ringT = T.find(k => k.type === 'wt_ring'); ringT.hurt(1e9, 0, 0);
+      Game.eBullets = []; step(ENEMY_TYPES.wt_ring.turret.cd + 0.5);
+      const fromRing = Game.eBullets.filter(b => b.from === ENEMY_TYPES.wt_ring.name).length;
+      Game.enemies = []; Game.eBullets = []; Game.zones = [];
+      return { ok: centered && n0 === 0 && warnOk && onOk && Math.abs(turned - W.spin) < 0.01 && rage3 && att && fromRing === 0,
+        got: `${centered ? '核心在正中間、4 座砲塔' : '位置或砲塔不對（錯誤）'}；一開始光束 ${n0} 條；預警 ${warn.length} 條${warnOk ? '' : '（不對）'}；開 ${on.length} 條${onOk ? '' : '（不對）'}；1 秒轉 ${turned.toFixed(2)}；暴走 ${rage3 ? '3 條' : '不是 3 條（錯誤）'}；砲塔${att ? '貼著核心' : '沒貼著核心（錯誤）'}；拆掉環形砲塔後它的子彈 ${fromRing} 發` };
+    }],
     ['精英', '精英池', 'CFG.ELITE_POOL：第 1 星區只出 from ≤ 1 的，第 2 星區起全部都出；章節的 eliteW 再乘（第二章三艦編隊 ×2）；編隊不會抽到分裂、召喚、閃現', M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const P = CFG.ELITE_POOL, cnt = (sector, ch) => { Game.chapterId = ch; const c = {}; for (let i = 0; i < 2000; i++) { const k = Game.pickElite(sector); c[k] = (c[k] || 0) + 1; } return c; };

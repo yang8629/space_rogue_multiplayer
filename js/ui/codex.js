@@ -234,7 +234,7 @@ const Codex = {
     const xsCnt = cPts.map(p => `${p.s}-${p.L + 1}`);
     const hpTip = i => {
       const pt = pts[i], m = hpMul(pt.level, 1);
-      const B = ENEMY_TYPES[CFG.BOSS_ORDER[pt.s - 1]];
+      const B = ENEMY_TYPES[CHAPTERS[0].bosses[pt.s] || CFG.BOSS_ORDER[0]];  // 第一章各星區的王
       const list = pt.L === 6 ? [[B.name, B.hp]]
         : [['蟲群', ENEMY_TYPES.swarmer.hp], ['刺殼', ENEMY_TYPES.brute.hp], ['噴吐者', ENEMY_TYPES.spitter.hp], ['虛空獵手', ENEMY_TYPES.elite.hp]];
       return `<div style="margin-top:4px;color:var(--muted)">第 1 波實際血量</div>` +
@@ -308,7 +308,7 @@ const Codex = {
       ${R('遠征流程', `遠征分成章節，每章打一段星區（每個星區 7 層，最後一層是守關旗艦）。通關一章開下一章；後面的章節會換王、敵人更強，有的從比較後面的星區開始（開局先補晶體、插座和幾次三選一）：<br>
         ${CHAPTERS.map(c => `<b>${c.name}</b>：星區 ${c.sectors[0]}～${c.sectors[1]}，${Object.entries(c.bosses).map(([s, id]) => `星區 ${s} ${ENEMY_TYPES[id].name}`).join('、')}${c.hp !== 1 ? `，敵人血量 ×${c.hp}、受到的傷害 ×${c.dmg}` : ''}`).join('<br>')}<br>
         旗艦：<br>${bosses}<br>
-        打完一章可以選擇結束（存下通關紀錄），或帶著目前的電路繼續<b>無盡模式</b>：星區一直往下，敵人持續變強，旗艦從三隻裡隨機出現。<br>
+        打完一章可以選擇結束（存下通關紀錄），或帶著目前的電路繼續<b>無盡模式</b>：星區一直往下，敵人持續變強，旗艦從 ${CFG.BOSS_ORDER.length} 艘裡隨機出現。<br>
         每張航圖只有 1 個軍械台；精英戰之後至少有一條路通往維修站；維修站、補給站都不會連著出現。`)}
       ${R('精英', `精英戰、精英亂入從這幾種隨機抽（星區不夠的還不會出現；有的章節會偏向某幾種）：<br>
         ${Object.keys(CFG.ELITE_POOL).map(k => { const T = ENEMY_TYPES[k], from = CFG.ELITE_POOL[k].from, ch = CHAPTERS.filter(c => c.eliteW && c.eliteW[k] > 1).map(c => c.name.split('　')[0]);
