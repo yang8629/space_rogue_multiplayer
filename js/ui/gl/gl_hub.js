@@ -47,47 +47,31 @@ const HUB_TEX_MEAN = 0.75;
 const HUB_WALL = { inner: 0x3e4a70, outer: 0x1f2740, rivet: 0x55658f };
 // 外牆外面的裝甲裙板：厚度、四個方向的明暗（光從左上）
 const HUB_SKIRT = { w: 26, shade: { up: 0.14, left: 0.06, down: -0.3, right: -0.2 } };
-// 站體外觀（GLHub.hullStyle；使用者 10-21「外觀過於方正」，出幾版選，選定後刪掉其他）：裙板之外再加的東西；hull = hullSegs 的外牆段
-const HUB_HULL_STYLES = {
-  skirt() {},  // 只有裙板（凸角斜切）
-  fins(g, H, hull) {  // 散熱鰭片：長的外牆每 110 一片，往外突出（避開窗戶和兩端）
-    const S = HUB_SKIRT.w, F = 24;
-    for (const s of hull) {
-      const len = s.along === 'x' ? s.w : s.h;
-      if (len < 260) continue;
-      for (let k = 80; k < len - 80; k += 110) {
-        const [px, py] = s.along === 'x' ? [s.x + k, s.y + s.h / 2] : [s.x + s.w / 2, s.y + k];
-        if (H.onWindow(px, py, 30)) continue;
-        const r = { up: [px - 7, s.y - S - F, 14, F], down: [px - 7, s.y + s.h + S, 14, F], left: [s.x - S - F, py - 7, F, 14], right: [s.x + s.w + S, py - 7, F, 14] }[s.out];
-        g.rect(...r).fill(hubShade(HUB_WALL.outer, HUB_SKIRT.shade[s.out] + 0.08)).stroke({ width: 2.5, color: HUB_INK });
-      }
-    }
-  },
-  struct(g, H, hull) {  // 結構件：上排兩端凸角的天線、機庫左邊和軍械庫右邊的對接臂、下面兩翼的散熱板
-    const R = HUB.rooms, WT = HUB.WT, S = HUB_SKIRT.w, M = 0x3a4466;
-    for (const [r, sx] of [[R.lab, -1], [R.records, 1]]) {  // 天線：從凸角斜著伸出去，尖端一盞紅燈
-      if (!r) continue;
-      const x0 = sx < 0 ? r.x - WT - S * 0.5 : r.x + r.w + WT + S * 0.5, y0 = r.y - WT - S * 0.5, x1 = x0 + sx * 60, y1 = y0 - 60;
-      H.hexPad(g, x0, y0, 14, M, 6);
-      g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 7, color: HUB_INK }); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 3.5, color: 0x6a7896 });
-      g.circle(x1, y1, 5).fill({ color: 0xff5d73, alpha: 1 }).stroke({ width: 2, color: HUB_INK });
-    }
-    for (const [r, sx] of [[R.hangar, -1], [R.armory, 1]]) {  // 對接臂：牆中間往外伸一支，末端 U 形夾具
-      if (!r) continue;
-      const y = r.y + r.h / 2, xw = sx < 0 ? r.x - WT - S : r.x + r.w + WT + S, x1 = xw + sx * 70;
-      g.rect(Math.min(xw, x1), y - 12, 70, 24).fill(M).stroke({ width: 3, color: HUB_INK });
-      g.rect(Math.min(xw, x1), y - 12, 70, 6).fill(hubShade(M, 0.15));
-      for (const sy of [-1, 1]) g.rect(sx < 0 ? x1 - 22 : x1, y + sy * 20 - 6, 22, 12).fill(hubShade(M, -0.1)).stroke({ width: 2.5, color: HUB_INK });
-      g.rect(sx < 0 ? x1 - 4 : x1, y - 26, 4, 52).fill(M).stroke({ width: 2, color: HUB_INK });
-      g.rect(sx < 0 ? x1 - 18 : x1 + 14, y - 3, 4, 6).fill({ color: 0x4cc9f0, alpha: 1 });
-    }
-    for (const r of [R.hangar, R.armory]) {  // 散熱板：下牆外面一排薄板
-      if (!r) continue;
-      const yb = r.y + r.h + WT + S;
-      for (let x = r.x + 60; x < r.x + r.w - 60; x += 22) g.rect(x, yb, 12, 34).fill(hubShade(M, -0.05)).stroke({ width: 2, color: HUB_INK });
-    }
-  },
-};
+// 站體外面的結構件（使用者 10-21 選的外觀）：上排兩端凸角的天線、機庫左邊和軍械庫右邊的對接臂、下面兩翼的散熱板
+function hubHullParts(g, H) {
+  const R = HUB.rooms, WT = HUB.WT, S = HUB_SKIRT.w, M = 0x3a4466;
+  for (const [r, sx] of [[R.lab, -1], [R.records, 1]]) {  // 天線：從凸角斜著伸出去，尖端一盞紅燈
+    if (!r) continue;
+    const x0 = sx < 0 ? r.x - WT - S * 0.5 : r.x + r.w + WT + S * 0.5, y0 = r.y - WT - S * 0.5, x1 = x0 + sx * 60, y1 = y0 - 60;
+    H.hexPad(g, x0, y0, 14, M, 6);
+    g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 7, color: HUB_INK }); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 3.5, color: 0x6a7896 });
+    g.circle(x1, y1, 5).fill({ color: 0xff5d73, alpha: 1 }).stroke({ width: 2, color: HUB_INK });
+  }
+  for (const [r, sx] of [[R.hangar, -1], [R.armory, 1]]) {  // 對接臂：牆中間往外伸一支，末端 U 形夾具
+    if (!r) continue;
+    const y = r.y + r.h / 2, xw = sx < 0 ? r.x - WT - S : r.x + r.w + WT + S, x1 = xw + sx * 70;
+    g.rect(Math.min(xw, x1), y - 12, 70, 24).fill(M).stroke({ width: 3, color: HUB_INK });
+    g.rect(Math.min(xw, x1), y - 12, 70, 6).fill(hubShade(M, 0.15));
+    for (const sy of [-1, 1]) g.rect(sx < 0 ? x1 - 22 : x1, y + sy * 20 - 6, 22, 12).fill(hubShade(M, -0.1)).stroke({ width: 2.5, color: HUB_INK });
+    g.rect(sx < 0 ? x1 - 4 : x1, y - 26, 4, 52).fill(M).stroke({ width: 2, color: HUB_INK });
+    g.rect(sx < 0 ? x1 - 18 : x1 + 14, y - 3, 4, 6).fill({ color: 0x4cc9f0, alpha: 1 });
+  }
+  for (const r of [R.hangar, R.armory]) {  // 散熱板：下牆外面一排薄板
+    if (!r) continue;
+    const yb = r.y + r.h + WT + S;
+    for (let x = r.x + 60; x < r.x + r.w - 60; x += 22) g.rect(x, yb, 12, 34).fill(hubShade(M, -0.05)).stroke({ width: 2, color: HUB_INK });
+  }
+}
 const HUB_TEX_SIZE = { wall: 320, metal: 256 };
 const HUB_FLOOR_TEX = 8;  // 地板貼圖一張 = 8 × 8 塊板子（HUB_FLOOR 的 tile）
 
@@ -188,7 +172,7 @@ const GLHub = {
       const e = { up: [s.x, s.y, s.x + s.w, s.y], down: [s.x, s.y + s.h, s.x + s.w, s.y + s.h], left: [s.x, s.y, s.x, s.y + s.h], right: [s.x + s.w, s.y, s.x + s.w, s.y + s.h] }[s.out];
       line(...e, 2);
     });
-    (HUB_HULL_STYLES[this.hullStyle] || HUB_HULL_STYLES.skirt)(g, this, hull);
+    hubHullParts(g, this);
     // 牆的內緣：沿著每間房的地板一圈斜面（光從左上：朝上、朝左的面亮，朝下、朝右的面暗），四個角斜切接起來
     const BV = 7;
     for (const r of rooms) {
@@ -220,7 +204,6 @@ const GLHub = {
     }
     this.built = true;
   },
-  hullStyle: 'struct',
   // 一個開口＝隔艙門：開口在牆中間收窄的斜切門框、地上分節的板子、門框上兩盞小燈（發光的用 { color, alpha }：不會被換成金屬貼圖）
   //   門的座標用 (u, v)：u 沿著開口寬（0～L）、v 穿過牆（0～T；開口兩邊各伸進房間 30，牆在 v = W0～W1）
   door(g, d) {
