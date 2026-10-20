@@ -2,6 +2,8 @@
 //   調色：node perf/teximg.mjs adjust <輸入> <輸出.png> [亮度 1] [對比 1] [飽和度 1]   （例如 0.45 0.6 0.8 = 變暗、降對比、降飽和）
 //   拼圖：node perf/teximg.mjs sheet <輸出.png> <圖1> <圖2> …   （每張縮成 512，排成一列或 2 列，左上角寫編號：看多張圖只花一張的 token）
 //   接縫：node perf/teximg.mjs tile <輸入> <輸出.png>          （2×2 重複鋪，看接縫明不明顯）
+//   疊回：node perf/teximg.mjs delta <AI 圖> <有花紋的截圖> <沒花紋的截圖> <輸出.png>
+//     兩張截圖的差（＝程式畫的花紋，例如大廳紋章）加到 AI 圖上：精確的幾何用程式畫的，質感用 AI 的（三張要同樣大小）
 //   套色：node perf/teximg.mjs tint <輸入> <輸出.png> <底色 10162a> [紋路強度 0.5]
 //     只留 AI 圖的明暗紋路、顏色換成遊戲的底色：灰階 → 每點 = 底色 ×（1 + 強度 ×（亮度 ÷ 平均亮度 − 1））
 //     平均剛好等於底色（跟 gl_hub.js 的 HUB_FLOOR 同一個顏色），強度 0 = 純底色、1 = 原圖的明暗差
@@ -43,6 +45,18 @@ if (mode === 'adjust') {
     for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) g.drawImage(i, x * S, y * S, S, S);
     return c.toDataURL('image/png');
   }, url(inp), load);
+} else if (mode === 'delta') {
+  const [ai, withP, noP, o] = a; out = o;
+  png = await run(async (s0, s1, s2, L) => {
+    const ld = eval(L), [A, P, N] = [await ld(s0), await ld(s1), await ld(s2)], W = A.width, H = A.height;
+    const px = img => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.drawImage(img, 0, 0, W, H); return [c, g, g.getImageData(0, 0, W, H)]; };
+    const [c, g, DA] = px(A), DP = px(P)[2].data, DN = px(N)[2].data, d = DA.data;
+    for (let i = 0; i < d.length; i += 4) for (let ch = 0; ch < 3; ch++) {
+      const k = DP[i + ch] - DN[i + ch];
+      if (Math.abs(k) > 2) d[i + ch] = Math.max(0, Math.min(255, d[i + ch] + k));  // 差 2 以內當成一樣（光暈的小誤差）
+    }
+    g.putImageData(DA, 0, 0); return c.toDataURL('image/png');
+  }, url(ai), url(withP), url(noP), load);
 } else if (mode === 'tint') {
   const [inp, o, hex = '10162a', k = '0.5'] = a; out = o;
   png = await run(async (src, hex, k, L) => {
