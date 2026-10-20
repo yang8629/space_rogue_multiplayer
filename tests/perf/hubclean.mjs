@@ -1,6 +1,6 @@
 // 基地房間的「乾淨」截圖：只留 WebGL 場景（藏起 2D 畫布的文字、DOM 介面），給 AI 以圖生圖當底圖用
 //   用法：node perf/hubclean.mjs <房間 hall> <輸出.png> [寬 1344] [高 768] [--nopattern]   （SDXL 適合的尺寸：1344×768、1024×1024）
-//   --nopattern：不畫那間房的地板花紋（大廳紋章）：AI 畫不準正圓、對稱，紋章之後用程式畫的疊回去（teximg.mjs delta）
+//   --nopattern：不畫那間房的地板花紋（電路紋、地毯）：AI 畫不準精確的幾何，花紋之後用程式畫的疊回去（teximg.mjs delta）
 import { GAME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const NOPAT = process.argv.includes('--nopattern');

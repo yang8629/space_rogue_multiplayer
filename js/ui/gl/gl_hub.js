@@ -28,9 +28,9 @@ const CONSOLE_ICON = {
     g.rect(x - 3 * k, y + 2 * k, 6 * k, 8 * k).fill({ color: c, alpha: a }); g.rect(x - 10 * k, y + 10 * k, 20 * k, 4 * k).fill({ color: c, alpha: a });
   },
 };
-// 各房間的地板：底色、板子大小、花紋（grate 格柵、trace 電路紋、ring 大廳中間的紋章、carpet 觀景台中間一塊）
+// 各房間的地板：底色、板子大小、花紋（grate 格柵（沒有貼圖時）、trace 電路紋、carpet 觀景台中間一塊）
 const HUB_FLOOR = {
-  hall: { base: 0x121931, tile: 80, pattern: 'ring' },
+  hall: { base: 0x121931, tile: 80, pattern: null },
   bay: { base: 0x10162a, tile: 60, pattern: 'grate' },
   hangar: { base: 0x10162a, tile: 60, pattern: 'grate' },
   armory: { base: 0x1a1624, tile: 80, pattern: null },
@@ -38,6 +38,13 @@ const HUB_FLOOR = {
   deck: { base: 0x141a30, tile: 80, pattern: 'carpet' },
   records: { base: 0x1b1914, tile: 80, pattern: null },
 };
+
+// 貼圖（assets/hub_tex.js 的 HUB_TEX：AI 生的無縫灰階貼圖，tests/perf/teximg.mjs pack 產生；設計見 docs/美術架構.md）
+//   畫法：貼圖 × 原本的顏色（染色），所以形狀、切面明暗照舊，只多了質感；貼圖平均亮度 HUB_TEX_MEAN，顏色先除掉它（平均起來跟原本一樣亮）
+//   一張貼圖在世界裡鋪多大：wall 牆、metal 物件（停機位、武器架、操作台、發射台、終端機、擺設）；地板照房間的板子大小 × HUB_FLOOR_TEX
+const HUB_TEX_MEAN = 0.75;
+const HUB_TEX_SIZE = { wall: 320, metal: 256 };
+const HUB_FLOOR_TEX = 8;  // 地板貼圖一張 = 8 × 8 塊板子（HUB_FLOOR 的 tile）
 
 // 轉了角度的矩形（中心 cx, cy、寬 w、高 h、轉 a）→ poly 用的點
 const hubRect = (cx, cy, w, h, a) => { const c = Math.cos(a), n = Math.sin(a), out = []; for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) out.push(cx + (u * w * c - v * h * n) / 2, cy + (u * w * n + v * h * c) / 2); return out; };
@@ -51,15 +58,51 @@ const GLHub = {
     this.gAnim = new PIXI.Graphics(); L.hub.addChild(this.gAnim);   // 會動的：光圈、操作台螢幕、導管光點、燈、無人機、發射台的箭頭
     this.pG = GLR.pool('hubGlow', L.hub, () => new PIXI.Sprite());  // 加法發光
     this.built = false;
+    this.loadTex();
   },
   glow(x, y, r, col, a) { return GLActors.glowAt(this.pG, x, y, r, col, a); },
+
+  // ---------- 貼圖 ----------
+  tex: {},
+  loadTex() {  // 沒有 HUB_TEX（測試、還沒載入）就照原本的平塗；每張讀好就重畫一次
+    const T = globalThis.HUB_TEX;
+    if (!T) return;
+    for (const [k, src] of Object.entries(T)) {
+      const img = new Image();
+      img.onload = () => {
+        const s = new PIXI.ImageSource({ resource: img, addressMode: 'repeat', autoGenerateMipmaps: true });  // 重複鋪；縮小時用 mipmap（不閃）
+        this.tex[k] = new PIXI.Texture({ source: s }); this.built = false;
+      };
+      img.src = src;
+    }
+  },
+  // 貼圖 × 顏色的填法（世界座標對齊：相鄰的東西花紋接得起來）；size = 一張在世界裡多大；沒有這張貼圖就回傳原本的顏色
+  texFill(color, key, size, ox = 0, oy = 0) {
+    const T = this.tex[key];
+    if (!T) return color;
+    const ch = s => Math.min(255, Math.round(((color >> s) & 255) / HUB_TEX_MEAN));
+    return { texture: T, color: (ch(16) << 16) | (ch(8) << 8) | ch(0), textureSpace: 'global', matrix: new PIXI.Matrix().scale(size / T.width, size / T.height).translate(ox, oy) };
+  },
+  // 靜態圖層用的畫筆：fill(數字顏色) 自動換成 this.texKind 那張貼圖 × 顏色；半透明（{ color, alpha }）、貼圖填法照原樣
+  //   所以牆、物件、擺設的畫法不用一個一個改；texKind = null 時不換
+  texPen(g) {
+    const pen = new Proxy(g, {
+      get: (t, k) => {
+        if (k === 'fill') return st => { t.fill(typeof st === 'number' && this.texKind ? this.texFill(st, this.texKind, HUB_TEX_SIZE[this.texKind]) : st); return pen; };
+        const v = t[k];
+        return typeof v === 'function' ? (...a) => { const r = v.apply(t, a); return r === t ? pen : r; } : v;
+      },
+    });
+    return pen;
+  },
 
   // ---------- 不會動的部分：第一次畫的時候畫一次（配置換了把 built 設回 false） ----------
   padLamps: new Map(),  // 停機位的燈座位置（shipPad 算好，draw 每幀點亮）
   build() {
-    const g = this.gBase, WT = HUB.WT, R = HUB.rooms, rooms = Object.values(R);
+    const g = this.texPen(this.gBase), WT = HUB.WT, R = HUB.rooms, rooms = Object.values(R);
     g.clear();
     // 1) 牆：每個房間外面一圈厚金屬（上、左面亮，下、右面暗）；房間之間的牆兩邊各畫一次剛好疊在一起
+    this.texKind = 'wall';
     for (const r of rooms) {
       const x = r.x - WT, y = r.y - WT, w = r.w + 2 * WT, h = r.h + 2 * WT, m = 0x3a4870;
       g.rect(x, y, w, h).fill(m).stroke({ width: 3, color: HUB_INK });
@@ -70,7 +113,9 @@ const GLHub = {
       for (let k = x + 30; k < x + w - 20; k += 90) g.rect(k, y + 14, 16, 7).fill(0x55658f).stroke({ width: 2, color: HUB_INK });  // 上牆的鉚釘
     }
     // 2) 地板：每間房自己的樣子；開口的地板接起兩邊（蓋掉那一段牆），兩側各一條門框
+    this.texKind = null;  // 地板用自己那張貼圖（floorTiles）
     for (const r of rooms) this.floor(g, r, HUB_FLOOR[r.id] || HUB_FLOOR.hall);
+    this.texKind = 'metal';  // 之後的門框、擺設、停機位、武器架、操作台、發射台、終端機
     for (const d of HUB.doors) {
       g.rect(d.x, d.y, d.w, d.h).fill(0x161d36);
       const vert = d.w > d.h;  // 上下相通的開口（寬 > 高）
@@ -100,7 +145,8 @@ const GLHub = {
   floor(g, r, F) { this.floorTiles(g, r, F); this.floorPattern(g, r, F); },
   // 板子：亮度差一點、左上亮右下暗、板縫描邊色
   floorTiles(g, r, F) {
-    const B = F.tile;
+    const B = F.tile, T = 'floor_' + r.id;
+    if (this.tex[T]) { g.rect(r.x, r.y, r.w, r.h).fill(this.texFill(F.base, T, B * HUB_FLOOR_TEX, r.x, r.y)); return; }  // 貼圖從房間左上角開始鋪
     for (let x = r.x; x < r.x + r.w; x += B) for (let y = r.y; y < r.y + r.h; y += B) {
       const w = Math.min(B, r.x + r.w - x), h = Math.min(B, r.y + r.h - y), base = hubShade(F.base, (seeded(x * 0.13 + y * 0.71) - 0.5) * 0.08);
       g.rect(x, y, w, h).fill(base);
@@ -110,7 +156,7 @@ const GLHub = {
       g.rect(x, y, w, h).stroke({ width: 1.5, color: HUB_INK });
     }
   },
-  // 花紋：電路紋（晶片實驗室）、地毯（觀景台）、大廳中間的紋章
+  // 花紋：電路紋（晶片實驗室）、地毯（觀景台）
   floorPattern(g, r, F) {
     const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     if (F.pattern === 'trace') {  // 電路紋：直角轉彎的細線＋端點
@@ -122,13 +168,6 @@ const GLHub = {
       }
     }
     if (F.pattern === 'carpet') g.rect(cx - r.w * 0.3, cy - r.h * 0.18, r.w * 0.6, r.h * 0.5).fill({ color: 0x2a3060, alpha: 0.45 }).stroke({ width: 2, color: 0x4a5a86, alpha: 0.5 });
-    if (F.pattern === 'ring') {  // 大廳：中間一塊圓形紋章（外圈＋放射的線＋八角內盤），出生點就在正中間
-      g.circle(cx, cy, 240).stroke({ width: 3, color: 0x2a3658, alpha: 0.8 }); g.circle(cx, cy, 300).stroke({ width: 2, color: 0x2a3658, alpha: 0.5 });
-      for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; g.moveTo(cx + Math.cos(a) * 245, cy + Math.sin(a) * 245).lineTo(cx + Math.cos(a) * 295, cy + Math.sin(a) * 295).stroke({ width: 2, color: 0x2a3658, alpha: 0.6 }); }
-      g.circle(cx, cy, 150).fill(hubShade(F.base, 0.07)).stroke({ width: 3, color: 0x2a3658 });
-      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; g.poly([cx + Math.cos(a) * 140, cy + Math.sin(a) * 140, cx + Math.cos(a + 0.12) * 100, cy + Math.sin(a + 0.12) * 100, cx + Math.cos(a - 0.12) * 100, cy + Math.sin(a - 0.12) * 100]).fill({ color: 0x4cc9f0, alpha: 0.18 }); }  // 指向四個方向的箭頭（往各區）
-      g.circle(cx, cy, 70).stroke({ width: 3, color: 0x4cc9f0, alpha: 0.35 });
-    }
   },
   // 發射台＋跑道一體：八角盤面（光從左上的切面）、最下面那條邊撐開到跑道寬，接著直直往下到發射口；
   //   外面一圈金屬邊（描邊—金屬—描邊）連續繞過盤面和跑道兩側，跑道中間一條凹下去的滑軌（箭頭在 gAnim 畫）
@@ -221,7 +260,7 @@ const GLHub = {
       g.rect(x0, y0, w, 64).fill(0xc9961f).stroke({ width: 2, color: HUB_INK });
       for (let y = y0 + 6; y < yb - 4; y += 12) g.poly([x0, y + 6, x0 + w, y - 2, x0 + w, y + 3, x0, y + 11]).fill({ color: HUB_INK, alpha: 0.85 });
     }
-    // 大廳：紋章四個斜角的導航燈柱（底座在這裡畫，燈每幀亮）；玩家是飛船，不擺人用的椅子、盆栽
+    // 大廳：四個斜角的導航燈柱（底座在這裡畫，燈每幀亮）；玩家是飛船，不擺人用的椅子、盆栽
     const hx0 = hall.x + hall.w / 2, hy0 = hall.y + hall.h / 2;
     D.pylons = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sy]) => [hx0 + sx * 200, hy0 + sy * 175]);
     for (const [x, y] of D.pylons) { this.hexPad(g, x, y, 17, 0x3a4466); g.circle(x, y, 6).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); }

@@ -1,5 +1,5 @@
 // 基地房間截圖：飛船停在指定房間，拍一張 → art_lab/screenshots/基地_<房間>.png
-//   用法：node perf/hubroomshot.mjs [機庫中間|戰績室|觀景台]（不給 = 全部）
+//   用法：node perf/hubroomshot.mjs [機庫中間|戰績室|觀景台|中央大廳|軍械庫|晶片實驗室|發射甲板]（不給 = 全部）
 import { GAME, SHOTS } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
@@ -11,6 +11,10 @@ const SPOTS = {
   機庫中間: 'const h = HUB.rooms.hangar; return [h.cx || h.x + h.w / 2, (h.cy || h.y + h.h / 2) + 130];',
   戰績室: 'const r = HUB.rooms.records; return [r.x + r.w / 2, r.y + r.h - 60];',
   觀景台: 'const r = HUB.rooms.deck; return [r.x + r.w / 2, r.y + r.h - 60];',
+  中央大廳: 'const r = HUB.rooms.hall; return [r.x + r.w / 2, r.y + r.h / 2];',
+  軍械庫: 'const r = HUB.rooms.armory; return [r.x + r.w / 2, r.y + r.h / 2];',
+  晶片實驗室: 'const r = HUB.rooms.lab; return [r.x + r.w / 2, r.y + r.h - 60];',
+  發射甲板: 'const r = HUB.rooms.bay; return [r.x + r.w / 2, r.y + r.h / 2];',
 };
 const want = process.argv[2] ? [process.argv[2]] : Object.keys(SPOTS);
 for (const name of want) {

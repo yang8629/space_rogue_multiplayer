@@ -101,7 +101,7 @@ for (const t of TESTS) {
 // ---- 3. 要上傳的內容（和 GitHub 上的差異＋提交訊息）沒有私人資訊 ----
 try { git('fetch', '-q', 'origin'); } catch (e) { console.log('（無法連線 GitHub，用本機記錄的 origin/main 比較）'); }
 git('add', '-A');
-const diff = git('diff', '--cached', 'origin/main', '--', '.', ':(exclude)assets/atlas_data.js', ':(exclude)assets/*.png');  // 圖集（自動產生的圖片編碼）不用掃
+const diff = git('diff', '--cached', 'origin/main', '--', '.', ':(exclude)assets/atlas_data.js', ':(exclude)assets/hub_tex.js', ':(exclude)assets/*.png');  // 圖集、基地貼圖（自動產生的圖片編碼）不用掃
 const added = diff.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++'));
 const msgs = git('log', 'origin/main..HEAD', '--format=%B').split('\n');
 const PRIVATE = [
