@@ -7,9 +7,9 @@
 //   無縫：node perf/teximg.mjs seam <輸入> <錯開的圖.png> <遮罩.png> [十字帶寬 0.16]
 //     上下左右各錯開一半（四邊的接縫移到正中間變成十字）＋一張遮罩（白 = 十字帶，邊緣漸層）；
 //     再用 F:/ComfyUI/gen.js --init=<錯開的圖> --mask=<遮罩> 只重畫十字帶 → 四邊是原圖中間本來就連續的部分，重複鋪看不到邊
-//   打包：node perf/teximg.mjs pack <輸出.js> 名字=圖:大小:紋路強度 …   （例：floor_hall=F:/x.png:1024:0.6）
-//     每張轉灰階、平均亮度 = 0.75（gl_hub.js 的 HUB_TEX_MEAN，遊戲裡再乘上原本的顏色）、縮到大小、JPG
-//     → window.HUB_TEX = { 名字: 'data:image/jpeg;base64,…' }（直接開 index.html 也讀得到，不用伺服器）
+//   打包：node perf/teximg.mjs pack <輸出.js> <PNG 資料夾> 名字=圖:大小:紋路強度 …   （例：floor_hall=F:/x.png:1024:0.35）
+//     每張轉灰階、平均亮度 = 0.75（gl_hub.js 的 HUB_TEX_MEAN，遊戲裡再乘上原本的顏色）、縮到大小、存成 PNG（<PNG 資料夾>/<名字>.png）
+//     → 同樣的 PNG 包進 window.HUB_TEX = { 名字: 'data:image/png;base64,…' }（直接開 index.html 時 WebGL 不能讀本機圖片檔，要靠這個；跟 atlas_data.js 一樣）
 //   套色：node perf/teximg.mjs tint <輸入> <輸出.png> <底色 10162a> [紋路強度 0.5]
 //     只留 AI 圖的明暗紋路、顏色換成遊戲的底色：灰階 → 每點 = 底色 ×（1 + 強度 ×（亮度 ÷ 平均亮度 − 1））
 //     平均剛好等於底色（跟 gl_hub.js 的 HUB_FLOOR 同一個顏色），強度 0 = 純底色、1 = 原圖的明暗差
@@ -52,20 +52,22 @@ if (mode === 'adjust') {
     return c.toDataURL('image/png');
   }, url(inp), load);
 } else if (mode === 'pack') {
-  const [o, ...items] = a, MEAN = 0.75, Q = 0.86, outTex = {};
+  const [o, dir, ...items] = a, MEAN = 0.75, outTex = {};
+  fs.mkdirSync(dir, { recursive: true });
   for (const it of items) {
     const [name, rest] = [it.slice(0, it.indexOf('=')), it.slice(it.indexOf('=') + 1)];
     const m = rest.match(/^(.*):(\d+):([\d.]+)$/);
     if (!name || !m) { console.log('看不懂：' + it); await b.close(); process.exit(1); }
-    outTex[name] = await run(async (src, S, k, MEAN, Q, L) => {
+    outTex[name] = await run(async (src, S, k, MEAN, L) => {
       const i = await eval(L)(src), c = document.createElement('canvas'); c.width = c.height = S;
       const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(i, 0, 0, S, S);
       const D = g.getImageData(0, 0, S, S), d = D.data, n = S * S, lum = new Float32Array(n); let sum = 0;
       for (let p = 0; p < n; p++) { lum[p] = 0.299 * d[p * 4] + 0.587 * d[p * 4 + 1] + 0.114 * d[p * 4 + 2]; sum += lum[p]; }
       const avg = sum / n || 1;
       for (let p = 0; p < n; p++) { const v = Math.max(0, Math.min(255, 255 * MEAN * (1 + k * (lum[p] / avg - 1)))); d[p * 4] = d[p * 4 + 1] = d[p * 4 + 2] = v; d[p * 4 + 3] = 255; }
-      g.putImageData(D, 0, 0); return c.toDataURL('image/jpeg', Q);
-    }, url(m[1]), +m[2], +m[3], MEAN, Q, load);
+      g.putImageData(D, 0, 0); return c.toDataURL('image/png');
+    }, url(m[1]), +m[2], +m[3], MEAN, load);
+    fs.writeFileSync(`${dir}/${name}.png`, Buffer.from(outTex[name].split(',')[1], 'base64'));
     console.log(name, Math.round(outTex[name].length / 1024) + ' KB');
   }
   fs.writeFileSync(o, `// 自動產生（tests/perf/teximg.mjs pack），不要手改：基地的貼圖（AI 生的無縫灰階貼圖，遊戲裡乘上原本的顏色；見 js/ui/gl/gl_hub.js、docs/美術架構.md）\nwindow.HUB_TEX = ${JSON.stringify(outTex)};\n`);
