@@ -45,68 +45,51 @@ const HUB_FLOOR = {
 const HUB_TEX_MEAN = 0.75;
 // 牆的顏色：內牆（房間之間的隔間）、外牆（船殼）、外牆上的鉚釘
 const HUB_WALL = { inner: 0x3e4a70, outer: 0x1f2740, rivet: 0x55658f };
+// 外牆外面的裝甲裙板：厚度、四個方向的明暗（光從左上）
+const HUB_SKIRT = { w: 26, shade: { up: 0.14, left: 0.06, down: -0.3, right: -0.2 } };
+// 站體外觀（GLHub.hullStyle；使用者 10-21「外觀過於方正」，出幾版選，選定後刪掉其他）：裙板之外再加的東西；hull = hullSegs 的外牆段
+const HUB_HULL_STYLES = {
+  skirt() {},  // 只有裙板（凸角斜切）
+  fins(g, H, hull) {  // 散熱鰭片：長的外牆每 110 一片，往外突出（避開窗戶和兩端）
+    const S = HUB_SKIRT.w, F = 24;
+    for (const s of hull) {
+      const len = s.along === 'x' ? s.w : s.h;
+      if (len < 260) continue;
+      for (let k = 80; k < len - 80; k += 110) {
+        const [px, py] = s.along === 'x' ? [s.x + k, s.y + s.h / 2] : [s.x + s.w / 2, s.y + k];
+        if (H.onWindow(px, py, 30)) continue;
+        const r = { up: [px - 7, s.y - S - F, 14, F], down: [px - 7, s.y + s.h + S, 14, F], left: [s.x - S - F, py - 7, F, 14], right: [s.x + s.w + S, py - 7, F, 14] }[s.out];
+        g.rect(...r).fill(hubShade(HUB_WALL.outer, HUB_SKIRT.shade[s.out] + 0.08)).stroke({ width: 2.5, color: HUB_INK });
+      }
+    }
+  },
+  struct(g, H, hull) {  // 結構件：上排兩端凸角的天線、機庫左邊和軍械庫右邊的對接臂、下面兩翼的散熱板
+    const R = HUB.rooms, WT = HUB.WT, S = HUB_SKIRT.w, M = 0x3a4466;
+    for (const [r, sx] of [[R.lab, -1], [R.records, 1]]) {  // 天線：從凸角斜著伸出去，尖端一盞紅燈
+      if (!r) continue;
+      const x0 = sx < 0 ? r.x - WT - S * 0.5 : r.x + r.w + WT + S * 0.5, y0 = r.y - WT - S * 0.5, x1 = x0 + sx * 60, y1 = y0 - 60;
+      H.hexPad(g, x0, y0, 14, M, 6);
+      g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 7, color: HUB_INK }); g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 3.5, color: 0x6a7896 });
+      g.circle(x1, y1, 5).fill({ color: 0xff5d73, alpha: 1 }).stroke({ width: 2, color: HUB_INK });
+    }
+    for (const [r, sx] of [[R.hangar, -1], [R.armory, 1]]) {  // 對接臂：牆中間往外伸一支，末端 U 形夾具
+      if (!r) continue;
+      const y = r.y + r.h / 2, xw = sx < 0 ? r.x - WT - S : r.x + r.w + WT + S, x1 = xw + sx * 70;
+      g.rect(Math.min(xw, x1), y - 12, 70, 24).fill(M).stroke({ width: 3, color: HUB_INK });
+      g.rect(Math.min(xw, x1), y - 12, 70, 6).fill(hubShade(M, 0.15));
+      for (const sy of [-1, 1]) g.rect(sx < 0 ? x1 - 22 : x1, y + sy * 20 - 6, 22, 12).fill(hubShade(M, -0.1)).stroke({ width: 2.5, color: HUB_INK });
+      g.rect(sx < 0 ? x1 - 4 : x1, y - 26, 4, 52).fill(M).stroke({ width: 2, color: HUB_INK });
+      g.rect(sx < 0 ? x1 - 18 : x1 + 14, y - 3, 4, 6).fill({ color: 0x4cc9f0, alpha: 1 });
+    }
+    for (const r of [R.hangar, R.armory]) {  // 散熱板：下牆外面一排薄板
+      if (!r) continue;
+      const yb = r.y + r.h + WT + S;
+      for (let x = r.x + 60; x < r.x + r.w - 60; x += 22) g.rect(x, yb, 12, 34).fill(hubShade(M, -0.05)).stroke({ width: 2, color: HUB_INK });
+    }
+  },
+};
 const HUB_TEX_SIZE = { wall: 320, metal: 256 };
 const HUB_FLOOR_TEX = 8;  // 地板貼圖一張 = 8 × 8 塊板子（HUB_FLOOR 的 tile）
-
-// 門的風格（GLHub.doorStyle；使用者 10-21 要「出幾版給我選」，選定後刪掉其他）
-//   參數：poly([[u, v]…])、rect(u, v, 沿開口寬, 穿過牆)、L 開口寬、T 開口長、牆在 v = W0～W1；發光的部分用 { color, alpha }（不會被換成金屬貼圖）
-const HUB_DOOR_STYLES = {
-  rail({ rect, L, T }) {  // 細門框：地上一條條橫紋、兩側細金屬條
-    for (let k = 0; k < L; k += 20) rect(k, 4, 10, T - 8).fill({ color: 0x2a3658, alpha: 0.5 });
-    for (const u of [-2, L - 6]) rect(u, 28, 8, T - 56).fill(0x55658f).stroke({ width: 2, color: HUB_INK });
-  },
-  blast({ poly, rect, L, W0, W1 }) {  // 防爆門：門檻黃黑斜紋、兩側厚重的門柱（裡面收著門板的縫）
-    rect(0, W0, L, W1 - W0).fill(0xc9961f);
-    for (let u = -16; u < L; u += 18) poly([[u, W0], [u + 9, W0], [u + 9 + (W1 - W0) * 0.4, W1], [u + (W1 - W0) * 0.4, W1]]).fill({ color: HUB_INK, alpha: 0.85 });
-    for (const [a, b] of [[-12, 18], [L - 18, L + 12]]) {
-      rect(a, W0 - 10, b - a, W1 - W0 + 20).fill(0x3a4466).stroke({ width: 3, color: HUB_INK });
-      rect(a + 4, W0 - 6, b - a - 8, 6).fill(hubShade(0x3a4466, 0.15));  // 上緣亮面
-      rect(a < 0 ? b - 6 : a + 2, W0 - 4, 4, W1 - W0 + 8).fill(0x0a0f22);  // 門板收進去的縫
-    }
-  },
-  energy({ rect, L, W0, W1 }) {  // 能量門：細門柱＋發射器、門檻兩道青色光線、中間淡淡的力場
-    rect(0, W0, L, W1 - W0).fill({ color: 0x4cc9f0, alpha: 0.07 });
-    for (const v of [W0 + 3, W1 - 6]) rect(0, v, L, 3).fill({ color: 0x4cc9f0, alpha: 0.9 });
-    for (const a of [-6, L - 8]) {
-      rect(a, W0 - 6, 14, W1 - W0 + 12).fill(0x55658f).stroke({ width: 2, color: HUB_INK });
-      rect(a + 3, (W0 + W1) / 2 - 6, 8, 12).fill(0x0a0f22);
-      rect(a + 5, (W0 + W1) / 2 - 3, 4, 6).fill({ color: 0x4cc9f0, alpha: 1 });
-    }
-  },
-  bulkhead({ poly, rect, L, T, W0, W1 }) {  // 隔艙門：開口在牆中間收窄的斜切門框、地上分節的板子、門框上兩盞小燈
-    for (let v = 6; v < T - 4; v += 22) rect(2, v, L - 4, 2).fill({ color: HUB_INK, alpha: 0.5 });
-    for (const sg of [1, -1]) {
-      const U = u => sg > 0 ? u : L - u;
-      poly([[U(-8), W0 - 12], [U(12), W0 - 12], [U(28), W0 + 6], [U(28), W1 - 6], [U(12), W1 + 12], [U(-8), W1 + 12]]).fill(0x3a4466).stroke({ width: 3, color: HUB_INK });
-      poly([[U(12), W0 - 12], [U(28), W0 + 6], [U(22), W0 + 8], [U(8), W0 - 6]]).fill(hubShade(0x3a4466, 0.18));  // 斜切面（朝上的亮）
-      rect(sg > 0 ? 8 : L - 14, (W0 + W1) / 2 - 3, 6, 6).fill({ color: 0x4cc9f0, alpha: 1 });
-    }
-  },
-};
-// 大廳中間的擺設（GLHub.centerStyle；紋章拿掉後「感覺少了點什麼」，使用者 10-21 要出幾版選）
-const HUB_CENTER_STYLES = {
-  none() {},
-  holo(g, H, r) {  // 全像投影台：六角底座＋中間發光的投影核心
-    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-    H.hexPad(g, cx, cy, 64, 0x1a2238, 6); H.hexPad(g, cx, cy, 38, 0x2a3454, 6);
-    g.circle(cx, cy, 15).fill({ color: 0x0a0f22, alpha: 1 }).stroke({ width: 2, color: HUB_INK }); g.circle(cx, cy, 9).fill({ color: 0x4cc9f0, alpha: 1 });
-  },
-  lift(g, H, r) {  // 中央升降平台：大八角平台（兩層）＋八個角的燈
-    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-    H.hexPad(g, cx, cy, 130, 0x182036, 8); H.hexPad(g, cx, cy, 96, 0x1e2740, 8);
-    for (let i = 0; i < 8; i++) { const a = (i + 0.5) / 8 * TAU; g.poly(hubRect(cx + Math.cos(a) * 113, cy + Math.sin(a) * 113, 14, 5, a + Math.PI / 2)).fill({ color: 0x4cc9f0, alpha: 0.85 }); }
-  },
-  core(g, H, r) {  // 能量核心：中間的核心，四條導管接到四根導航燈柱
-    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-    for (const [px, py] of H.decor.pylons || []) {
-      const x = cx + (px - cx) * 0.86, y = cy + (py - cy) * 0.86;  // 停在燈柱底座前面（底座先畫了）
-      g.moveTo(cx, cy).lineTo(x, y).stroke({ width: 16, color: HUB_INK }); g.moveTo(cx, cy).lineTo(x, y).stroke({ width: 11, color: 0x3a4466 });
-      g.moveTo(cx, cy).lineTo(x, y).stroke({ width: 3, color: 0x4cc9f0, alpha: 0.7 });
-    }
-    H.hexPad(g, cx, cy, 46, 0x2a3454, 6);
-    g.circle(cx, cy, 18).fill({ color: 0x0a0f22, alpha: 1 }).stroke({ width: 2, color: HUB_INK }); g.circle(cx, cy, 11).fill({ color: 0x4cc9f0, alpha: 1 });
-  },
-};
 
 // 轉了角度的矩形（中心 cx, cy、寬 w、高 h、轉 a）→ poly 用的點
 const hubRect = (cx, cy, w, h, a) => { const c = Math.cos(a), n = Math.sin(a), out = []; for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) out.push(cx + (u * w * c - v * h * n) / 2, cy + (u * w * n + v * h * c) / 2); return out; };
@@ -165,17 +148,47 @@ const GLHub = {
     g.clear();
     // 1) 牆：每間房往外擴 WT 的範圍連成一整塊（相鄰房間共用同一道牆，交界不會有接縫）
     //   內牆（兩間房中間）：比較亮、乾淨的隔間（metal 貼圖）；外牆（外面是太空）：厚重的船殼裝甲（wall 貼圖、深色、一排鉚釘）
-    const ex = r => [r.x - WT, r.y - WT, r.w + 2 * WT, r.h + 2 * WT];
-    this.texKind = null;
-    for (const r of rooms) g.rect(...ex(r)).stroke({ width: 6, color: HUB_INK });  // 先描再填：房間之間的描邊被蓋掉，只剩整個站體的外圍
+    //   外牆外面再一圈裝甲裙板（HUB_SKIRT 厚）：站體的凸角切成 45° 斜角（外觀不要太方正）；窗戶的位置牆和裙板都挖空（看得到外面真的太空）
+    const ex = r => [r.x - WT, r.y - WT, r.w + 2 * WT, r.h + 2 * WT], hull = this.hullSegs(rooms), wins = this.windows = this.hubWindows();
+    const LZ = HUB.zones.find(z => z.kind === 'launch'), holes = [...wins, ...(LZ && R.bay ? [{ x: LZ.x - HUB.RUNWAY_W / 2 - 8, y: R.bay.y + R.bay.h - 2, w: HUB.RUNWAY_W + 16, h: WT + HUB_SKIRT.w + 4 }] : [])];  // 跑道出口
+    const cut = (x, y, w, h) => {  // 洞要裁到這塊圖形裡面（超出圖形的洞挖不出來）
+      for (const q of holes) {
+        const x0 = Math.max(x, q.x), y0 = Math.max(y, q.y), x1 = Math.min(x + w, q.x + q.w), y1 = Math.min(y + h, q.y + q.h);
+        if (x1 - x0 > 0.5 && y1 - y0 > 0.5) g.rect(x0, y0, x1 - x0, y1 - y0).cut();
+      }
+    };
+    const skirts = hull.map(s => this.skirtPoly(s));
     this.texKind = 'metal';
-    for (const r of rooms) g.rect(...ex(r)).fill(HUB_WALL.inner);
+    for (const r of rooms) { g.rect(...ex(r)).fill(HUB_WALL.inner); cut(...ex(r)); }
     this.texKind = 'wall';
-    for (const [x, y, w, h, along] of this.hullSegs(rooms)) {
-      g.rect(x, y, w, h).fill(HUB_WALL.outer);
-      if (along === 'x') for (let k = x + 30; k < x + w - 20; k += 90) g.rect(k, y + h / 2 - 3, 14, 6).fill(HUB_WALL.rivet).stroke({ width: 2, color: HUB_INK });
-      else for (let k = y + 30; k < y + h - 20; k += 90) g.rect(x + w / 2 - 3, k, 6, 14).fill(HUB_WALL.rivet).stroke({ width: 2, color: HUB_INK });
-    }
+    hull.forEach((s, i) => {
+      g.rect(s.x, s.y, s.w, s.h).fill(HUB_WALL.outer); cut(s.x, s.y, s.w, s.h);
+      const xs = skirts[i].filter((_, k) => k % 2 === 0), ys = skirts[i].filter((_, k) => k % 2);
+      g.poly(skirts[i]).fill(hubShade(HUB_WALL.outer, HUB_SKIRT.shade[s.out])); cut(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+      if (s.along === 'x') for (let k = s.x + 30; k < s.x + s.w - 20; k += 90) { if (!this.onWindow(k, s.y + s.h / 2)) g.rect(k, s.y + s.h / 2 - 3, 14, 6).fill(HUB_WALL.rivet).stroke({ width: 2, color: HUB_INK }); }
+      else for (let k = s.y + 30; k < s.y + s.h - 20; k += 90) { if (!this.onWindow(s.x + s.w / 2, k)) g.rect(s.x + s.w / 2 - 3, k, 6, 14).fill(HUB_WALL.rivet).stroke({ width: 2, color: HUB_INK }); }
+    });
+    // 描邊（填完再描，碰到洞就跳過）：裙板的外緣＋凸角的斜邊＝站體的輪廓；牆和裙板的交界一條細線
+    this.texKind = null;
+    const line = (x0, y0, x1, y1, width) => {
+      let segs = [[0, 1]];  // 這條線上還要畫的部分（0～1）
+      if (x0 === x1 || y0 === y1) for (const q of holes) {  // 斜線只在凸角，不會碰到洞
+        const hor = y0 === y1, c = hor ? y0 : x0, [q0, q1] = hor ? [q.y, q.y + q.h] : [q.x, q.x + q.w];
+        if (c < q0 || c > q1) continue;
+        const [a, b] = hor ? [x0, x1] : [y0, y1], [h0, h1] = (hor ? [q.x, q.x + q.w] : [q.y, q.y + q.h]).map(v => (v - a) / (b - a)).sort((m, n) => m - n);
+        segs = segs.flatMap(([s0, s1]) => [[s0, Math.min(s1, h0)], [Math.max(s0, h1), s1]]).filter(([s0, s1]) => s1 - s0 > 0.001);
+      }
+      for (const [s0, s1] of segs) g.moveTo(x0 + (x1 - x0) * s0, y0 + (y1 - y0) * s0).lineTo(x0 + (x1 - x0) * s1, y0 + (y1 - y0) * s1).stroke({ width, color: HUB_INK });
+    };
+    hull.forEach((s, i) => {
+      const p = skirts[i], P = k => [p[k * 2], p[k * 2 + 1]];
+      if (s.c0) line(...P(0), ...P(1), 4);
+      line(...P(1), ...P(2), 4);
+      if (s.c1) line(...P(2), ...P(3), 4);
+      const e = { up: [s.x, s.y, s.x + s.w, s.y], down: [s.x, s.y + s.h, s.x + s.w, s.y + s.h], left: [s.x, s.y, s.x, s.y + s.h], right: [s.x + s.w, s.y, s.x + s.w, s.y + s.h] }[s.out];
+      line(...e, 2);
+    });
+    (HUB_HULL_STYLES[this.hullStyle] || HUB_HULL_STYLES.skirt)(g, this, hull);
     // 牆的內緣：沿著每間房的地板一圈斜面（光從左上：朝上、朝左的面亮，朝下、朝右的面暗），四個角斜切接起來
     const BV = 7;
     for (const r of rooms) {
@@ -191,13 +204,13 @@ const GLHub = {
     this.texKind = 'metal';  // 之後的門框、擺設、停機位、武器架、操作台、發射台、終端機
     for (const d of HUB.doors) this.door(g, d);
     this.decorBuild(g);
-    (HUB_CENTER_STYLES[this.centerStyle] || HUB_CENTER_STYLES.none)(g, this, R.hall);
+    this.hallCore(g, R.hall);
     // 3) 停機位、武器架、操作台、發射台、終端機的底座
     for (const z of HUB.zones) {
       if (z.kind === 'pad') this.shipPad(g, z);
       else if (z.kind === 'rack') this.rackPlate(g, z.x, z.y);
       else if (z.kind === 'console') { this.hexPad(g, z.x, z.y + 8, 40, 0x2b3654, 8); g.circle(z.x, z.y + 8, 18).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); }
-      else if (z.kind === 'launch') { const bay = R.bay; this.launchPad(g, z, bay.y + bay.h); g.rect(z.x - HUB.RUNWAY_W / 2 - 8, bay.y + bay.h - 2, HUB.RUNWAY_W + 16, WT + 2).fill(0x02030a).stroke({ width: 3, color: HUB_INK }); }
+      else if (z.kind === 'launch') { const bay = R.bay; this.launchPad(g, z, bay.y + bay.h); }  // 跑道穿過下牆的開口在畫牆時挖穿（看得到外面的太空）
       else if (z.kind === 'term') {
         const x0 = z.side ? R.hall.x + R.hall.w - 54 : R.hall.x;
         g.rect(x0, z.y - 60, 54, 120).fill(hubShade(0x3a4870, z.side ? -0.2 : 0)).stroke({ width: 3, color: HUB_INK });
@@ -207,25 +220,43 @@ const GLHub = {
     }
     this.built = true;
   },
-  // 一個開口：開口的地板＋門（照 HUB_DOOR_STYLES[this.doorStyle]）
-  //   門的座標用 (u, v)：u 沿著開口寬（0～L）、v 穿過牆（0～T；開口兩邊各伸進房間 30，牆在 v = 30～30 + WT）
-  doorStyle: 'rail', centerStyle: 'none',
+  hullStyle: 'struct',
+  // 一個開口＝隔艙門：開口在牆中間收窄的斜切門框、地上分節的板子、門框上兩盞小燈（發光的用 { color, alpha }：不會被換成金屬貼圖）
+  //   門的座標用 (u, v)：u 沿著開口寬（0～L）、v 穿過牆（0～T；開口兩邊各伸進房間 30，牆在 v = W0～W1）
   door(g, d) {
-    const vert = d.w > d.h, L = vert ? d.w : d.h, T = vert ? d.h : d.w;  // vert：上下相通的開口（寬 > 高）
+    const vert = d.w > d.h, L = vert ? d.w : d.h, T = vert ? d.h : d.w, W0 = 30, W1 = 30 + HUB.WT;  // vert：上下相通的開口（寬 > 高）
     const P = (u, v) => vert ? [d.x + u, d.y + v] : [d.x + v, d.y + u];
     const poly = pts => g.poly(pts.flatMap(([u, v]) => P(u, v)));
     const rect = (u, v, w, h) => { const [x, y] = P(u, v); return vert ? g.rect(x, y, w, h) : g.rect(x, y, h, w); };
     g.rect(d.x, d.y, d.w, d.h).fill(0x161d36);
-    (HUB_DOOR_STYLES[this.doorStyle] || HUB_DOOR_STYLES.rail)({ g, poly, rect, L, T, W0: 30, W1: 30 + HUB.WT });
+    for (let v = 6; v < T - 4; v += 22) rect(2, v, L - 4, 2).fill({ color: HUB_INK, alpha: 0.5 });
+    for (const sg of [1, -1]) {
+      const U = u => sg > 0 ? u : L - u;
+      poly([[U(-8), W0 - 12], [U(12), W0 - 12], [U(28), W0 + 6], [U(28), W1 - 6], [U(12), W1 + 12], [U(-8), W1 + 12]]).fill(0x3a4466).stroke({ width: 3, color: HUB_INK });
+      poly([[U(12), W0 - 12], [U(28), W0 + 6], [U(22), W0 + 8], [U(8), W0 - 6]]).fill(hubShade(0x3a4466, 0.18));  // 斜切面（朝上的亮）
+      rect(sg > 0 ? 8 : L - 14, (W0 + W1) / 2 - 3, 6, 6).fill({ color: 0x4cc9f0, alpha: 1 });
+    }
   },
-  // 外牆：每間房四邊的牆，扣掉跟別間房的牆重疊的部分（那是內牆）→ 剩下外面是太空的那幾段 [x, y, w, h, 沿著哪個方向]
+  // 大廳中間的能量核心：四條導管接到四根導航燈柱（導管停在燈柱底座前面）
+  hallCore(g, r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    for (const [px, py] of this.decor.pylons) {
+      const x = cx + (px - cx) * 0.86, y = cy + (py - cy) * 0.86;
+      g.moveTo(cx, cy).lineTo(x, y).stroke({ width: 16, color: HUB_INK }); g.moveTo(cx, cy).lineTo(x, y).stroke({ width: 11, color: 0x3a4466 });
+      g.moveTo(cx, cy).lineTo(x, y).stroke({ width: 3, color: 0x4cc9f0, alpha: 0.7 });
+    }
+    this.hexPad(g, cx, cy, 46, 0x2a3454, 6);
+    g.circle(cx, cy, 18).fill({ color: 0x0a0f22, alpha: 1 }).stroke({ width: 2, color: HUB_INK }); g.circle(cx, cy, 11).fill({ color: 0x4cc9f0, alpha: 1 });
+  },
+  // 外牆：每間房四邊的牆，扣掉跟別間房的牆重疊的部分（那是內牆）→ 剩下外面是太空的那幾段
+  //   { x, y, w, h, along 沿著哪個軸, out 朝外的方向（up／down／left／right）, c0／c1 開頭／結尾是不是站體的凸角（整段牆的端點，沒被別間扣掉） }
   hullSegs(rooms) {
     const WT = HUB.WT, out = [], ex = r => [r.x - WT, r.y - WT, r.x + r.w + WT, r.y + r.h + WT];
     for (const r of rooms) {
       const [x0, y0, x1, y1] = ex(r);
-      // 四邊的牆：[沿著的軸, 從, 到, 厚度方向的從, 到]
-      const sides = [['x', x0, x1, y0, r.y], ['x', x0, x1, r.y + r.h, y1], ['y', y0, y1, x0, r.x], ['y', y0, y1, r.x + r.w, x1]];
-      for (const [ax, a0, a1, t0, t1] of sides) {
+      // 四邊的牆：[沿著的軸, 從, 到, 厚度方向的從, 到, 朝外]
+      const sides = [['x', x0, x1, y0, r.y, 'up'], ['x', x0, x1, r.y + r.h, y1, 'down'], ['y', y0, y1, x0, r.x, 'left'], ['y', y0, y1, r.x + r.w, x1, 'right']];
+      for (const [ax, a0, a1, t0, t1, dir] of sides) {
         let segs = [[a0, a1]];
         for (const o of rooms) {
           if (o === r) continue;
@@ -233,11 +264,32 @@ const GLHub = {
           if (Math.min(t1, c1) - Math.max(t0, c0) < 1) continue;  // 厚度方向沒有重疊：不是同一道牆
           segs = segs.flatMap(([s0, s1]) => [[s0, Math.min(s1, b0)], [Math.max(s0, b1), s1]]).filter(([s0, s1]) => s1 - s0 > 1);
         }
-        for (const [s0, s1] of segs) out.push(ax === 'x' ? [s0, t0, s1 - s0, t1 - t0, 'x'] : [t0, s0, t1 - t0, s1 - s0, 'y']);
+        for (const [s0, s1] of segs) out.push({ ...(ax === 'x' ? { x: s0, y: t0, w: s1 - s0, h: t1 - t0 } : { x: t0, y: s0, w: t1 - t0, h: s1 - s0 }), along: ax, out: dir, c0: s0 === a0, c1: s1 === a1 });
       }
     }
     return out;
   },
+  // 一段外牆外面的裙板（poly 的點）：凸角那一端斜切 45°（兩邊的裙板在斜線上接起來）
+  skirtPoly(s) {
+    const S = HUB_SKIRT.w, { x, y, w, h, c0, c1 } = s;
+    switch (s.out) {
+      case 'up': return [c0 ? x - S : x, y, x, y - S, x + w, y - S, c1 ? x + w + S : x + w, y];
+      case 'down': return [c0 ? x - S : x, y + h, x, y + h + S, x + w, y + h + S, c1 ? x + w + S : x + w, y + h];
+      case 'left': return [x, c0 ? y - S : y, x - S, y, x - S, y + h, x, c1 ? y + h + S : y + h];
+      default: return [x + w, c0 ? y - S : y, x + w + S, y, x + w + S, y + h, x + w, c1 ? y + h + S : y + h];
+    }
+  },
+  // 窗戶（挖穿外牆和裙板的洞）：觀景台上牆一整片大窗、機庫左牆和軍械庫右牆各兩扇；{ x, y, w, h, out 朝外 }
+  hubWindows() {
+    const R = HUB.rooms, WT = HUB.WT, S = HUB_SKIRT.w, deck = R.deck, hg = R.hangar, ar = R.armory, out = [];
+    if (deck) out.push({ x: deck.x + 40, y: deck.y - WT - S + 8, w: deck.w - 80, h: WT + S - 16, out: 'up' });
+    for (const k of [0.3, 0.7]) {
+      if (hg) out.push({ x: hg.x - WT - S + 8, y: hg.y + hg.h * k - 40, w: WT + S - 16, h: 80, out: 'left' });
+      if (ar) out.push({ x: ar.x + ar.w + 8, y: ar.y + ar.h * k - 40, w: WT + S - 16, h: 80, out: 'right' });
+    }
+    return out;
+  },
+  onWindow(x, y, pad = 12) { return (this.windows || []).some(q => x > q.x - pad && x < q.x + q.w + pad && y > q.y - pad && y < q.y + q.h + pad); },
   // 一間房的地板：板子＋花紋（分開：換成貼圖的地板只換板子，花紋照畫在上面）
   floor(g, r, F) { this.floorTiles(g, r, F); this.floorPattern(g, r, F); },
   // 板子：亮度差一點、左上亮右下暗、板縫描邊色
@@ -394,8 +446,9 @@ const GLHub = {
     // 晶片實驗室：上牆、左牆一排伺服器機櫃（燈每幀閃）
     for (let x = lab.x + 30; x < lab.x + lab.w - 60; x += 70) this.server(g, x, lab.y + 8, 56, 40, D);
     for (let y = lab.y + 90; y < lab.y + lab.h - 60; y += 70) this.server(g, lab.x + 8, y, 40, 56, D);
-    // 觀景台：上牆一整片大窗戶（看得到星空和一顆行星）、兩個面向窗戶的停泊台（跟機庫停機位同一套的切面台座）
-    this.window(g, deck.x + 40, deck.y - WT + 6, deck.w - 80, WT + 30, true);
+    // 窗戶的玻璃（洞在畫牆的時候挖好了：透出外面真的太空；觀景台外面那顆行星在 skyDraw）
+    for (const q of this.windows) this.window(g, q);
+    // 觀景台：兩個面向窗戶的停泊台（跟機庫停機位同一套的切面台座）
     for (const sg of [-1, 1]) {
       const bx = deck.x + deck.w / 2 + sg * 110, by = deck.y + deck.h * 0.5;
       this.hexPad(g, bx, by, 48, 0x1a2238, 6);
@@ -407,8 +460,6 @@ const GLHub = {
     bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * step, y = rec.y + 30; g.rect(x - pw / 2, rec.y + 4, pw, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
     const sy0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 14, sh = rec.y + rec.h - 14 - sy0;  // 螢幕放在左牆門口（往觀景台）的下面，右牆對稱（以前疊在門口上）
     for (const sg of [0, 1]) { const x = sg ? rec.x + rec.w - 14 : rec.x + 6; g.rect(x, sy0, 8, sh).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: sy0 + sh / 2, col: 0xffd166, screen: true }); }
-    // 外牆的窗戶：機庫左牆、軍械庫右牆
-    for (const [x, y] of [[hg.x - WT + 8, hg.y + hg.h * 0.3], [hg.x - WT + 8, hg.y + hg.h * 0.7], [ar.x + ar.w + 8, ar.y + ar.h * 0.3], [ar.x + ar.w + 8, ar.y + ar.h * 0.7]]) this.window(g, x, y - 40, WT - 16, 80, false);
     // 巡邏的維修無人機：大廳繞圈、機庫走道上下、實驗室繞圈
     D.drones = [
       { cx: hall.x + hall.w * 0.3, cy: hall.y + hall.h * 0.35, rx: 110, ry: 50, sp: 0.45, ph: 0 },
@@ -442,12 +493,15 @@ const GLHub = {
     const n = 3;
     for (let i = 0; i < n; i++) D.leds.push({ x: w > h ? x + 12 + i * (w - 24) / (n - 1) : x + w / 2, y: w > h ? y + h / 2 + 4 : y + 12 + i * (h - 24) / (n - 1), col: 0x2ee6a6, k: seeded(x + y + i) * 10 });
   },
-  window(g, x, y, w, h, planet) {  // 窗戶：金屬框＋星空（觀景台的大窗加一顆行星）
-    g.rect(x - 4, y - 4, w + 8, h + 8).fill(0x55658f).stroke({ width: 2, color: HUB_INK });
-    g.rect(x, y, w, h).fill(0x02030a);
-    for (let i = 0; i < Math.max(6, w * h / 400); i++) g.circle(x + 3 + seeded(i * 7.1 + x) * (w - 6), y + 3 + seeded(i * 3.3 + y * 1.7) * (h - 6), seeded(i + y) < 0.2 ? 1.4 : 0.8).fill({ color: 0xffffff, alpha: 0.4 + 0.6 * seeded(i * 9 + x) });
-    if (planet) { const px = x + w * 0.72, py = y + h * 0.9; g.circle(px, py, h * 0.7).fill(0x3a5aa8); g.circle(px - h * 0.15, py - h * 0.15, h * 0.55).fill({ color: 0x6f8fd8, alpha: 0.5 }); }
-    g.rect(x, y, w, h).fill({ color: 0x4cc9f0, alpha: 0.07 });
+  window(g, q) {  // 窗戶的玻璃：淡藍的一層、斜的反光、窗櫺（每 110 一根）、一圈金屬窗框
+    const { x, y, w, h } = q, wide = w > h, L = wide ? w : h, D = wide ? h : w;
+    g.rect(x, y, w, h).fill({ color: 0x8fd8ff, alpha: 0.07 });
+    for (let k = 30; k + 18 + D * 0.6 < L - 10; k += 150) for (const [o, ww, al] of [[0, 16, 0.06], [22, 5, 0.1]]) {  // 反光：一寬一細兩道斜線
+      const u = k + o, pts = [[u, D], [u + ww, D], [u + ww + D * 0.6, 0], [u + D * 0.6, 0]];
+      g.poly(pts.flatMap(([a, b]) => wide ? [x + a, y + b] : [x + b, y + a])).fill({ color: 0xffffff, alpha: al });
+    }
+    for (let k = 110; k < L - 40; k += 110) (wide ? g.rect(x + k - 3, y, 6, h) : g.rect(x, y + k - 3, w, 6)).fill(0x55658f).stroke({ width: 1.5, color: HUB_INK });
+    g.rect(x - 3, y - 3, w + 6, h + 6).stroke({ width: 5, color: 0x55658f }); g.rect(x - 6, y - 6, w + 12, h + 12).stroke({ width: 2, color: HUB_INK });
   },
 
   // ---------- 每幀 ----------
@@ -630,6 +684,17 @@ const GLHub = {
     GLActors.glowAt(P, x, y, 110, 0x7fd4ff, 0.55 + 0.1 * Math.sin(t * 9));
     GLActors.glowAt(P, x, y, 36, 0xeaf8ff, 1);
     g.circle(x, y, 7).fill(0xffffff);
+    // 觀景台外面的行星（從觀景台的大窗看得到）：同樣的視差；藍色的球、左上亮面、右下陰影、一圈大氣光
+    const dk = HUB.rooms.deck;
+    if (dk) {
+      const ax = dk.x + dk.w * 0.68, ay = dk.y - 70, R = 160;  // 中心在大窗後面一點：一半被站體擋住
+      const qx = ax + (Hub.cam.x - (ax - VW / 2 / Hub.k)) * this.SKY_PAR, qy = ay + (Hub.cam.y - (ay - VH / 2 / Hub.k)) * this.SKY_PAR;
+      GLActors.glowAt(P, qx, qy, R * 1.5, 0x4a7cff, 0.22);
+      g.circle(qx, qy, R).fill(0x23407a);
+      g.circle(qx - R * 0.22, qy - R * 0.22, R * 0.78).fill({ color: 0x5f8fe0, alpha: 0.35 });
+      for (const [dy, a] of [[-0.35, 0.12], [0.05, 0.1], [0.4, 0.08]]) g.ellipse(qx, qy + dy * R, R * Math.sqrt(1 - dy * dy) * 0.98, R * 0.07).fill({ color: 0xbfd8ff, alpha: a });  // 雲帶
+      g.circle(qx + R * 0.3, qy + R * 0.3, R * 0.95).fill({ color: 0x050a18, alpha: 0.45 });  // 背光的那半邊
+    }
   },
   // 沒解鎖的飛船：黑色剪影＋一圈淡淡的灰光（看得出形狀）
   silhouette(S, x, y, rot = 0) {
