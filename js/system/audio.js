@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · audio.js：音效 SFX、背景音樂 Music（Web Audio 即時合成）
+// 星環電路 多人版 · audio.js：音效 SFX、背景音樂 Music（Web Audio 即時合成）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

@@ -1,6 +1,6 @@
 // 星環電路 美術程式（介面）：數值圖示（最大 HP、移動速度、衝刺冷卻、受到的傷害、射速、子彈速度、零件格、能量容量）
 // 跟 art_world.js 一起用（faceted、polyPts、mix、glow）；畫風照新畫面：切面上色、#03050c 描邊、光從左上來
-// 產生：node mp_tests/perf/builduiicons.mjs → multiplayer/assets/ui/stat_*.png
+// 產生：node tests/perf/builduiicons.mjs → multiplayer/assets/ui/stat_*.png
 'use strict';
 
 const STAT_ART = {

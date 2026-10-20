@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · main.js：啟動：初始化、主迴圈 frame()
+// 星環電路 多人版 · main.js：啟動：初始化、主迴圈 frame()
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

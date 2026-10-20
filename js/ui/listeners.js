@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · listeners.js：聽遊戲邏輯發出的事件（Events），播音效、切換畫面
+// 星環電路 多人版 · listeners.js：聽遊戲邏輯發出的事件（Events），播音效、切換畫面
 // 事件名稱和帶的資料見各個 Events.emit；這裡決定「發生這件事時要怎麼表現」
 'use strict';
 

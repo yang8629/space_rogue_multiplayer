@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · effects.js：特效事件 burst（粒子）、floatText（浮動數字）、trail（殘影）；真正畫粒子的是 ui/fx.js
+// 星環電路 多人版 · effects.js：特效事件 burst（粒子）、floatText（浮動數字）、trail（殘影）；真正畫粒子的是 ui/fx.js
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

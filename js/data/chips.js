@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO（組件升級）、插座與組件、奇異點強化格子、起始電路
+// 星環電路 多人版 · chips.js：晶片定義 CHIPS、等級 LV_INFO（組件升級）、插座與組件、奇異點強化格子、起始電路
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · pipeline.js：電路執行器：compileChain / runOps / runComps / hostFire / analyzeChain、倉庫被動
+// 星環電路 多人版 · pipeline.js：電路執行器：compileChain / runOps / runComps / hostFire / analyzeChain、倉庫被動
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

@@ -1,5 +1,5 @@
 // 星環電路 美術程式（世界：敵人、地圖物件、牆、背包模組）：用 Canvas 2D 畫，產生工具（tools/art/build.html）用它畫成圖集 → assets/
-// 來源：art_lab/world_preview.html（2026-10-05 使用者確認的畫風）。改美術就改這裡，再跑 mp_tests/perf/buildatlas.mjs 重產圖集
+// 來源：art_lab/world_preview.html（2026-10-05 使用者確認的畫風）。改美術就改這裡，再跑 tests/perf/buildatlas.mjs 重產圖集
 // 需要先載入 js/core/config.js（TAU、rand、clamp）
 'use strict';
 

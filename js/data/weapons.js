@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · weapons.js：5 把武器與兩段升級樹、weaponParams / weaponEmit
+// 星環電路 多人版 · weapons.js：5 把武器與兩段升級樹、weaponParams / weaponEmit
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

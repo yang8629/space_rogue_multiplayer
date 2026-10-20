@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · codex.js：📖 電路總覽：規則、晶片、武器、圖表
+// 星環電路 多人版 · codex.js：📖 電路總覽：規則、晶片、武器、圖表
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -241,7 +241,7 @@ const Codex = {
         list.map(([n, hp]) => `<div>${n}<span class="v">${Math.round(hp * m)}</span></div>`).join('');
     };
 
-    // 5. 整局模擬在用的兩張表（資料是 mp_tests 的模擬結果：js/data/simvalue.js，exportvalue.js 產生）
+    // 5. 整局模擬在用的兩張表（資料是 tests 的模擬結果：js/data/simvalue.js，exportvalue.js 產生）
     const SV = typeof SIM_VALUE !== 'undefined' ? SIM_VALUE : null, WK = Object.keys(WEAPONS);
     const x2 = v => '×' + (+v.toFixed(2));
     const svTabs = (group, body) => `<div class="viz-tabs" data-group="${group}">${WK.map((w, i) => `<button type="button" data-pane="${group}-${w}"${i ? '' : ' class="on"'} style="color:${WEAPONS[w].color}">${WEAPONS[w].name}</button>`).join('')}</div>

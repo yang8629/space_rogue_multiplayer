@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · events.js：？事件節點的事件表 EVENTS（數字在 CFG.EVENT）
+// 星環電路 多人版 · events.js：？事件節點的事件表 EVENTS（數字在 CFG.EVENT）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 

@@ -66,7 +66,7 @@ const out = [
   ...lines.slice(0, styleStart),
   '<link rel="stylesheet" href="css/style.css">',
   ...lines.slice(styleEnd + 1, scriptStart),
-  '<!-- 遊戲程式：依序載入（後面的檔案會用到前面定義的東西）。每個檔案的用途寫在 README 的「檔案結構」 -->',
+  '<!-- 遊戲程式：依序載入（後面的檔案會用到前面定義的東西）。每個檔案的用途寫在 docs/架構.md -->',
   ...cut.map(([file]) => `<script src="js/${file}"></script>`),
   ...lines.slice(scriptEnd + 1),
 ].join('\n');

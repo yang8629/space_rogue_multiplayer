@@ -1,4 +1,4 @@
-// 星環電路 雙人版 · parts.js：機體成長線：零件 PARTS、機體數值 mechStats
+// 星環電路 多人版 · parts.js：機體成長線：零件 PARTS、機體數值 mechStats
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
