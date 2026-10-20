@@ -211,8 +211,12 @@ const GLHub = {
     const P = (u, v) => vert ? [d.x + u, d.y + v] : [d.x + v, d.y + u];
     const poly = pts => g.poly(pts.flatMap(([u, v]) => P(u, v)));
     const rect = (u, v, w, h) => { const [x, y] = P(u, v); return vert ? g.rect(x, y, w, h) : g.rect(x, y, h, w); };
-    g.rect(d.x, d.y, d.w, d.h).fill(0x161d36);
-    for (let v = 6; v < T - 4; v += 22) rect(2, v, L - 4, 2).fill({ color: HUB_INK, alpha: 0.5 });
+    // 門檻板：只鋪在牆的厚度裡（多蓋住房間邊緣的斜面 BV），顏色是兩邊房間地板的平均（以前整塊深藍、伸進房間 30：接到棕、綠的地板像一道黑色凹槽）
+    const BV = 7, at = (u, v) => { const [x, y] = P(u, v); return Object.values(HUB.rooms).find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h); };
+    const fa = (HUB_FLOOR[(at(L / 2, 2) || {}).id] || HUB_FLOOR.hall).base, fb = (HUB_FLOOR[(at(L / 2, T - 2) || {}).id] || HUB_FLOOR.hall).base;
+    const mid = [16, 8, 0].reduce((c, s) => c | (Math.round((((fa >> s) & 255) + ((fb >> s) & 255)) / 2) << s), 0);
+    rect(0, W0 - BV, L, W1 - W0 + 2 * BV).fill(hubShade(mid, 0.06));
+    for (const v of [W0 - BV, W1 + BV - 2]) rect(0, v, L, 2).fill({ color: HUB_INK, alpha: 0.55 });  // 兩端的接縫
     for (const sg of [1, -1]) {
       const U = u => sg > 0 ? u : L - u;
       poly([[U(-8), W0 - 12], [U(12), W0 - 12], [U(28), W0 + 6], [U(28), W1 - 6], [U(12), W1 + 12], [U(-8), W1 + 12]]).fill(0x3a4466).stroke({ width: 3, color: HUB_INK });
