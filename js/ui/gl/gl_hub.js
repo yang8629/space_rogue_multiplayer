@@ -235,23 +235,27 @@ const GLHub = {
     this.hexPad(g, cx, cy, 46, 0x2a3454, 6);
     g.circle(cx, cy, 18).fill({ color: 0x0a0f22, alpha: 1 }).stroke({ width: 2, color: HUB_INK }); g.circle(cx, cy, 11).fill({ color: 0x4cc9f0, alpha: 1 });
   },
-  // 外牆：每間房四邊的牆，扣掉跟別間房的牆重疊的部分（那是內牆）→ 剩下外面是太空的那幾段
-  //   { x, y, w, h, along 沿著哪個軸, out 朝外的方向（up／down／left／right）, c0／c1 開頭／結尾是不是站體的凸角（整段牆的端點，沒被別間扣掉） }
+  // 外牆：每間房四邊的牆裡，「再往外一個牆厚」是太空的那幾段（往外還有別間房的牆＝內牆）
+  //   { x, y, w, h, along 沿著哪個軸, out 朝外的方向（up／down／left／right）, c0／c1 開頭／結尾是不是站體的凸角（沿著牆再過去也是太空） }
+  //   以前用「跟別間房的牆重疊」判斷內牆：兩間房之間的隔間牆通到外牆的那一小段被算成內牆，外面的裙板斷一個缺口（10-21 使用者看到透出太空）
   hullSegs(rooms) {
     const WT = HUB.WT, out = [], ex = r => [r.x - WT, r.y - WT, r.x + r.w + WT, r.y + r.h + WT];
+    const covered = (r, X0, Y0, X1, Y1) => rooms.some(o => { if (o === r) return false; const [a, b, c, d] = ex(o); return Math.min(X1, c) - Math.max(X0, a) >= 1 && Math.min(Y1, d) - Math.max(Y0, b) >= 1; });
     for (const r of rooms) {
       const [x0, y0, x1, y1] = ex(r);
-      // 四邊的牆：[沿著的軸, 從, 到, 厚度方向的從, 到, 朝外]
-      const sides = [['x', x0, x1, y0, r.y, 'up'], ['x', x0, x1, r.y + r.h, y1, 'down'], ['y', y0, y1, x0, r.x, 'left'], ['y', y0, y1, r.x + r.w, x1, 'right']];
-      for (const [ax, a0, a1, t0, t1, dir] of sides) {
+      // 四邊的牆：[沿著的軸, 從, 到, 厚度方向的從, 到, 朝外, 往外那一條（厚度方向的從, 到）]
+      const sides = [['x', x0, x1, y0, r.y, 'up', y0 - WT, y0], ['x', x0, x1, r.y + r.h, y1, 'down', y1, y1 + WT], ['y', y0, y1, x0, r.x, 'left', x0 - WT, x0], ['y', y0, y1, r.x + r.w, x1, 'right', x1, x1 + WT]];
+      const box = (ax, s0, s1, t0, t1) => ax === 'x' ? [s0, t0, s1, t1] : [t0, s0, t1, s1];  // (沿著, 厚度) → [X0, Y0, X1, Y1]
+      for (const [ax, a0, a1, t0, t1, dir, o0, o1] of sides) {
         let segs = [[a0, a1]];
         for (const o of rooms) {
           if (o === r) continue;
           const [ox0, oy0, ox1, oy1] = ex(o), [b0, b1, c0, c1] = ax === 'x' ? [ox0, ox1, oy0, oy1] : [oy0, oy1, ox0, ox1];
-          if (Math.min(t1, c1) - Math.max(t0, c0) < 1) continue;  // 厚度方向沒有重疊：不是同一道牆
+          if (Math.min(o1, c1) - Math.max(o0, c0) < 1) continue;  // 往外那一條沒碰到這間：這段外面不是它
           segs = segs.flatMap(([s0, s1]) => [[s0, Math.min(s1, b0)], [Math.max(s0, b1), s1]]).filter(([s0, s1]) => s1 - s0 > 1);
         }
-        for (const [s0, s1] of segs) out.push({ ...(ax === 'x' ? { x: s0, y: t0, w: s1 - s0, h: t1 - t0 } : { x: t0, y: s0, w: t1 - t0, h: s1 - s0 }), along: ax, out: dir, c0: s0 === a0, c1: s1 === a1 });
+        for (const [s0, s1] of segs) out.push({ ...(ax === 'x' ? { x: s0, y: t0, w: s1 - s0, h: t1 - t0 } : { x: t0, y: s0, w: t1 - t0, h: s1 - s0 }), along: ax, out: dir,
+          c0: !covered(r, ...box(ax, s0 - WT, s0, t0, t1)), c1: !covered(r, ...box(ax, s1, s1 + WT, t0, t1)) });  // 沿著牆再過去還接著別間房的牆：不是凸角
       }
     }
     return out;
