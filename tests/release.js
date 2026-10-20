@@ -119,6 +119,9 @@ for (const [src, lines] of [['差異', added], ['提交訊息', msgs]])
   for (const l of lines) for (const [re, label] of PRIVATE)
     if (re.test(l) && !/^\+?\s*(Co-Authored-By|Claude-Session):/.test(l)) hits.push(`${src}（${label}）：${l.trim().slice(0, 120)}`);
 ok(!hits.length, `私人資訊掃描（${added.length} 行新增）`, hits.slice(0, 15).join('\n'));
+// GitHub 的歷史 2026-10-19 改寫過、拿掉了所有 Claude 署名：沒設 attribution 的電腦提交、或舊副本 pull 把舊歷史合併回來，都會再帶上去
+const signed = msgs.filter(l => /^\s*(Co-Authored-By:.*Claude|Claude-Session:)/i.test(l));
+ok(!signed.length, '提交訊息沒有 Claude 署名', `${signed.length} 行，例如：${(signed[0] || '').trim()}\n（新提交：.claude/settings.local.json 設 attribution；舊歷史：照 docs/進度.md 的 reset）`);
 
 // ---- 4. 版號與 README ----
 const verLocal = verOf(read('js/core/config.js'));

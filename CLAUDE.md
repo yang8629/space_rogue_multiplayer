@@ -67,7 +67,7 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`進度.
 - 問問題時每個名稱都要說明（效果、在哪、跟什麼比）；只列自己推薦的選項。文字精簡，舉例用程式裡找得到的名字。
 - 說「誤差範圍」，不說雜訊。比較表要寫每組幾局、數字是什麼。
 - 檢查沒過：先查遊戲，證明遊戲對了才改檢查；回報寫出哪一項、內容是什麼（看 `tests/release_last.log`）。
-- 改到畫面：用真的 Chrome（WebGL）截圖看過再回報；截圖放 `art_lab/screenshots/`（中文檔名，只留最新）。
+- 改到畫面：用真的 Chrome（WebGL）截圖看過再回報；截圖放 `art_lab/screenshots/`（遊戲資料夾的上一層，`tests/perf/paths.mjs` 的 `SHOTS`；中文檔名，只留最新）。
 - 每做完一步更新 `docs/進度.md`。
 
 ## 改完之後
@@ -78,5 +78,18 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`進度.
    - 模擬（整局、價值表、晶片模擬表…）的指令和規則：`docs/模擬.md`。
 2. 規則改了就更新 `README.md`；還沒上傳的改動記在 `docs/版本紀錄.md` 的「（下一版）」那一行，版號先不動。
 3. 平常只在本機提交，**不主動上傳**。git 不在 PATH 時，`release.js` 會去找 Program Files 裡的 git。
+   - 提交訊息不加 Claude 署名（`Co-Authored-By`、`Claude-Session`）：每台電腦在 `.claude/settings.local.json` 設 `"attribution": { "commit": "", "pr": "" }`（不上傳，寫進 `.git/info/exclude`）。`release.js` 會擋。
 4. 上傳：`node release.js <新版號> --push`（例如 `2.16.0`）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。
 5. 私人資訊掃描的額外字詞放本機 `tests/private_words.txt`（一行一個，不上傳）。
+
+## 瀏覽器測試
+
+- 起本機伺服器：在遊戲資料夾的上一層 `python3 -m http.server 8765 --bind 127.0.0.1`，開 `http://127.0.0.1:8765/<資料夾>/index.html`；console 跑 `MechCheck.runAll()`。改了 js 要強制重新整理（忽略快取）。
+- 多人：每個玩家用不同網址開（`127.0.0.1:8765`、`localhost:8765`…，存檔才分開）；房主 `Net.lobby(); Net.host()`，隊友 `Net.lobby(); Net.join('房號')`。
+- `tests/perf/*.mjs` 的 Chrome 路徑寫死 Windows（`C:/Program Files/...`），Mac 上要改路徑才能跑；Mac 重做圖集用 chrome-devtools 開 `tools/art/build.html` 呼叫 `buildAtlas()`（`buildatlas.mjs` 也是 Windows 路徑）。
+
+## 踩過的坑
+
+- 回傳「字串或物件」的地方，物件欄位不要用 `String.prototype` 有的名字（`big`、`link`、`small`…）：用 `r.big` 判斷時字串也有（事件的賭運氣結果踩過）。
+- 收到的 JSON 物件 key 是字串：拿來當號碼要 `Number(k)`（延遲廣播的號碼踩過，隊友全讀成 0 號）。
+- PixiJS `poly(pts, false)` 不封口的線會往多邊形一側偏：折線用 `moveTo`／`lineTo`（`gl_hub.js` 的導管）。
