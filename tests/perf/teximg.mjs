@@ -4,6 +4,9 @@
 //   接縫：node perf/teximg.mjs tile <輸入> <輸出.png>          （2×2 重複鋪，看接縫明不明顯）
 //   疊回：node perf/teximg.mjs delta <AI 圖> <有花紋的截圖> <沒花紋的截圖> <輸出.png>
 //     兩張截圖的差（＝程式畫的花紋，例如大廳紋章）加到 AI 圖上：精確的幾何用程式畫的，質感用 AI 的（三張要同樣大小）
+//   無縫：node perf/teximg.mjs seam <輸入> <錯開的圖.png> <遮罩.png> [十字帶寬 0.16]
+//     上下左右各錯開一半（四邊的接縫移到正中間變成十字）＋一張遮罩（白 = 十字帶，邊緣漸層）；
+//     再用 F:/ComfyUI/gen.js --init=<錯開的圖> --mask=<遮罩> 只重畫十字帶 → 四邊是原圖中間本來就連續的部分，重複鋪看不到邊
 //   套色：node perf/teximg.mjs tint <輸入> <輸出.png> <底色 10162a> [紋路強度 0.5]
 //     只留 AI 圖的明暗紋路、顏色換成遊戲的底色：灰階 → 每點 = 底色 ×（1 + 強度 ×（亮度 ÷ 平均亮度 − 1））
 //     平均剛好等於底色（跟 gl_hub.js 的 HUB_FLOOR 同一個顏色），強度 0 = 純底色、1 = 原圖的明暗差
@@ -45,6 +48,24 @@ if (mode === 'adjust') {
     for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) g.drawImage(i, x * S, y * S, S, S);
     return c.toDataURL('image/png');
   }, url(inp), load);
+} else if (mode === 'seam') {
+  const [inp, o, maskOut, band = '0.16'] = a; out = o;
+  const [img, mask] = await run(async (src, band, L) => {
+    const i = await eval(L)(src), W = i.width, H = i.height;
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    const hw = W / 2, hh = H / 2;  // 錯開一半：四塊對角交換
+    g.drawImage(i, -hw, -hh); g.drawImage(i, hw, -hh); g.drawImage(i, -hw, hh); g.drawImage(i, hw, hh);
+    const m = document.createElement('canvas'); m.width = W; m.height = H; const k = m.getContext('2d');
+    k.fillStyle = '#000'; k.fillRect(0, 0, W, H);
+    const bw = W * band, bh = H * band;  // 十字帶：中間最白、往外漸層到黑（重畫的地方跟原圖自然接上）
+    const gx = k.createLinearGradient(hw - bw, 0, hw + bw, 0); gx.addColorStop(0, '#000'); gx.addColorStop(0.3, '#fff'); gx.addColorStop(0.7, '#fff'); gx.addColorStop(1, '#000');
+    k.fillStyle = gx; k.fillRect(hw - bw, 0, bw * 2, H);
+    const gy = k.createLinearGradient(0, hh - bh, 0, hh + bh); gy.addColorStop(0, '#000'); gy.addColorStop(0.3, '#fff'); gy.addColorStop(0.7, '#fff'); gy.addColorStop(1, '#000');
+    k.globalCompositeOperation = 'lighten'; k.fillStyle = gy; k.fillRect(0, hh - bh, W, bh * 2);
+    return [c.toDataURL('image/png'), m.toDataURL('image/png')];
+  }, url(inp), +band, load);
+  fs.writeFileSync(maskOut, Buffer.from(mask.split(',')[1], 'base64'));
+  png = img;
 } else if (mode === 'delta') {
   const [ai, withP, noP, o] = a; out = o;
   png = await run(async (s0, s1, s2, L) => {
