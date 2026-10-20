@@ -24,11 +24,14 @@ if (mode === 'adjust') {
 } else if (mode === 'sheet') {
   const [o, ...imgs] = a; out = o;
   png = await run(async (srcs, L) => {
-    const S = 512, n = srcs.length, cols = n <= 3 ? n : Math.ceil(n / 2), rows = Math.ceil(n / cols);
-    const c = document.createElement('canvas'); c.width = cols * S; c.height = rows * S; const g = c.getContext('2d');
+    // 每格寬 512（寬圖 672）、高照第一張的比例
+    const I = [], L0 = eval(L); for (const s of srcs) I.push(await L0(s));
+    const n = I.length, wide = I[0].width > I[0].height * 1.2, S = wide ? 672 : 512, SH = Math.round(S * I[0].height / I[0].width);
+    const cols = n <= 3 ? n : Math.ceil(n / 2), rows = Math.ceil(n / cols);
+    const c = document.createElement('canvas'); c.width = cols * S; c.height = rows * SH; const g = c.getContext('2d');
     for (let k = 0; k < n; k++) {
-      const i = await eval(L)(srcs[k]), x = (k % cols) * S, y = Math.floor(k / cols) * S;
-      g.drawImage(i, x, y, S, S);
+      const i = I[k], x = (k % cols) * S, y = Math.floor(k / cols) * SH;
+      g.drawImage(i, x, y, S, SH);
       g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(x, y, 44, 40); g.fillStyle = '#fff'; g.font = 'bold 30px sans-serif'; g.fillText(String(k + 1), x + 12, y + 31);
     }
     return c.toDataURL('image/png');
