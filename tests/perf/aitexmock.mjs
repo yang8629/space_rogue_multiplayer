@@ -18,8 +18,8 @@ const shot = async (withTex) => {
     if (!withTex) return;
     const tex = await PIXI.Assets.load({ src: dataUrl, loadParser: 'loadTextures' });
     console.log('貼圖大小', tex.width, tex.height, PIXI.VERSION);
-    // 這間房的地板改畫成貼圖（重複鋪滿；畫在原本地板的位置，擺設照樣畫在上面）
-    const of = GLHub.floor; GLHub.floor = function (g, rr, F) { if (rr.id !== room) return of.call(this, g, rr, F); const pat = new PIXI.FillPattern(tex, 'repeat'); pat.setTransform(new PIXI.Matrix().scale(k, k).translate(rr.x, rr.y)); g.rect(rr.x, rr.y, rr.w, rr.h).fill(pat); };
+    // 這間房的地板磚改畫成貼圖（重複鋪滿；花紋、擺設照樣畫在上面）
+    const of = GLHub.floorTiles; GLHub.floorTiles = function (g, rr, F) { if (rr.id !== room) return of.call(this, g, rr, F); const pat = new PIXI.FillPattern(tex, 'repeat'); pat.setTransform(new PIXI.Matrix().scale(k, k).translate(rr.x, rr.y)); g.rect(rr.x, rr.y, rr.w, rr.h).fill(pat); };
     GLHub.built = false;
   }, withTex, dataUrl, room, +panelWorld / +panelPx);
   await new Promise(r => setTimeout(r, 500));

@@ -96,8 +96,10 @@ const GLHub = {
     }
     this.built = true;
   },
-  // 一間房的地板：板子（亮度差一點、左上亮右下暗、板縫描邊色）＋花紋
-  floor(g, r, F) {
+  // 一間房的地板：板子＋花紋（分開：換成貼圖的地板只換板子，花紋照畫在上面）
+  floor(g, r, F) { this.floorTiles(g, r, F); this.floorPattern(g, r, F); },
+  // 板子：亮度差一點、左上亮右下暗、板縫描邊色
+  floorTiles(g, r, F) {
     const B = F.tile;
     for (let x = r.x; x < r.x + r.w; x += B) for (let y = r.y; y < r.y + r.h; y += B) {
       const w = Math.min(B, r.x + r.w - x), h = Math.min(B, r.y + r.h - y), base = hubShade(F.base, (seeded(x * 0.13 + y * 0.71) - 0.5) * 0.08);
@@ -107,6 +109,9 @@ const GLHub = {
       if (F.pattern === 'grate') for (let k = 8; k < h - 4; k += 8) g.rect(x + 6, y + k, w - 12, 2).fill({ color: HUB_INK, alpha: 0.5 });
       g.rect(x, y, w, h).stroke({ width: 1.5, color: HUB_INK });
     }
+  },
+  // 花紋：電路紋（晶片實驗室）、地毯（觀景台）、大廳中間的紋章
+  floorPattern(g, r, F) {
     const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     if (F.pattern === 'trace') {  // 電路紋：直角轉彎的細線＋端點
       for (let i = 0; i < 14; i++) {
