@@ -1,9 +1,9 @@
 // 新畫面每幀時間拆解：照 bench4 的配裝跑 8 秒，量 GLWorld.draw、GLFx.draw、GLActors.draw、GLFx.drawTexts、app.render（送給顯示卡）各花多少
 //   用法：node perf/glprof.mjs [storm|intercept|trig2]
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const build = process.argv[2] || 'intercept';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false, defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: false, defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

@@ -1,6 +1,6 @@
 // 星環電路 整局模擬的電腦（做選擇）
 //   在遊戲的全域範圍裡執行（runsim／botsim／qasim 用 vm.runInThisContext，coopsim 每份遊戲各一份 vm context），由 bot/load.js 載入
-//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、EVENTS、socketsOf、chipId、hasLv、compsFor、rareOf、mergeRare、pick、randInt
+//   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、EVENTS、socketsOf、chipId、hasLv、mergedChip、pick、randInt
 
 // 倉庫裡的晶片填進電路的空格（中等玩家：有空格就裝上）
 // 晶片分數：晶片價值表（botsim --value：chipvalue_base.json）裡這把武器、最接近現在難度的「速度 ÷ √掉血」
@@ -40,13 +40,12 @@ function chipScore(id) {
   {  // 熟練玩家：玩法晶片疊在同一批子彈上（每顆子彈同時養好幾個晶片、效果一起觸發）
     const play = new Set(G.chain.slice(1).filter(x => x && CH[x] && hasLv(x) && bOf(x) !== b).map(bOf)).size;
     if (hasLv(b)) v *= Math.min(1.5, 1 + 0.1 * play);  // 每多一個玩法晶片 +10%，最多 +50%
-    if (b === 'split' || b === 'rear') v *= Math.min(1.5, 1 + 0.1 * play);  // 讓子彈變多的：電路上的玩法晶片越多越值錢
   }
   // 插座的價值（2026-10-03）：每個插座 ≈ 組件插在這個晶片上的平均好處（組件本身的價值 × 插在這個晶片上的加乘，兩兩組合表的「插晶片」）；沒量過當 6%
   const sk = typeof socketsOf === 'function' ? socketsOf(id) : 0;
   let g = 0.06;
   if (sk && P) {
-    const gs = ['amp', 'split', 'bigshot', 'pierce'].map(c => {
+    const gs = ['amp', 'bigshot'].map(c => {
       const q = P[`${b}+${c}@h`] || P[`${c}+${b}@h`], cv = V && V[c] && V[c][w], rc = rvItem(c);
       if (!q || (!cv && rc == null)) return null;
       const y = q[nearKey(q, L)], cval = rc != null ? rc : (x => x.speed / Math.sqrt(Math.max(0.2, x.dmg)))(cv[nearKey(cv, L)]);
@@ -56,22 +55,11 @@ function chipScore(id) {
   }
   // 組件：電路上（武器或晶片）沒有空插座的話，拿了也插不上
   const freeSock = CH[id].comp && typeof socketsOf === 'function' ? G.chain.some((c, i) => c && ((G.socks || [])[i] || []).length < socketsOf(c)) : true;
-  return v * (1 + RARE_W * ((rareOf(id) || { lv: 0 }).lv)) * (1 + g * sk) * (freeSock ? 1 : 0.3);
+  return v * (1 + g * sk) * (freeSock ? 1 : 0.3);
 }
-// 稀有晶片：詞條每級 +10%（估的，沒有量過）。身上已經有這個晶片時拿稀有版本 = 那個晶片多了詞條（或詞條 +1 級），預設增強
-const RARE_W = 0.1;
-const rareUpgrade = id => !!(CH[id] && rareOf(id) && G.ownedChip && G.ownedChip(bOf(id)));
-function rareUpgradeGain(id) {
-  const o = G.ownedChip(bOf(id)), r0 = rareOf(o.arr[o.i]), r = mergeRare(r0, rareOf(id));
-  return 1 + RARE_W * (r.lv - (r0 ? r0.lv : 0));
-}
-// 晶片順序：鏡像迴路緊接武器 → 數值（分裂、巨彈、穿甲）→ 發射（反向、蓄力）→ 增幅（倍增、超頻）→ 彈道 → 命中 → 機體 → 其他 → 觸發器放最後
-const ORDER = { mod: 0, launch: 1, amp: 2, path: 3, impact: 4, body: 5, link: 6, singularity: 6, composite: 6, trigger: 9, scrap: 10 };
-// 鏡像迴路複製左邊那一格（只能複製武器、數值晶片）：放在武器右邊 = 武器多射一次
-const orderOf = id => bOf(id) === 'mirror' ? -1 : (ORDER[CH[id].type] ?? 6);
-// 插座（2026-10-02）：組件插在左邊最近的宿主上。武器先插滿 3 個（超頻一定插武器），剩下的組件依序插在玩法晶片上（吸引只插巨彈），
-//   觸發器放最後（右邊沒東西 = 回響只吃觸發器自己插座上的組件）；沒有插座數的宿主（模擬直接給的晶片）當成 2 個；組件不會升級
-const COMP_ORDER = ['mirror', 'overclock', 'split', 'pierce', 'bigshot', 'amp', 'blast', 'shock', 'ignite', 'frost', 'shred', 'ov_power', 'ov_pierce', 'ov_seek', 'ov_rate'];
+// 插座（10-22 插件往下傳）：插件影響插的那格和線上後面的所有晶片 → 先插飛船晶片（作用在飛船所有攻擊＋整條線），再照線的順序往後插
+//   傷害、大小排前面（每一格都吃），元素在後；沒有插座數的宿主（模擬直接給的晶片）當成 2 個
+const COMP_ORDER = ['amp', 'bigshot', 'shock', 'blast', 'ignite', 'frost', 'shred'];
 // 空格苦行（散彈升級，2026-10-09）：每個空格傷害 +50% → 一顆晶片要強過它佔掉的空格才裝；最弱的先拿下來放回倉庫
 //   拿掉一顆多一個空格，傷害變 (1 + per × (空格 + 1)) ÷ (1 + per × 空格) 倍；晶片分數比這個低就拿掉
 function asceticTrim() {
@@ -109,58 +97,35 @@ function capTrim() {
   }
 }
 function sortChain() {
-  if (!socketsOf) {  // 舊版（沒有插座，GAME_DIR 指到舊的 worktree）：照種類排
-    const rest = G.chain.slice(1).filter(Boolean).sort((a, b) => orderOf(a) - orderOf(b));
-    G.chain = [G.chain[0], ...rest, ...Array(G.chain.length - 1 - rest.length).fill(null)];
-    return;
-  }
   asceticTrim();
-  // 電路上的晶片＋所有插座上的組件＋倉庫裡的組件（模擬直接給的電路可能把組件寫在晶片後面，一起收進來）
+  // 電路上的晶片＋所有插座上的插件＋倉庫裡的插件（模擬直接給的電路可能把插件寫在晶片後面，一起收進來）
   const invC = G.inventory.map((id, j) => id && CH[id].comp ? j : -1).filter(j => j >= 0);
   const ids = [...G.chain.slice(1).filter(Boolean), ...(G.socks || []).flat(), ...invC.map(j => G.inventory[j])];
   for (const j of invC) G.inventory[j] = null;
   const comps = ids.filter(id => CH[id].comp).map(bOf).sort((a, b) => COMP_ORDER.indexOf(a) - COMP_ORDER.indexOf(b));
-  const hosts = ids.filter(id => !CH[id].comp).map(id => socketsOf(id) || globalThis.__KEEP0 === bOf(id) ? id : chipId(bOf(id), 2))
-    .sort((a, b) => orderOf(a) - orderOf(b));
-  // 分配插座（2026-10-03 改聰明一點）：
-  //   1. 武器先拿：鏡像（武器多射一次）、超頻、分裂、穿甲（作用在全部子彈），再加第一個倍增、巨彈
-  //   2. 多的倍增、巨彈插在產物傷害大的晶片上（黏著的爆炸、環繞放出、蓄滿那發、迴旋回程、地雷、感染）：武器層 × 宿主層相乘，分散比疊在武器上痛
-  //   3. 剩下的先插還沒進化的玩法晶片（組件升級：插 1 個升 1 級），再塞武器的空格，最後才插其他晶片
-  const BIG = ['sticky', 'orbit', 'charge', 'boomerang', 'stasis', 'infect'];
-  const W = [], H = new Map(hosts.map(h => [h, []]));
-  const cap = h => socketsOf(h) - H.get(h).length;
-  const okOn = (h, c) => c !== 'overclock' && (bOf(h) !== 'pull' || c === 'bigshot');
-  const lvRoom = h => hasLv(h) && cap(h) > 0 && H.get(h).length < compsFor(CFG.MAX_CHIP_LV);  // 還能靠組件升級（放錯的組件也算等級，但這裡只插有效果的）
-  const grab = c => comps.splice(comps.indexOf(c), 1)[0];
-  for (const c of ['mirror', 'mirror', 'overclock', 'split', 'pierce']) if (comps.includes(c) && W.length < socketsOf('weapon')) W.push(grab(c));
-  // 兩兩組合表有量過的：組件插在晶片上比插武器好（速度加乘高 5% 以上）就插晶片；沒量過的照 BIG
-  const P = globalThis.__CP, w = G.weapon.id, L = (G.sector - 1) * 7 + (G.node ? G.node.L : 0);
-  const pv = k => { const q = P && (P[k] || null); if (!q) return null; const ks = Object.keys(q).map(Number), y = q[ks.reduce((a, b) => Math.abs(b - L) < Math.abs(a - L) ? b : a)]; return y.s[w] / (1 + Math.max(-0.5, y.d[w] - 1) * 0.5); };
-  const better = (h, c) => { const b = bOf(h), on = pv(`${b}+${c}@h`) ?? pv(`${c}+${b}@h`), off = pv(`${b}+${c}`) ?? pv(`${c}+${b}`);
-    return on != null && off != null ? on > off * 1.05 : BIG.includes(b) && (c === 'amp' || c === 'bigshot'); };
-  for (const c of [...comps]) {
-    const h = hosts.find(h => cap(h) > 0 && okOn(h, c) && better(h, c));
-    if (h) H.get(h).push(grab(c));
-  }
-  for (const c of ['amp', 'bigshot']) if (comps.includes(c) && W.length < socketsOf('weapon') && !W.includes(c)) W.push(grab(c));
-  for (const c of [...comps]) {
-    if (c === 'overclock' || c === 'mirror') continue;
-    const up = hosts.find(h => lvRoom(h) && okOn(h, c)), h = hosts.find(h => cap(h) > 0 && okOn(h, c));
-    if (up) H.get(up).push(grab(c));  // 讓玩法晶片升級
-    else if (W.length < socketsOf('weapon')) W.push(grab(c));  // 武器還有空格插武器（作用在全部子彈）
-    else if (h) H.get(h).push(grab(c));
-  }
-  for (const c of [...comps]) {  // 武器插不下的鏡像：產物多一份，先挑產物傷害大的晶片
-    const h = c === 'mirror' && (hosts.find(h => cap(h) > 0 && okOn(h, c) && BIG.includes(bOf(h))) || hosts.find(h => cap(h) > 0 && okOn(h, c)));
-    if (h) H.get(h).push(grab(c));
-  }
+  const hosts = ids.filter(id => !CH[id].comp).map(id => socketsOf(id) || globalThis.__KEEP0 === bOf(id) ? id : chipId(bOf(id), 2, lvOf(id), rareOf(id)));
+  const S = [[], ...hosts.map(() => [])], cap = [socketsOf('weapon'), ...hosts.map(socketsOf)];
+  for (let i = 0; i < S.length && comps.length; i++) while (S[i].length < cap[i] && comps.length) S[i].push(comps.shift());
   const len = Math.max(G.chain.length, hosts.length + 1);
-  G.chain = [G.chain[0], ...hosts]; G.socks = [W, ...hosts.map(h => H.get(h))];
+  G.chain = [G.chain[0], ...hosts]; G.socks = S;
   while (G.chain.length < len) { G.chain.push(null); G.socks.push([]); }
   for (const c of comps) { const j = G.inventory.indexOf(null); if (j >= 0) G.inventory[j] = c; }  // 插不下的回倉庫
   capTrim();
 }
+// 同種晶片能合成就合成（中等玩家：省格子）；合成後留在電路上那格，插件在 sortChain 重新分配
+// ponytail: 一律合成，不比較分開放哪個強；要比再拿晶片價值表算
+function mergeAll() {
+  if (typeof mergedChip === 'undefined') return;  // 舊版（GAME_DIR 指到舊的 worktree）沒有合成
+  const at = [...G.chain.map((_, i) => [G.chain, i]), ...G.inventory.map((_, j) => [G.inventory, j])];
+  for (const [a, i] of at) for (const [b, k] of at) {
+    if ((a === b && i === k) || !a[i] || !b[k] || CH[a[i]].locked) continue;
+    const m = mergedChip(a[i], b[k]);
+    if (!m) continue;
+    if (a === G.chain && b !== G.chain) { a[i] = m; b[k] = null; } else { b[k] = m; a[i] = null; }
+  }
+}
 function equip() {
+  mergeAll();
   for (let i = 1; i < G.chain.length; i++) {
     if (G.chain[i]) continue;
     const j = G.inventory.findIndex(id => id && !CH[id].locked && !CH[id].comp);  // 電路格只放晶片（組件在 sortChain 插進插座）
@@ -176,11 +141,10 @@ function equip() {
   sortChain();
   G.recalc();
 }
-// 選獎勵：挑分數最高的（晶片不會合成）
+// 選獎勵：挑分數最高的（同種晶片在 equip 合成）
 // 刷新三選一（2026-10-09）：最好的選項沒讓配裝變好（不到 1.03 倍）就花晶體刷新；刷完至少留 ◆40（照星區漲）補血，每次三選一最多刷 2 次
 //   「變好幾倍」：零件 = 試裝分數的倍數；晶片（電路有空格）= 晶片分數；晶片（電路滿了）= 跟電路上最弱那顆比；組件 = 晶片分數
 function rewardGain(id) {
-  if (rareUpgrade(id)) return rareUpgradeGain(id);
   if (!CH[id]) return chipScore(id);
   if (CH[id].comp || G.chain.includes(null)) return chipScore(id);
   const cur = G.chain.filter((x, i) => i > 0 && x && !CH[x].locked).map(chipScore);
@@ -204,15 +168,14 @@ function pickReward(R) {
   const ok = R.options.filter(id => G.canAcquire(id)), merge = G.mergeTarget && ok.find(id => G.mergeTarget(id));  // 舊版：能合成升級的優先
   if (merge) return merge;
   if (G.chain.includes(null)) {  // 熟練玩家：電路還有空格就拿晶片（不拿零件）
-    const c = ok.filter(id => CH[id] && !rareUpgrade(id));  // 身上已經有的稀有版本不佔格子，跟其他選項比進步幅度（rewardScore）
-    if (c.length && !ok.some(rareUpgrade)) return c.reduce((a, b) => chipScore(b) > chipScore(a) ? b : a);
+    const c = ok.filter(id => CH[id]);
+    if (c.length) return c.reduce((a, b) => chipScore(b) > chipScore(a) ? b : a);
   }
   return ok.length ? ok.reduce((a, b) => rewardScore(b) > rewardScore(a) ? b : a) : null;
 }
 // 三選一的分數：電路滿了（沒有空格）時，新的電路晶片裝不上去，只值「換掉電路上最弱那顆的進步」＋ 1/4 的原分數（之後有格子、或拿來換的彈性）
 //   2026-10-05 以前直接用晶片分數：電路滿了還一直拿晶片丟倉庫，倉庫有晶片在等位置時也不拿零件換格子
 function rewardScore(id) {
-  if (rareUpgrade(id)) return rareUpgradeGain(id);
   const s = chipScore(id);
   if (!CH[id] || CH[id].comp || G.chain.includes(null)) return s;
   const cur = G.chain.filter((x, i) => i > 0 && x && !CH[x].locked).map(chipScore);
@@ -243,7 +206,6 @@ function shopBuy() {
   G.shop.items.map((it, i) => [it, i]).filter(([it]) => !it.sold).sort((a, b) => chipScore(b[0].id) - chipScore(a[0].id)).forEach(([it, i]) => {
     if (G.credits >= it.price && (G.chain.includes(null) || chipScore(it.id) > weakest() * 1.1)) G.buy(i);
   });
-  if (G.buyCap && G.stats.heat >= G.energyCap()) G.buyCap();  // 能量容量（2026-10-10）：全部有電要的（heat）已經用滿容量就買
 }
 const closeEditor = () => { if (G.state === 'editor') G.toggleEditor(); };
 

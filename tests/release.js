@@ -1,9 +1,12 @@
 'use strict';
 // 上傳前檢查（雙人版）：只印摘要，失敗才印細節
-//   node release.js               只檢查（不改檔、不提交）
-//   node release.js 0.6.3         把版號改成 mp-0.6.3（今天日期＋時間）、README 目前版本、docs/版本紀錄.md「（下一版）」改名，然後檢查
-//   node release.js 0.6.3 --push  同上，全部通過才提交並推上 GitHub
-// 檢查項目：所有測試、機制檢查（含插座檢查）、要上傳的內容沒有私人資訊、版號跟 GitHub 上不同、README 目前版本、docs/版本紀錄.md
+//   node release.js                  只檢查（不改檔、不提交）
+//   node release.js --patch          版號「修」+1（v0.0.1 → v0.0.2）：只有修錯誤、調數值、美術、文字
+//   node release.js --minor          版號「次」+1、「修」歸零（v0.0.2 → v0.1.0）：規則或內容有變
+//   node release.js 1.0.0            直接指定（「主」只在使用者說要的時候改；第一次從舊版號換過來也用這個）
+//   以上加 --push：全部通過才提交並推上 GitHub。版號規則見 docs/版號.md
+//   改版號 = VERSION 改成 v主.次.修（今天日期＋時間）、index.html 的檔案網址、README 目前版本、docs/版本紀錄.md「（下一版）」改名
+// 檢查項目：所有測試、機制檢查（含插座檢查）、要上傳的內容沒有私人資訊、README 目前版本；改版號時才檢查：版號跟 GitHub 上不同、版本紀錄
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -17,7 +20,21 @@ const REPO = path.join(__dirname, '..');
 const TESTS = ['smoke.js', 'range.js', 'e2e.js', 'maptest.js', 'editortest.js', 'beamlag.js', 'roomlag.js', 'matelag.js', 'silent.js'];  // 插座檢查已經併進機制檢查（SockCheck）
 const args = process.argv.slice(2);
 const push = args.includes('--push');
-const newVer = args.find(a => /^\d+(\.\d+)+$/.test(a));
+const verOf = src => (src.match(/VERSION: *'([^']+)'/) || [])[1];
+const read = f => fs.readFileSync(path.join(REPO, f), 'utf8');
+// 新版號：直接指定（三段數字）或 --patch／--minor 照目前的 v主.次.修 往上加
+const bump = args.includes('--minor') ? 'minor' : args.includes('--patch') ? 'patch' : null;
+const newVer = (() => {
+  const given = args.find(a => /^\d+(\.\d+)*$/.test(a));
+  if (given && !/^\d+\.\d+\.\d+$/.test(given)) { console.log(`版號要三段數字（主.次.修）：${given}`); process.exit(1); }
+  if (given) return given;
+  if (!bump) return null;
+  const m = (verOf(read('js/core/config.js')) || '').match(/^v(\d+)\.(\d+)\.(\d+)/);
+  if (!m) { console.log('目前的版號不是 v主.次.修（舊的 mp- 版號）：第一次請直接指定，例如 node release.js 0.1.0'); process.exit(1); }
+  const [, a, b, c] = m.map(Number);
+  return bump === 'minor' ? `${a}.${b + 1}.0` : `${a}.${b}.${c + 1}`;
+})();
+if (push && !newVer) { console.log('上傳一定要換版號：加 --patch、--minor 或指定版號'); process.exit(1); }
 
 let fails = 0;
 // 完整結果另外存一份（沒過的項目附完整內容）：畫面上的輸出被截掉、被過濾時，還能回頭查是哪一項沒過
@@ -39,19 +56,19 @@ const git = (...a) => {
   if (r.status !== 0) throw new Error(`git ${a.join(' ')}：${r.stderr}`);
   return r.stdout;
 };
-const read = f => fs.readFileSync(path.join(REPO, f), 'utf8');
 const write = (f, t) => fs.writeFileSync(path.join(REPO, f), t);
 const VLOG = 'docs/版本紀錄.md';  // 版本紀錄（README 只放目前版本＋連結）
-const verOf = src => (src.match(/VERSION: *'([^']+)'/) || [])[1];
 
 // ---- 1. 版號（有指定才改） ----
 if (newVer) {
   const d = new Date(), p2 = n => String(n).padStart(2, '0');
   const day = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;  // 版號戳記：日期＋時間
-  const full = `mp-${newVer}（${day}）`, old = verOf(read('js/core/config.js'));
+  const full = `v${newVer}（${day}）`, old = verOf(read('js/core/config.js'));
   write('js/core/config.js', read('js/core/config.js').replace(/VERSION: *'[^']+'/,`VERSION: '${full}'`));
+  // 每個檔案的網址帶版號：發布後瀏覽器一定重抓，同一版的檔案不會新舊混用（GitHub Pages 的檔案各自暫存，以前會拿到一半新一半舊）
+  write('index.html', read('index.html').replace(/((?:src|href)="(?:js|css|assets)\/[^"?]+)(?:\?v=[^"]*)?"/g, `$1?v=${newVer}"`));
   write('README.md', read('README.md').split(`**${old}**`).join(`**${full}**`));
-  write(VLOG, read(VLOG).replace('| （下一版） |', `| mp-${newVer} |`));
+  write(VLOG, read(VLOG).replace('| （下一版） |', `| v${newVer} |`));
   console.log(`版號 ${old} → ${full}`);
 }
 
@@ -128,14 +145,13 @@ const verLocal = verOf(read('js/core/config.js'));
 let verRemote = '';
 try { verRemote = verOf(git('show', 'origin/main:js/core/config.js')); } catch (e) {}
 const hasChanges = added.length > 0 || git('rev-list', '--count', 'origin/main..HEAD').trim() !== '0';
-ok(!hasChanges || verLocal !== verRemote, `版號 ${verLocal}（GitHub 上是 ${verRemote || '？'}）`,
-  '有改動但版號沒變：用 node release.js <新版號>');
-const readme = read('README.md');
+const readme = read('README.md'), vlog = read(VLOG), tag = (verLocal || '').split('（')[0];
 ok(readme.includes(`**${verLocal}**`), 'README 目前版本和 VERSION 一致');
-const vlog = read(VLOG);
-ok(!vlog.includes('| （下一版） |'), '版本紀錄沒有未命名的「（下一版）」');
-const tag = (verLocal || '').split('（')[0];
-ok(new RegExp(`\\| ${tag.replace(/\./g, '\\.')} \\|`).test(vlog), `版本紀錄有 ${tag} 這一行`);
+if (newVer) {  // 上傳前的關卡（平常只檢查時跳過：有還沒上傳的改動本來就會不一樣）
+  ok(!hasChanges || verLocal !== verRemote, `版號 ${verLocal}（GitHub 上是 ${verRemote || '？'}）`, '有改動但版號沒變');
+  ok(!vlog.includes('| （下一版） |'), '版本紀錄沒有未命名的「（下一版）」');
+  ok(new RegExp(`\\| ${tag.replace(/\./g, '\\.')} \\|`).test(vlog), `版本紀錄有 ${tag} 這一行`);
+} else console.log(`（版號 ${verLocal}；GitHub 上是 ${verRemote || '？'}${hasChanges ? '；有還沒上傳的改動' : ''}）`);
 
 // ---- 5. 提交＋上傳 ----
 const slow = TIMES.slice().sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(0)}`).join('、');

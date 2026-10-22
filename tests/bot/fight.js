@@ -115,22 +115,18 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     const v = AR.f(p.x, p.y);
     if (v < 110) { const [gx, gy] = AR.grad(p.x, p.y), w = (110 - v) / 110 * 1.5; mx += gx * w; my += gy * w; }
   }
-  // 閃子彈：200 內朝自己飛來的敵彈，往它的側邊躲（越近越急）；中等玩家會這樣做
+  // 閃子彈（熟練玩家，2026-10-22 改成預測式）：照原本想走的方向往前推 0.6 秒，會被打到就改走 16 個方向（＋原地）裡最安全、最接近原本方向的那個
+  //   以前是每顆子彈往側邊推、推力加總：兩邊都有子彈時互相抵銷，打裂界獵艦跟完全不閃只差約兩成（bossfight.js boss2，每把 2 場）
   // 逆襲（散彈升級）：爆發沒開、HP 一半以上 → 不閃子彈，故意吃一發換爆發（衝撞照樣閃：太痛）
   const bait = G.wpOf(p).revenge && !(p.revengeT > 0) && p.hp > p.maxHp * 0.5;
   threat = 0;
-  if (!bait) for (const b of G.eBullets) {
-    const rx = p.x - b.x, ry = p.y - b.y, d = Math.hypot(rx, ry), v = Math.hypot(b.vx, b.vy) || 1;
-    if (b.mine) {  // 精英「佈雷」的地雷（不會動）：靠近 110 內就往外繞（越近越急）
-      if (d < 110) { const w = 2.5 * (1 - d / 110); mx += rx / (d || 1) * w; my += ry / (d || 1) * w; threat += w; }
-      continue;
-    }
-    if (d > 200 || (b.vx * rx + b.vy * ry) <= 0) continue;
-    const miss = Math.abs(rx * b.vy - ry * b.vx) / v;  // 子彈照直線飛，會離飛船多近
-    if (miss > p.r + b.r + 24) continue;
-    let sx = -b.vy / v, sy = b.vx / v; if (sx * rx + sy * ry < 0) { sx = -sx; sy = -sy; }
-    const w = 3 * (1 - d / 200); mx += sx * w; my += sy * w; threat += w;
+  for (const b of G.eBullets) {  // 精英「佈雷」的地雷（不會動）：靠近 110 內就往外繞（越近越急）
+    if (!b.mine) continue;
+    const rx = p.x - b.x, ry = p.y - b.y, d = Math.hypot(rx, ry);
+    if (d < 110) { const w = 2.5 * (1 - d / 110); mx += rx / (d || 1) * w; my += ry / (d || 1) * w; threat += w; }
   }
+  const dodge = bait ? null : dodgeDir(p, mx, my);
+  if (dodge) { mx = dodge.x; my = dodge.y; threat += dodge.w; }
   // 落點紅圈（終焉核心的轟炸、砲艦的砲擊，2026-10-19 加）：在圈裡（含飛船半徑＋20）就往圈外走，越快爆越急
   //   以前完全不躲：砲艦精英每 3 秒 3 個圈，電腦站著吃
   for (const z of G.zones) {
@@ -162,7 +158,10 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (d / v < 0.35) ramHit = true;
   }
   // dodge:ram 也躲貼身：任何敵人靠到 50 內就往外推（盾衛、刺殼、分裂體慢慢擠過來撞）；60 內衝刺
+  //   自己勾住的不算（暈住、被拉在身前 HOOK.hold；以前一直往外推、浪費衝刺，牽引鉤扯完才甩時整局 0%，2026-10-22）
+  const held = new Set([p.hookE, ...(p.hookX || [])]);
   for (const e of all) {
+    if (held.has(e)) continue;
     const rx = p.x - e.x, ry = p.y - e.y, d = Math.hypot(rx, ry) || 1, gap = d - p.r - e.r;
     if (gap > 50) continue;
     const w = 3 * (1 - Math.max(0, gap) / 50); mx += rx / d * w; my += ry / d * w; threat += w;
@@ -194,11 +193,11 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   }
   if (!inHole || Math.hypot(p.x - holeStuck.x, p.y - holeStuck.y) > 20) { holeStuck.x = p.x; holeStuck.y = p.y; holeStuck.t = G.time; }
   const l = Math.hypot(mx, my);
-  const m = slow && threat < 0.5 ? slow * 60 : 60;  // 十字彈流跟著轉：沒有子彈要閃時照算出來的速度走（不是一律全速）
+  const m = slow && threat < 0.5 && !dodge ? slow * 60 : 60;  // 十字彈流跟著轉：沒有子彈要閃時照算出來的速度走（不是一律全速）
   I.joy = l > 0.01 ? { bx: 0, by: 0, x: mx / l * m, y: my / l * m } : null;
   if (chase) I.dash = true;
   if (inHole && G.time - holeStuck.t > 2 && p.dashCd <= 0) I.dash = true;  // 黑洞裡被拖住：往外衝
-  const danger = ramHit || beamHit || !bait && G.eBullets.some(b => Math.hypot(b.x - p.x, b.y - p.y) < 60 && (b.vx * (p.x - b.x) + b.vy * (p.y - b.y)) > 0) || nd < 40;
+  const danger = ramHit || beamHit || (dodge && dodge.hitT < 0.15) || nd < 40;  // 怎麼走都會在 0.15 秒內被打到：衝刺（有無敵時間）
   if (danger && p.dashCd <= 0) I.dash = true;
   // 拖曳艦的牽引光束拉住自己（2026-10-19）：往遠離牠的方向衝刺掙脫（熟練玩家看到光束就衝）；衝刺還沒好就先往外走
   const me = G.slotOf(p), puller = all.find(e => e.mode === 'pull' && e.tgt === me);
@@ -212,7 +211,7 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
 // 照配裝打：電路上有這些玩法晶片時，刻意照它們的玩法打（可以同時好幾種）
 //   反向：背對敵人射；衝刺射擊：安全時朝敵人衝；環繞：貼近讓繞圈的子彈磨敵人；
 //   牆反彈：直接打（打偏的自然會彈回來；2026-09-30 比過：刻意瞄牆比較差）；蓄力：平常照打，血厚的敵人才停火蓄滿再放
-const bOf = id => String(id).split('~')[0];  // 晶片 id：base~插座數
+const bOf = id => CHIPS[id] ? baseOf(id) : String(id).split(/[~^!]/)[0];  // 晶片 id：base~插座數^等級!稀有 → base
 const hasChip = b => G.chain.some(id => id && bOf(id) === b);
 // 久打不到：記住敵人總血量上次減少的時間（新的一波生出來也算有進展）；有旗艦時只看旗艦（打死牠召喚的蟲群不算進展）
 const stall = { hp: 0, t: 0, n: 0 };
@@ -225,13 +224,38 @@ function stalled() {
   stall.hp = hp; stall.n = n;
   return n > 0 && G.time - stall.t > 20;
 }
-const chg = { t0: 0, off: 0 };  // 蓄力：開始停火的時間、照常開火到什麼時候
-let relT = 0, threat = 0, navOn = false;  // threat：這一幀要閃的子彈有多急（0 = 沒有子彈會打到；baseBot 算）
+// 預測式閃子彈：回傳要改走的方向 { x, y, w = 急迫度, hitT = 最好的方向也會在幾秒後被打到（Infinity = 躲得掉）}；照原本方向走就安全時回傳 null
+//   飛船速度照 Player.update 的加速度（每秒 12）推：v(t) = 目標 + (v0 − 目標)·e^(−12t)；子彈照直線飛、到壽命就消失
+const DODGE = { T: 0.6, dt: 0.05, n: 16, pad: 4 };
+function dodgeDir(p, mx, my) {
+  const spd = Math.max(p.ship.speed, Math.hypot(p.vx, p.vy)), reach = spd * DODGE.T + 60;
+  const near = b => Math.hypot(b.x - p.x, b.y - p.y) < reach + Math.hypot(b.vx, b.vy) * DODGE.T;
+  const B = G.eBullets.filter(b => !b.mine && b.life > 0 && near(b));
+  for (const e of G.enemies) if (!e.dead && !(e.spawnT > 0) && Math.hypot(e.vx || 0, e.vy || 0) >= 170 && near(e)) B.push({ x: e.x, y: e.y, vx: e.vx, vy: e.vy, r: e.r, life: DODGE.T });  // 高速衝過來的敵人（衝鋒、滾動）也當子彈算
+  if (!B.length) return null;
+  const hitT = (ux, uy) => {  // 照 (ux, uy) 方向全速走（0, 0 = 停下），幾秒後第一次被打到
+    for (let t = DODGE.dt; t <= DODGE.T + 1e-6; t += DODGE.dt) {
+      const e = (1 - Math.exp(-12 * t)) / 12, x = p.x + ux * spd * t + (p.vx - ux * spd) * e, y = p.y + uy * spd * t + (p.vy - uy * spd) * e;
+      for (const b of B) if (t <= b.life && Math.hypot(b.x + b.vx * t - x, b.y + b.vy * t - y) < p.r + b.r + DODGE.pad) return t;
+    }
+    return Infinity;
+  };
+  const l = Math.hypot(mx, my), ux = l > 0.01 ? mx / l : 0, uy = l > 0.01 ? my / l : 0;
+  if (hitT(ux, uy) === Infinity) return null;
+  let best = null;
+  for (let i = 0; i <= DODGE.n; i++) {
+    const a = i / DODGE.n * TAU, dx = i < DODGE.n ? Math.cos(a) : 0, dy = i < DODGE.n ? Math.sin(a) : 0, h = hitT(dx, dy);
+    const score = Math.min(h, DODGE.T + 1) * 10 + (dx * ux + dy * uy);  // 先比安全（越晚被打到越好），一樣安全再比跟原本方向多接近
+    if (!best || score > best.score) best = { x: dx, y: dy, score, hitT: h };
+  }
+  return { x: best.x, y: best.y, w: 3, hitT: best.hitT };
+}
+let threat = 0, navOn = false;  // threat：這一幀要閃的子彈有多急（0 = 沒有子彈會打到；baseBot 算）
 // navOn：這一幀在繞路／脫困（各晶片的貼近走位先不蓋過去）
 const unstick = {};
 const holeStuck = { x: 0, y: 0, t: 0 };  // 黑洞裡被拖住多久（見 baseBot）  // 卡住偵測（見 baseBot）
 // 新的一局：電腦自己的狀態也歸零（蓄力放開的時間、卡住偵測、出口脫困）
-function resetBot() { chg.t0 = chg.off = 0; relT = 0; threat = 0; navOn = false; stall.hp = 0; stall.t = 0; stall.n = 0; for (const k in unstick) delete unstick[k]; for (const k in exitStuck) delete exitStuck[k]; holeStuck.t = 0; }
+function resetBot() { threat = 0; navOn = false; stall.hp = 0; stall.t = 0; stall.n = 0; for (const k in unstick) delete unstick[k]; for (const k in exitStuck) delete exitStuck[k]; holeStuck.t = 0; }
 const T_A = () => (Arena);
 // 區域出口：自己這一區沒有敵人、出口出現時，直接飛進去（不開火、不衝刺）
 //   大地圖：看自己這一區的閘門開了沒（雙人：隊友先穿過去時 exit 已經收掉、下一區的敵人在閘門另一邊，不算擋路）
@@ -324,35 +348,20 @@ function standBot(p) {
 }
 function fightBot(p) {
   baseBot(p);
-  const ch = hasChip('charge'), df = hasChip('dashfire');
-  if (!(ch || df)) return;
-  let n = null, nd = Infinity;
-  for (const e of G.enemies) { if (e.dead || e.spawnT > 0 || e.cloak > 0.5) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < nd) { nd = d; n = e; } }
-  if (!n) return;
-  const I = Input, ux = (n.x - p.x) / nd, uy = (n.y - p.y) / nd;
-  // 衝刺射擊：冷卻好、沒有子彈要閃，往敵人的側面衝（衝刺就會開火，不用靠近；以前朝敵人衝，掉血是不裝的 2 倍多）
-  //   左右兩邊挑落點（約 130 外）附近沒有敵人和敵彈、也沒出場地的那一邊；都不安全就不衝，衝刺留著躲危險（baseBot）
-  if (df && p.dashCd <= 0 && nd < 400 && !I.dash && threat === 0) {
-    for (const sd of [1, -1]) {
-      const dx = -uy * sd, dy = ux * sd, lx = p.x + dx * 130, ly = p.y + dy * 130;
-      const inside = lx > 60 && ly > 60 && lx < CFG.WORLD_W - 60 && ly < CFG.WORLD_H - 60;
-      const safe = inside && !G.enemies.some(e => !e.dead && Math.hypot(e.x - lx, e.y - ly) < 80) && !G.eBullets.some(b => Math.hypot(b.x - lx, b.y - ly) < 90);
-      if (safe) { I.joy = { bx: 0, by: 0, x: dx * 60, y: dy * 60 }; I.dash = true; break; }
-    }
-  }
-  // 反向、牆反彈照常面對敵人打（9-30 比過：刻意背對／瞄牆比較差）
-  const aim = { bx: 0, by: 0, x: ux * 60, y: uy * 60 };
-  // 蓄力：只對血厚的（要 6 發以上才打得死）、而且沒有子彈要閃時才停火蓄滿再放，其他照打
-  //   停火超過 4 秒還沒放（蓄力一直被閃躲打斷、充不滿）→ 照常開火 3 秒；久打不到時不蓄（2026-10-09 QA：相位刃＋蓄力對刺殼停火 300 秒）
-  const tough = n.maxHp >= 6 * G.wp.damage || /boss|elite/.test(n.type);
-  if (G.time < chg.t0) chg.t0 = chg.off = 0;  // 新的一場
-  const holdOk = G.time >= chg.off && !(G.time - stall.t > 20);
-  if (ch && (relT > 0 || (tough && threat === 0 && holdOk))) {
-    I.autoFire = false;
-    if (!chg.t0) chg.t0 = G.time;
-    if (relT > 0) relT -= 1 / 60; else if (p.chargeC >= 1 && nd < 500) relT = 0.1;
-    I.aimStick = relT > 0 ? aim : null;
-    if (relT > 0) chg.t0 = 0; else if (G.time - chg.t0 > 4) { chg.off = G.time + 3; chg.t0 = 0; }
-  } else chg.t0 = 0;
+  altBot(p);
+}
+// 右鍵（10-22：招牌動作會觸發電路）：照武器挑時機按（熟練玩家）
+function altBot(p) {
+  const id = G.weapon.id, W = WEAPON_PLAY[id];
+  if (!WEAPONS[id].alt || p.altCd > 0) return;
+  const near = (x, y, r) => G.enemies.filter(e => !e.dead && e.spawnT <= 0 && Math.hypot(e.x - x, e.y - y) < r).length;
+  const nearB = r => G.eBullets.filter(b => b.life > 0 && Math.hypot(b.x - p.x, b.y - p.y) < r).length;
+  const go = id === 'laser' ? (p.hHeat || 0) >= 0.6 && near(p.x, p.y, HEAT.r) >= 1  // 排熱：熱度夠、身邊有怪
+    : id === 'scatter' ? W.count(p) >= W.max()  // 召回：飛輪都丟出去了（10-22 試過等停住快消失才收、站一個射程讓飛輪停在敵人身上：整局 5%／10%／兩個一起 0%，都比一丟滿就收的 15% 差）
+    : id === 'plasma' ? W.shots(p).some(b => b.mode === 'park' && W.boomN(b) >= 3)  // 塌縮：有井算到 3 隻以上（旗艦照命中點算，跟遊戲同一套）
+    : id === 'railgun' ? !!p.hookE && (p.slammed || p.hookT < 0.3)  // 甩擊：扯到重摔之後再甩（勾住快到時間也甩）
+    : id === 'blade' ? nearB(PARRY.r * 1.5) > 0  // 彈反：子彈快打到
+    : id === 'drone' ? nearB(150) >= 3 : false;  // 收攏：身邊子彈多
+  if (go) Input.alt = true;
 }
 

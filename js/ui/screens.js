@@ -5,6 +5,44 @@
 // =====================================================================
 // SCREENS — DOM 畫面（標題 / 航圖 / 獎勵 / 商店 / 結算）
 // =====================================================================
+// ---------- 從資料組出來的小段 HTML（資料層只放數值和文字，排版在這裡） ----------
+// 數值圖示（最大 HP、速度、衝刺冷卻…）
+const statIcon = id => `<img class="si" src="assets/ui/stat_${id}.png" alt="${STATS[id].name}" title="${STATS[id].name}">`;
+// 一項效果：圖示＋數值，對玩家有利綠色、不利紅色（例：受到的傷害 +3% 紅、衝刺冷卻 −8% 綠）
+const statFx = ({ stat, v, pct }) => `<span class="sv ${v * STATS[stat].good > 0 ? 'good' : 'bad'}">${statIcon(stat)}${signed(v, pct)}</span>`;
+// 零件疊 n 層的總效果（圖示）
+const partLine = (id, n = 1) => PARTS[id].fx.map(f => statFx(fxTimes(f, n))).join('');
+// 玩法晶片每一級的效果，現在這一級亮綠
+const lvLine = (base, cur) => {
+  const L = LV_INFO[base];
+  if (!L) return '';
+  return `${L[0]}：` + L[1].map((v, i) => i + 1 === cur ? `<b style="color:#9dff6b">Lv${i + 1} ${v}</b>` : `Lv${i + 1} ${v}`).join(' → ');
+};
+// 收集進度：手上同種、還沒滿級的晶片裡最高的等級（例：碎片 2/3 = 已有一片 Lv2，再拿一片就能合成 Lv3）
+const lvHave = base => Math.max(0, ...[...(Game.chain || []), ...(Game.inventory || [])].filter(x => x && baseOf(x) === base && lvOf(x) < CFG.MAX_CHIP_LV).map(lvOf));
+// 飛船：開局零件每種幾層＋總效果（沒有零件 = 空）
+const shipPartsHtml = S => Object.entries(S.parts).map(([id, n]) => `<div class="fxl"><b>${PARTS[id].name} ${n} 層</b>${partLine(id, n)}</div>`).join('');
+// 飛船：專屬能力（有 skillDesc 的再加上開局零件開啟的特性）
+function shipAbilityHtml(S) {
+  const head = `<div class="trl"><b style="color:${S.color}">${S.abilityName}</b>${S.skillDesc ? S.skillDesc() : S.abilityDesc}</div>`;
+  if (!S.skillDesc) return head;
+  return head + Object.entries(S.parts).flatMap(([id, n]) => [n >= 2 && PARTS[id].t2, n >= 4 && PARTS[id].t4].filter(Boolean))
+    .map(t => `<div class="trl"><b style="color:#9dff6b">開啟${t.name}</b>${t.desc}</div>`).join('');
+}
+// 飛船卡片的說明：平常只顯示一句（brief），按 Shift 看開局零件和專屬能力的完整說明
+const shipDescHtml = S => `<div class="ds brief">${S.brief}</div><div class="det"><div class="ds">${shipPartsHtml(S)}${shipAbilityHtml(S)}</div></div>`;
+// 開局數值一行（圖示）：船體、速度、衝刺冷卻、零件格
+function shipStatLine(S) {
+  const st = shipStart(S);
+  return `<div class="statl"><span>${statIcon('hp')}${st.hp}</span><span>${statIcon('speed')}${st.speed}</span><span>${statIcon('dashCd')}${st.dashCd} 秒</span><span>${statIcon('slots')}${S.partSlots}</span></div>`;
+}
+
+// 傷害統計的來源 → 顏色（武器、飛船的代表色；晶片照種類）
+function dmgKeyColor(key) {
+  return key === 'weapon' ? WEAPONS[Game.weapon.id].color : key === 'ship' ? SHIPS[Game.shipId].color : key === 'comet' ? '#bfe9ff'
+    : CHIPS[key] ? TYPE_META[CHIPS[key].type].color : '#8fa3d9';
+}
+
 // 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、組件金、機體強化（零件）銀白
 const CARD_CAT = { chip: '晶片', comp: '組件', mech: '機體強化' };
 const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
@@ -21,17 +59,17 @@ function weaponCardBody(id) {
     <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>`;
 }
 function chipCard(id, footer = '') {
-  const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip', r = rareOf(id);
+  const d = CHIPS[id], m = TYPE_META[d.type], cat = isComp(id) ? 'comp' : 'chip';
   const ps = d.stored ? `<div class="ps">倉庫被動：${Object.entries(d.stored).map(([k, v]) => PASSIVE_LABEL[k](v)).join('、')}</div>` : '';
-  const lv = LV_INFO[baseOf(id)] ? `<div class="ty" style="line-height:1.6">${lvLine(baseOf(id), 1)}<br>每插 1 個組件升 ${CFG.LV_PER_COMP} 級</div>` : '';  // 卡片上的晶片還沒插組件，一律 Lv1
+  const have = lvHave(baseOf(id));
+  const lv = LV_INFO[baseOf(id)] ? `<div class="ty" style="line-height:1.6">${lvLine(baseOf(id), lvOf(id))}<br>同種晶片拖到一起合成升級${have ? `　<b style="color:#ffd166">已有 ${have}/${CFG.MAX_CHIP_LV}</b>` : ''}</div>` : '';
   const sk = isHost(id) && id !== 'weapon' && socketsOf(id) ? ' sk' + socketsOf(id) : '';  // 插座數 = 稀有度：框色 1 灰、2 藍、3 紫
-  // 稀有晶片：金色色帶、金框流光，名稱下面一行詞條（框色改金色，插座數看 ◇ 那行）
-  const band = r ? '<div class="cat rareband">★ 稀有晶片</div>' : catBand(cat), rl = r ? `<div class="rareln">★ ${rareTxt(r)}</div>` : '';
-  return `<div class="card cat-${cat}${sk}${r ? ' rare' : ''}">${band}
-    <div class="ty" style="color:${m.color}">${m.icon} ${m.label} · ⚡${d.cost}</div>
-    <div class="ttl">${d.name}</div>${rl}
+  const rare = rareOf(id) ? `<div class="ds rareln">★ 稀有：${RARE_INFO[baseOf(id)]}</div>` : '';
+  return `<div class="card cat-${cat}${sk}${rareOf(id) ? ' rare' : ''}">${rareOf(id) ? '<div class="cat rareband">★ 稀有晶片</div>' : catBand(cat)}
+    <div class="ty" style="color:${m.color}">${m.icon} ${m.label}</div>
+    <div class="ttl">${lvName(id)}</div>
     ${sockLine(id)}
-    <div class="ds brief">${chipBrief(id)}</div>
+    <div class="ds brief">${chipBrief(id)}</div>${rare}
     <div class="det"><div class="ds">${d.desc}</div>${lv}${ps}</div>${footer}</div>`;
 }
 // 三選一的標題（種類見 CFG.REWARDS）
@@ -43,27 +81,19 @@ const REWARD_TITLE = {
   event: () => '? 事件：三選一（晶片或零件）',
   eventPart: () => '⚖ 黑市：零件三選一',
 };
-const REVEAL_MS = 1600;  // 揭曉動畫：有稀有晶片時，其他卡先翻開，稀有那格醞釀到這時候才翻開
 const FLIP_BEAT_MS = 300;  // 三選一：畫面出來後等這麼久才開始翻卡片
-// 稀有版本、身上已經有這個晶片：身上那個變稀有。已有不同詞條時兩個按鈕：替換（新詞條從 1 級）／增強（原本的 +1 級）
-function rareButtons(id, wait) {
-  const o = Game.ownedChip(baseOf(id)), old = o.arr[o.i], r0 = rareOf(old), r1 = rareOf(id), off = wait ? 'disabled' : '';
-  const where = `${o.arr === Game.chain ? `電路第 ${o.i + 1} 格` : '倉庫'}的${CHIPS[baseOf(id)].name}`, sk = Math.max(socketsOf(old), socketsOf(id));
-  const note = `<div class="ty rareln">${where}變稀有（插座 ${sk} 個，組件不動）</div>`;
-  const btn = (mode, txt, dis) => `<button ${off || dis ? 'disabled' : ''} data-act="reward" data-arg="${id}|${mode}">${txt}</button>`;
-  const up = r => mergeRare(r0, r1, r);
-  if (!r0) return note + btn('boost', `選擇：${RARE[r1.k].name} Lv${r1.lv}`);
-  if (r0.k === r1.k) return note + btn('boost', r0.lv >= RARE_MAX_LV ? '詞條已滿級' : `增強：${RARE[r0.k].name} Lv${r0.lv} → Lv${up('boost').lv}`, r0.lv >= RARE_MAX_LV);
-  return note + btn('replace', `替換：${RARE[r0.k].name} → ${RARE[r1.k].name} Lv1`)
-    + btn('boost', r0.lv >= RARE_MAX_LV ? `${RARE[r0.k].name}已滿級` : `增強：${RARE[r0.k].name} Lv${r0.lv} → Lv${up('boost').lv}`, r0.lv >= RARE_MAX_LV);
+// 三選一卡片：拿了會裝在哪；進倉庫時改成紅字
+function placeLine(id) {
+  const P = Game.autoPlace(id), line = (t, bad) => `<div class="ty placeln" style="color:${bad ? '#ff8a8a' : '#9dff6b'}">→ ${t}</div>`;
+  if (!P) return line(isComp(id) ? '沒有空插座，先放倉庫' : '電路已滿，先放倉庫（要自己換）', true);
+  return line(P.sock != null ? `插在${CHIPS[Game.chain[P.sock]].name}上` : '接在電路最後');
 }
-// 插座說明：宿主顯示插座數與產物；組件顯示「插在左邊的晶片上」
+// 插座說明：晶片顯示插座數；插件顯示怎麼插
 function sockLine(id) {
-  if (isComp(id)) return '<div class="ty sockln">◆ 組件：拖進武器、玩法晶片或觸發器的插座（不佔電路格）</div>';
+  if (isComp(id)) return '<div class="ty sockln">◆ 插件：拖進武器或晶片的插座（不佔電路格）</div>';
   if (!isHost(id) || id === 'weapon') return '';
-  const n = socketsOf(id), P = HOST_PRODUCT[baseOf(id)] || '';
-  // 產物（插在上面的組件作用在哪裡）縮起來時也顯示：選晶片時常常要看
-  return `<div class="ty sockln${n ? '' : ' det'}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}${P ? `<br>產物：${P}` : ''}</div>`;
+  const n = socketsOf(id), P = CHIPS[baseOf(id)];
+  return `<div class="ty sockln${n ? '' : ' det'}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}<br>往下傳：${P.pass === 'kill' ? '擊殺時' : P.pass === 'end' ? '結束時' : '命中時'}</div>`;
 }
 
 // 零件卡片：名稱＋層數（圓點，4 層開滿）、每層效果（圖示）、2／4 層特性（已開啟的亮起來）
@@ -86,7 +116,7 @@ const Screen = {
     const key = this.scrollKey(), keep = [...this.el.querySelectorAll(SCROLL_BOXES)].map(e => e.scrollTop);
     this.el.innerHTML = html; this.el.classList.remove('hidden', 'hub');
     if (key && key === this.scrollKey()) this.el.querySelectorAll(SCROLL_BOXES).forEach((e, i) => { if (keep[i]) e.scrollTop = keep[i]; });
-    this.hubOn = false;  // 基地的飛船只在基地畫面（hubView）能動
+    Hub.setDriving(false);  // 基地的飛船只在基地畫面（hubView）能動
   },
   scrollKey() {  // 認畫面：最外層框的 class＋標題
     const f = this.el.firstElementChild, h = this.el.querySelector('h2');
@@ -117,7 +147,7 @@ const Screen = {
       case 'codex': Codex.open('rules'); break;
       case 'run': this.restart(); break;
       case 'editor': Game.toggleEditor(); break;
-      case 'reward': { const [id, mode] = (arg || '').split('|'); Game.takeReward(id || null, mode || 'boost'); break; }  // 稀有版本：id|replace 替換／id|boost 增強
+      case 'reward': Game.takeReward(arg || null); break;
       case 'reroll': Game.rerollReward(); break;
       case 'buy': Game.buy(+arg); break;
       case 'leave': Game.showMap(); break;
@@ -145,10 +175,8 @@ const Screen = {
       case 'upg': Game.upgradeWeapon(arg); break;
       case 'armorybonus': Game.armoryBonus(); break;
       case 'slot': Game.expandSlot(arg); break;
-      case 'bhpick': Game.bhToggle(arg); break;
       case 'evopt': Game.evChoose(+arg); break;
       case 'evnext': Game.evNext(); break;
-      case 'bhfuse': Game.bhFuse(); break;
       case 'bossslot': Game.pickBossSlot(arg); break;
       case 'next': {
         const V = Game.victory;
@@ -162,7 +190,7 @@ const Screen = {
       case 'refresh': Screen.hardRefresh(); break;
       case 'clearrec': Screen.records('', true); break;  // 先在畫面上確認一次
       case 'clearrecok':
-        try { localStorage.removeItem(RECORDS_KEY); } catch (e) {}
+        Save.remove('records');
         Screen.records('已刪除所有紀錄。');
         break;
       case 'copyrec': Screen.copyRecords(); break;
@@ -170,7 +198,6 @@ const Screen = {
       case 'copycode': Screen.copyCode(btn); break;
       case 'copyone': Screen.copyOne(+arg); break;
       case 'heal': Game.shopHeal(); break;
-      case 'cap': Game.buyCap(); break;
       case 'wspick': Game.wsPick(arg); break;
       case 'wsfrom': Game.wsFrom(arg); break;
       case 'wsto': Game.wsTo(arg); break;
@@ -280,43 +307,6 @@ const Screen = {
     return t.length ? `<div class="sub" style="text-align:center;margin-top:10px">這一局的事件效果：${t.join('　·　')}</div>` : '';
   },
 
-  blackhole() {
-    const B = Game.bh, owned = Game.ownedFusable(), free = Game.bhFreeSlots(), A = Game.slotAttr || [];
-    const attrTag = k => `<b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}" title="${SLOT_ATTRS[k].desc.replace(/<[^>]+>/g, '')}">${SLOT_ATTRS[k].name}</b>`;
-    // 電路每一格目前的強化狀態
-    const slots = Game.chain.map((id, i) => `<span class="bh-slot">${i + 1} ${id ? (i === 0 ? '武器' : CHIPS[id].short || CHIPS[id].name) : '空格'}　${A[i] ? attrTag(A[i]) : '<span style="color:#8fa3d9">未強化</span>'}</span>`).join('');
-    let body;
-    if (B.result && B.fusing) {
-      body = `<div class="bh-core fusing"></div><div class="result" style="color:#b388ff">晶片正在被吞噬……</div>`;
-    } else if (B.result) {
-      const R = B.result, S = SLOT_ATTRS[R.attr];
-      body = `<div class="result" style="color:${R.good ? '#9dff6b' : '#ff6b6b'}">
-          ${R.good ? '✺ 強化成功' : '✖ 奇異點反噬'}：電路第 ${R.slot + 1} 格 → ${S.name}</div>
-        <div class="sub" style="text-align:center">${S.desc}。屬性留在格子上，換晶片也還在。（投入：${R.chip}）${slotAttrLine(R.slot)}<br>電路編輯器（Tab）裡強化過的格子有綠框／紅框，滑鼠移上去看現在的效果。</div>
-        <div class="sub bh-slots">${slots}</div>
-        <div class="row" style="justify-content:center;margin-top:14px"><button class="big" data-act="leave">返回航圖</button></div>`;
-    } else {
-      const cards = owned.map(o => {
-        const on = B.sel === o.key, odds = Math.round(bhGood(o.id) * 100);
-        return chipCard(o.id, `<div class="ty">位置：${o.sock != null ? `插在${CHIPS[Game.chain[o.sock]].name}上` : o.arr === Game.chain ? '電路第 ' + (o.i + 1) + ' 格' : '倉庫第 ' + (o.i + 1) + ' 格'}　好結果 ${odds}%</div>
-          <button data-act="bhpick" data-arg="${o.key}">${on ? '已選取（點擊取消）' : '投入這個'}</button>`)
-          .replace('class="card', `class="card${on ? ' picked' : ''}`);
-      }).join('');
-      body = `<div class="bh-core"></div>
-        <div class="sub" style="text-align:center">投入 1 個晶片（晶片會消失）：隨機一個<b>還沒強化過</b>的電路格（武器格也可能）得到一個屬性，每格只能強化一次。<br>
-          好結果的機率看投入晶片的插座數：${bhOddsTxt()}。<br>
-          好：${GOOD_ATTRS.map(attrTag).join('、')}<br>壞：${BAD_ATTRS.map(attrTag).join('、')}</div>
-        <div class="sub bh-slots">${slots}</div>
-        <div class="cards">${cards || '<div class="sub">目前沒有可投入的晶片。</div>'}</div>
-        <div class="row" style="justify-content:center">
-          <button class="big" data-act="bhfuse" ${B.sel && free.length ? '' : 'disabled'}>${free.length ? '投入奇異點' : '電路格都強化過了'}</button>
-          <button data-act="leave">不冒險，離開</button></div>`;
-    }
-    this.show(`<div class="scr">
-      <div class="between"><div><h2 style="color:#b388ff">◐ 奇異點</h2>
-        <div class="sub">犧牲一個晶片，賭一個電路格的屬性。</div></div>${this.status()}</div>${body}</div>`);
-  },
-
   // 清暫存重新整理：GitHub Pages 的檔案會被瀏覽器暫存，一般重新整理可能還是舊版
   //   開標題畫面時在背景抓一次最新的版號，跟目前的不一樣就讓按鈕亮起來
   refreshBtn() {  // 平常不顯示（只留位置），檢查到新版才出現
@@ -324,6 +314,7 @@ const Screen = {
       ? `<button id="refreshBtn" class="glow" data-act="refresh">🔄 有新版 ${this.newVer}，按這裡更新</button>`
       : '<span id="refreshBtn"></span>';
   },
+
   checkVersion() {
     if (this.verChecked || typeof fetch !== 'function' || location.protocol === 'file:') return;  // 本機開檔、測試環境不檢查
     this.verChecked = true;
@@ -392,41 +383,33 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
   reward() {
     const R = Game.reward, full = !Game.inventory.includes(null);
     if (!R) return;
-    if (!R.options.some(rareOf)) R.revealed = true;  // 沒有稀有晶片：不演揭曉
     const slotCard = () => `<div class="card" style="border-color:#2ee6a6">
       <div class="ty" style="color:#2ee6a6">🔌 電路擴充</div><div class="ttl">插槽 +1</div>
       <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
       <button data-act="slot" data-arg="reward">選擇</button></div>`;
-    // 揭曉動畫：零件（機體強化）、電路擴充、一般晶片一起先翻開，稀有那格最後才翻開
     const cardOf = id => {
       if (id === 'slot') return slotCard();
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
         return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
       }
-      const wait = rareOf(id) && !R.revealed;  // 稀有那格翻開前不能按
-      const ok = Game.canAcquire(id) && !wait, label = Game.canAcquire(id) ? '選擇' : '倉庫已滿';
-      return chipCard(id, rareOf(id) && Game.ownedChip(baseOf(id)) ? rareButtons(id, wait) : `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
+      const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
+      return chipCard(id, placeLine(id) + `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
     };
     const flip = R.flipFor !== R.options;  // 每組卡片（新開、刷新）翻開一次；同一組重畫不再翻
     R.flipFor = R.options;
     const cards = [...R.options, ...(R.slot ? ['slot'] : [])].map((id, i) => {  // slot：有電路擴充卡的三選一（CFG.REWARDS 的 slotCard）
-      const html = cardOf(id), wait = rareOf(id) && !R.revealed;
-      // 卡片本身有 style（電路擴充的框色）就接在後面；稀有那格（蓋著）也跟著一起翻出來，之後才揭曉
-      return wait || flip ? html.replace(/^<div class="card([^"]*)"(?: style="([^"]*)")?>/, (_, c, st) => `<div class="card${c}${wait ? ' rare-wait' : ''}${flip ? ' flipin' : ''}"${flip || st ? ` style="${st ? st + ';' : ''}${flip ? `animation-delay:${i * 0.12}s` : ''}"` : ''}>${wait ? '<div class="rare-veil">✦</div>' : ''}`)
-        : rareOf(id) && !R.popped ? html.replace('class="card', 'class="card rare-pop') : html;
+      const html = cardOf(id);
+      // 卡片本身有 style（電路擴充的框色）就接在後面
+      return flip ? html.replace(/^<div class="card([^"]*)"(?: style="([^"]*)")?>/, (_, c, st) => `<div class="card${c} flipin" style="${st ? st + ';' : ''}animation-delay:${i * 0.12}s">`) : html;
     }).join('');
-    const reveal = () => { if (!R.revealed) setTimeout(() => { if (Game.reward === R && Game.state === 'reward') { R.revealed = true; this.reward(); } }, REVEAL_MS); };
-    if (R.revealed) R.popped = true;  // 翻開的動畫只播一次（之後重畫不再播）
-    if (flip) requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {  // 畫面先出來（等真的畫上去），慢一拍才開始翻；翻開、揭曉都從這時候算
+    if (flip) requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {  // 畫面先出來（等真的畫上去），慢一拍才開始翻
       const el = this.el.querySelector('.cards.flip-hold');
       if (el) el.classList.remove('flip-hold');
-      if (Game.reward === R) reveal();
     }, FLIP_BEAT_MS)));
-    else reveal();
     this.show(`<div class="scr">
       <div class="between"><div><h2>${REWARD_TITLE[R.kind]()}</h2>
-        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}獲得的晶片會放入倉庫，按 Tab 裝上電路。</div></div>${this.status()}</div>
+        <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}選了會自動裝上電路（電路滿了才放倉庫），按 Tab 調整。</div>${this.fightSummary()}</div>${this.status()}</div>
       <div class="cards${flip ? ' flip-hold' : ''}">${cards}</div>
       <div class="row" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
@@ -452,12 +435,31 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
           : `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_REPAIR.price) && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${Game.shopHealHp()}（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆ ${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）</button>`}
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
           ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">🔌 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
-        ${!Game.shop.capBought
-          ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_CAP) ? '' : 'disabled'} data-act="cap">⚡ 能量容量 +${CFG.CAP_SHOP_ADD}（目前 ${Game.energyCap()}，◆ ${Game.shopPrice(CFG.SHOP_CAP)}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>
       <div class="toast" style="text-align:center">${toast}</div></div>`);
   },
 
+  // 三選一上面：剛打完的這一場，各晶片佔比＋每秒傷害（跟上一場比）；不是剛打完戰鬥（事件、商店的獎勵）就不顯示
+  fightSummary() {
+    const R = Game.runStats, B = Game.fightBase;
+    if (!R || !B || B.node !== (Game.node && Game.node.id)) return '';
+    const d = Object.entries(R.chips).map(([k, v]) => [k, v - (B.chips[k] || 0)]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const total = d.reduce((a, [, v]) => a + v, 0), dt = R.time - B.time;
+    if (!total || dt <= 0) return '';
+    const dps = B.dps = total / dt;
+    const vs = (now, was, lab) => was ? `（${lab} ${Math.round(was)}，<b style="color:${now >= was ? '#9dff6b' : '#ff8a8a'}">${now >= was ? '+' : ''}${Math.round((now / was - 1) * 100)}%</b>）` : '';
+    // 中途改過電路：改之後（滿 5 秒才比）對改之前（同一場、同一批怪）
+    let cut = '';
+    const C = B.cut, base = Object.values(B.chips).reduce((a, v) => a + v, 0), now = Object.values(R.chips).reduce((a, v) => a + v, 0);
+    if (C && R.time - C.t >= 5 && C.t > B.time) {
+      const after = (now - C.d) / (R.time - C.t), before = (C.d - base) / (C.t - B.time);
+      cut = `<br>　改電路後 ${Math.round(R.time - C.t)} 秒：<b>${Math.round(after)}</b>${vs(after, before, '改之前')}`;
+    }
+    const on = new Set([...Game.chain, ...Game.socks.flat()].filter(Boolean).map(baseOf));
+    const gone = k => CHIPS[k] && k !== 'weapon' && !on.has(k);  // 這場打到一半拆掉的晶片、插件
+    const parts = d.map(([k, v]) => `<span style="color:${dmgKeyColor(k)}">${dmgKeyName(k)} ${Math.round(v / total * 100)}%${gone(k) ? '（已拆）' : ''}</span>`).join('　');
+    return `<div class="sub" style="margin-top:6px">這一場：每秒傷害 <b>${Math.round(dps)}</b>${vs(dps, Game.prevFightDps, '上一場')}${cut}<br>${parts}</div>`;
+  },
   // 結算：本局傷害總計（依來源拆開）＋ 擊殺、最高單發、戰鬥時間、平均 DPS
   runSummary() {
     const R = Game.runStats;
@@ -516,6 +518,8 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
         <h3>畫面</h3>
         ${check('shake', '畫面震動', '爆炸、撞擊時晃動畫面')}${check('fps', '顯示 FPS', '戰鬥畫面右上角')}${check('detail', '卡片顯示完整說明', '預設精簡；按 Shift 可以臨時切換')}
         <h3>操作</h3><div class="st-box set-keys">${keys}</div>
+        <h3>測試</h3>
+        ${check('unlockAll', '全部解鎖', '飛船、武器、晶片、章節全開（測試用；解鎖進度照樣記）')}
         <h3>版本</h3>
         <div class="row"><span class="ver">${CFG.VERSION}</span><button data-act="refresh">🔄 清暫存重新整理</button></div>
       </div></div>`);
@@ -535,7 +539,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     this.show(`<div class="scr title-wrap">
       ${head}
       <div class="sub">結束在 ${where} · 剩餘晶體 ${Game.credits}${rec ? '<br><span style="color:#6a79ad">這一局已存入「遊玩紀錄」</span>' : ''}</div>
-      ${coop ? Net.teamSummaryHtml() : ''}
+      ${coop ? NetView.teamSummaryHtml() : ''}
       ${this.runSummary()}
       <div class="row">${!coop ? `<button class="big" data-act="run" data-arg="${Game.mode}">重新開始</button>` : ''}
         ${back}</div>
@@ -548,7 +552,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
         <h1 style="color:#ff4d6d;text-shadow:0 0 18px #ff4d6d">${Game.mates.length > 1 ? '全機覆滅' : '雙機全毀'}</h1>
         <div class="sub">倒在 ${Net.whereText()} · 剩餘晶體 ${Game.credits}${Game.lastHit ? `<br>擊毀原因：${Game.lastHit}` : ''}<br>
           <span style="color:#6a79ad">這一局已存入「遊玩紀錄」（含連線延遲數據）</span></div>
-        ${Net.teamSummaryHtml()}
+        ${NetView.teamSummaryHtml()}
         ${this.runSummary()}
         <div class="row">${Net.roomOpen() ? '<button class="big" data-act="netroom">回到房間</button><button data-act="title">離開房間</button>' : '<button class="big" data-act="title">回到基地</button>'}</div>
         <div class="row" style="margin-top:0"><button data-act="copyrun">📋 複製這局紀錄</button><button data-act="records">📜 所有遊玩紀錄</button></div>
@@ -583,7 +587,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     this.show(`<div class="scr title-wrap">${head}
       ${pick}
       ${this.status()}
-      ${Game.mode === 'coop' ? Net.teamSummaryHtml() : ''}
+      ${Game.mode === 'coop' ? NetView.teamSummaryHtml() : ''}
       ${this.runSummary()}
       ${Game.isClient() ? `<div class="sub" style="color:#ff9dbd">${!V.pick ? '👥 房主在等你：先選二選一的獎勵' : '👥 等待房主決定：前往下一星區，或結束遠征…'}</div>` : `
       ${!V.pick ? '<div class="sub" style="color:#ffd166">先選一個獎勵才能前往</div>' : ''}${wait ? '<div class="sub" style="color:#ff9dbd">👥 等隊友選好獎勵…</div>' : ''}
@@ -611,7 +615,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       // 展開看細節：第 2 版紀錄才有的欄位（舊紀錄沒有就不顯示）
       const S = r.stats;
       const detail = [
-        S ? `<div><b>最後的電路數值</b><br>插槽 ${S.slots}、能量 ⚡${S.heat}${S.cap != null ? ' / ' + S.cap : ''}${S.off != null ? (S.off ? `（沒電 ${S.off} 個）` : '') : `（射速 ${S.rateCut}）`}、每秒 ${S.rps} 發、每發 ${S.perFire} 顆共 ${S.fireDmg} 傷害、估算 DPS ${S.estDps}、擊退 ${S.knock}${S.passives.length ? `<br>倉庫被動：${S.passives.join('、')}` : ''}</div>` : '',
+        S ? `<div><b>最後的電路數值</b><br>插槽 ${S.slots}${S.lines ? `、${S.lines} 條線` : ''}${S.heat != null ? `、能量 ⚡${S.heat}${S.cap != null ? ' / ' + S.cap : ''}` : ''}、每秒 ${S.rps} 發、每發 ${S.perFire} 顆共 ${S.fireDmg} 傷害、估算 DPS ${S.estDps}、擊退 ${S.knock}${S.passives.length ? `<br>倉庫被動：${S.passives.join('、')}` : ''}</div>` : '',
         list2('各晶片傷害', (r.chipDmg || []).map(([n, v]) => `${n}　${fmt(v)}（${r.dmg ? Math.round(v / r.dmg * 100) : 0}%）`)),
         r.coop && r.coop.mateChipDmg ? (() => {
           const t = r.coop.mateChipDmg.reduce((a, [, v]) => a + v, 0);
@@ -690,7 +694,7 @@ const REC_CODE = {
   enemy: { 蟲群: '蟲', 刺殼: '刺', 噴吐者: '噴', 虛空獵手: '獵', 砲艦: '砲', 拖曳艦: '拖', 三艦編隊: '隊',星噬母艦: '母', 裂界獵艦: '裂', 終焉核心: '核', 雙子獵艦: '雙', 星環守門者: '門', 瞄準砲塔: '瞄', 環形砲塔: '環', 轟炸砲塔: '轟', 召喚砲塔: '召', 彗星: '彗', 黑洞核心: '洞',
     彈幕艇: '艇', 列隊蟲: '列', 盾衛: '盾', 分裂體: '分', 碎裂體: '碎', 潛伏者: '潛', 母巢: '巢' },
   result: { dead: '死', cleared: '通', retired: '退', disconnect: '斷線', in_progress: '進行中' },
-  src: { 武器直擊: '直擊', '命中觸發（回響）': '回響', 攔截回射: '回射', 震盪衝撞: '衝撞' },
+  src: { 直接命中: '直擊', 武器直擊: '直擊', '命中觸發（回響）': '回響', 攔截回射: '回射', 震盪衝撞: '衝撞' },
 };
 function recordText(r) {
   const C = REC_CODE, L = [];
@@ -713,7 +717,7 @@ function recordText(r) {
   L.push(`武器 ${r.weapon.replace('・', '+')}`);
   const S = r.stats;
   const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的組件
-  L.push(`電路 ${wsk ? '武器' + wsk[0] + '｜' : ''}${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（能量${S.heat}${S.cap != null ? '/' + S.cap : ''}${S.off != null ? (S.off ? ` 沒電${S.off}個` : '') : ` 射速${S.rateCut}`} ${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
+  L.push(`電路 ${wsk ? '武器' + wsk[0] + '｜' : ''}${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（${S.lines ? S.lines + '條線 ' : S.heat != null ? `能量${S.heat}${S.cap != null ? '/' + S.cap : ''} ` : ''}${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
   const M = r.mech;
   if (M) {
     L.push(`機體 ${Object.entries(M.parts).map(([k, v]) => k.slice(0, 2) + v).join(' ') || '無零件'}${M.module ? `｜${M.module}${M.traits.length ? `(${M.traits.join(' ')})` : ''}` : M.traits.length ? `(${M.traits.join(' ')})` : ''} HP${r.hp}/${r.maxHp} 晶${r.credits}`);

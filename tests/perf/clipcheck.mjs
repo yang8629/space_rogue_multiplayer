@@ -1,10 +1,10 @@
 // 圖集貼圖有沒有被框切到：每張貼圖畫在 3 倍大的畫布上，數框外面不透明的像素（alpha > 10），列出有超出的
 //   用法：node perf/clipcheck.mjs [前綴，例如 e/]
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const url = GAME + 'tools/art/build.html';
 const pre = process.argv[2] || '';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new' });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 800));

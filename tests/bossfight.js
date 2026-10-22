@@ -7,7 +7,7 @@ const { seed, splitEnemyRng, noFx, resetRun } = require('./rng');
 splitEnemyRng(T_); noFx();
 const QB = require('./bot/load').loadBot(code => require('vm').runInThisContext(code));
 const bosses = (process.argv[2] || 'boss3,boss4,boss5').split(','), N = +(process.argv[3] || 3), SEC = +(process.argv[4] || 3), HPK = +(process.argv[5] || 1);  // HPK：王的血量 ×（只看流程時調低）
-const weapons = ['laser', 'scatter', 'plasma', 'railgun', 'blade'];
+const weapons = Object.keys(T_.WEAPONS);
 for (const id of bosses) {
   const rows = [];
   for (let s = 0; s < N; s++) {

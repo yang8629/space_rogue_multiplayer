@@ -12,9 +12,9 @@ G.simFast = true;  // 模擬：不等給人看的時間（區域肅清 1.6 秒�
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
 // --tweak="CHIPS.frost.cost=0"：先改數值再跑（試調整用，不改遊戲檔案；跟 runsim.js 一樣）
 if (arg('tweak')) require('vm').runInThisContext(process.argv.find(a => a.startsWith('--tweak=')).slice(8));
-const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃' };
+const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃', drone: '蜂群' };
 const WPN = arg('w') ? arg('w').split(',') : Object.keys(WN);
-const PLAY = Object.keys(CH).filter(id => CH[id].kill);
+const PLAY = NORMAL_IDS.filter(id => CH[id].type === 'chip');  // 晶片（10-22：放在線上、會往下傳的那種）
 const CHIPS = arg('chips') ? arg('chips').split(',') : PLAY;
 const N = +(arg('n') || 3), LEVEL = +(arg('level') || 3), dt = 1 / 60, CAP = 150;
 
@@ -88,9 +88,9 @@ function bot(p) {
   if (danger && p.dashCd <= 0) I.dash = true;
 }
 
-// 數每個晶片發動幾次（Game.rareAct：迴旋折返、環繞放出…）
+// 數每個晶片被觸發幾次（Game.lineFire：線上那一格放出產物）
 const ACTS = {};
-{ const o = G.rareAct.bind(G); G.rareAct = (b, ...a) => { ACTS[b] = (ACTS[b] || 0) + 1; return o(b, ...a); }; }
+{ const o = G.lineFire.bind(G); G.lineFire = t => { const b = t.line.cells[t.k].key; ACTS[b] = (ACTS[b] || 0) + 1; return o(t); }; }
 let SKILLED = null;  // 熟練玩家（bot/，跟整局模擬同一套；會放開蓄力、站著架設），用到才載入
 function fight(w, chip, s) {
   SKILLED = SKILLED || require('./bot/load').loadBot(code => require('vm').runInThisContext(code));
@@ -143,7 +143,7 @@ if (process.argv.includes('--weapons')) {
 function run1(w, chain, s, cfg, setup, real, botFn = bot) {  // botFn：電腦（預設這個檔案的；--value／--upval 用 bot/ 的熟練玩家）
   seed(3000 + s); G.newRun('run', 'vanguard', w); G.parts = {};
   if (T_.splitChain) {  // 組件寫在晶片後面 = 插在它的插座上；沒有插座數的晶片給 2 個
-    const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(T_.baseOf(id), 2) : id));
+    const r = T_.splitChain(chain.map(id => id && T_.isHost(id) && id !== 'weapon' && !T_.socketsOf(id) ? T_.chipId(T_.baseOf(id), 2, T_.lvOf(id), T_.rareOf(id)) : id));  // 等級、稀有照原本的
     G.chain = r.chain; G.socks = r.socks;
   } else G.chain = chain.slice();
   G.wSock = (cfg.level || 0) < 7 ? 0 : cfg.level < 14 ? 1 : 2;  // 武器插座照難度（打完幾隻王）
@@ -345,21 +345,21 @@ if (process.argv.includes('--combo')) {
 }
 
 // --levels：每個玩法晶片 Lv1／Lv2／Lv3（進化）的輸出，跟只有武器比（清場時間倍數，越大越強）
-//   升級用收束透鏡：插在玩法晶片上沒有效果、只升級（見 compileChain）
-const lvChain = (chip, lv) => [chip, ...Array(T_.compsFor(lv)).fill('focus')];
+//   等級寫在晶片 id（同種合成，見 mergedChip）
+const lvChain = (chip, lv) => [T_.chipId(chip, 0, lv)];
 if (process.argv.includes('--levels')) {
   const cfg = { level: LEVEL, wavesTotal: 3, elites: 0 };
   const avgT = chain => WPN.map(w => { let t = 0; for (let s = 0; s < N; s++) t += run1(w, chain(w), s, cfg).t; return t / N; });
   const base = avgT(() => ['weapon', null, null, null]);
-  console.log(`難度 ${LEVEL}、${N} 場平均。數字 = 只有武器的清場時間 ÷ 裝了晶片的清場時間（越大越強），括號 = 五把武器裡最高／最低`);
-  console.log('晶片'.padEnd(10) + ['Lv1', 'Lv2', 'Lv3（進化）'].map(s => s.padStart(22)).join(''));
+  console.log(`難度 ${LEVEL}、${N} 場平均。數字 = 只有武器的清場時間 ÷ 裝了晶片的清場時間（越大越強），括號 = 武器裡最高／最低`);
+  console.log('晶片'.padEnd(10) + ['Lv1', 'Lv2', 'Lv3'].map(s => s.padStart(22)).join(''));
   for (const chip of CHIPS) {
     const cells = [1, 2, 3].map(lv => {
       const t = avgT(() => ['weapon', ...lvChain(chip, lv), null, null]), r = t.map((x, i) => base[i] / x);
       const avg = r.reduce((a, b) => a + b, 0) / r.length, hi = r.indexOf(Math.max(...r)), lo = r.indexOf(Math.min(...r));
       return `${avg.toFixed(2)}x（${WN[WPN[hi]]}${r[hi].toFixed(1)}／${WN[WPN[lo]]}${r[lo].toFixed(1)}）`.padStart(22);
     });
-    console.log((CH[chip].name + '→' + CH[chip].evo).padEnd(10) + cells.join(''));
+    console.log(CH[chip].name.padEnd(10) + cells.join(''));
   }
   process.exit(0);
 }

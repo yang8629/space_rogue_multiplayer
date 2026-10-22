@@ -1,14 +1,14 @@
 // 雙人新畫面實測：開兩個瀏覽器（房主、隊友），訊息由這個腳本轉送（假的 PeerJS），進一場戰鬥擺好場景，
 //   兩邊各截一張，拼成「房主看到的／隊友看到的」比較圖 → art_lab/screenshots/新畫面_雙人比較.png
 //   用法：node perf/mpshots.mjs [canvas]   （給 canvas = 用舊畫面截）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const MODE = process.argv[2] === 'canvas' ? 'canvas' : 'gl';
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const open = async () => {
-  const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
+  const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
   const p = await b.newPage();
   p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
   p.on('console', m => { if (m.type() === 'error') console.log('console', m.text().slice(0, 200)); });

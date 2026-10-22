@@ -1,8 +1,8 @@
 // 「敵人與物件畫風」預覽頁（tools/art/build_preview.js 產生的）：打開看有沒有錯誤，截精英、旗艦兩段
 //   用法：node perf/previewshot.mjs   → art_lab/screenshots/畫風頁_精英.png、畫風頁_旗艦.png、畫風頁_敵人.png
-import { ROOT, SHOTS } from './paths.mjs';
+import { ROOT, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1200, height: 900 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1200, height: 900 } });
 const p = await b.newPage();
 let errs = 0;
 p.on('pageerror', e => { errs++; console.log('頁面錯誤', e.message); });

@@ -8,7 +8,6 @@
 //   隊友：自己飛船的移動、衝刺在自己電腦上算（零延遲），把位置與「有沒有按開火」傳給房主
 //   房主替隊友開火時，用 withLoadout 換上隊友的武器與電路
 // =====================================================================
-const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'slotAttr', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'playKills', 'pullHits', 'parts', 'partSlots', 'cap', 'mech', 'boons'];
 const NET_PREFIX = 'circuitrogue-mp-';
 const NET_CODE_CHARS = 'ABCDEFGHJKLNPQSTUVWXYZ23456789';  // 去掉容易看錯的 I O 0 1，以及快捷鍵 M R
 const NET_RATE = 1 / 30;
@@ -20,12 +19,29 @@ const NET_ROOM_RATE = 1 / 30;  // 房間（共用的基地）裡每秒同步幾�
 const NET_ROOM_STALE = 2000;   // 多久沒收到某人的位置就不畫他（ms）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const r2 = v => Math.round(v * 100) / 100;
+const BULLET_TOL = 4, BULLET_STALE = 4;  // 子彈：隊友那邊的直線預測差多少（px）才重送；隊友那邊過了射程幾秒還沒消息（訊息掉了）就自己拿掉
 const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; return a ? a.id : 0; };
 // 其他人的飛船（戰鬥中的隊友、房間裡的其他人，同一套）：
 //   x, y = 遊戲判定用的位置：收到新位置就換成新的，兩次同步之間照速度往前推（coast）
 //   畫面上的位置 = x, y ＋ ex, ey（Net.drawPos）：收到新位置時畫面不跳，把差距記在 ex, ey，之後每秒收掉 NET_EASE 倍（指數）；差超過 NET_SNAP（瞬移、傳送）直接跳
 //   為什麼：訊息時快時慢（網路抖動），直接蓋過去會先被晚到的舊位置拉回、下一幀一口氣跳 2 倍（tests/matelag.js、roomlag.js 加抖動量到）
 const NET_EASE = 12, NET_SNAP = 150;
+// 武器狀態（隊友那邊畫 HUD、無人機、鉤爪的線、彈反的護盾用）：
+//   [熱度, 過熱, 右鍵冷卻, 下一刀強化, 收攏, 還能擋, 彈反格擋, 勾住的敵人 id, 勾住剩幾秒, 多勾幾隻, 場上的飛輪／重力井, 無人機 [x, y, 方向, 壞掉]…]
+const weaponRow = p => {
+  const W = weaponPlay(p), D = loadoutOf(p).weapon.id === 'drone' ? p.drones || [] : [];
+  return [r2(p.hHeat || 0), r2(Math.max(0, p.hLock || 0)), r2(p.altCd || 0), r2(Math.max(0, p.edgeT || 0)), r2(Math.max(0, p.guardT || 0)), p.guardN || 0,
+    r2(Math.max(0, p.parryWinT || 0)), p.hookE && !p.hookE.dead ? p.hookE.id : 0, r2(p.hookT || 0), (p.hookX || []).length, W.count ? W.count(p) : 0,
+    D.flatMap(d => [Math.round(d.x), Math.round(d.y), r2(d.a || 0), d.down > 0 ? 1 : 0])];
+};
+const applyWeaponRow = (p, a) => {  // 套用的時候敵人要已經更新完（鉤爪找勾住的那隻）
+  if (!Array.isArray(a)) return;
+  p.hHeat = num(a[0]); p.hLock = num(a[1]); p.altCd = num(a[2]); p.edgeT = num(a[3]); p.guardT = num(a[4]); p.guardN = num(a[5]); p.parryWinT = num(a[6]);
+  p.hookE = a[7] ? Game.enemies.find(e => e.id === a[7]) || null : null; p.hookT = num(a[8]); p.hookX = new Array(clamp(Math.floor(num(a[9])), 0, 9)).fill(null);
+  p.wN = num(a[10]);
+  const d = Array.isArray(a[11]) ? a[11].slice(0, 4 * 12) : [];
+  p.drones = Array.from({ length: Math.floor(d.length / 4) }, (_, i) => ({ x: num(d[i * 4]), y: num(d[i * 4 + 1]), a: num(d[i * 4 + 2]), down: d[i * 4 + 3] ? 1 : 0 }));
+};
 function netMove(o, x, y) {
   if (Number.isFinite(o.x) && Number.isFinite(o.y)) {
     const ex = (o.ex || 0) + o.x - x, ey = (o.ey || 0) + o.y - y, far = Math.hypot(ex, ey) > NET_SNAP;
@@ -157,9 +173,7 @@ const Net = {
   // 每一幀呼叫：連上之後每秒量一次延遲
   tick(dt) {
     if (this.waiting) {  // 房主等隊友重連：倒數，時間到就結束
-      const left = Math.max(0, Math.ceil((this.waiting.until - performance.now()) / 1000)), el = document.getElementById('rejoinLeft');
-      if (el) el.textContent = left;
-      if (left <= 0) this.giveUp();
+      if (performance.now() >= this.waiting.until) this.giveUp();
       else if (this.peers.some(q => q.linked)) this.keepAlive(dt);  // 三人以上：等的時候其他隊友照樣收到 ping（不然會被當成房主斷線）
       return;
     }
@@ -174,12 +188,6 @@ const Net = {
     if (Game.mode === 'coop') {
       if (this.role === 'host' && this.voteEnd && performance.now() >= this.voteEnd && !this.pauseReason()) this.tryResolve(true);  // 投票時間到
       if (this.role === 'host' && this.evEnd && performance.now() >= this.evEnd && !this.pauseReason()) this.tryResolveEv(true);  // 全隊事件的投票時間到：照已經投的抽
-      const vt = document.getElementById('voteTimer'), left = this.voteLeft();
-      if (vt) vt.textContent = left != null ? `剩 ${left} 秒` : '';
-      const et = document.getElementById('evTimer'), el = this.evLeft();  // 全隊事件的投票倒數
-      if (et) et.textContent = el != null ? `（剩 ${el} 秒）` : '';
-      const gl = this.goUntil && document.getElementById('goLeft');  // 出發倒數
-      if (gl) gl.textContent = Math.max(1, Math.ceil((this.goUntil - performance.now()) / 1000));
     }
     this.keepAlive(dt);
   },
@@ -248,67 +256,35 @@ const Net = {
     return rows.sort((a, b) => a.slot - b.slot).map(({ slot, ship, me, R }) => ({ tag: `${slot}P`, ship, me, dmg: total(R),
       kills: R ? R.kills : 0, maxHit: R ? R.maxHit : 0, downs: R ? R.downs || 0 : 0, revives: R ? R.revives || 0 : 0 }));
   },
-  teamSummaryHtml() {
-    const rows = this.teamRows(), sum = rows.reduce((a, r) => a + r.dmg, 0);
-    const fmt = n => Math.round(n).toLocaleString('zh-TW');
-    const body = rows.map(r => {
-      const S = SHIPS[r.ship] || { name: '？', color: '#8fa3d9' }, pct = sum ? r.dmg / sum * 100 : 0;
-      const c = Game.slotColor(parseInt(r.tag, 10));  // 玩家色（照號碼）
-      return `<div class="sum-lab"><i style="background:${c}"></i><b style="color:${c}">${r.tag}</b> ${S.name}${r.me ? '（你）' : ''}</div>
-        <div class="sum-track"><div style="width:${pct.toFixed(1)}%;background:${c}"></div></div>
-        <div class="sum-val">${fmt(r.dmg)}<span>${pct.toFixed(0)}%</span></div>`;
-    }).join('');
-    const tile = (k, v) => `<div class="sum-tile"><span>${k}</span><b>${v}</b></div>`;
-    return `<div class="summary">
-      <div class="sum-head"><span>多人傷害結算</span><b>${fmt(sum)}</b></div>
-      <div class="sum-rows">${body}</div>
-      <div class="sum-tiles">${rows.map(r => tile(`${r.tag} 擊殺`, fmt(r.kills)) + tile(`${r.tag} 最高單發`, fmt(r.maxHit))).join('')}</div></div>`;
-  },
-  pingColor(ms) { return ms == null ? '#8fa3d9' : ms < 80 ? '#9dff6b' : ms < 150 ? '#ffd166' : '#ff4d6d'; },
 
   // ---------- 大廳：開房 / 輸入房號加入 → 進房間（共用的基地：大家的飛船都在同一個基地，各自準備，全員準備好就開始） ----------
-  lobby(msg = '') {
+  lobby(msg = '', bad = false) {
     this.close();
     this.resetStats();
-    this.renderLobby(msg);
+    this.renderLobby(msg, bad);
   },
   // 一局結束後回到同一個房間（連線不斷）
   backToRoom() {
-    if (!this.roomOpen()) { this.lobby('<span style="color:#ff4d6d">連線已經中斷，請重新開房或加入</span>'); return; }
+    if (!this.roomOpen()) { this.lobby('連線已經中斷，請重新開房或加入', true); return; }
     this.send({ t: 'room' });
     if (this.role === 'client') this.sendProgress();  // 這一局可能剛通關：房主照新的進度開放章節
     this.enterRoom();
   },
   // 連線畫面：開房間、輸入房號加入（連上之後就進房間）
-  renderLobby(msg = '') {
+  renderLobby(msg = '', bad = false) {
     Game.state = 'lobby'; Game.inArena = false; Game.mates = [];
-    const ok = typeof Peer !== 'undefined';
-    Screen.show(`<div class="scr title-wrap">
-      <h1 style="font-size:42px">👥 多人連線</h1>
-      <div class="sub">開房間或輸入房號加入（最多 ${NET_MAX} 人）。進房間後大家在同一個基地裡：各自在停機坪選飛船、到發射台準備（房主選章），全員準備好就開始；每局結束後回到這個房間。</div>
-      <div id="netBtns">${ok ? `<div class="row"><button class="big" data-act="nethost">開房間</button></div>
-        <div class="row"><input id="netCode" maxlength="4" placeholder="房號" autocomplete="off" spellcheck="false"
-          style="font-size:22px;width:5.5em;text-align:center;letter-spacing:.3em;text-transform:uppercase;background:#0a1030;color:#fff;border:1px solid #4cc9f0;border-radius:6px;padding:8px">
-          <button class="big" data-act="netjoin">加入房間</button></div>`
-      : '<div class="sub" style="color:#ff4d6d">連線元件沒有載入（需要網路）。請確認有連上網路後重新整理。</div>'}</div>
-      <div class="sub" id="netMsg" style="min-height:3em">${msg}</div>
-      <div class="keys">一人按「開房間」拿到 4 碼房號，其他人輸入房號按「加入房間」。<br>
-        多人遠征：航圖投票（選不同就照票數抽籤）、錢包各自獨立（怪物掉落的晶體每人都拿）、獎勵各自選、戰鬥中按 Tab 全員一起暫停。<br>
-        一人被擊墜時留在原地，隊友靠近 ${CFG.REVIVE.time} 秒就能救起來（救的人分出自己一半的血量）；沒被救起的在戰鬥結束後以 30% HP 歸隊；全員都被擊墜才結束。</div>
-      <div class="row"><button data-act="title" data-back>返回基地 (Esc)</button></div>
-      <div class="ver">版本 ${CFG.VERSION}</div></div>`);
+    this.view('lobby', { msg, bad });
   },
   // 進房間：共用的基地（Game.state 'pick'）；準備要重新按
   enterRoom() {
     Game.state = 'pick'; Game.inArena = false; Game.mates = [];
     this.meReady = false; this.roomMates = {};
-    Screen.hubPick();
+    this.view('screen', { name: 'hubPick' });
   },
   // 房間裡的狀態變了（有人加入、離開、準備、換章）：重畫上方的房間列；開著發射台的面板就重畫面板
   roomStatus() {
     if (Game.state !== 'pick') return;
-    if (Screen.hubOn) Screen.hubView();
-    else if (Screen.el.querySelector('[data-act="depart"], [data-act="netchapter"]')) Screen.basePanel('launch');
+    this.view('room');
   },
   // 每個人到房主的延遲（ms，來回；房主自己 null）：房主照自己量的（q.ping），隊友照房主廣播的（pg 訊息，每個人獨立）
   pingOf(slot) {
@@ -316,9 +292,6 @@ const Net = {
     if (this.role === 'host') { const q = this.peers.find(o => o.slot === slot && o.linked); return q ? q.ping : null; }
     return this.pings[slot] != null ? this.pings[slot] : slot === this.slot ? this.ping : null;
   },
-  // 號碼旁邊的延遲（房間列、戰鬥中的隊友列）；每秒更新一次，只改那幾段字
-  pingTag(slot) { const ms = this.pingOf(slot); return ms == null ? '' : `<span style="color:${this.pingColor(ms)}">${ms}ms</span>`; },
-  showPing() { if (typeof document !== 'undefined') for (const el of document.querySelectorAll('[data-pslot]')) el.innerHTML = this.pingTag(+el.dataset.pslot); },
   // 房間裡的人：[號碼, 準備好了沒, 是不是自己]（自己 + 房主這邊的隊友／隊友這邊收到位置的人）
   roomList() {
     const me = [this.mySlot(), this.meReady, true];
@@ -330,34 +303,19 @@ const Net = {
   sendRoomPos() {
     const s = Hub.ship;
     if (!s) return;
-    this.send({ t: 'hp', sl: this.mySlot(), x: Math.round(s.x), y: Math.round(s.y), vx: Math.round(s.vx), vy: Math.round(s.vy), a: r2(s.aim), s: Hub.shipId, w: Hub.weaponId, m: s.moving ? 1 : 0, r: this.meReady ? 1 : 0, b: Screen.hubOn ? 0 : 1 });
+    this.send({ t: 'hp', sl: this.mySlot(), x: Math.round(s.x), y: Math.round(s.y), vx: Math.round(s.vx), vy: Math.round(s.vy), a: r2(s.aim), s: Hub.shipId, w: Hub.weaponId, m: s.moving ? 1 : 0, r: this.meReady ? 1 : 0, b: Hub.driving ? 0 : 1,
+      f: s.wantFire ? 1 : 0, ds: s.dashSeq || 0, as: s.altSeq || 0, dT: r2(Math.max(0, s.dashT)) });  // 開火、衝刺、右鍵：對方那邊照這些跑一份（Hub.updateGhosts）
   },
   onRoomPos(m, q) {
     const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
     if (!slot || slot === this.mySlot()) return;
     const had = this.roomMates[slot], wasReady = had && had.r, p = had || {};  // 同一個物件接著用：畫面位置的差距（ex, ey）要延續
     netMove(p, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H));
-    Object.assign(p, { vx: clamp(num(m.vx), -2000, 2000), vy: clamp(num(m.vy), -2000, 2000), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now() });
+    Object.assign(p, { vx: clamp(num(m.vx), -2000, 2000), vy: clamp(num(m.vy), -2000, 2000), a: num(m.a), s: SHIPS[m.s] ? m.s : 'vanguard', w: WEAPONS[m.w] ? m.w : null, m: !!m.m, r: !!m.r, b: !!m.b, at: performance.now(),
+      f: !!m.f, ds: num(m.ds), as: num(m.as), dT: clamp(num(m.dT), 0, CFG.DASH_TIME) });
     this.roomMates[slot] = p;
     if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
     if (!had || wasReady !== p.r) this.roomStatus();  // 新來的人、準備狀態變了：更新房間列
-  },
-  // 基地裡開火（hubFire 事件）：告訴其他人（房主轉給其他隊友），對方用 Hub.addFire 生出同樣的子彈
-  sendHubFire(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hf', sl: this.mySlot(), x: Math.round(d.x), y: Math.round(d.y), a: r2(d.a), w: d.w, ...(d.m ? { m: d.m } : {}) }); },  // m：傷害倍率（砲台）
-  onHubFire(m, q) {
-    const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
-    if (!slot || slot === this.mySlot() || Game.state !== 'pick' || !WEAPONS[m.w]) return;
-    if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
-    Hub.addFire(slot, clamp(num(m.x), 0, HUB.W), clamp(num(m.y), 0, HUB.H), num(m.a), m.w, clamp(num(m.m, 1), 0, 1));
-  },
-  // 基地裡衝刺（hubDash 事件）：告訴其他人，對方用 Hub.dashFx 畫出同樣的效果（瞬移、殘影、砲台、星門）
-  sendHubDash(d) { if (Game.state === 'pick' && (this.role === 'host' ? this.peers.length : this.linked)) this.send({ t: 'hd', sl: this.mySlot(), k: d.k, x0: Math.round(d.x0), y0: Math.round(d.y0), x1: Math.round(d.x1), y1: Math.round(d.y1), a: r2(d.a), s: d.s }); },
-  onHubDash(m, q) {
-    const slot = this.role === 'host' ? q && q.slot : clamp(Math.floor(num(m.sl, 0)), 1, NET_MAX);
-    if (!slot || slot === this.mySlot() || Game.state !== 'pick' || !['dash', 'phase', 'decoy', 'turret', 'portal'].includes(m.k) || !SHIPS[m.s]) return;
-    if (this.role === 'host') for (const o of this.peers) if (o !== q) this.sendTo(o, { ...m, sl: slot });  // 轉給其他隊友
-    const X = v => clamp(num(v), 0, HUB.W), Y = v => clamp(num(v), 0, HUB.H);
-    Hub.dashFx(slot, m.k, X(m.x0), Y(m.y0), X(m.x1), Y(m.y1), num(m.a), m.s);
   },
   // 其他人的飛船畫在哪（netMove 記的差距還沒收完的部分加上去）
   drawPos(o) { return [o.x + (o.ex || 0), o.y + (o.ey || 0)]; },
@@ -366,7 +324,8 @@ const Net = {
     const now = performance.now();
     return Object.entries(this.roomMates).filter(([, p]) => now - p.at < NET_ROOM_STALE).map(([s, p]) => { const [x, y] = this.drawPos(p); return { slot: +s, ...p, x, y }; });
   },
-  setMsg(html) { const el = document.getElementById('netMsg'); if (el) el.innerHTML = html; },
+  setMsg(text, bad = false) { this.view('msg', { text, bad }); },  // 大廳的提示（bad：錯誤）
+  view(k, d = {}) { Events.emit('netView', { k, ...d }); },  // 要畫面做什麼（ui/lobby.js 的 NetView 接）
   // ---------- 章節：房主在發射台選，所有人都解鎖的章節才能選 ----------
   cleanChapter(n) { return CHAPTERS.some(c => c.id === n) ? n : 1; },  // 對方傳來的章號：不認得的當第一章
   mateUnlocked(id) { return id === CHAPTERS[0].id || this.peers.every(q => (q.cleared || []).includes(id - 1)); },  // 隊友都解鎖了
@@ -387,16 +346,15 @@ const Net = {
   },
   sendProgress() { this.send({ t: 'prog', cleared: chapterProgress() }); },  // 隊友：把自己的通關進度告訴房主
   // 隊友：這個分頁在哪個房間是幾號（重新整理後重連時告訴房主，免得兩人同時斷線時坐錯位置）
-  rememberSeat() { try { sessionStorage.setItem('v2_seat', JSON.stringify({ code: this.code, slot: this.slot })); } catch (e) {} },
-  seatHint(code) { try { const s = JSON.parse(sessionStorage.getItem('v2_seat') || 'null'); return s && s.code === code ? s.slot : null; } catch (e) { return null; } },
+  rememberSeat() { Save.setSeat({ code: this.code, slot: this.slot }); },
+  seatHint(code) { const s = Save.seat(); return s && s.code === code ? s.slot : null; },
 
   host() {
     this.close();
     this.role = 'host'; this.pending = [];
     const code = this.code = Array.from({ length: 4 }, () => pick([...NET_CODE_CHARS])).join('');
     this.setMsg('正在建立房間…');
-    const btns = document.getElementById('netBtns');
-    if (btns) btns.innerHTML = '';  // 開了房間就不再顯示「開房間／加入房間」（離開用下方的按鈕；開房失敗會回到大廳重新顯示）
+    this.view('hosting');  // 開了房間就不再顯示「開房間／加入房間」（離開用下方的按鈕；開房失敗會回到大廳重新顯示）
     const peer = this.peer = new Peer(NET_PREFIX + code);
     peer.on('open', () => { if (Game.state === 'lobby') this.enterRoom(); });  // 房間開好：先進基地等隊友（房號寫在上方的房間列）
     peer.on('connection', conn => {
@@ -414,7 +372,7 @@ const Net = {
   },
   join(raw, resumeRunId = null) {
     const code = String(raw || '').trim().toUpperCase();
-    if (!/^[A-Z0-9]{4}$/.test(code)) { this.setMsg('<span style="color:#ff4d6d">請輸入 4 碼房號</span>'); return; }
+    if (!/^[A-Z0-9]{4}$/.test(code)) { this.setMsg('請輸入 4 碼房號', true); return; }
     this.close();
     this.role = 'client'; this.code = code;
     this.setMsg('連線中…');
@@ -472,7 +430,7 @@ const Net = {
       return;
     }
     if (this.inRun()) { this.clientLost(msg); return; }
-    if (this.afterRun()) { this.close(); this.runId = null; Screen[Game.state](); return; }  // 房主關掉了：結算照看，按鈕換成回到基地
+    if (this.afterRun()) { this.close(); this.runId = null; this.view('screen', { name: Game.state }); return; }  // 房主關掉了：結算照看，按鈕換成回到基地
     this.endLost(msg);
   },
   endLost(msg) {  // 放棄這一局：存紀錄、回到「連線中斷」畫面
@@ -480,19 +438,17 @@ const Net = {
     this.waiting = null; this.rejoining = null; this.hideOverlay();
     const inLobby = Game.state === 'lobby';
     this.close(); this.runId = null;
-    if (inLobby) { this.lobby(`<span style="color:#ff4d6d">${msg}</span>`); return; }
+    if (inLobby) { this.lobby(msg, true); return; }
     if (Game.state === 'title') return;
     Game.mates = []; Game.state = 'title'; Game.inArena = false;
-    Screen.show(`<div class="scr title-wrap"><h1 style="font-size:40px;color:#ff4d6d">連線中斷</h1>
-      <div class="sub">${msg}</div>
-      <div class="row"><button class="big" data-act="title">回到基地</button><button data-act="records">📜 遊玩紀錄</button></div></div>`);
+    this.view('lost', { msg });
   },
 
   // ---------- 斷線重連 ----------
   // 房主：隊友斷線 → 遊戲暫停，房間保留 NET_REJOIN_TIME 秒等隊友回來（重新整理後輸入同一個房號也可以）
   waitForMate(msg, q) {
     const conn = q.conn;
-    q.conn = null; q.linked = false; q.editing = false; q.away = false; q.ping = null; q.at = null; q.heard = 0; q.hid = false;  // heard 歸零：重連回來的第一則訊息才開始算
+    q.conn = null; q.linked = false; q.editing = false; q.away = false; q.ping = null; q.at = null; q.heard = 0; q.hid = false; q.bSent = null;  // bSent：重連回來要重送全部子彈；heard 歸零：重連回來的第一則訊息才開始算
     try { conn && conn.close(); } catch (e) {}
     q.waiting = { until: performance.now() + NET_REJOIN_TIME * 1000, msg };
     this.voteEnd = 0;
@@ -501,13 +457,7 @@ const Net = {
   },
   waitOverlay() {
     const W = this.waiting;
-    if (!W) return;
-    const left = Math.max(0, Math.ceil((W.until - performance.now()) / 1000));
-    this.overlay(`<h2 style="color:#ffd166;margin:0">⏸ 隊友斷線了</h2>
-      <div class="sub">${W.msg}<br>遊戲暫停中，房間保留 <b id="rejoinLeft">${left}</b> 秒。<br>
-        請隊友按「重新連線」；如果他重新整理了頁面，選「多人連線」後輸入房號 <b style="letter-spacing:.2em;color:#ffd166">${this.code}</b> 就能回到這一局。</div>
-      <div class="row"><button class="big" data-act="netsolo">自己繼續玩（隊友之後還能回來）</button>
-        <button data-act="netgiveup">結束這一局</button></div>`);
+    if (W) this.view('wait', { msg: W.msg, until: W.until, code: this.code });
   },
   // 房主：不等了，繼續玩。房間仍然開著，斷線的隊友用同一個房號就能回到當下的進度
   soloContinue() {
@@ -515,7 +465,7 @@ const Net = {
     for (const q of this.peers) if (q.waiting) { q.waiting = null; q.gone = true; const m = this.mateOf(q); if (m) m.gone = true; }
     this.solo = true; this.refreshPeers(); this.pushPause();
     this.hideOverlay();
-    if (Game.state === 'map') Screen.map(`隊友離線，你一個人繼續（房號 ${this.code}，隊友可以隨時回來）`);
+    if (Game.state === 'map') this.view('screen', { name: 'map', msg: `隊友離線，你一個人繼續（房號 ${this.code}，隊友可以隨時回來）` });
   },
   // 隊友：斷線 → 暫停，可以按「重新連線」回到同一局
   clientLost(msg) {
@@ -529,12 +479,7 @@ const Net = {
   },
   rejoinOverlay(note = '') {
     const R = this.rejoin;
-    if (!R) return;
-    this.overlay(`<h2 style="color:#ff9f1c;margin:0">連線中斷</h2>
-      <div class="sub">${R.msg}${note ? `<br><span style="color:#ff4d6d">${note}</span>` : ''}<br>
-        房主那邊會暫停並保留房間 ${NET_REJOIN_TIME} 秒，重新連線就能回到這一局。</div>
-      <div class="row"><button class="big" data-act="netrejoin" ${this.rejoining ? 'disabled' : ''}>${this.rejoining ? '連線中…' : `重新連線（房號 ${R.code}）`}</button>
-        <button data-act="netgiveup">放棄，回到基地</button></div>`);
+    if (R) this.view('rejoin', { msg: R.msg, note, code: R.code, busy: !!this.rejoining });
   },
   tryRejoin() {
     const R = this.rejoin;
@@ -571,7 +516,7 @@ const Net = {
     this.solo = this.peers.some(o => o.gone);
     this.refreshPeers(); this.pushPause();
     this.sendTo(q, this.resumePayload(q));
-    this.overlay('<h2 style="color:#9dff6b;margin:0">隊友重新連線中…</h2><div class="sub">正在把這一局的狀態傳給隊友。</div>');
+    this.view('resuming');
   },
   // 房主：把目前這一局的狀態打包給重新連線的隊友 q
   resumePayload(q) {
@@ -580,7 +525,7 @@ const Net = {
     return {
       t: 'resume', runId: this.runId, hostPick: this.myPick, state: G.screenState(), slot: q.slot,
       others: this.peers.filter(o => o !== q && o.pick).map(o => ({ slot: o.slot, ...o.pick })),  // 其他隊友（三人以上）
-      you: { pick: q.pick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory, sa: L.slotAttr || [],
+      you: { pick: q.pick, weapon: L.weapon, chain: L.chain, sk: L.socks || [], inventory: L.inventory,
         hp: mate.hp, maxHp: mate.maxHp, dead: !!mate.dead, credits: (L.credits || 0) + (this.lootTotal - (L.lootAtLo || 0)), dmg: this.dmgPack(L.R, L),
         parts: L.parts, ps: L.partSlots, cap: L.cap, ws: L.wSock, pk: L.playKills, bp: L.bonusPicks || 0, bn: L.boons },
       map: this.packMap(G.map), chapter: G.chapterId, sector: G.sector, bossId: G.bossId, node: G.node ? G.node.id : null, visited: G.visited,
@@ -615,7 +560,7 @@ const Net = {
       G.bonusPicks = clamp(Math.floor(num(Y.bp)), 0, 9);  // 開局三選一剩下的次數以房主記住的為準（newRun 會重設，所以放在它後面）
       const lo = this.sanitizeLoadout(Y);
       if (lo.weapon && lo.weapon.id === G.weapon.id) G.weapon = lo.weapon;
-      G.chain = lo.chain; G.socks = lo.socks; G.inventory = lo.inventory; G.slotAttr = lo.slotAttr;
+      G.chain = lo.chain; G.socks = lo.socks; G.inventory = lo.inventory;
       const YP = Y.parts && typeof Y.parts === 'object' ? Y.parts : {};  // 機體與玩法擊殺也以房主記住的為準
       G.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(YP[id])), 0, 20)]));
       G.partSlots = clamp(Math.floor(num(Y.ps, G.partSlots)), 1, 20);
@@ -647,7 +592,7 @@ const Net = {
     } else if (m.state === 'victory' && G.node) {
       G.inArena = false; G.state = 'victory';
       if (!(soft && G.victory)) G.victory = { slot: false, boss: G.bossId, pick: 'lost' };  // pick 'lost'：重新整理過，二選一的結果已經在配裝裡  // 同一個頁面：保留原本的勝利畫面（模組還能裝）
-      Screen.victory();
+      this.view('screen', { name: 'victory' });
       if (bossDone(G.victory)) this.send({ t: 'moddone' });  // 房主可能在等隊友選旗艦獎勵
     } else if (soft && G.state === 'reward' && G.reward && G.reward.kind === 'start') G.view();  // 同一個頁面、正在開局三選一：留在原本的畫面（showMap 會跳到下一次，少選一次）
     else G.showMap('已重新連線，回到這一局。');
@@ -663,18 +608,7 @@ const Net = {
     if (this.mateAway) return this.role === 'host' ? '隊友切到其他視窗' : '房主切到其他視窗';
     return null;
   },
-  overlay(html) {
-    let el = document.getElementById('netOverlay');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'netOverlay';
-      el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) Screen.act(b); });
-      document.body.appendChild(el);
-    }
-    el.innerHTML = `<div class="panel">${html}</div>`;
-    el.hidden = false;
-  },
-  hideOverlay() { const el = document.getElementById('netOverlay'); if (el) el.hidden = true; },
+  hideOverlay() { this.view('hideOverlay'); },
 
   // 收到訊息：q = 房主這邊是哪個隊友送來的（隊友這邊是 null，訊息都來自房主）
   onData(m, q = null) {
@@ -703,7 +637,7 @@ const Net = {
         if (m.v !== CFG.VERSION) {  // 版號不同（有人沒重新整理）：不讓開始
           const theirs = String(m.v || '舊版').slice(0, 40);
           this.sendTo(q, { t: 'ver', v: CFG.VERSION });
-          this.setMsg(`<span style="color:#ff4d6d">隊友的版本不同（你：${CFG.VERSION}／隊友：${theirs}），請兩邊都按 Ctrl+F5 重新整理</span>`);
+          this.setMsg(`隊友的版本不同（你：${CFG.VERSION}／隊友：${theirs}），請兩邊都按 Ctrl+F5 重新整理`, true);
           break;
         }
         this.pending = this.pending.filter(o => o !== q);
@@ -730,18 +664,16 @@ const Net = {
       case 'chap': if (client) { this.chapter = Game.chapterId = this.cleanChapter(m.chapter); this.roomStatus(); } break;
       case 'hp': this.onRoomPos(m, q); break;
       case 'evv': if (host) this.onEvVote(m, q); break;  // 全隊投票的事件：隊友的票
-      case 'evp': if (client && m.v && typeof m.v === 'object') { this.evVotes = {}; for (const k in m.v) this.evVotes[Math.floor(Number(k))] = Math.floor(num(m.v[k])); if (m.s != null) this.evEnd = performance.now() + clamp(num(m.s), 0, 60) * 1000; if (Game.state === 'event') Screen.event(); } break;  // 投票進度、剩幾秒
+      case 'evp': if (client && m.v && typeof m.v === 'object') { this.evVotes = {}; for (const k in m.v) this.evVotes[Math.floor(Number(k))] = Math.floor(num(m.v[k])); if (m.s != null) this.evEnd = performance.now() + clamp(num(m.s), 0, 60) * 1000; if (Game.state === 'event') this.view('screen', { name: 'event' }); } break;  // 投票進度、剩幾秒
       case 'evr': if (client && m.v && typeof m.v === 'object') { const v = {}; for (const k in m.v) v[Math.floor(Number(k))] = Math.floor(num(m.v[k])); this.evVotes = {}; this.evEnd = 0; Game.evResolve(Math.floor(num(m.i)), v); } break;  // 房主抽的結果
       case 'pg':  // 房主廣播的每個人的延遲
         if (client && m.p && typeof m.p === 'object') {
           this.pings = {};
           // k 是字串（JSON 的 key）：num() 只認數字，要用 Number（以前讀成 0 號、全部丟掉）
           for (const k in m.p) { const s = Math.floor(Number(k)), v = Math.round(num(m.p[k], -1)); if (s >= 2 && s <= NET_MAX && v >= 0 && v < 60000) this.pings[s] = v; }
-          this.showPing();
+          this.view('ping');
         }
         break;
-      case 'hf': this.onHubFire(m, q); break;
-      case 'hd': this.onHubDash(m, q); break;
       case 'hold': if (client) this.hold = typeof m.why === 'string' ? m.why.slice(0, 40) : null; break;
       case 'ver': this.lost(`你和房主的版本不同（你：${CFG.VERSION}／房主：${String(m.v || '舊版').slice(0, 40)}），請兩邊都按 Ctrl+F5 重新整理`); break;
       case 'room':
@@ -761,7 +693,7 @@ const Net = {
           if (!P.dead) { P.hp = 0; P.dead = true; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); }
           Game.lastHit = typeof m.cause === 'string' ? m.cause.slice(0, 60) : '';
           Game.saveRecord('dead');
-          setTimeout(() => { if (Game.state === 'dead') Screen.dead(); }, 900);
+          setTimeout(() => { if (Game.state === 'dead') this.view('screen', { name: 'dead' }); }, 900);
         }
         break;
       case 'dmg': if (client) this.onDmg(m); break;
@@ -771,7 +703,7 @@ const Net = {
         if (host) {
           q.away = false; this.refreshPeers(); this.pushPause();
           if (!this.waiting) this.hideOverlay(); else this.waitOverlay();
-          if (Game.state === 'map') { this.checkVoteTimer(); Screen.map(); }
+          if (Game.state === 'map') { this.checkVoteTimer(); this.view('screen', { name: 'map' }); }
         }
         break;
       case 'away':
@@ -785,7 +717,7 @@ const Net = {
           for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'at', s, slot: q.slot });  // 轉告其他隊友
           this.checkVoteTimer();
         } else this.at[clamp(Math.floor(num(m.slot, 1)), 1, NET_MAX)] = s;
-        if (Game.state === 'map') Screen.map();
+        if (Game.state === 'map') this.view('screen', { name: 'map' });
         break;
       }
       case 'vote': {
@@ -796,14 +728,14 @@ const Net = {
         this.votes[s] = m.node;
         if (host) for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'vote', node: m.node, slot: s });  // 轉告其他隊友
         if (!this.votes[this.mySlot()]) this.nudge(true);  // 隊友選好了、自己還沒：提醒（可能還在整理電路、商店）
-        if (Game.state === 'map') Screen.map();
+        if (Game.state === 'map') this.view('screen', { name: 'map' });
         if (host) this.tryResolve();
         break;
       }
-      case 'vt': if (client) { this.voteEnd = performance.now() + clamp(num(m.s), 0, 60) * 1000; if (Game.state === 'map') Screen.map(); } break;
+      case 'vt': if (client) { this.voteEnd = performance.now() + clamp(num(m.s), 0, 60) * 1000; if (Game.state === 'map') this.view('screen', { name: 'map' }); } break;
       case 'go':
         if (client && Game.map && typeof m.node === 'string' && Game.nodeById(m.node)) {
-          if (Game.state === 'editor') { Editor.close(); Game.recalc(); this.sendLoadout(); }
+          if (Game.state === 'editor') { this.view('closeEditor'); Game.recalc(); this.sendLoadout(); }
           const V = m.votes && typeof m.votes === 'object' ? m.votes : {}, ok = id => (typeof id === 'string' && Game.nodeById(id) ? id : null), votes = {};
           for (let s = 1; s <= NET_MAX; s++) if (ok(V[s])) votes[s] = V[s];
           this.go(m.node, votes, !!m.drawn && Object.keys(votes).length >= 2);
@@ -814,13 +746,13 @@ const Net = {
         if (typeof m.k !== 'string' || !Object.prototype.hasOwnProperty.call(CFG.EVENT.sos, m.k)) break;
         Game.addSos(m.k, true);
         if (host) for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'sos', k: m.k });
-        if (Game.state === 'map') Screen.map();
+        if (Game.state === 'map') this.view('screen', { name: 'map' });
         break;
       case 'hoard':
         if (!Array.isArray(m.ids) || !Game.map) break;
         Game.markHoard(m.ids.filter(id => typeof id === 'string').slice(0, 4), true);
         if (host) for (const o of this.peers) if (o !== q) this.sendTo(o, { t: 'hoard', ids: m.ids });
-        if (Game.state === 'map') Screen.map();
+        if (Game.state === 'map') this.view('screen', { name: 'map' });
         break;
       case 'ward':
         if (client && Game.boons && Game.boons.ward > 0) { Game.boons.ward--; bannerFx('⛨ 終焉護殼', `撐住了致命的一擊（無敵 ${CFG.EVENT.ward.iframe} 秒）`, 2); }
@@ -849,7 +781,7 @@ const Net = {
         break;
       case 'finish': if (client && Game.screenState() === 'victory') { if (Game.state === 'editor') Game.toggleEditor(); Game.finishRun(); } break;
       case 'moddone':  // 隊友選好了旗艦獎勵：大家都好了，房主就可以前往下一星區
-        if (host && q.modWait) { q.modWait = false; if (!this.modWaiting() && Game.state === 'victory') Screen.victory(); }
+        if (host && q.modWait) { q.modWait = false; if (!this.modWaiting() && Game.state === 'victory') this.view('screen', { name: 'victory' }); }
         break;
       case 'ping': {
         this.reply(q, { t: 'pong', at: m.at });
@@ -865,7 +797,7 @@ const Net = {
           this.send({ t: 'pg', p: Object.fromEntries(this.peers.filter(o => o.linked && o.ping != null).map(o => [o.slot, o.ping])) });
         } else this.ping = ms;
         if (S && Game.state === 'play' && S.pings.length < 3600) S.pings.push(ms);
-        this.showPing();
+        this.view('ping');
         break;
       }
     }
@@ -881,7 +813,7 @@ const Net = {
     if (this.role !== 'host' || Game.state !== 'pick' || !this.meReady || !this.allReady() || Hub.seq) return;
     const n = this.peers.length + 1;
     this.send({ t: 'launch', n });
-    Hub.launch(() => { if (Game.state === 'pick' && this.meReady && this.allReady()) this.startHost(); else Screen.hubPick(); }, this.launchOff(1, n), this.launchMates(n));  // 播完再確認一次（有人中途離開就回基地）
+    Hub.launch(() => { if (Game.state === 'pick' && this.meReady && this.allReady()) this.startHost(); else this.view('screen', { name: 'hubPick' }); }, this.launchOff(1, n), this.launchMates(n));  // 播完再確認一次（有人中途離開就回基地）
   },
   launchOff(slot, n) { return (slot - 1 - (n - 1) / 2) * Math.min(40, HUB.RUNWAY_W / Math.max(1, n - 1)); },  // 出發動畫：照號碼在跑道上左右錯開（間隔 40，人多時縮到跑道寬放得下；以前 26，兩人的名牌疊在一起）
   launchMates(n) { return this.roomShips().map(o => ({ slot: o.slot, off: this.launchOff(o.slot, n) })); },  // 其他人（房間裡看得到的）：號碼、跑道上的位置
@@ -890,7 +822,7 @@ const Net = {
     this.myPick = this.cleanPick({ ship, weapon, chip });
     this.meReady = true;
     this.send({ t: 'ready', ...this.myPick, slot: this.mySlot() });
-    Screen.hubPick();  // 回到基地等其他人
+    this.view('screen', { name: 'hubPick' });  // 回到基地等其他人
     this.tryStart();
   },
   onMateReady(m, q) {
@@ -909,14 +841,14 @@ const Net = {
   // ---------- 開始 ----------
   makeLoadout(p) {  // 隊友的配裝（房主這邊用來算隊友的子彈）
     const L = { shipId: p.ship, weapon: { id: p.weapon, path: null, final: null },
-      chain: startChain(p.chip), socks: [], inventory: startInv(p.chip), slotAttr: [], playKills: {}, pullHits: 0,
+      chain: startChain(p.chip), socks: startSocks(p.chip), inventory: startInv(p.chip), playKills: {},
       parts: { ...SHIPS[p.ship].parts }, partSlots: SHIPS[p.ship].partSlots, cap: SHIPS[p.ship].cap, wSock: CFG.START_WSOCK, boons: cleanBoons(),
       R: { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0 } };  // 隊友的傷害統計
     const ST = Game.chapter().start;  // 章節的開局補償：電路格、插座先加；晶體和剩下的三選一次數先記著，之後隊友的配裝同步會蓋過去
     applyChapterStart(L, ST);
     L.credits = ST ? ST.credits || 0 : 0; L.bonusPicks = ST ? ST.picks || 0 : 0;
     L.wp = weaponParams(L.weapon);
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.wp, Game.boons); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.boons); });
     return L;
   },
   startHost() {
@@ -1006,7 +938,7 @@ const Net = {
     this.votes[this.mySlot()] = id;
     this.nudge(false);
     this.send({ t: 'vote', node: id, slot: this.mySlot() });
-    Screen.map();
+    this.view('screen', { name: 'map' });
     if (this.role === 'host') this.tryResolve();
   },
   checkVoteTimer() {  // 房主：大家都在航圖時開始倒數
@@ -1014,7 +946,7 @@ const Net = {
     if (this.role !== 'host' || Game.state !== 'map' || !on.length || !on.every(q => q.at === 'map') || this.voteEnd) return;
     this.voteEnd = performance.now() + NET_VOTE_TIME * 1000;
     this.send({ t: 'vt', s: NET_VOTE_TIME });
-    Screen.map();
+    this.view('screen', { name: 'map' });
   },
   tryResolve(force = false) {  // 房主：大家都投了（或時間到）就決定目的地
     if (this.role !== 'host' || Game.state !== 'map') return;
@@ -1034,27 +966,17 @@ const Net = {
     this.at = {}; for (const q of this.peers) q.at = null;
     this.voteEnd = 0; this.votes = {}; this.evVotes = {}; this.evEnd = 0;  // 新的節點：上一個事件沒投完的票不算
     this.nudge(false);
-    const label = NODE_META[node.type].label;
     const T = !NODE_META[node.type].fight ? 0 : this.goTime != null ? this.goTime : NET_GO_TIME;  // 只有要打的節點倒數（補給站、維修站這些直接進去）；goTime：模擬用（電腦不用等，設 0）
     if (!(T > 0)) { Game.enterNode(node); return; }
     Game.state = 'going';
     this.goUntil = performance.now() + T * 1000;  // 大家都選好（或投票時間到）：倒數 3 秒再進關卡
-    const S = Object.keys(votes).map(Number).sort((a, b) => a - b);
-    const why = S.map(s => `${s}P 投「${NODE_META[Game.nodeById(votes[s]).type].label}」`).join('、') + (S.length === 2 ? '，各 50%' : '，照票數比例抽籤');
-    Screen.show(`<div class="scr title-wrap"><h1 style="font-size:36px">${drawn ? '🎲 意見分歧，抽籤決定' : '➜ 出發'}</h1>
-      <div class="sub">${drawn ? `${why}。<br>` : ''}
-        目的地：<b style="color:${NODE_META[node.type].color};font-size:22px">${NODE_META[node.type].icon} ${label}</b></div>
-      <h1 style="font-size:64px;margin:10px 0 0" id="goLeft">${T}</h1></div>`);
+    this.view('going', { node, votes, drawn, T });
     setTimeout(() => { if (Game.state === 'going') { this.goUntil = 0; Game.enterNode(node); } }, T * 1000);
   },
   // 提醒還沒選節點的人：畫面最上面的橫幅（開著電路編輯器、在商店也看得到），自己投了票或出發時收起來
   nudge(on) {
-    let el = document.getElementById('netNudge');
-    if (!on) { if (el) el.hidden = true; return; }
-    if (!el) { el = document.createElement('div'); el.id = 'netNudge'; document.body.appendChild(el); }
-    el.textContent = '👥 隊友已經選好下一個節點，等你選擇（在航圖點一個發光的節點）';
-    el.hidden = false;
-    Events.emit('nudge');
+    this.view('nudge', { on });
+    if (on) Events.emit('nudge');
   },
   voteLeft() { return this.voteEnd ? Math.max(0, Math.ceil((this.voteEnd - performance.now()) / 1000)) : null; },
   // ---------- 全隊投票的事件（EVENTS 的 team，例如求救訊號）：每人一票（evVotes：幾號 → 第幾個選項），
@@ -1070,7 +992,7 @@ const Net = {
     this.evVotes[q.slot] = i;
     if (!this.evEnd) this.evEnd = performance.now() + NET_VOTE_TIME * 1000;
     this.send({ t: 'evp', v: this.evVotes, s: this.evLeft() });  // 投票進度給所有人看
-    if (Game.state === 'event') Screen.event();
+    if (Game.state === 'event') this.view('screen', { name: 'event' });
     this.tryResolveEv();
   },
   tryResolveEv(force = false) {
@@ -1091,10 +1013,10 @@ const Net = {
   sendLoadout() {
     if (this.role !== 'client' || !this.linked) return;
     const G = Game;
-    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, sa: G.slotAttr || [], hp: G.player.hp, cr: G.credits,
+    this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, hp: G.player.hp, cr: G.credits,
       parts: G.parts, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft(), bn: G.boons });
   },
-  // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶插座數 ~2，見 parseChipId）
+  // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶插座數 ~2、等級 ^2，見 parseChipId）
   sanitizeLoadout(m) {
     const fix = id => parseChipId(id);
     const chain = (Array.isArray(m.chain) ? m.chain : []).slice(0, CFG.MAX_SLOTS).map((id, i) => (i === 0 ? 'weapon' : fix(id)));
@@ -1103,20 +1025,19 @@ const Net = {
     const inventory = Array.from({ length: CFG.INV_SLOTS }, (_, i) => fix(Array.isArray(m.inventory) ? m.inventory[i] : null));
     const W = m.weapon && WEAPONS[m.weapon.id] ? m.weapon : null, path = W && W.path && WEAPONS[W.id].paths[W.path] ? W.path : null;
     const weapon = W ? { id: W.id, path, final: path && (W.final === 0 || W.final === 1) ? W.final : null } : null;
-    const slotAttr = chain.map((_, i) => (i > 0 && Array.isArray(m.sa) && SLOT_ATTRS[m.sa[i]] ? m.sa[i] : null));
     // 插座：只收組件，每格最多插座上限個（多的丟掉）
     const socks = chain.map((id, i) => !id || !Array.isArray(m.sk) || !Array.isArray(m.sk[i]) ? []
       : m.sk[i].slice(0, CFG.MAX_SOCKETS).map(fix).filter(c => c && isComp(c)));
-    return { chain, socks, inventory, weapon, slotAttr };
+    return { chain, socks, inventory, weapon };
   },
   applyMateLoadout(m, q) {  // 房主：檢查後套用到隊友 q 的配裝
     const mate = this.mateOf(q);
     if (!mate || !mate.L) return;
-    const { chain, socks, inventory, weapon, slotAttr } = this.sanitizeLoadout(m), L = mate.L;
+    const { chain, socks, inventory, weapon } = this.sanitizeLoadout(m), L = mate.L;
     if (weapon && weapon.id === L.weapon.id) L.weapon = weapon;
     L.credits = Math.max(0, num(m.cr, L.credits || 0));  // 隊友的錢包（重新連線時還原用）
     L.lootAtLo = this.lootTotal || 0;  // 之後撿到的掉落另外算
-    L.chain = chain; L.socks = socks; L.inventory = inventory; L.slotAttr = slotAttr; L.wp = weaponParams(L.weapon);
+    L.chain = chain; L.socks = socks; L.inventory = inventory; L.wp = weaponParams(L.weapon);
     // 機體：零件層數（0～20）、零件格
     const P = m.parts && typeof m.parts === 'object' ? m.parts : {};
     L.parts = Object.fromEntries(PART_IDS.map(id => [id, clamp(Math.floor(num(P[id])), 0, 20)]));
@@ -1125,7 +1046,7 @@ const Net = {
     L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
     L.bonusPicks = clamp(Math.floor(num(m.bp, L.bonusPicks || 0)), 0, 9);  // 開局三選一還剩幾次（隊友重新整理時還原）
     L.boons = cleanBoons(m.bn);  // ？事件的這一局效果（終焉護殼用掉時房主會先告訴隊友，所以以隊友傳來的為準）
-    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.wp, Game.boons); });
+    Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.boons); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
     if (!Game.inArena) mate.hp = clamp(num(m.hp, mate.hp), 1, mate.maxHp);  // 戰鬥中的血量以房主為準
     else mate.hp = Math.min(mate.hp, mate.maxHp);
@@ -1205,6 +1126,8 @@ const Net = {
     p.aimD = num(m.ad, 300); p.autoMode = !!m.au;  // 準星距離（環繞放出）、手機自動攻擊（環繞轉滿就放）
     const ds = num(m.ds, p.dashSeq);
     if (ds > p.dashSeq) { p.dashSeq = ds; Game.withLoadout(p.L, () => p.onDash()); }  // 衝刺技能（震波、相位超載）由房主執行
+    const as = num(m.as, p.altSeq || 0);
+    if (as > (p.altSeq || 0)) { p.altSeq = as; p.altQ = true; }  // 武器右鍵：下一次 hostUpdateMate 執行
   },
   hostUpdateMates(dt) { for (const m of Game.mates) this.hostUpdateMate(m, dt); },
   hostUpdateMate(m, dt) {
@@ -1212,7 +1135,7 @@ const Net = {
     coast(m, dt);  // 兩次輸入之間先照速度往前推
     m.x = clamp(m.x, m.r, Arena.W - m.r); m.y = clamp(m.y, m.r, Arena.H - m.r);
     m.iframe -= dt; m.overdrive -= dt; m.dashT -= dt; if (m.frostT > 0) m.frostT -= dt;  // 冰凍時間在房主這邊倒數（隊友那邊照同步的剩餘秒數變慢）
-    Game.withLoadout(m.L, () => { m.tickDash(); m.tickFire(dt, m.wantFire); });  // 開火（蓄力、過熱）與衝刺相關的晶片
+    Game.withLoadout(m.L, () => { m.tickDash(); m.tickAlt(dt); m.tickFire(dt, m.wantFire); });  // 衝刺相關的晶片、武器（每幀的事、右鍵）、開火（蓄力、過熱）
     Objects.hostCheckMate(m);
   },
   hostSend(dt) {
@@ -1224,8 +1147,8 @@ const Net = {
     // 每艘飛船（給別人畫）：[號碼, 17 項狀態, 零件, 拾取範圍, 離線]
     const row = (p, slot, parts, magnet) => [slot, r(p.x), r(p.y), r2(p.aim), r2(p.hp), p.maxHp, r2(Math.max(0, p.dashT)), r2(Math.max(0, p.iframe)),
       p.overdrive > 0 ? 1 : 0, p.moving ? 1 : 0, p.dead ? 1 : 0, r(p.vx), r(p.vy), r2(p.reviveT),
-      0, p.shield || 0, p.frostT > 0 ? 1 : 0, p.revengeT > 0 ? 1 : 0,  // （空位）、護盾層數、被凍住、逆襲中
-      PART_IDS.map(id => parts[id] || 0), r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0, Game.wardOf(p)];  // 最後：終焉護殼還能免死幾次  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
+      0, p.shield || 0, p.frostT > 0 ? 1 : 0, 0,  // （空位）、護盾層數、被凍住、（空位）
+      PART_IDS.map(id => parts[id] || 0), r(CFG.MAGNET_RANGE * (1 + magnet)), p.gone ? 1 : 0, Game.wardOf(p), weaponRow(p)];  // 最後：終焉護殼還能免死幾次  // 拾取範圍：隊友那邊模擬晶體飛向這艘船時用
     const rows = [row(P, 1, G.parts, G.passives.magnet), ...G.mates.map(m => row(m, m.slot, m.L.parts, m.L.passives.magnet))];
     // 敵人：種類、mode 這些字串寫成 et 的編號；待機的（蟲潮整區可能幾百隻）每 NET_IDLE_EVERY 次才送完整資料，中間只列 id 在 ei
     const full = this.sendN++ % NET_IDLE_EVERY === 0, et = [], etIdx = new Map(), ei = [], live = [];
@@ -1237,15 +1160,11 @@ const Net = {
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
       zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 王的落點轟炸（紅圈）
-      fl: G.flames.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 火毯（散彈升級）留在地上的火
-      qk: G.quakes.map(q => [r(q.x), r(q.y), q.r, r2(q.t), q.max]),  // 餘震（電漿升級）的預告圈
       dc: G.decoys.map(d => [r(d.x), r(d.y), r2(d.t), d.slot, r2(d.aim)]),  // 殘影（幻影號）
       tu: G.turrets.map(q => [r(q.x), r(q.y), r2(q.t), q.slot, r2(q.aim)]),  // 砲台（哨兵號）
-      tr: G.trails.map(L => [r(L.x1), r(L.y1), r(L.x2), r(L.y2), r2(L.t), L.max]),  // 殘留彈道（軌道升級）的電軌
-      lk: G.links.map(L => [r2(L.t), ...L.es.filter(e => !e.dead && e.link === L).map(e => e.id)]),  // 共鳴（電漿升級）：剩幾秒、連結的敵人
       e: live.map(e => trimRow([e.id, ti(e.type), r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, ti(e.mode), r2(e.modeT), r2(e.chargeA),
-        e.slowT > 0 ? 1 : 0, e.burnT > 0 || e.burnL ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
+        e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
         e.shieldA != null ? r2(e.shieldA) : null, r2(e.cloak || 0),  // 盾衛的盾方向、潛伏者的隱形程度
         e.t.syncCd ? r2(e.cd) : null, e.markT > 0 || e.shredT > 0 ? 1 : 0,  // 倒數（t.syncCd：噴吐者鼓起、母巢脈動、星環守門者的光束）、弱點標記／破甲
         e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
@@ -1269,15 +1188,36 @@ const Net = {
       this.sendTo(q, { t: 's', ...shared,
         p: rows.filter(a => a[0] !== q.slot),  // 其他人的飛船
         me: [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        r2(m.chargeC), m.L.stats.heatLimit ? r2(m.ohT / m.L.stats.heatLimit) : 0, r2(Math.max(0, m.ohLock)), m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), standStacks(m, m.L.stats.stand), m.crowdK || 0, r2(Math.max(0, m.revengeT || 0)), m.streak || 0, m.focusK || 0, m.spreadK || 0, m.grazeK || 0, m.staticK || 0, m.parryK || 0],  // …、群戰的敵人數、逆襲剩幾秒、無傷連殺層數、專注／分散／擦彈層數  // 灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）
+        0, 0, 0, m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), 0, 0, 0, m.streak || 0],  // …、（空位 ×3）、護盾、灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）、（空位 ×3）、無傷連殺層數
+        ws: weaponRow(m),  // 自己的武器狀態（HUD）
         kp: m.L.playKills,  // 這個隊友各晶片的玩法擊殺數（隊友那邊的紀錄用；pk 是晶體，名字不能撞）
-        b: G.bullets.filter(b => !b.dead && near(b.x, b.y)).map(b => [r(b.x), r(b.y), r2(b.angle), r(b.speed), r2(b.r),
-          ci(b.color), b.shape, b.splits, b.payload ? 1 : 0, r2(b.life), r(Math.min(60, Math.hypot(b.x - b.sx, b.y - b.sy)))]),
+        ...this.bulletRows(q, near, ci),
         eb: G.eBullets.filter(b => near(b.x, b.y)).map(b => [r(b.x), r(b.y), r(b.vx), r(b.vy), b.r, b.col ? ci(b.col) : -1, b.mine ? r2(b.life) : 0]),  // 盾衛反彈的原本顏色、地雷剩幾秒（0 = 不是地雷）
         pal,
       });
     }
     this.fxBuf = [];
+  },
+
+  // 子彈：隊友那邊照直線自己飛（clientUpdate），這裡只送他會猜錯的——新的、轉彎、變速、停住的（跟上次送給他的直線預測差超過 BULLET_TOL）；
+  //   消失的只送編號（bd）。q.bSent：子彈 → 上次送給這個隊友的 [x, y, 角度, 速度, 時間]（每個隊友各一份：只送他附近的）
+  //   b：[編號, x, y, 角度, 速度（停住的 0）, 半徑, 顏色, 形狀, 分裂, 帶子彈, 剩下時間, 尾巴長]
+  bulletRows(q, near, ci) {
+    const G = Game, S = q.bSent || (q.bSent = new Map()), live = new Set(), b = [], bd = [], r = Math.round, T = BULLET_TOL;
+    for (const o of G.bullets) {
+      if (o.dead) continue;
+      live.add(o);
+      if (!near(o.x, o.y)) continue;
+      const sp = ['park', 'wait', 'orbit'].includes(o.mode) ? 0 : o.speed, p = S.get(o);
+      if (p) {
+        const dt = G.time - p[4], ex = p[0] + Math.cos(p[2]) * p[3] * dt - o.x, ey = p[1] + Math.sin(p[2]) * p[3] * dt - o.y;
+        if (Math.abs(ex) < T && Math.abs(ey) < T && Math.abs(angleDiff(p[2], o.angle)) < 0.05 && p[5] === o.r) continue;  // 大小變了也重送（疊井、疊輪、磨盤）
+      }
+      S.set(o, [o.x, o.y, o.angle, sp, G.time, o.r]);
+      b.push([o.nid, r(o.x), r(o.y), r2(o.angle), r(sp), r2(o.r), ci(o.color), o.shape, r2(o.life), r(Math.min(60, Math.hypot(o.x - o.sx, o.y - o.sy))), o.vortex ? r(o.vortex) : 0]);  // 最後一欄：漩渦的吸引半徑（隊友畫範圍圈）
+    }
+    for (const o of S.keys()) if (!live.has(o)) { bd.push(o.nid); S.delete(o); }
+    return { b, bd };
   },
 
   // ---------- 隊友 ----------
@@ -1298,7 +1238,7 @@ const Net = {
         if (e.spawnT > 0) e.spawnT -= dt;
         else { e.x += e.vx * dt; e.y += e.vy * dt; }
       }
-      for (const b of G.bullets) { b.x += Math.cos(b.angle) * b.speed * dt; b.y += Math.sin(b.angle) * b.speed * dt; b.life -= dt; }
+      for (const b of G.bullets) { b.x += Math.cos(b.angle) * b.speed * dt; b.y += Math.sin(b.angle) * b.speed * dt; if (b.speed) b.life -= dt; }  // 停住的（速度 0）不倒數：等房主說消失
       for (const b of G.eBullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
       Objects.clientStep(dt);
       for (const c of G.pickups) {  // 晶體：用和房主一樣的算法飛向最近的玩家；碰到自己就先藏起來（房主那邊才真的入帳）
@@ -1315,7 +1255,7 @@ const Net = {
       if (this.inAcc >= NET_RATE && !P.dead) {
         this.inAcc = Math.min(this.inAcc - NET_RATE, NET_RATE);
         this.send({ t: 'i', x: Math.round(P.x), y: Math.round(P.y), vx: Math.round(P.vx), vy: Math.round(P.vy), a: r2(P.aim),
-          mv: P.moving ? 1 : 0, dT: r2(Math.max(0, P.dashT)), ds: P.dashSeq || 0, f: P.wantFire ? 1 : 0,
+          mv: P.moving ? 1 : 0, dT: r2(Math.max(0, P.dashT)), ds: P.dashSeq || 0, as: P.altSeq || 0, f: P.wantFire ? 1 : 0,
           ad: Math.round(P.aimD || 300), sx: Math.round(P.dashSX == null ? P.x : P.dashSX), sy: Math.round(P.dashSY == null ? P.y : P.dashSY), au: P.autoMode ? 1 : 0 });
       }
     }
@@ -1332,7 +1272,7 @@ const Net = {
       netMove(m, num(p[0], m.x), num(p[1], m.y)); m.aim = num(p[2]);  // 畫面上不跳（見 netMove） m.hp = num(p[3]); m.maxHp = num(p[4], m.maxHp);
       m.dashT = num(p[5]); m.iframe = num(p[6]); m.overdrive = p[7] ? 1 : 0; m.moving = !!p[8]; m.dead = !!p[9];
       m.vx = num(p[10]); m.vy = num(p[11]); m.reviveT = num(p[12]);
-      m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0; m.revengeT = p[16] ? 0.2 : 0;  // 逆襲中（畫那艘船發紅光）
+      m.shield = clamp(num(p[14]), 0, 9); m.frostT = p[15] ? 0.2 : 0;
       const pp = arr(p[17]); m.parts = Object.fromEntries(PART_IDS.map((id, i) => [id, clamp(num(pp[i]), 0, 20)]));
       m.magnet = num(p[18], CFG.MAGNET_RANGE); m.gone = !!p[19]; m.ward = clamp(Math.floor(num(p[20])), 0, 9);
     }
@@ -1351,11 +1291,9 @@ const Net = {
       if (s.me[3] && !P.dead) { P.dead = true; Input.down = false; burst(P.x, P.y, P.ship.color, 80, 400, 1.2, 3); G.shake(20); }
       else if (!s.me[3] && P.dead && hp > 0) { P.dead = false; P.vx = P.vy = 0; P.iframe = CFG.REVIVE.iframe; }  // 被隊友救起來
       P.reviveT = num(s.me[5]);
-      P.chargeC = num(s.me[6]); P.heatR = num(s.me[7]); P.ohLock = num(s.me[8]); P.shield = num(s.me[9]);
+      P.shield = num(s.me[9]);
       if (s.me[12] > 0) P.frostT = Math.max(P.frostT || 0, num(s.me[12]));
-      P.standK = num(s.me[13], 0);  // 架設的層數  // 被彗星凍住（房主判定，自己的船自己變慢）
-      P.crowdK = num(s.me[14], 0); P.revengeT = num(s.me[15], 0); P.streak = num(s.me[16], 0);  // 群戰、逆襲、無傷連殺（畫左上小條用）
-      P.focusK = num(s.me[17], 0); P.spreadK = num(s.me[18], 0); P.grazeK = num(s.me[19], 0); P.staticK = num(s.me[20], 0); P.parryK = num(s.me[21], 0);  // 專注、分散、擦彈、靜電、格擋流
+      P.streak = num(s.me[16], 0);  // 無傷連殺（畫左上小條用）
     }
     if (s.kp && typeof s.kp === 'object')  // 玩法擊殺：房主算好的次數，這邊只增不減
       for (const k in s.kp) if (hasLv(k) && num(s.kp[k]) > (G.playKills[k] || 0)) G.playKills[k] = Math.floor(num(s.kp[k]));
@@ -1371,6 +1309,8 @@ const Net = {
         affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined };
     }).filter(Boolean);
     for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
+    applyWeaponRow(P, s.ws);  // 武器狀態：敵人更新完才套（鉤爪找勾住的那隻）
+    for (const row of arr(s.p)) { const m = Array.isArray(row) && G.mates.find(q => q.slot === row[0]); if (m) applyWeaponRow(m, row[22]); }
     // 守門者的光束：同步來的角度是單程延遲之前的，再往前轉「轉速 × 單程延遲（來回延遲的一半）」才跟房主判定用的對齊
     //   （tests/beamlag.js 量過：不補的話單程延遲 100ms 時，隊友看到光束碰到船之前 133ms 就被扣血）；
     //   往目標修一半（自己照轉速推算的跟房主差一點，直接蓋掉會一下快一下慢）
@@ -1383,12 +1323,17 @@ const Net = {
     const byId = new Map(G.enemies.map(e => [e.id, e]));  // 列隊蟲：用 id 接回前面那節（找不到 = 自己是頭）
     for (const e of G.enemies) if (e.aheadId !== undefined) e.ahead = byId.get(e.aheadId) || null;  // 沿用的那節也要重接（前面那節可能換成新的物件）
     const pal = arr(s.pal);
-    G.bullets = arr(s.b).map(a => {
-      const ang = num(a[2]), tl = num(a[10]);
-      return { x: num(a[0]), y: num(a[1]), angle: ang, speed: num(a[3]), r: num(a[4], 3), color: typeof pal[a[5]] === 'string' ? pal[a[5]] : '#fff',
-        shape: a[6], splits: num(a[7]), payload: !!a[8], life: num(a[9], 1),
-        sx: num(a[0]) - Math.cos(ang) * tl, sy: num(a[1]) - Math.sin(ang) * tl };
-    });
+    // 子彈：只收到新的、跟直線預測不一樣的（見 bulletRows），其他的照直線自己飛；消失的照編號拿掉，太久沒消息的（訊息掉了）自己拿掉
+    const byN = new Map(G.bullets.map(b => [b.nid, b])), gone = new Set(arr(s.bd));
+    for (const a of arr(s.b)) {
+      if (!Array.isArray(a)) continue;
+      const ang = num(a[3]), tl = num(a[9]);
+      let b = byN.get(a[0]);
+      if (!b) { b = { nid: a[0] }; byN.set(a[0], b); G.bullets.push(b); }
+      Object.assign(b, { x: num(a[1]), y: num(a[2]), angle: ang, speed: num(a[4]), r: num(a[5], 3), color: typeof pal[a[6]] === 'string' ? pal[a[6]] : '#fff',
+        shape: a[7], life: num(a[8], 1), sx: num(a[1]) - Math.cos(ang) * tl, sy: num(a[2]) - Math.sin(ang) * tl, vortex: num(a[10]) });
+    }
+    G.bullets = G.bullets.filter(b => !gone.has(b.nid) && b.life > -BULLET_STALE);
     if (Array.isArray(s.as)) {  // 大地圖：第一次收到（或換了一張）就照種子產生，自己的飛船放到出生點
       if (Arena.rect || Arena.seed !== num(s.as[0]) || (Arena.sc || 1) !== num(s.as[3], 1)) {
         if (ENEMY_TYPES[s.as[2]] && ENEMY_TYPES[s.as[2]].boss) Arena.genBoss(num(s.as[0]), s.as[2]);  // 旗艦戰
@@ -1400,12 +1345,8 @@ const Net = {
     Arena.gates.forEach((g, i) => { g.open = i < num(s.go); });
     G.objs = Objects.unpack(s.ob);
     G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1 }));
-    G.flames = arr(s.fl).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 30), t: num(a[3]), max: num(a[4], 1) || 1 }));
-    G.quakes = arr(s.qk).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 90), t: num(a[3]), max: num(a[4], 1) || 1 }));
     G.decoys = arr(s.dc).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]), r: 12, decoy: true }));
     G.turrets = arr(s.tu).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]) }));
-    G.trails = arr(s.tr).filter(Array.isArray).map(a => ({ x1: num(a[0]), y1: num(a[1]), x2: num(a[2]), y2: num(a[3]), t: num(a[4]), max: num(a[5], 1) || 1 }));
-    G.links = arr(s.lk).filter(Array.isArray).map(a => ({ t: num(a[0]), ids: a.slice(1) }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
     G.eBullets = arr(s.eb).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2]), vy: num(a[3]), r: num(a[4], 5), col: typeof pal[a[5]] === 'string' ? pal[a[5]] : null,
       mine: num(a[6]) > 0, life: num(a[6]), max: AFFIX.mine.life }));
@@ -1455,5 +1396,3 @@ document.addEventListener('visibilitychange', () => {
   if (!Net.linked || Game.mode !== 'coop') return;
   if (Net.role === 'host') { Net.myAway = document.hidden; Net.pushPause(); } else Net.send({ t: 'away', on: document.hidden });
 });
-Events.on('hubFire', d => Net.sendHubFire(d));  // 基地裡開火：多人房間時告訴其他人
-Events.on('hubDash', d => Net.sendHubDash(d));  // 基地裡衝刺：多人房間時告訴其他人

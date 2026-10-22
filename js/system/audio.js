@@ -30,7 +30,7 @@ const SFX = {
   setMuted(m) {
     this.muted = m;
     this.applyVolume();
-    try { localStorage.setItem('muted', m ? '1' : '0'); } catch (e) {}
+    Save.setFlag('muted', m);
     document.querySelectorAll('[data-act="mute"]').forEach(b => b.textContent = m ? '🔇 音效關' : '🔊 音效開');
   },
   ready(key, gap) {
@@ -75,6 +75,7 @@ const SFX = {
         if (arg === 'scatter' && this.ready('shoot', 60)) { H({ freq: 3000, f2: 400, dur: 0.12, vol: 0.18 }); T({ type: 'sine', f: 160, f2: 60, dur: 0.1, vol: 0.12 }); }
         if (arg === 'plasma' && this.ready('shoot', 80)) T({ type: 'sine', f: 320, f2: 90, dur: 0.25, vol: 0.18 });
         if (arg === 'railgun' && this.ready('shoot', 50)) { H({ freq: 5000, filter: 'highpass', dur: 0.08, vol: 0.18 }); T({ type: 'sawtooth', f: 900, f2: 120, dur: 0.18, vol: 0.08 }); }
+        if (arg === 'drone' && this.ready('shoot', 45)) T({ f: 1800, f2: 1200, dur: 0.04, vol: 0.04 });
         if (arg === 'blade' && this.ready('shoot', 60)) H({ freq: 2600, f2: 800, filter: 'bandpass', q: 2, dur: 0.12, vol: 0.2 });
         break;
       case 'ricochet': if (this.ready('ricochet', 50)) T({ type: 'triangle', f: 1600, f2: 2400, dur: 0.05, vol: 0.06 }); break;
@@ -100,7 +101,7 @@ const SFX = {
     }
   },
 };
-try { if (localStorage.getItem('muted') === '1') SFX.muted = true; } catch (e) {}
+if (Save.flag('muted', false)) SFX.muted = true;
 
 // =====================================================================
 // MUSIC — 背景音樂（Web Audio 即時合成，不需要音檔）
@@ -134,7 +135,7 @@ const Music = {
   },
   toggle() {
     this.on = !this.on;
-    try { localStorage.setItem('music', this.on ? '1' : '0'); } catch (e) {}
+    Save.setFlag('music', this.on);
     this.fadeTo(this.on && this.track ? 1 : 0, 0.3);
   },
   fadeTo(v, sec) {
@@ -273,7 +274,7 @@ const Music = {
     if (i === 0 || i === 14) for (const n of ch) this.note('sawtooth', n - 12, t, dt * 2.5, 0.03, { cutoff: 1200, detune: 6, attack: 0.015, rev: 0.4 });
   },
 };
-try { if (localStorage.getItem('music') === '0') Music.on = false; } catch (e) {}  // 載入時就讀，標題畫面的按鈕才不會先顯示「開」
+if (!Save.flag('music', true)) Music.on = false;  // 載入時就讀，標題畫面的按鈕才不會先顯示「開」
 
 addEventListener('pointerdown', () => SFX.init(), { capture: true });
 addEventListener('keydown', e => {

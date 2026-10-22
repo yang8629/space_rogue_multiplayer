@@ -1,4 +1,5 @@
-// 星環電路 多人版 · game.js：Game：一局的流程、戰鬥、獎勵、商店、黑洞（強化格子）、傷害、主更新
+// 星環電路 多人版 · game.js：Game：狀態、雙人共用、一局的流程、共用（傷害、電路重算）、主更新
+//   其他的方法分在 game_record.js、game_combat.js、game_stations.js、game_chips.js、game_mech.js（Object.assign 加到 Game）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
@@ -18,19 +19,19 @@ const Game = {
   state: 'title', returnState: null, mode: null,
   chapterId: 1,  // 這一局的章節（見 chapters.js）：單人在選章畫面設
   bonusPicks: 0,  // 章節的開局補償：到航圖之前還要連續三選一幾次
-  chain: [], socks: [], inventory: [], slotAttr: [], credits: 0,  // socks[i]：插在第 i 格晶片上的組件
+  chain: [], socks: [], inventory: [], credits: 0,  // socks[i]：插在第 i 格晶片上的插件
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], zones: [], flames: [], links: [], quakes: [], trails: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], slashQ: [], zones: [],
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
   //   mate.L = 隊友的配裝（電路、倉庫、武器…），房主算隊友的子彈時用 withLoadout 暫時換上
   mates: [], shooter: null,  // mates：其他玩家的飛船（房主這邊每艘帶 L = 那個人的配裝；slot = 幾號玩家）
-  // V2 晶片：各晶片的玩法擊殺數、開火模式（衝刺射擊／擦彈）、目前的蓄力、引力漩渦
+  // 各晶片的擊殺數（產物打死的，見 onEnemyKilled）、開火模式（砲台）
   parts: {}, partSlots: 6, cap: 4, mech: mechStats({}), objs: [], portals: [], decoys: [], turrets: [],
-  playKills: {}, fireMode: null, chargeC: null, heatC: null, standFull: false, vortices: [], pullHits: 0, arcT: 0,
+  playKills: {}, fireMode: null,
 
   // ---------- 雙人共用 ----------
   allShips() { return [this.player, ...this.mates]; },  // 所有飛船（含倒下、離線的）
@@ -38,6 +39,7 @@ const Game = {
   // 配裝 L 是誰的飛船（L = null：房主自己）；子彈、傷害的 owner 都是配裝
   shipOf(L) { return L ? this.mates.find(m => m.L === L) || null : this.player; },
   // 畫面跟著誰：自己被擊墜時看還活著的隊友
+  toWorld(sx, sy) { return this.inArena ? [sx / ZOOM + this.cam.x, sy / ZOOM + this.cam.y] : [sx / Hub.k + Hub.cam.x, sy / Hub.k + Hub.cam.y]; },  // 螢幕座標 → 世界座標（戰鬥的鏡頭／基地的鏡頭）
   viewShip() { return this.player.dead && this.mates.find(m => !m.dead) || this.player; },
   // 幾號玩家（1P＝房主）：自己的號碼問 Net，隊友的號碼記在飛船上
   tagOf(p) { return `${this.slotOf(p)}P`; },
@@ -70,7 +72,7 @@ const Game = {
     this.turrets.push({ x, y, t: CFG.TURRET.t, pl: p, slot: p === this.player ? Net.mySlot() : p.slot || 0, aim: p.aim, cd: 0 });
   },
   // 砲台開火：射速照放的人（機體的射速增減；移動、站著不動才有的加成不算），朝射程內（跟自動攻擊一樣）最近的敵人
-  //   用那個人的整條電路（環繞的子彈不進圈），傷害 ×CFG.TURRET.dmg；子彈標 turret（傷害統計另外一類）
+  //   用那個人的武器（命中照樣觸發武器線），傷害 ×CFG.TURRET.dmg；子彈標 turret（傷害統計另外一類）
   updateTurrets(dt) {
     for (const q of this.turrets) {
       q.t -= dt; q.cd -= dt;
@@ -79,9 +81,7 @@ const Game = {
         const S = this.stats, w = this.wp, M = this.mech, e = nearestEnemy(q.x, q.y, clamp(w.speed * w.life + 40, 140, CFG.AUTO_RANGE), null, true);
         if (!e || !S) return;
         q.aim = Math.atan2(e.y - q.y, e.x - q.x); q.cd = Math.max(q.cd, -dt) + S.interval / (M.rate * M.rateMul);
-        this.fireMode = 'turret';
-        let list;
-        try { list = runOps(S.ops, 0).map(s => ({ ...s, orbit: 0, damage: s.damage * CFG.TURRET.dmg })); } finally { this.fireMode = null; }
+        const list = weaponShots().map(s => ({ ...s, damage: s.damage * CFG.TURRET.dmg }));
         const n0 = this.bullets.length;
         if (list.length) spawnShots(list, q.x + Math.cos(q.aim) * 10, q.y + Math.sin(q.aim) * 10, q.aim, 0, null);
         for (let i = n0; i < this.bullets.length; i++) this.bullets[i].turret = true;
@@ -90,15 +90,11 @@ const Game = {
     this.turrets = this.turrets.filter(q => q.t > 0);
   },
   // 暫時把 Game 的配裝換成 L（隊友的），執行完再換回來；L 為 null 時就是房主自己
-  withLoadout(L, fn) {
+  withLoadout(L, fn) {  // 算隊友的事：Game 的配裝欄位暫時指向 L（見 LOADOUT_KEYS），shooter = L（傷害記在他身上）
     if (!L) return fn();
-    const saved = {}, prev = this.shooter;
-    for (const k of LOADOUT_KEYS) { saved[k] = this[k]; this[k] = L[k]; }
-    this.shooter = L;
-    try { return fn(); } finally {
-      for (const k of LOADOUT_KEYS) { L[k] = this[k]; this[k] = saved[k]; }
-      this.shooter = prev;
-    }
+    const prev = this.cur, prevS = this.shooter;
+    this.cur = L; this.shooter = L === this.L ? null : L;  // 房主自己 = null（見 owner）
+    try { return fn(); } finally { this.cur = prev; this.shooter = prevS; }
   },
   passivesOf(p) { return p.L ? p.L.passives : this.passives; },
   isClient() { return Net.role === 'client' && this.mode === 'coop'; },
@@ -125,10 +121,10 @@ const Game = {
     // 遠征／雙人：開局三選一的起始晶片直接裝在電路上（武器右邊）；飛船不再自帶晶片
     this.chain = mode === 'sandbox' ? ['weapon', null, null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
-    this.socks = mode === 'sandbox' ? [['split']] : [];
-    this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 放倉庫
-    this.playKills = {}; this.pullHits = 0; this.unlockFresh = []; this.slotAttr = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
-    this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1；slotAttr：奇異點強化過的電路格（index 跟 chain 一樣）
+    this.socks = mode === 'sandbox' ? [['amp']] : mode === 'range' ? [] : startSocks(startChip);
+    this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 插武器（見 startSocks）
+    this.playKills = {}; this.unlockFresh = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
+    this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;
     this.boons = cleanBoons(); this.sos = null;  // ？事件拿到的這一局效果（黑市、終焉護殼的次數，見 mechStats）；sos：下一場戰鬥變難（見 addSos）
@@ -143,6 +139,7 @@ const Game = {
       perf: { worst: 0, worstAt: '', slow: 0 },  // 效能：戰鬥中最慢的一幀（ms）、在哪裡、超過 100ms 的幀數
       cap: { n: 0, cut: 0, max: 0, at: '', first: '', src: [], chain: [] } };  // 子彈上限防呆：觸發幾幀、刪了幾顆、最多幾顆、在哪裡（最多那次）、第一次在哪、最多那次的子彈來源和電路
     this.sectorStats = { chips: {}, t0: 0, kills0: 0, dmg0: 0 };  // 「本關」＝目前這個星區
+    this.chipSince = {};  // 實測 DPS 的起點（見 trackSince）
     this.nodeLog = null;
     this.lastHit = '';
     const ST = this.freePlay() ? null : this.chapter().start;  // 章節的開局補償（從星區 2 以後開始的章節）
@@ -157,923 +154,9 @@ const Game = {
     else if (mode === 'coop') return;  // 雙人：由 Net 建好隊友之後再開戰
     else this.showMap(`${this.chapter().name}：${this.chapter().intro}`);
   },
-  // ---------- 遊玩紀錄：走過的節點 ----------
-  here() { return `${this.sector}-${this.node ? this.node.L + 1 : 0}`; },
-  // 現在在哪、場上多少子彈（效能、連線卡頓的紀錄用）
-  whereNow() { const C = this.combat; return `${this.here()}${C && this.inArena ? ` 第${C.wave}波` : ''}・子彈${this.bullets.length + this.eBullets.length}`; },
-  // 每幀（main.js）：戰鬥中這一幀花了 ms 毫秒；超過 2 秒的不算（切到別的分頁回來）
-  notePerf(ms) {
-    const R = this.runStats;
-    if (!R || !R.perf || this.state !== 'play' || !this.inArena || ms > 2000) return;
-    if (ms > 100) R.perf.slow++;
-    if (ms > R.perf.worst) { R.perf.worst = Math.round(ms); R.perf.worstAt = this.whereNow(); }
-  },
-  // 子彈上限防呆（CFG.BULLET_CAP）：超過就刪最舊的（標 dead，別處還拿著的也當成消失）；記下觸發的地方
-  capBullets() {
-    const C = CFG.BULLET_CAP, R = this.runStats;
-    let hit = false;
-    for (const [k, cap] of [['bullets', C.mine], ['eBullets', C.enemy]]) {
-      const arr = this[k], over = arr.length - cap;
-      if (over <= 0) continue;
-      hit = true;
-      if (R && R.cap) {
-        const at = `${this.whereNow()}（${k === 'bullets' ? '我方' : '敵方'}）`;
-        if (!R.cap.first) R.cap.first = at;
-        R.cap.cut += over;
-        // 最多那次：記下子彈從哪來（數量最多的 3 種）和當下的電路，才追得到是哪個組合爆量（電路之後可能換掉）
-        //   只在數量創新高時數一次（一萬多顆約 0.1ms）
-        if (arr.length > R.cap.max) { R.cap.max = arr.length; R.cap.at = at; R.cap.src = this.bulletSources(arr, k === 'bullets'); R.cap.chain = this.chain.map((id, i) => id ? lvName(id, slotLv(i)) + ((this.socks[i] || []).length ? `［${this.socks[i].map(c => CHIPS[c].name).join('、')}］` : '') : '空'); }
-      }
-      for (let i = 0; i < over; i++) arr[i].dead = true;
-      arr.splice(0, over);
-    }
-    if (hit && R && R.cap) R.cap.n++;  // 這一幀觸發（我方、敵方都超過也只算一幀）
-  },
-  // 子彈來源前 3 名（[名稱, 顆數]）：我方照產生它的晶片（att.src，回響產生的加「・回響」），敵方照哪種敵人（from）
-  bulletSources(arr, mine) {
-    const cnt = {}, SRC = { weapon: '武器', ship: '機體', comet: '彗星' };
-    for (const b of arr) {
-      const s = mine ? (b.att && b.att.src) || 'weapon' : b.from || '?';
-      const key = mine ? (CHIPS[s] ? CHIPS[s].name : SRC[s] || s) + (b.depth > 0 ? '・回響' : '') : s;
-      cnt[key] = (cnt[key] || 0) + 1;
-    }
-    return Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  },
-  totalDmg() { return this.runStats ? Object.values(this.runStats.dmg).reduce((a, b) => a + b, 0) : 0; },
-  logNodeStart(node) {
-    const R = this.runStats;
-    if (!R) return;
-    const label = node.type === 'boss' ? `旗艦・${ENEMY_TYPES[this.bossId].name}` : NODE_META[node.type].label;
-    if (['combat', 'elite', 'boss'].includes(node.type))
-      this.nodeLog = { at: this.here(), label, t0: R.time, hp0: this.player.hp, hits0: R.hits, dmg0: this.totalDmg() };
-    else R.path.push(`${this.here()} ${label}`);
-  },
-  // 戰鬥節點的摘要：花幾秒、掉多少血、被打中幾下、打出多少傷害（ongoing = 還在打）
-  nodeSummary(ongoing = false) {
-    const N = this.nodeLog, R = this.runStats;
-    if (!N || !R) return null;
-    return `${N.at} ${N.label} ${Math.round(R.time - N.t0)}秒 HP ${Math.ceil(N.hp0)}→${Math.max(0, Math.ceil(this.player.hp))}` +
-      `（被打 ${R.hits - N.hits0} 下）傷害 ${Math.round(this.totalDmg() - N.dmg0)}${ongoing ? ' ←進行中' : ''}`;
-  },
-  logNodeEnd() {
-    const s = this.nodeSummary();
-    if (s) this.runStats.path.push(s);
-    this.nodeLog = null;
-  },
-  // 章節：這一局從哪個星區打到哪個星區、每個星區的王（見 chapters.js）；打完最後一個星區之後是無盡模式，王隨機抽
-  chapter() { return chapterById(this.chapterId); },
-  lastSector() { return this.chapter().sectors[1]; },
-  bossFor(sector) { return this.chapter().bosses[sector] || pick(CFG.BOSS_ORDER); },
-  isEndless() { return this.sector > this.lastSector(); },
-  // 這章打完了沒：最後一個星區的王打掉了（停在那一關的旗艦獎勵畫面），或已經進了無盡模式（結算、紀錄、模擬判斷通關都用這個）
-  chapterDone() { return this.isEndless() || (this.sector === this.lastSector() && this.state === 'victory'); },
-  nodeById(id) { return this.map.flat().find(n => n.id === id); },
-  reachable() {
-    return this.node ? this.node.next.map(id => this.nodeById(id)) : this.map[0];
-  },
-  showMap(toast = '') {
-    if (this.bonusPicks > 0) { this.bonusPicks--; this.openStartPick(toast); return; }  // 章節的開局補償：先選完三選一才到航圖
-    this.inArena = false; this.state = 'map';
-    if (this.mode === 'coop') Net.atMap();  // 雙人：告訴隊友「我回到航圖了」（隊友這邊順便送出最新配裝）
-    this.view(toast);
-  },
-  // 章節的開局補償：一般戰鬥的三選一（晶片或零件），選完（或跳過）回到 showMap，次數用完才真的到航圖
-  //   note：上一次三選一的結果（第一次是章節開場文字），顯示在標題下面，不然會被下一個三選一蓋掉
-  openStartPick(note = '') {
-    this.inArena = false;
-    this.openReward('start', { note });
-    if (this.mode === 'coop') Net.sendLoadout();  // 雙人的隊友：每次都把配裝和剩下的次數傳給房主（重新整理重連時還原用）
-    this.view();
-  },
-  // 開局三選一還剩幾次（正在選的這一次也算）
-  startPicksLeft() { return (this.bonusPicks || 0) + (this.state === 'reward' && this.reward && this.reward.kind === 'start' ? 1 : 0); },
-  // 畫面：照目前的 state 顯示對應的畫面（怎麼畫由 ui/listeners.js 決定）；msg：畫面上的提示文字
-  view(msg = '') { Events.emit('view', { state: this.state, msg }); },
-  enterNode(node) {
-    if (!this.reachable().includes(node)) return;
-    this.node = node; this.visited.push(node.id);
-    const L = node.L, level = L + (this.sector - 1) * 7;  // 每個星區難度往上疊
-    this.logNodeStart(node);
-    switch (node.type) {
-      // 一般戰：第 1 星區前 3 層 2 波，之後都是 3 波（新星區開頭不會比上一個星區結尾少）
-      case 'combat': {  // 第幾區有：treasure 寶藏無人機、swarm 蟲潮、intrude 精英亂入（0 = 這場沒有；亂入只在 3 區的戰鬥、第 2 區以後）
-        const n = 2 + (L >= 3 || this.sector > 1 ? 1 : 0), roll = (p, lo = 1) => lo <= n && Math.random() < p ? randInt(lo, n) : 0;
-        this.startCombat({ level, wavesTotal: n, elites: 0, treasure: roll(CFG.TREASURE.chance), swarm: roll(CFG.SWARM.chance), intrude: n >= 3 ? roll(CFG.INTRUDE.chance, 2) : 0,
-          hoard: !!node.hoard, ...this.takeSos() });  // hoard：星圖情報標出的寶藏星域（每一區都有寶藏無人機）
-        break;
-      }
-      case 'elite':  this.startCombat({ level, wavesTotal: 2, elites: 1, ...this.takeSos() }); break;
-      case 'event':  this.openEvent(node); break;
-      case 'boss':   this.startCombat({ level, wavesTotal: 1, elites: 0, boss: true }); break;
-      case 'shop':   this.openShop(); break;
-      case 'blackhole': this.openBlackhole(); break;  // 航圖節點「奇異點」（程式代號沿用 blackhole）
-      case 'workshop': this.openWorkshop(); break;
-      case 'armory': this.state = 'armory'; this.armorySource = 'armory'; this.view(); break;
-      case 'repair': {
-        const p = this.player, heal = Math.round(p.maxHp * CFG.REPAIR_RATIO);
-        p.hp = Math.min(p.maxHp, p.hp + heal);
-        this.showMap(`維修完成：HP +${heal}`);
-        break;
-      }
-    }
-  },
-
-  // ---------- 戰鬥 ----------
-  startCombat(cfg) {
-    this.combat = Object.assign({ wave: 0, waveTimer: 1.2, pending: [], spawnClock: 0, cleared: false, clearT: 0,
-      wavesTotal: Infinity, elites: 0 }, cfg);
-    this.bullets = []; this.enemies = []; this.eBullets = []; Events.emit('fxClear');
-    for (const q of this.players()) if (q) q.drRec = 0;  // 灰血（堡壘號）每場重算
-    this.pickups = []; this.triggerQueue = []; this.vortices = []; this.portals = []; this.decoys = []; this.turrets = []; this.zones = []; this.flames = []; this.links = []; this.quakes = []; this.trails = [];
-    this.kills = 0; this.nextId = 1; this.exit = null;
-    // 大地圖：一般戰、精英戰分區；旗艦戰一區、形狀照王（雙人：隊友收到種子才產生，之前先用方形場地）
-    if (this.isClient()) Arena.reset();
-    else if (this.usesAreas()) Arena.gen(randInt(1, 2 ** 31 - 2), this.combat.wavesTotal, this.areaScale(this.combat.level));
-    else if (this.combat.boss && !this.combat.sandbox) Arena.genBoss(randInt(1, 2 ** 31 - 2), this.bossId);
-    else Arena.reset();
-    if (Net.stats) Net.stats.lastRecv = 0;  // 同步間隔從這場戰鬥重新算（不把航圖、商店的時間算進去）
-    this.player.resetPos();
-    // 雙人：照號碼由左到右、以中間為準排開，每人隔 100（1P 在最左；隊友的位置由隊友自己的電腦決定）
-    if (Net.role) this.player.x += this.slotX(Net.mySlot());
-    for (const m of this.mates) { m.resetPos(); m.x += this.slotX(m.slot || 2); m.dead = false; }
-    this.player.dead = false;
-    for (const p of this.allShips()) this.resetMechCombat(p);
-    this.objs = this.isClient() ? [] : Objects.gen(this.combat, this.node);
-    if (!this.combat.boss && !this.combat.sandbox && !this.combat.range) this.combat.themes = this.pickThemes(this.sector, !!this.node && this.node.L >= 3);  // 地圖物件（雙人：房主產生，隨同步傳給隊友）
-    this.cam.x = this.player.x - ZW / 2; this.cam.y = this.player.y - ZH / 2;
-    Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
-    try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
-    this.inArena = true; this.state = 'play';
-    this.view();
-  },
-  // 區域大小照難度縮放：前面敵人少，地圖小一點（第 1 星區 0.72～0.84、第 2 星區 0.86～0.98、之後 1）
-  areaScale(level) { return clamp(0.7 + 0.02 * (level || 0), 0.7, 1); },
-  startWave(n) {
-    const C = this.combat;
-    C.wave = n;
-    if (C.boss) {
-      C.pending = [this.bossId];
-      bannerFx(`♛ ${ENEMY_TYPES[this.bossId].name}`, '守關旗艦接近中', 2.5);
-      Events.emit('bossArrive', this.bossId);
-      return;
-    }
-    let budget = (5 + n * 3 + C.level * 3) * CFG.WAVE_MUL * (this.coopOn() ? coopCount(C.level, this.onlineN()) : 1);  // 多人：敵人數量 ×2 → ×2.5（隨難度），三、四人每多一人再 +0.6
-    if (C.sos) budget *= C.sos;  // 求救訊號、星圖情報被發現：敵人變多（倍數）
-    const eliteArea = !C.sandbox && C.elites > 0 && n === C.wavesTotal;  // 精英戰的最後一區是精英的場子：只帶少量護衛
-    if (eliteArea) budget *= CFG.ELITE_ESCORT;
-    const list = [], TH = C.sandbox ? this.pickThemes(1 + Math.floor(n / 5), n % 5 >= 3) : C.themes || { list: [], share: 0 };
-    C.swarmArea = C.swarm === n && !eliteArea; C.clumpN = 0;  // 蟲潮：這一區全是蟲群（數量照預算 ×count，spawnEnemy 成群放、血量打折）
-    if (C.swarmArea) { for (let i = Math.round(budget * CFG.SWARM.count); i > 0; i--) list.push('swarmer'); budget = 0; }
-    while (budget > 0) {
-      if (TH.list.length && Math.random() < TH.share) {  // 主題小兵
-        const k = pick(TH.list), c = THEMES[k];
-        if (budget >= c.cost && !(c.max && list.filter(x => x === k).length >= c.max)) { list.push(k); budget -= c.cost; continue; }
-      }
-      const r = Math.random(), lv = C.sandbox ? n : C.level + n;
-      if (lv >= 3 && r < 0.18 && budget >= 6) { list.push('brute'); budget -= 6; }
-      else if (lv >= 2 && r < 0.45 && budget >= 3) { list.push('spitter'); budget -= 3; }
-      else { list.push('swarmer'); budget -= 1; }
-    }
-    // 警報艇（CFG.ALARM）：分區的戰鬥第 from 區以後，混在這一區的敵人裡（在精英放進來之前插：精英照舊最先出場）（蟲潮那一區不放：全是蟲群）
-    if (this.usesAreas() && !C.swarmArea && n >= CFG.ALARM.from && Math.random() < CFG.ALARM.chance) list.splice(randInt(0, list.length), 0, 'alarm');
-    if (eliteArea) for (let i = 0; i < C.elites; i++) list.unshift(this.pickElite(this.sector));  // 精英最先出場
-    if (C.treasure === n || C.hoard) list.splice(Math.floor(list.length / 2), 0, 'treasure');  // 寶藏無人機：混在這一區的敵人中間出場
-    // 沙盒：每 10 波輪流出現三隻旗艦
-    const sbBoss = C.sandbox && n % 10 === 0 ? CFG.BOSS_ORDER[(n / 10 - 1) % CFG.BOSS_ORDER.length] : null;
-    if (sbBoss) list.push(sbBoss);
-    else if (C.sandbox && n % 5 === 0) list.unshift(this.pickElite(1 + Math.floor(n / 5)));
-    C.pending = list;
-    // 精英詞綴先抽好（出場橫幅要寫名字）：第 1 星區 1 個、第 2 星區 2 個、第 3 星區以後 3 個；沙盒照波次（第 5 波 1 個、第 15 波 3 個）
-    const nAff = affixCount(C.sandbox ? Math.floor(n / 5) : this.sector), eliteTypes = list.filter(x => ENEMY_TYPES[x].elite);
-    C.eliteRolls = eliteTypes.map(x => rollAffixes(nAff, x));
-    C.waveN = 0;  // 這一區實際出場幾隻（spawnEnemy 加；列隊蟲一隻 6 節）：精英亂入照這個算「剩一半」
-    if (C.intrude === n) { C.intrudeType = this.pickElite(this.sector); C.intrudeRoll = rollAffixes(nAff, C.intrudeType); }
-    const bText = C.sandbox ? `WAVE ${n}` : this.usesAreas() ? `區域 ${n} / ${C.wavesTotal}` : `WAVE ${n} / ${C.wavesTotal}`;
-    Events.emit('waveStart', { n, boss: !!sbBoss, swarm: C.swarmArea });
-    if (C.eliteRolls.length && !sbBoss) {  // 精英出場：名字＋詞綴說明
-      const R = C.eliteRolls[0];
-      bannerFx(`⚠ ${eliteName({ affixes: R, t: ENEMY_TYPES[eliteTypes[0]] })}`, affixBrief(R), 3);
-    } else if (C.swarmArea) bannerFx('⚠ 蟲潮', `${bText}：大群脆弱的蟲群湧過來`, 2.5);
-    else bannerFx(bText, sbBoss ? `♛ ${ENEMY_TYPES[sbBoss].name}接近中` : n === 1 ? [C.sos && `⚠ 追兵：敵人 +${Math.round((C.sos - 1) * 100)}%`, C.hoard && '✦ 寶藏星域：每一區都有寶藏無人機'].filter(Boolean).join('　') : '', 2);
-  },
-  // 主題小兵：每場戰鬥抽幾種、佔一波多少比例，都隨進度增加（第 1 星區前半 0～1 種 20% → 第 3 星區 2～3 種 55% → 無盡 3 種以上 65%）
-  pickThemes(sector, late) {
-    const s = sector;
-    const [n, share] = s >= 4 ? [Math.min(5, 3 + Math.floor((s - 4) / 2)), 0.65] : s === 3 ? [randInt(2, 3), 0.55]
-      : s === 2 ? [randInt(1, 2), 0.4] : late ? [1, 0.3] : [randInt(0, 1), 0.2];
-    const pool = Object.keys(THEMES).filter(k => THEMES[k].from <= Math.min(s, 3));
-    return { list: pickN(pool, Math.min(n, pool.length)), share };
-  },
-  // 抽一種精英（CFG.ELITE_POOL：這個星區出得來的，照權重 × 章節的 eliteW）
-  pickElite(sector) {
-    const P = CFG.ELITE_POOL, W = (!this.freePlay() && this.chapter().eliteW) || {};
-    const ids = Object.keys(P).filter(k => P[k].from <= sector), w = ids.map(k => P[k].w * (W[k] != null ? W[k] : 1));
-    let r = Math.random() * w.reduce((a, b) => a + b, 0);
-    for (let i = 0; i < ids.length; i++) if ((r -= w[i]) < 0) return ids[i];
-    return ids[ids.length - 1];
-  },
-  // 一次出好幾個的：編隊（t.fleet）、雙子獵艦（t.twin）、星環守門者的砲塔（t.turrets）；回傳整組（第一個是 e，其他的已經放進 enemies）
-  spawnParts(e) {
-    return e.t.fleet ? this.makeFleet(e) : e.t.twin ? this.makeTwin(e) : e.t.turrets ? this.makeTurrets(e) : [e];
-  },
-  // 雙子獵艦（CFG.TWIN）：e 是主艦（血量在它身上），另一艘 share = e；兩艘共用隊形 P（中心、轉角，BOSS_MOVE.boss4）
-  makeTwin(e) {
-    const C = CFG.TWIN, P = { x: e.x, y: e.y, ang: rand(0, TAU), dir: Math.random() < 0.5 ? 1 : -1, k: 0, members: [e], at: -1 };
-    // 兩艘都要落在空地上：出生點靠近牆時，有些角度會把其中一艘放進牆裡很深（clampIn 推不出來：牆裡深處推的方向算不出來，一直往右推）
-    //   窄的地方哪個角度都放不下兩艘：中心換到離牆至少轉圈半徑的地方（王關裡 40 局有 3～5 局，tests/twinwall.js）
-    const open = a => [1, -1].every(s => Arena.f(P.x + s * Math.cos(a) * C.orbit, P.y + s * Math.sin(a) * C.orbit) >= e.r + 10);
-    const fit = () => { for (let i = 0; i < 16 && !open(P.ang); i++) P.ang += TAU / 16; return open(P.ang); };
-    if (!fit() && !Arena.rect) { [P.x, P.y] = Arena.randomIn(e.zone || 0, C.orbit + e.r + 10, this.players(), 500); fit(); }
-    [e.x, e.y] = Arena.clampIn(P.x + Math.cos(P.ang) * C.orbit, P.y + Math.sin(P.ang) * C.orbit, e.r + 10);
-    const k = new Enemy(e.type, ...Arena.clampIn(P.x - Math.cos(P.ang) * C.orbit, P.y - Math.sin(P.ang) * C.orbit, e.r + 10), e.hpScale);
-    k.share = e; k.spawnT = e.spawnT; k.spawnMax = e.spawnMax; k.zone = e.zone; k.alert = e.alert;
-    e.pair = k.pair = P; P.members.push(k); this.enemies.push(k);
-    return P.members;
-  },
-  // 星環守門者的砲塔（t.turrets，CFG.WARDEN）：繞在核心旁邊、各管一招（wardenTurret）；第一次出招錯開
-  makeTurrets(e) {
-    const W = CFG.WARDEN, out = [e];
-    e.cd = W.rest;  // 一開始光束先停 rest 秒（最後 warn 秒有預警線）
-    e.t.turrets.forEach((type, i) => {
-      const a = Math.PI / 4 + i * Math.PI / 2, R = e.r + W.turretR;
-      const k = new Enemy(type, e.x + Math.cos(e.rot + a) * R, e.y + Math.sin(e.rot + a) * R, e.hpScale);
-      k.core = e; k.slotA = a; k.spawnT = e.spawnT; k.spawnMax = e.spawnMax; k.zone = e.zone; k.cd = k.t.turret.cd * (0.6 + 0.4 * i / 3);
-      out.push(k); this.enemies.push(k);
-    });
-    return out;
-  },
-  // 編隊（ENEMY_TYPES[type].fleet）：e 是第一艘，在旁邊補上其他艘，共用一個編隊 F（CFG.WING、ELITE_AI.wing）；詞綴、待機照 e
-  //   kids = 同隊的其他艘：叫醒一艘整隊一起醒（wakeEnemy）
-  makeFleet(e) {
-    const W = CFG.WING, n = e.t.fleet;
-    const F = { x: e.x, y: e.y, ang: rand(0, TAU), side: Math.random() < 0.5 ? 1 : -1, members: [e], fireT: W.fireCd, crossT: W.crossCd * 0.6, mode: 'form', modeT: 0, at: -1 };
-    e.fleet = F;
-    for (let i = 1; i < n; i++) {
-      const a = F.ang + i / n * TAU, k = new Enemy(e.type, ...Arena.clampIn(e.x + Math.cos(a) * W.radius, e.y + Math.sin(a) * W.radius, 20), e.hpScale);
-      k.zone = e.zone; k.alert = e.alert; k.home = e.home; k.spawnT = e.spawnT; k.fleet = F;
-      if (e.affixes) k.setAffixes(e.affixes, this.player.x, this.player.y);
-      F.members.push(k); this.enemies.push(k);
-    }
-    for (const m of F.members) { m.kids = F.members.filter(o => o !== m); m.grp = e.id; }  // 精英血條：整隊一條（一艘一段）
-    return F.members;
-  },
-  // o.intruder：精英亂入（o.affixes = 先抽好的詞綴）
-  spawnEnemy(type, o = {}) {
-    const C = this.combat, p = this.player, zone = Math.max(0, C.wave - 1), S = CFG.SWARM, swarm = C.swarmArea && type === 'swarmer', n0 = this.enemies.length;
-    let x, y;
-    if (swarm && C.clumpN > 0) {  // 蟲潮：跟同一群的第一隻擠在一起（散開 jitter）；落在行星、小行星上就生在第一隻那裡
-      C.clumpN--;
-      [x, y] = Arena.clampIn(C.clumpAt[0] + rand(-S.jitter, S.jitter), C.clumpAt[1] + rand(-S.jitter, S.jitter), 20);
-      if (Objects.inHole({ x, y, r: 10 }, OBJ.HOLE_NOESC) || Objects.onSolid({ x, y, r: 10 }, 40)) [x, y] = C.clumpAt;
-    } else for (let t = 0; t < 30; t++) {
-      const a = rand(0, TAU), d = rand(520, 780);
-      x = clamp(p.x + Math.cos(a) * d, 40, CFG.WORLD_W - 40);
-      y = clamp(p.y + Math.sin(a) * d, 40, CFG.WORLD_H - 40);
-      if (!Arena.rect) [x, y] = Arena.spawnPoint(zone, this.players().filter(q => q.zone === zone), 500, 60);  // 大地圖：散在這一波的區域各處（離在這一區的玩家至少 500）
-      // 不生在黑洞出不來的範圍：母巢不會動，整個引力範圍都不行；列隊蟲後面 5 節往外排到 110
-      const R = type === 'hive' ? OBJ.HOLE_R : OBJ.HOLE_NOESC + (type === 'worm' ? 110 : 0);
-      // 也不生在行星、小行星裡或貼著它們（離表面至少 40）：生在裡面會被推進物件中間的死角出不來
-      if (!Objects.inHole({ x, y, r: ENEMY_TYPES[type].radius }, R) && !Objects.onSolid({ x, y, r: ENEMY_TYPES[type].radius }, 40)) break;
-    }
-    const scale = (C.sandbox ? 1 + (C.wave - 1) * 0.12 : enemyHpMul(C.level, C.wave)) *
-      (this.coopOn() ? coopMul(CFG.COOP_HP, C.level) : 1) *  // 雙人：敵人血量 ×1 → ×1.3（隨難度）；隊友離線時恢復單人血量
-      (this.isEndless() ? Math.pow(CFG.ENDLESS_HP, this.sector - this.lastSector()) : 1) *  // 無盡：每個星區血量再 ×1.2（乘算）
-      (C.sandbox ? 1 : this.chapter().hp);  // 章節：敵人血量再 ×（第一章 1）
-    if (swarm && !(C.clumpN > 0)) { C.clumpAt = [x, y]; C.clumpN = S.clump - 1; }  // 新的一群從這裡湧出
-    const e = new Enemy(type, x, y, scale);
-    if (!Arena.rect) e.zone = zone;
-    // 警戒（CFG.ALERT）：分區的戰鬥出場先待機；表上 awake 的（寶藏無人機）、精英亂入照舊直接行動
-    if (this.usesAreas() && !e.t.awake && !o.intruder) { e.alert = false; e.home = [x, y]; }
-    if (swarm) e.hp = e.maxHp *= S.hp;
-    if (e.t.elite) e.setAffixes(o.affixes || (C.eliteRolls && C.eliteRolls.shift()) || [], p.x, p.y);  // 精英詞綴（startWave 先抽好的）
-    if (e.t.center && !Arena.rect) { e.x = Arena.center.x; e.y = Arena.center.y; }  // 星環守門者：場地正中間
-    this.enemies.push(e);
-    const group = this.spawnParts(e);  // 編隊、雙子獵艦、守門者的砲塔：一次出好幾個
-    if (e.t.treasure) { bannerFx(`✦ ${e.t.name}`, `${CFG.TREASURE.life} 秒內打掉：這場的三選一保證稀有晶片`, 2.5); Events.emit('treasureArrive', e); }
-    if (o.intruder) {
-      const I = { left: group.length };  // 同一個亂入的共用（left = 還沒打掉幾隻；分裂詞綴分出來的那隻也加進來）
-      for (const m of group) m.intruder = I;
-      bannerFx(`⚠ 精英亂入：${eliteName(e)}`, `打掉：這場的三選一保證稀有晶片　${affixBrief(e.affixes || [])}`, 3);
-      Events.emit('eliteIntrude', e);
-    }
-    burst(x, y, e.t.color, 10, 90, 0.5, 2);
-    if (type === 'worm') {  // 列隊蟲：再往外排 5 節，每節跟著前一節
-      const ux = (x - p.x) / (Math.hypot(x - p.x, y - p.y) || 1), uy = (y - p.y) / (Math.hypot(x - p.x, y - p.y) || 1);
-      let prev = e;
-      for (let i = 1; i < 6; i++) {
-        const w = new Enemy('worm', ...Arena.clampIn(x + ux * 22 * i, y + uy * 22 * i, 20), scale);
-        if (!Arena.rect) w.zone = zone;
-        w.alert = e.alert;
-        w.ahead = prev; prev = w; this.enemies.push(w);
-      }
-    }
-    C.waveN = (C.waveN || 0) + this.enemies.length - n0;
-  },
-  updateWaves(dt) {
-    const C = this.combat;
-    if (C.range) return;  // 靶場：沒有波次，標靶由 Range 管理
-    if (C.cleared) {
-      for (const c of this.pickups) c.vacuum = true;
-      C.clearT -= dt;
-      if (C.clearT <= 0) this.combatWon();
-      return;
-    }
-    // 精英亂入：這一區的敵人都出場了、剩不到一半時闖進來（先於「清完」判斷：同一幀清完也照樣闖進來）
-    if (C.intrude === C.wave && !C.intruded && !C.pending.length && this.enemies.length <= C.waveN * CFG.INTRUDE.at) {
-      C.intruded = true;
-      this.spawnEnemy(C.intrudeType, { affixes: C.intrudeRoll, intruder: true });
-    }
-    if (C.pending.length) {
-      C.spawnClock -= dt;
-      if (C.spawnClock <= 0) { C.spawnClock = C.swarmArea ? CFG.SWARM.gap : 0.22; this.spawnEnemy(C.pending.shift()); }
-    } else if (this.enemies.length === 0) {
-      for (const c of this.pickups) c.vacuum = true;  // 每一波清完就把地上的晶體全部吸過來
-      if (C.wave >= C.wavesTotal) {
-        C.cleared = true; C.clearT = this.simFast ? 0 : 1.6;  // simFast：模擬（電腦不用看「區域肅清」）
-        bannerFx('區域肅清', '', 1.6);
-        Events.emit('areaClear', { last: true });
-        return;
-      }
-      // 一場戰鬥分成幾個區域（一區一波）：清完打開閘門，有人穿過閘門就開始下一區（另一個人之後自己飛過去加入）
-      if (C.wave >= 1 && this.usesAreas() && C.exitUsed !== C.wave) {
-        if (!this.exit) this.openExit();
-        else if (this.players().some(p => p.zone >= C.wave)) this.nextArea();
-        return;
-      }
-      C.waveTimer -= dt;
-      if (C.waveTimer <= 0) { C.waveTimer = 2.5; this.startWave(C.wave + 1); }
-    }
-  },
-  // ---------- 區域：一般戰、精英戰分成 2～3 個區域（旗艦戰、沙盒、靶場照舊） ----------
-  usesAreas() {
-    const C = this.combat;
-    return !!C && !C.sandbox && !C.range && !C.boss && isFinite(C.wavesTotal) && C.wavesTotal > 1;
-  },
-  // 打開這一區的閘門（exit = 閘門中央，畫箭頭、同步用）
-  openExit() {
-    const g = Arena.gates[this.combat.wave - 1];
-    if (!g) { this.combat.exitUsed = this.combat.wave; return; }  // 不該發生（大地圖的閘門數 = 區域數 - 1）：直接開始下一波
-    g.open = true;
-    this.exit = { x: g.x, y: g.y, r: 40, gate: true };
-    bannerFx('區域肅清', '閘門已開啟，穿過閘門前往下一區', 2);
-    Events.emit('areaClear', { last: false });
-  },
-  // 換區：地上的晶體直接收下；倒下的人如果留在後面的區域，搬到新區域的入口（閘門不能回頭，不搬隊友救不到）；下一波照常倒數
-  nextArea() {
-    const C = this.combat, n = this.pickups.length;
-    this.credits += n;
-    if (this.mode === 'coop') Net.lootTotal += n;
-    this.pickups = [];
-    this.exit = null; C.exitUsed = C.wave; C.areaN = (C.areaN || 0) + 1; C.waveTimer = 1.2;
-    for (const p of this.allShips()) if (p.dead && !p.gone) this.toEntry(p, C.wave);
-  },
-  toEntry(p, k) {
-    if (Arena.rect || (p.zone || 0) >= k) return;
-    const E = Arena.entryOf(k);
-    p.x = E.x; p.y = E.y; p.vx = p.vy = 0; p.zone = k;
-  },
-  combatWon() {
-    const client = this.isClient();  // 雙人的隊友：地上剩下的晶體由房主算好數量傳過來
-    this.inArena = false;
-    const left = client ? 0 : this.pickups.length;
-    this.credits += left;  // 沒吸完的晶體直接入帳（雙人時兩人都拿）
-    this.pickups = [];
-    const p = this.player;
-    if (!client) for (const q of this.players()) if (q && !q.dead && q.drRec > 0) { q.hp = Math.min(q.maxHp, q.hp + q.drRec); q.drRec = 0; }  // 灰血（堡壘號）：戰鬥結束時剩下的回滿回
-    if (this.mode === 'coop') Net.afterCombat(left);  // 雙人：被擊墜的人在戰鬥結束後以 30% HP 歸隊，並同步血量
-    this.logNodeEnd();  // 先記下戰鬥結果（先鋒號回血之前的 HP）
-    Events.emit('combatWon', { boss: this.node.type === 'boss' });
-    const type = this.node.type;
-    if (type === 'boss') {  // 擊敗旗艦：電路插槽 +1／零件格 +1 二選一（勝利畫面上選）、晶體獎勵，可前往下一星區
-      const slot = this.chain.length < CFG.MAX_SLOTS;
-      this.credits += 50;  // 雙人：兩人各自拿
-      if (!slot) this.partSlots++;  // 電路已滿：沒得選，直接給零件格
-      const ws = (this.wSock || CFG.START_WSOCK) < CFG.WEAPON_SOCKETS;
-      if (ws) this.wSock = (this.wSock || CFG.START_WSOCK) + 1;  // 武器插座 +1（最多 3）
-      this.recalc();
-      if (this.runStats) { this.runStats.bosses.push(ENEMY_TYPES[this.bossId].name); this.runStats.bossIds.push(this.bossId); }
-      if (this.sector === this.lastSector() && !MechCheck.running) markChapterCleared(this.chapterId);  // 打完這章最後一隻王：記下通關、開下一章（雙人兩邊各自記）
-      this.victory = { slot, ws, boss: this.bossId, pick: slot ? null : 'part' };  // pick：二選一選了哪個（'chain' 電路插槽／'part' 零件格）
-      this.victory.rew = false;  // 旗艦的三選一還沒選（選完才回到勝利畫面，見 afterReward）
-      if (this.mode === 'coop' && Net.role === 'host') Net.waitMods(this.coopOn());  // 雙人：等隊友選好二選一才能前往
-      this.openReward('boss');
-      this.view();
-      return;
-    }
-    // 稀有保證：戰鬥中打到的（寶藏無人機、精英亂入，房主告訴大家）＋自己回應求救訊號的獎勵（每個人照自己選的，見 addSos）
-    const S = CFG.EVENT.sos[this.combat.sosKey] || {}, B = [...(this.combat.bonus || []), ...(S.bonus ? [S.bonus] : [])], add = B.reduce((n, k) => n + CFG.BONUS[k].rare, 0);
-    this.openReward(type === 'elite' ? 'elite' : 'combat', { again: S.again || 0, ...(add ? { rareAdd: add, note: `✦ ${B.map(k => CFG.BONUS[k].note).join('、')}：保證 ${add} 格稀有晶片` } : {}) });
-    this.view();
-  },
-  // 一般戰鬥獎勵三選一：每一格 30% 是零件（"part:armor"），其他是晶片；不重複
-  // 保底：電路有空格時，零件只會出現在最後一格；上一次三選一沒有玩法晶片，這一次一定有（刷新也算一次）
-  // 稀有晶片：見 withRare（kind = CFG.REWARDS 的種類，決定保證幾格稀有；rareAdd = 再多保證幾格，打掉寶藏無人機）
-  rewardOptions(kind = 'combat', rareAdd = 0) {
-    if (CFG.REWARDS[kind].parts) return pickN(PART_IDS, 3).map(k => 'part:' + k);  // 黑市的走私零件
-    const offers = this.chipOffers(), chips = pickN(offers, 3), parts = pickN(PART_IDS, 3), empty = this.chain.includes(null);
-    const out = this.withComp([0, 1, 2].map(i => (!empty || i === 2) && Math.random() < 0.3 ? 'part:' + parts[i] : newChip(chips[i])));  // 晶片的插座數在這裡決定
-    const isPlay = id => !String(id).startsWith('part:') && hasLv(id);
-    if (this.playDry && !out.some(isPlay)) {
-      const pool = offers.filter(id => hasLv(id) && !out.some(o => CHIPS[o] && baseOf(o) === id));
-      const nComp = out.filter(isComp).length, k = out.findIndex(id => !isComp(id) || nComp > 1);  // 換掉零件、觸發器（或多出來的組件）；保底的那個組件留著
-      if (pool.length && k >= 0) out[k] = newChip(pick(pool));
-    }
-    this.withRare(out, CFG.REWARDS[kind].rare + rareAdd);
-    this.playDry = !out.some(isPlay);
-    return out;
-  },
-  // 稀有晶片：每一格玩法晶片 CFG.RARE.chance 機率變稀有（換成隨機一個玩法晶片＋詞條；身上已經有的也會出現）；need = 至少幾格稀有
-  withRare(out, need = 0) {
-    const make = i => {
-      const pool = openChips(NORMAL_IDS).filter(id => hasLv(id) && !out.some((o, j) => j !== i && CHIPS[o] && baseOf(o) === id));
-      out[i] = newChip(pick(pool), null, rollRare());
-    };
-    out.forEach((id, i) => { if (CHIPS[id] && hasLv(id) && Math.random() < CFG.RARE.chance) make(i); });
-    for (let n = out.filter(rareOf).length; n < need; n++) {
-      const free = out.map((id, i) => i).filter(i => !rareOf(out[i]));
-      const nComp = out.filter(isComp).length;
-      // 先換玩法晶片；沒有就換零件、觸發器，最後才換組件（至少留一個組件，見 withComp）
-      const i = free.find(i => CHIPS[out[i]] && hasLv(out[i])) ?? free.find(i => !isComp(out[i])) ?? free.find(() => nComp > 1);
-      if (i == null) break;
-      make(i);
-    }
-    return out;
-  },
-  // 身上（電路、倉庫）的這種玩法晶片在哪裡：{ arr, i } 或 null
-  ownedChip(base) {
-    for (const arr of [this.chain, this.inventory]) { const i = arr.findIndex(c => c && baseOf(c) === base); if (i >= 0) return { arr, i }; }
-    return null;
-  },
-  // 拿到稀有版本、身上已經有這個晶片：身上那個變稀有，留在原本的位置、插座上的組件不動；插座數取兩個裡比較多的
-  takeRare(id, mode) {
-    const o = this.ownedChip(baseOf(id)), old = o.arr[o.i];
-    const r = mergeRare(rareOf(old), rareOf(id), mode), nid = chipId(baseOf(id), Math.max(socketsOf(old), socketsOf(id)), r);
-    o.arr[o.i] = nid;
-    this.recalc();
-    Events.emit('upgrade');
-    if (this.runStats) this.runStats.got.push(`${this.here()} ${CHIPS[nid].name} Lv${r.lv}（稀有）`);
-    return `${CHIPS[baseOf(id)].name}變成稀有：${rareTxt(r)}`;
-  },
-  // 至少一格是組件（組件才填得滿插座）：沒抽到就隨機把一格換成組件
-  withComp(ids) {
-    if (ids.some(id => isComp(id))) return ids;
-    const pool = openChips(NORMAL_IDS).filter(id => isComp(id) && !ids.includes(id));
-    if (pool.length) ids[Math.floor(Math.random() * ids.length)] = pick(pool);
-    return ids;
-  },
-  // 打開三選一：每種三選一（出發前、戰鬥、精英）的差別都在 CFG.REWARDS（刷新價格、有沒有電路擴充卡）
-  openReward(kind, extra = {}) {
-    const K = CFG.REWARDS[kind];
-    this.reward = { kind, options: this.rewardOptions(kind, extra.rareAdd || 0), reroll: this.shopPrice(K.reroll), slot: K.slotCard && this.chain.length < CFG.MAX_SLOTS, after: K.after || null, ...extra };
-    this.state = 'reward';
-  },
-  // 花晶體刷新三選一（價格見 CFG.REWARDS：每刷一次就更貴）
-  rerollReward() {
-    const R = this.reward;
-    if (!R || this.credits < R.reroll) return;
-    this.pay(R.reroll, () => { R.reroll += this.shopPrice(CFG.REWARDS[R.kind].rerollUp); R.options = this.rewardOptions(R.kind, R.rareAdd || 0); R.revealed = false; this.view(); });  // 刷新：稀有那格重新演揭曉
-  },
-  // 獎勵、商店、事件可以出現的晶片：解鎖了的（局外成長）；已經有的玩法晶片不再出現（同一種只有一個；升級靠插組件）
-  chipOffers() {
-    const own = new Set([...this.chain, ...this.socks.flat(), ...this.inventory].filter(Boolean).map(baseOf));
-    return openChips(NORMAL_IDS).filter(id => !(hasLv(id) && own.has(id)));
-  },
-  // ---------- 取得晶片：放進倉庫（不會合成：玩法晶片靠插組件升級，組件、觸發器不會升級） ----------
-  canAcquire(id) {
-    if (String(id).startsWith('part:')) return partsUsed(this.parts) < this.partSlots;  // 零件：要有空的零件格
-    if (rareOf(id) && this.ownedChip(baseOf(id))) return true;  // 稀有版本、身上已經有：直接變稀有，不用倉庫
-    return this.inventory.includes(null);
-  },
-  acquire(id) {
-    if (this.runStats) this.runStats.got.push(`${this.here()} ${CHIPS[id].name}${socketsOf(id) ? `（插座 ${socketsOf(id)}）` : ''}`);
-    const i = this.inventory.indexOf(null);
-    if (i < 0) return null;
-    this.inventory[i] = id;
-    this.recalc();
-    return `獲得「${CHIPS[id].name}」，已放入倉庫`;
-  },
-  pickBossSlot(k) {  // 擊沉旗艦的二選一：電路插槽 +1 或零件格 +1
-    const V = this.victory;
-    if (!V || V.pick || (k !== 'chain' && k !== 'part') || (k === 'chain' && this.chain.length >= CFG.MAX_SLOTS)) return;
-    V.pick = k;
-    if (k === 'chain') this.chain.push(null); else this.partSlots++;
-    this.recalc();
-    if (this.runStats) this.runStats.got.push(`${this.here()} ${k === 'chain' ? '插槽 +1' : '零件格 +1'}（旗艦二選一）`);
-    Events.emit('upgrade');
-    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
-    this.view();
-  },
-  // ---------- 改裝廠：零件三選一、付錢換零件 ----------
-  openWorkshop() {
-    this.ws = { options: pickN(PART_IDS, 3), picked: false, from: null, msg: '' };
-    this.state = 'workshop';
-    this.view();
-  },
-  wsPick(id) {
-    const W = this.ws;
-    if (!W || W.picked || !W.options.includes(id)) return;
-    if (!this.addPart(id)) { W.msg = '零件格已滿：可以用「換零件」改成別種'; this.view(); return; }
-    W.picked = true; W.msg = `裝上 ${PARTS[id].name}（${this.parts[id]} 層）` + this.mechGain();
-    Events.emit('upgrade');
-    this.view();
-  },
-  wsFrom(id) { if (this.ws) { this.ws.from = this.ws.from === id ? null : id; this.view(); } },
-  wsTo(id) {
-    const W = this.ws;
-    if (!W || !W.from) return;
-    const from = W.from;
-    if (this.swapPart(from, id)) { W.msg = `改裝完成：${PARTS[from].name} → ${PARTS[id].name}`; W.from = null; Events.emit('upgrade'); }
-    this.view();
-  },
-  // mode：稀有版本、身上那個已經有不同的詞條時，replace 替換／boost 增強（預設）
-  takeReward(id, mode = 'boost') {
-    let msg;
-    if (id && id.startsWith('part:')) {  // 零件
-      const k = id.slice(5);
-      if (!this.addPart(k)) return;
-      Events.emit('upgrade');
-      this.afterReward(`裝上零件 ${PARTS[k].name}（${this.parts[k]} 層）` + this.mechGain());
-      return;
-    }
-    if (id && rareOf(id) && this.ownedChip(baseOf(id))) return this.afterReward(this.takeRare(id, mode));
-    if (id) {
-      msg = this.acquire(id);
-      if (!msg) return;
-    } else {
-      this.earn(10);
-      msg = '跳過獎勵：◆ +10';
-    }
-    // 電路有空格就直接裝上；只有放進倉庫（電路滿了）才打開電路編輯器
-    let toInv = false;
-    if (id) {
-      const j = this.inventory.lastIndexOf(id), slot = this.chain.indexOf(null, 1);
-      // 組件：插進武器或電路上還有空插座的晶片
-      const h = isComp(id) ? this.chain.findIndex((c, i) => c && (this.socks[i] || []).length < socketsOf(c) && (baseOf(id) !== 'overclock' || i === 0) && (baseOf(c) !== 'pull' || baseOf(id) === 'bigshot')) : -1;  // 不會沒作用的地方才自動插
-      if (j >= 0 && h >= 0) { (this.socks[h] = this.socks[h] || []).push(id); this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已插在${CHIPS[this.chain[h]].name}上`; }
-      else if (j >= 0 && !isComp(id) && slot > 0) { this.chain[slot] = id; this.inventory[j] = null; this.recalc(); msg = `「${CHIPS[id].name}」已裝上電路第 ${slot + 1} 格`; }
-      else toInv = j >= 0;
-    }
-    this.afterReward(msg);
-    if (toInv) this.openEditorWith(msg);
-  },
-  // 選完三選一：回到 CFG.REWARDS 的 after（旗艦：勝利畫面），沒寫就回航圖
-  afterReward(msg) {
-    const R = this.reward;
-    this.reward = null;
-    if (R && R.again > 0) { this.openReward('combat', { again: R.again - 1, note: `${msg || ''}<br>📡 護送的謝禮：再選一次` }); this.view(); return; }  // 求救訊號「只護送」：打贏多一次三選一
-    if (!R || R.after !== 'victory') return this.showMap(msg);
-    const V = this.victory;
-    V.rew = true;
-    if (this.isClient() && bossDone(V)) Net.send({ t: 'moddone' });
-    this.state = 'victory';
-    this.view();
-  },
-  openEditorWith(msg) {
-    this.toggleEditor();
-    if (this.state === 'editor') Events.emit('editorMsg', { msg, hint: 'newChip' });  // 編輯器上方的說明：新晶片放在倉庫
-  },
-
-  // ---------- 商店 ----------
-  // 花晶體的價格照星區漲（見 CFG.SHOP_PRICE_UP）：補給站、刷新獎勵、換零件、拆廢鐵
-  shopMul() { const k = Math.max(0, this.sector - 1); return 1 + CFG.SHOP_PRICE_UP * k * k; },
-  shopPrice(base) { return Math.round(base * this.shopMul()); },
-  shopHealHp(p = this.player) { return Math.ceil(p.maxHp * CFG.SHOP_REPAIR.ratio); },
-  openShop() {
-    const items = this.withComp(pickN(this.chipOffers(), 4).map(id => newChip(id))).map(id => ({ id, price: this.shopPrice(chipPrice(id)), sold: false }));
-    if (COMPOSITE_IDS.length && Math.random() < 0.6) { const id = pick(COMPOSITE_IDS); items.push({ id, price: this.shopPrice(chipPrice(id)), sold: false }); }
-    this.shop = { items, slotBought: false, capBought: false, healed: false };
-    this.state = 'shop';
-    this.view();
-  },
-  shopHeal() {  // 補給站補血：回復最大 HP 的 20%，每間限 1 次
-    const p = this.player, price = this.shopPrice(CFG.SHOP_REPAIR.price), hp = this.shopHealHp(p);
-    if (this.shop.healed || this.credits < price || p.hp >= p.maxHp) return;
-    this.pay(price, () => {
-      this.shop.healed = true;
-      p.hp = Math.min(p.maxHp, p.hp + hp);
-      this.view(`補血完成：HP +${hp}`);
-    });
-  },
-  buy(idx) {
-    const it = this.shop.items[idx];
-    if (!it || it.sold || this.credits < it.price || !this.canAcquire(it.id)) return;
-    this.pay(it.price, () => { it.sold = true; this.view(this.acquire(it.id)); });
-  },
-  // ---------- 武器 ----------
-  refreshWeapon() {  // 重新計算武器參數，並更新電路第 1 格的顯示
-    const W = WEAPONS[this.weapon.id], st = this.weapon, c = CHIPS.weapon;
-    this.wp = weaponParams(st);
-    c.name = weaponTitle(st);
-    c.short = W.short;
-    const lines = [W.desc];
-    if (st.path) lines.push(`第一段・${W.paths[st.path].name}：${W.paths[st.path].desc}`);
-    if (st.final != null) { const n = W.paths[st.path].next[st.final]; lines.push(`第二段・${n.name}：${n.desc}`); }
-    c.desc = lines.join('<br>') + (this.mode === 'range' ? '<br><span style="color:#6a79ad">武器固定在電路第 1 格；靶場可在「🚀 機體・武器」分頁更換。</span>'
-      : '<br><span style="color:#6a79ad">武器固定在電路第 1 格，這一場不能更換。</span>');
-    if (this.player) this.recalc();
-  },
-  swapShip(id) {  // 靶場：換機體（保留位置、電路與倉庫）
-    const old = this.player;
-    this.shipId = id;
-    this.parts = { ...SHIPS[id].parts }; this.partSlots = SHIPS[id].partSlots; this.cap = SHIPS[id].cap;
-    this.player = new Player(SHIPS[id]);
-    if (old) { this.player.x = old.x; this.player.y = old.y; }
-    this.recalc();
-    this.player.hp = this.player.maxHp;
-  },
-  weaponStage() { return this.weapon.final != null ? 2 : this.weapon.path ? 1 : 0; },
-  upgradeWeapon(choice) {  // 只在軍械台升級
-    const st = this.weapon;
-    if (st.final != null) return;
-    if (!st.path) st.path = choice; else st.final = +choice;
-    this.refreshWeapon();
-    if (this.runStats) this.runStats.upgrades.push(`${this.here()} ${weaponTitle(st)}`);
-    Events.emit('upgrade');
-    this.showMap(`武器升級：${weaponTitle(st)}`);
-  },
-  // 電路擴充（插槽 +1）的來源：補給站購買、精英獎勵、武器升滿後的軍械台、擊敗 Boss
-  expandSlot(source) {
-    if (this.chain.length >= CFG.MAX_SLOTS) return;
-    if (source === 'shop') {
-      const price = this.shopPrice(CFG.SHOP_SLOT);
-      if (this.credits < price || this.shop.slotBought) return;
-      this.pay(price, () => { this.shop.slotBought = true; this.addSlot(source); });
-      return;
-    }
-    this.addSlot(source);
-  },
-  // 能量容量：飛船開局＋補給站買的（cap）＋散熱片每層 +2（mech.cap）；雙人時 cap 跟著配裝（LOADOUT_KEYS）
-  energyCap() { return (this.cap || 0) + ((this.mech && this.mech.cap) || 0); },
-  buyCap() {  // 補給站：能量容量 +2（每間 1 次）
-    const price = this.shopPrice(CFG.SHOP_CAP);
-    if (this.credits < price || this.shop.capBought) return;
-    this.pay(price, () => {
-      this.shop.capBought = true; this.cap += CFG.CAP_SHOP_ADD; this.recalc(); Events.emit('upgrade');
-      if (this.runStats) this.runStats.got.push(`${this.here()} 能量容量 +${CFG.CAP_SHOP_ADD}（補給站）`);
-      this.view(`能量容量 +${CFG.CAP_SHOP_ADD}（目前 ${this.energyCap()}）`);
-    });
-  },
-  addSlot(source) {
-    this.chain.push(null);
-    this.recalc();
-    Events.emit('upgrade');
-    if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（${{ shop: '補給站', reward: '精英獎勵', armory: '軍械台' }[source] || source}）`);
-    const msg = `電路擴充：插槽 +1（目前 ${this.chain.length} 格）`;
-    if (source === 'shop') this.view(msg);
-    else this.showMap(msg);
-  },
-  armoryBonus() {
-    const B = CFG.ARMORY_BONUS, p = this.player;
-    this.earn(B.credits);
-    p.hp = Math.min(p.maxHp, p.hp + B.hp);
-    this.showMap(`武器已升滿：改領 ◆ +${B.credits}、HP +${B.hp}`);
-  },
-  // 目前這一關的摘要（遊玩紀錄用）
-  sectorSummary() {
-    const R = this.runStats, S = this.sectorStats;
-    return `星區 ${this.sector}：戰鬥 ${Math.round(R.time - S.t0)} 秒、擊殺 ${R.kills - S.kills0}、傷害 ${Math.round(this.totalDmg() - S.dmg0)}、` +
-      `離開時 HP ${Math.max(0, Math.ceil(this.player.hp))}/${this.player.maxHp}、晶體 ${this.credits}`;
-  },
-  nextSector() {
-    if (this.runStats) this.runStats.sectors.push(this.sectorSummary());
-    this.sector++;
-    // chips0：這一關開始時的整局晶片傷害（隊友的傷害由房主算，本關 = 整局 − chips0）
-    this.sectorStats = { chips: {}, chips0: { ...this.runStats.chips }, t0: this.runStats.time, kills0: this.runStats.kills, dmg0: this.totalDmg() };
-    if (this.isClient()) { this.bossId = Net.nextMap.bossId; this.map = Net.nextMap.map; }  // 隊友：用房主產生的星圖
-    else {
-      this.bossId = this.bossFor(this.sector); this.map = genMap();
-      // 武器都已經升滿（雙人：每個人都升滿）就不再出現軍械台，改成戰鬥
-      const maxed = W => W && W.final != null;
-      if (maxed(this.weapon) && this.mates.every(m => maxed(m.L && m.L.weapon)))
-        for (const n of this.map.flat()) if (n.type === 'armory') n.type = 'combat';
-    }
-    this.node = null; this.visited = [];
-    if (this.mode === 'coop' && Net.role === 'host') Net.sendSector();
-    const p = this.player;
-    p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.3));
-    this.showMap(this.sector === this.lastSector() + 1
-      ? `進入無盡模式：星區 ${this.sector}，船體修復 30%。旗艦改為隨機出現`
-      : `進入星區 ${this.sector}：船體修復 30%，敵人更強了`);
-  },
-  // ---------- 戰鬥中的選單（Esc／手機的「選單」鈕）：繼續、離開遊戲（離開 = 中途結束，存紀錄、顯示結算） ----------
-  togglePauseMenu(open = !this.pauseMenu) {
-    this.pauseMenu = open;
-    Input.down = false; Input.dash = false; Input.dashHeld = false; Input.joy = null; Input.aimStick = null;
-    this.view();  // 戰鬥中：開著選單就畫選單，沒開就收起畫面
-  },
-  quitRun() {
-    this.pauseMenu = false;
-    if (this.freePlay()) { this.state = 'title'; this.inArena = false; this.view(); return; }  // 靶場、沙盒：沒有結算，直接回標題
-    this.saveRecord('retired');
-    this.state = 'ended'; this.endCleared = false; this.inArena = false;
-    this.view();
-    if (this.mode === 'coop') Net.leave();  // 雙人：自己離開，隊友可以一個人繼續（跟隊友離線一樣）
-  },
-  // 結束遠征（通關或中途撤退）：存下遊玩紀錄後回到基地
-  finishRun() {
-    this.saveRecord(this.chapterDone() ? 'cleared' : 'retired');
-    if (this.mode === 'coop') {  // 雙人：房主決定結束；之後每個人各自看結算、各自按「回到房間」（不用等房主，除非房主關掉房間）
-      if (Net.role === 'host') Net.send({ t: 'finish' });
-      this.state = 'ended'; this.endCleared = this.chapterDone(); this.inArena = false;
-      this.view();
-      return;
-    }
-    this.state = 'title'; this.inArena = false;
-    this.view();
-  },
-
-  // ---------- 遊玩紀錄（存在瀏覽器；標題畫面「遊玩紀錄」可以查看、複製） ----------
-  loadRecords() {
-    try { const r = JSON.parse(localStorage.getItem(RECORDS_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
-  },
-  saveRecord(result) {
-    const R = this.runStats;
-    if (!['run', 'coop'].includes(this.mode) || !R || R.recorded || MechCheck.running) return;  // 機制檢查的模擬局不存
-    R.recorded = true;
-    // 局外成長：這一局的成績加進解鎖進度（先加再存紀錄：第一次讀進度時會用紀錄補成績，不能先看到這一局）；新達成的記在 unlockFresh（結算畫面、回到基地時顯示）
-    const ulk = { sector: this.sector, bossIds: R.bossIds.slice(), weapon: this.weapon.id, kills: R.kills, elites: R.elites, echoK: R.echoK, play: { ...this.playKills } };
-    this.unlockFresh = unlockAddRun(ulk);
-    const rec = this.mode === 'coop' ? Net.buildRecord(result) : this.buildRecord(result);
-    rec.ulk = ulk;  // 以後加新的解鎖條件時，用它補成績（unlockUpgrade）
-    const list = [rec, ...this.loadRecords()].slice(0, CFG.MAX_RECORDS);
-    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(list)); } catch (e) {}
-  },
-  // 目前這一局的紀錄（結算畫面的「複製這局紀錄」也用它，打完 Boss 還沒結束的局也能複製）
-  buildRecord(result) {
-    const R = this.runStats;
-    const total = Object.values(R.dmg).reduce((a, b) => a + b, 0);
-    const chips = Object.entries(R.chips).sort((a, b) => b[1] - a[1]).map(([k, v]) => [dmgKeyName(k), Math.round(v)]);
-    // 晶片名稱（電路上的照組件升到的等級）＋插座數（◇2）；電路格另外標奇異點強化的屬性
-    const name = (id, lv = 1) => id ? lvName(id, lv) + (isHost(id) && id !== 'weapon' ? '◇' + socketsOf(id) : '') : null, A = this.slotAttr || [];
-    const withSock = (id, i) => id && (this.socks[i] || []).length ? `${name(id, slotLv(i))}［${this.socks[i].map(c => CHIPS[c].name).join('、')}］` : name(id, slotLv(i));
-    // 打到哪：星區、層、節點種類、波次；王戰時再加上王剩多少血
-    const node = this.node, C = this.combat, boss = (this.enemies || []).find(e => e.t.boss && !e.dead);
-    let where = node ? `${this.isEndless() ? '無盡 · ' : ''}星區 ${this.sector} 第 ${node.L + 1} 層（${NODE_META[node.type].label}）` : `星區 ${this.sector} 航圖`;
-    if (node && C && this.inArena && C.wavesTotal !== Infinity) where += ` 第 ${C.wave} / ${C.wavesTotal} 波`;
-    if (boss && this.inArena) where += `，${boss.t.name}剩 ${Math.max(0, Math.round(boss.hp / boss.maxHp * 100))}% 血${boss.enraged ? '（暴走中）' : ''}`;
-    const s = this.stats, P = this.passives;
-    const inFight = this.inArena && this.nodeLog;
-    const rec = {
-      v: 2, build: CFG.VERSION, at: new Date().toISOString(), result, where,
-      input: Input.touch ? `觸控（自動攻擊${Input.autoFire ? '開' : '關'}）` : '滑鼠鍵盤',
-      ship: SHIPS[this.shipId].name, weapon: weaponTitle(this.weapon),
-      chapter: this.chapterId, sector: this.sector, layer: this.node ? this.node.L + 1 : 0, endless: this.isEndless(),
-      bosses: R.bosses.slice(), cause: result === 'dead' ? this.lastHit : '',
-      time: Math.round(R.time), kills: R.kills, dmg: Math.round(total), maxHit: Math.round(R.maxHit),
-      dps: R.time > 0 ? Math.round(total / R.time) : 0,
-      dmgBySource: Object.fromEntries(DMG_SOURCES.filter(([k]) => R.dmg[k] > 0).map(([k, label]) => [label, Math.round(R.dmg[k])])),
-      chipDmg: chips, chain: this.chain.map((id, i) => A[i] ? (withSock(id, i) || '空') + '｛' + SLOT_ATTRS[A[i]].name + '｝' : withSock(id, i)), inv: this.inventory.filter(Boolean).map(name),
-      // 最後的電路數值：插槽數、能量、射速、每發子彈數與傷害、編輯器的估算 DPS、倉庫被動
-      stats: { slots: this.chain.length, heat: s.heat, cap: s.cap, off: s.off, rps: +s.rps.toFixed(2),
-        perFire: s.count, fireDmg: Math.round(s.dmg), estDps: Math.round(s.dpsEst), triggerLayers: s.layers.length, knock: this.wp.knock,
-        passives: Object.entries(P).filter(([, v]) => v > 0).map(([k, v]) => PASSIVE_LABEL[k](+v.toFixed(2))) },
-      credits: this.credits, hp: Math.max(0, Math.ceil(this.player.hp)), maxHp: this.player.maxHp,
-      mech: this.mechRecord(),
-      // 生存：受到的傷害依來源、被打中次數、衝刺次數
-      taken: Object.fromEntries(Object.entries(R.taken).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v)])),
-      hits: R.hits, dashes: R.dashes,
-      // 過程：各關摘要、走過的節點（戰鬥節點含秒數與掉血）、武器升級、取得的晶片與插槽
-      sectors: [...R.sectors, this.sectorSummary() + (result === 'cleared' || result === 'retired' ? '' : ' ←目前')],
-      path: [...R.path, ...(inFight ? [this.nodeSummary(true)] : [])],
-      upgrades: R.upgrades.slice(), got: R.got.slice(),
-      perf: R.perf ? { ...R.perf } : null, cap: R.cap && R.cap.n ? { ...R.cap } : null,
-    };
-    return rec;
-  },
-  // 機體（遊玩紀錄用）：零件層數、零件格、開啟的特性、各晶片的玩法擊殺數
-  mechRecord() {
-    const T = this.mech.traits;
-    return { parts: Object.fromEntries(PART_IDS.filter(id => this.parts[id]).map(id => [PARTS[id].name, this.parts[id]])), slots: this.partSlots,
-      traits: [...PART_IDS.flatMap(id => [PARTS[id].t2, PARTS[id].t4]).filter(t => T[t.id]).map(t => t.name), ...(T.balance ? ['均衡'] : [])],
-      playKills: Object.fromEntries(Object.entries(this.playKills).map(([k, v]) => [CHIPS[k] ? CHIPS[k].name : k, v])) };
-  },
-  // ---------- ？事件節點（EVENTS，data/events.js）：看情境、選一個選項 ----------
-  openEvent(node) {
-    const E = EVENTS[node.ev];
-    if (!E) { this.showMap(); return; }
-    this.ev = { id: node.ev, node };
-    this.state = 'event';
-    this.view();
-  },
-  // 選第 i 個選項（回傳值見 data/events.js 開頭）：賭運氣的結果先留在事件畫面揭曉（ev.res），按「繼續」才到 evNext
-  evChoose(i) {
-    const V = this.ev, E = V && EVENTS[V.id], o = E && E.opts[i];
-    if (this.state !== 'event' || !o || V.res || (o.can && !o.can(this, V.node))) return;
-    if (E.team && this.mode === 'coop' && Net.linked) {  // 全隊投票的事件：這一下是投票，結果等房主抽（evResolve）
-      if (V.vote == null) { V.vote = i; Net.evVote(i); this.view(); }
-      return;
-    }
-    const r = o.go(this, V.node);
-    if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}${r && typeof r === 'object' ? ' → ' + r.msg : ''}`);
-    if (r && typeof r === 'object') { V.res = r; this.view(); return; }
-    this.ev = null;
-    if (r === true) this.view(); else this.showMap(r || '');
-  },
-  // 全隊投票的結果（房主抽的，全隊一樣）：照第 i 個選項做，事件畫面寫出每個人投什麼、抽中哪個，按「繼續」回航圖
-  evResolve(i, votes) {
-    const V = this.ev, E = V && EVENTS[V.id], o = E && E.opts[i];
-    if (this.state !== 'event' || !o || V.res) return;
-    this.evTeamNow = true;  // 全隊各自套用同一個結果：addSos 不用再廣播
-    const r = o.go(this, V.node);
-    this.evTeamNow = false;
-    const who = Object.keys(votes).map(Number).sort((a, b) => a - b).map(s => `${s}P 投「${E.opts[votes[s]] ? E.opts[votes[s]].lab : '?'}」`).join('、');
-    const drawn = new Set(Object.values(votes)).size > 1;
-    if (this.runStats) this.runStats.got.push(`${this.here()} 事件 ${E.name}：${o.lab}（全隊投票）`);
-    V.res = { msg: `${drawn ? '🎲 抽中：' : '全隊：'}${o.lab}`, sub: who, color: E.color, then: () => false, map: typeof r === 'string' ? r : '' };  // sub：每個人投了什麼（小字）
-    this.view();
-  },
-  evNext() {
-    const r = this.ev && this.ev.res;
-    if (this.state !== 'event' || !r) return;
-    this.ev = null;
-    if (r.then && r.then(this)) this.view(); else this.showMap(r.map != null ? r.map : r.msg);  // map：回航圖時的提示（全隊投票的結果用選項自己的文字）
-  },
-  evHp(k) { return Math.round(this.player.maxHp * k); },  // 事件：最大 HP 的 k 是多少
-  evHurt(k) { const p = this.player, hp = this.evHp(k); p.hp = Math.max(1, p.hp - hp); return hp; },  // 事件扣血：最少留 1 HP
-  // 下一場一般戰鬥或精英戰變難（CFG.EVENT.sos 的 key）：全隊一起（雙人：誰觸發都告訴所有人；敵人由房主產生）
-  //   sos.mul = 全隊最大的倍數；sos.mine = 自己選的、sos.team = 隊友選的裡面倍數最大的；打贏的獎勵照自己選的，自己沒選（或選的沒獎勵）就照隊友的
-  addSos(key, fromNet = false) {
-    const S = CFG.EVENT.sos[key], cur = this.sos || { mul: 1, mine: null, team: null };
-    if (!S) return;
-    cur.mul = Math.max(cur.mul, S.mul);
-    if (fromNet) { if (!cur.team || S.mul > CFG.EVENT.sos[cur.team].mul) cur.team = key; } else cur.mine = key;
-    this.sos = cur;
-    if (!fromNet && this.mode === 'coop' && !this.evTeamNow) Net.sendSos(key);  // 全隊投票的結果：每個人各自套用，不用廣播
-  },
-  // 進下一場戰鬥：帶上變難的倍數（sos）和自己的獎勵（sosKey），用掉
-  takeSos() {
-    const S = this.sos;
-    this.sos = null;
-    return S ? { sos: S.mul, sosKey: this.sosPay(S) } : {};
-  },
-  // 打贏拿哪一種獎勵（CFG.EVENT.sos 的 key）：自己選的有獎勵就照自己的，不然照隊友的；都沒有 = null
-  sosPay(S) { const pays = k => k && (CFG.EVENT.sos[k].bonus || CFG.EVENT.sos[k].again); return pays(S.mine) ? S.mine : pays(S.team) ? S.team : null; },
-  // 星圖情報：把這幾場一般戰鬥標成寶藏星域（全隊：雙人時告訴所有人）
-  markHoard(ids, fromNet = false) {
-    const L = ids.map(id => this.nodeById(id)).filter(n => n && n.type === 'combat');
-    for (const n of L) n.hoard = true;
-    if (!fromNet && this.mode === 'coop' && L.length) Net.sendHoard(L.map(n => n.id));
-  },
-  wardOf(p) { const B = p === this.player ? this.boons : p.L ? p.L.boons : null; return B ? B.ward : p.ward || 0; },  // 還能免死幾次（隊友那邊看別人的：同步來的 p.ward）
-
-  // 終焉護殼：受到致命傷害時留 1 HP、無敵一下，用掉一次（隊友的由房主判定，用掉時告訴那個隊友）
-  wardSave(p) {
-    const B = p.L ? p.L.boons : this.boons;
-    if (!B || !(B.ward > 0)) return false;
-    B.ward--;
-    p.hp = 1; p.iframe = Math.max(p.iframe, CFG.EVENT.ward.iframe);
-    burst(p.x, p.y, '#ffd166', 50, 320, 0.8, 3); ringFx(p.x, p.y, 110, '#ffd166');
-    bannerFx('⛨ 終焉護殼', `${this.mode === 'coop' ? this.tagOf(p) + ' ' : ''}撐住了致命的一擊（無敵 ${CFG.EVENT.ward.iframe} 秒）`, 2);
-    if (p.L) Net.sendWard(p);
-    Events.emit('wardSave', p);
-    return true;
-  },
-
-  // ---------- 奇異點：投入 1 個晶片，隨機一個還沒強化過的電路格（武器格也可以）抽一個屬性 ----------
-  //   好結果的機率照投入晶片的插座數（BH_GOOD）；屬性留在格子上（換晶片也還在），每格只能強化一次
-  ownedFusable() {  // 電路、倉庫、插座中可以投入奇異點的晶片
-    const out = [];
-    this.chain.forEach((id, i) => { if (i > 0 && canSacrifice(id)) out.push({ key: 'chain:' + i, arr: this.chain, i, id }); });
-    this.inventory.forEach((id, i) => { if (canSacrifice(id)) out.push({ key: 'inv:' + i, arr: this.inventory, i, id }); });
-    this.socks.forEach((S, h) => (S || []).forEach((id, k) => out.push({ key: `sock:${h}:${k}`, arr: S, i: k, id, sock: h })));
-    return out;
-  },
-  bhFreeSlots() { return this.chain.map((_, i) => i).filter(i => !(this.slotAttr || [])[i]); },  // 武器格也可以
-  openBlackhole() {
-    this.bh = { sel: null, result: null };
-    this.state = 'blackhole';
-    this.view();
-  },
-  bhToggle(key) {
-    this.bh.sel = this.bh.sel === key ? null : key;
-    this.view();
-  },
-  bhFuse() {
-    const a = this.ownedFusable().find(o => o.key === this.bh.sel), free = this.bhFreeSlots();
-    if (!a || !free.length) return;
-    const good = Math.random() < bhGood(a.id);
-    const attr = pick(good ? GOOD_ATTRS : BAD_ATTRS), slot = pick(free);
-    if (this.runStats) this.runStats.got.push(`${this.here()} 奇異點 投入${CHIPS[a.id].name} → 第 ${slot + 1} 格${SLOT_ATTRS[attr].name}`);
-    if (a.arr === this.chain) for (const c of this.socks[a.i] || []) { const k = this.inventory.indexOf(null); if (k >= 0) this.inventory[k] = c; }  // 投入電路上的晶片：插座上的組件退回倉庫（放不下的一起被吞掉）
-    if (a.arr === this.chain) this.socks[a.i] = [];
-    if (a.sock != null) a.arr.splice(a.i, 1); else a.arr[a.i] = null;
-    this.slotAttr = this.slotAttr || [];
-    this.slotAttr[slot] = attr;
-    this.recalc();
-    this.bh = { sel: null, result: { good, attr, slot, chip: CHIPS[a.id].name }, fusing: true };
-    this.view();
-    Events.emit('fuseStart');
-    setTimeout(() => {
-      if (this.state !== 'blackhole') return;
-      this.bh.fusing = false;
-      Events.emit('fuseEnd', { good });
-      this.view();
-    }, 1200);
-  },
-
   // ---------- 共用 ----------
   recalc() {
-    this.mech = mechStats(this.parts, this.wp, this.boons);  // 先算機體：估算 DPS 會用到（玻璃砲看受到的傷害、重量砲看移動速度）
+    this.mech = mechStats(this.parts, this.boons);
     this.stats = analyzeChain(this.chain);
     this.passives = computePassives(this.inventory);
     const p = this.player;
@@ -1083,6 +166,29 @@ const Game = {
       p.maxHp = newMax;
       p.hp = Math.min(p.hp, p.maxHp);
     }
+    if (typeof Editor === 'undefined' || !Editor.dry) this.trackSince();  // 編輯器拖曳時的試放不算換位置
+  },
+  // 實測 DPS：每個晶片從裝在目前位置那一刻起的傷害 ÷ 戰鬥時間。換位置、拔掉再裝就重新起算（比較插哪裡好用）
+  trackSince() {
+    const R = this.runStats;
+    if (!R) return;
+    const pos = {}, add = (k, at) => (pos[k] = pos[k] || []).push(at);  // 傷害統計的 key（base）→ 在電路上的位置
+    this.chain.forEach((id, i) => {
+      if (id) add(baseOf(id), i);
+      (this.socks[i] || []).forEach((c, k) => c && add(baseOf(c), i + '.' + k));
+    });
+    const S = this.chipSince = this.chipSince || {};
+    for (const k in S) if (!pos[k]) delete S[k];
+    for (const k in pos) { const at = pos[k].join(); if (!S[k] || S[k].at !== at) S[k] = { at, t: R.time, d: R.chips[k] || 0 }; }
+  },
+  // 每秒實際傷害；null = 還在測（戰鬥時間不到 CFG.MEASURE_MIN 秒）
+  measuredDps(k) {
+    const R = this.runStats, S = this.chipSince && this.chipSince[k];
+    if (!R || !S) return null;
+    const d = R.chips[k] || 0;
+    if (R.time < S.t || d < S.d) { S.t = R.time; S.d = d; return null; }  // 靶場清掉統計：重新起算
+    const dt = R.time - S.t;
+    return dt < CFG.MEASURE_MIN ? null : (d - S.d) / dt;
   },
   toggleEditor() {
     // 雙人：戰鬥中按 Tab → 兩邊一起暫停，關掉編輯器時把新電路傳給房主再繼續
@@ -1090,16 +196,20 @@ const Game = {
       this.state = this.returnState;
       Events.emit('editor', { open: false });
       this.recalc();
+      // 戰鬥中改了電路：記下這一刻（三選一上面另外比「改電路前後」，見 Screen.fightSummary）
+      const B = this.fightBase, R = this.runStats;
+      if (this.state === 'play' && B && R && JSON.stringify([this.chain, this.socks]) !== this.editSig)
+        B.cut = { t: R.time, d: Object.values(R.chips).reduce((a, v) => a + v, 0) };
       if (this.mode === 'range') Range.clearStats();  // 靶場：改完電路重新計算
       if (this.mode === 'coop') {
         Net.sendLoadout();
         if (this.state === 'play') Net.setEditing(false);
         if (this.state === 'map') { Net.checkVoteTimer(); Net.tryResolve(); }  // 時間到的情況由 Net.tick 處理
       }
-      if (this.state === 'blackhole') this.bh.sel = [];
       this.view();
-    } else if (['play', 'map', 'reward', 'shop', 'blackhole', 'event', 'armory', 'workshop', 'victory'].includes(this.state)) {
+    } else if (['play', 'map', 'reward', 'shop', 'event', 'armory', 'workshop', 'victory'].includes(this.state)) {
       this.returnState = this.state;
+      this.editSig = JSON.stringify([this.chain, this.socks]);
       this.state = 'editor';
       Input.down = false; Input.dash = false; Input.joy = null; Input.aimStick = null;
       if (this.mode === 'coop' && this.returnState === 'play') Net.setEditing(true);
@@ -1131,15 +241,14 @@ const Game = {
     this.kills++;
     const KR = e.killer ? e.killer.R : this.runStats;  // 雙人：擊殺算在打出最後一擊的人身上
     const lastOfGroup = !e.fleet || !e.fleet.members.some(m => m !== e && !m.dead);  // 編隊：最後一艘才算打倒一隻精英
+    const kp = this.shipOf(e.killer);
+    if (kp) this.withLoadout(loadoutOf(kp), () => weaponPlay().onKill(kp, e));  // 擊殺時（熱能光束的低溫）：打最後一擊那個人的武器
     if (KR) { KR.kills++; if (e.t.elite && lastOfGroup) KR.elites = (KR.elites || 0) + 1; if (e.lastSrc === 'echo') KR.echoK = (KR.echoK || 0) + 1; }  // 精英、回響擊殺（解鎖進度）
     const big = e.type === 'brute' || e.t.elite;
     if (!this.isClient()) {
-      this.infectBurst(e); this.payPlayTags(e); this.onStreakKill(e); this.onReloadKill(e);
-      if (e.wild && e.burnT > 0) {  // 野火：燒著死掉 → 火噴到附近所有敵人
-        const R = e.wild.deathR;
-        for (const o of enemiesNear(e.x, e.y, R)) if (o !== e && !o.dead && !(o.spawnT > 0) && dist2(o.x, o.y, e.x, e.y) < R * R) this.igniteFrom(e, o);
-        ringFx(e.x, e.y, R, '#ff9f1c');
-      }
+      this.infectBurst(e); this.onStreakKill(e);
+      const src = e.killAtt && e.killAtt.src, K = (e.killer || this).playKills;  // 晶片的產物打死的：記在那片晶片上（遊玩紀錄）
+      if (K && !e.noPlay && CHIPS[src] && CHIPS[src].type === 'chip') K[src] = (K[src] || 0) + 1;
       if (e.type === 'splitter') for (let i = 0; i < 3; i++) {  // 分裂體：分成 3 隻碎裂體
         const a = i / 3 * TAU + rand(0, 1), k = new Enemy('splitling', ...Arena.clampIn(e.x + Math.cos(a) * 20, e.y + Math.sin(a) * 20, 20), e.hpScale);
         k.zone = e.zone; k.spawnT = 0.15; k.vx = Math.cos(a) * 200; k.vy = Math.sin(a) * 200; this.enemies.push(k);
@@ -1147,8 +256,8 @@ const Game = {
     }
     burst(e.x, e.y, e.t.color, big ? 40 : 16, big ? 320 : 220, 0.6, 2.5);
     Events.emit('enemyKilled', { e, big });
-    if (e.t.treasure) this.bonusRare(e, 'treasure');
-    if (e.intruder && --e.intruder.left === 0) this.bonusRare(e, 'intrude');
+    if (e.t.treasure) this.bonusLoot(e, 'treasure');
+    if (e.intruder && --e.intruder.left === 0) this.bonusLoot(e, 'intrude');
     if (big) this.shake(e.t.elite ? 14 : 6);
     if (e.t.boss) {  // 母艦爆炸：清除所有小怪與敵彈
       this.shake(28);
@@ -1163,10 +272,6 @@ const Game = {
     for (let i = 0; i < base; i++) if (Math.random() < this.passives.greed) n++;
     for (let i = 0; i < n; i++)
       this.pickups.push({ id: this.nextId++, x: e.x + rand(-8, 8), y: e.y + rand(-8, 8), vx: rand(-80, 80), vy: rand(-80, 80), life: 14 });
-    if (e.t.elite && lastOfGroup && this.combat.sandbox && COMPOSITE_IDS.length) {
-      const i = this.inventory.indexOf(null), id = pick(COMPOSITE_IDS);
-      if (i >= 0) { this.inventory[i] = id; this.recalc(); floatText(e.x, e.y - 30, `獲得 ${CHIPS[id].name}`, '#ff9f1c', true); }
-    }
   },
   // 警戒（CFG.ALERT）：叫醒一隻待機的敵人。call：也叫醒同一區、身邊 call 以內待機的同伴（被叫醒的不再往外叫，不會一路傳遍整區）
   //   母巢醒了，牠生的蟲群一起醒
@@ -1189,13 +294,13 @@ const Game = {
     bannerFx('⚠ 警報', '警報艇邊逃邊叫醒附近的敵人：快打掉它', 2);
     Events.emit('alarm', e);
   },
-  // 戰鬥中額外拿到稀有晶片保證（k = CFG.BONUS 的種類：寶藏無人機、精英亂入）：記在 combat.bonus，combatWon 時加進三選一；多人時房主在 'won' 告訴隊友
-  bonusRare(e, k) {
+  // 戰鬥中拿到額外獎勵（k = CFG.BONUS 的種類：寶藏無人機、精英亂入）：記在 combat.bonus，combatWon 時多幾次三選一；多人時房主在 'won' 告訴隊友
+  bonusLoot(e, k) {
     (this.combat.bonus = this.combat.bonus || []).push(k);
     burst(e.x, e.y, '#ffd166', 60, 380, 1, 3); ringFx(e.x, e.y, 120, '#ffd166');
     this.shake(8);
-    bannerFx(`✦ ${CFG.BONUS[k].note}`, '這場的三選一保證稀有晶片', 2);
-    Events.emit('bonusRare', { e, k });
+    bannerFx(`✦ ${CFG.BONUS[k].note}`, '打贏後多一次三選一', 2);
+    Events.emit('bonusLoot', { e, k });
   },
   // 寶藏無人機：時間到躍遷離開（不算擊殺、不掉東西）
   treasureEscape(e) {
@@ -1209,20 +314,18 @@ const Game = {
     const M = this.mechOf(p), T = M.traits;
     if (p.shield > 0) {  // 護盾產生器：擋下一次
       p.shield--; p.shieldT = 0; p.iframe = 0.3;
-      this.onRevenge(p);  // 逆襲：護盾擋下也算受傷（無傷連殺不歸零）
       burst(p.x, p.y, '#4cc9f0', 14, 200, 0.35, 2); floatText(p.x, p.y - 26, '護盾', '#4cc9f0');
       return;
     }
     dmg *= (1 - Math.min(0.6, this.passivesOf(p).armor)) * M.taken;
-    const RV = this.wpOf(p).revenge;
-    if (RV && !(p.revengeT > 0)) dmg *= RV.first;  // 逆襲（散彈升級）：沒開時被打中，那一下減半（挨一下換爆發）
     if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - this.lastSector());  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
     if (!this.freePlay()) dmg *= this.chapter().dmg;  // 章節：受到的傷害再 ×（第一章 1）
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
     if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
     if (p.hp <= 0 && this.wardSave(p)) return;  // 終焉護殼（？事件）：免死一次
-    if (dmg > 0) { this.onRevenge(p); p.streak = 0; this.rareHurt(p); }  // 逆襲開始；無傷連殺歸零；稀有晶片的反擊
+    if (dmg > 0) p.streak = 0;
+    if (dmg > 0) this.withLoadout(loadoutOf(p), () => weaponPlay().onHurt(p));  // 被打中（能量刃的無盡連段歸零）
     if (p.ship.ability === 'gray' && dmg > 0) p.drRec = Math.min(p.maxHp * CFG.GRAY.cap, (p.drRec || 0) + dmg * CFG.GRAY.share);  // 堡壘號・灰血：這次傷害的一部分之後可以回來
     burst(p.x, p.y, '#ff4d6d', 16, 240, 0.4, 2);
     if (p !== this.player) {  // 房主這邊：隊友被打中（隊友的畫面震動、音效由隊友自己的電腦處理）
@@ -1245,324 +348,34 @@ const Game = {
     }
   },
 
-  // ---------- 星門號：衝刺時在起點和落點開一對門（3 秒，同時只有一對） ----------
-  openPortal(p, ax, ay, bx, by) {
-    if (ax == null || Math.hypot(bx - ax, by - ay) < 40) return;
-    this.portals = this.portals.filter(q => q.owner !== p);
-    this.portals.push({ ax, ay, bx, by, t: 3, owner: p, color: p.ship.color });
-  },
-  updatePortals(dt) {
-    for (const q of this.portals) q.t -= dt;
-    this.portals = this.portals.filter(q => q.t > 0 && !q.owner.dead);
-  },
-  // 物體（子彈、敵彈、飛船）從門外走進門：從另一個門出來，放在門的前方（照移動方向）免得馬上又碰到；cd 秒內不能再走
-  // (x0, y0) = 這一幀移動前的位置；本來就在門裡（例如門開在飛船身上）不算走進去，要先離開再走回來
-  portalHop(o, r, cdKey, cd, dirA, x0, y0) {
-    if (!this.portals.length || this.time < (o[cdKey] || 0)) return false;
-    for (const q of this.portals) {
-      for (const [x1, y1, x2, y2] of [[q.ax, q.ay, q.bx, q.by], [q.bx, q.by, q.ax, q.ay]]) {
-        const rr = (22 + r) ** 2;
-        if (dist2(o.x, o.y, x1, y1) > rr || dist2(x0, y0, x1, y1) <= rr) continue;
-        const a = dirA != null ? dirA : Math.atan2(o.vy || 0, o.vx || 0), k = 22 + r + 2;
-        o.x = x2 + Math.cos(a) * k; o.y = y2 + Math.sin(a) * k;
-        o[cdKey] = this.time + cd;
-        burst(x2, y2, q.color, 6, 120, 0.25, 2);
-        return true;
-      }
-    }
-    return false;
-  },
-  portalShip(p, x0, y0) {
-    if (!this.portalHop(p, p.r, 'portalT', 0.6, null, x0, y0)) return;
-    p.px = p.x; p.py = p.y;
-    if (p.dashT > 0) { p.dashSX = p.x; p.dashSY = p.y; }  // 衝刺途中穿門：起點改成出口，新門不會越拉越長
-  },
-
-  // ---------- 機體成長線（零件、飛船能力）：房主執行，隊友的飛船用隊友的配裝 ----------
-  maxHpOf(ship, P, M) { return Math.max(20, Math.round((ship.hp + P.maxHp + M.maxHp) * M.hpMul)); },
-  mechOf(p) { return p.L ? p.L.mech : this.mech; },
-  wpOf(p) { return p.L ? p.L.wp : this.wp; },
-  // 逆襲（散彈升級）：受傷或護盾擋下 → 一段時間內傷害 ×2.5＋爆炸
-  onRevenge(p) {
-    const R = this.wpOf(p).revenge;
-    if (!R) return;
-    if (!(p.revengeT > 0)) floatText(p.x, p.y - 30, '逆襲！', '#ff4d6d', true);
-    p.revengeT = R.t;
-  },
-  // 連殺裝填（軌道升級）：打出最後一擊的人下一發冷卻歸零
-  onReloadKill(e) {
-    const p = this.shipOf(e.killer);
-    if (p && !p.dead && this.wpOf(p).reload) p.fireCd = Math.min(p.fireCd, 0);
-  },
-  // 無傷連殺（輕裝甲 4 層）：打出最後一擊的人沒被打中時每殺一隻 +1 層
-  onStreakKill(e) {
-    const p = this.shipOf(e.killer);
-    if (!p || p.dead || !this.mechOf(p).traits.streak) return;
-    p.streak = Math.min(STREAK.max, (p.streak || 0) + 1);
-  },
-  // 散彈升級的每幀效果（在那個人的配裝下執行，房主）：逆襲倒數、群戰數身邊的敵人
-  tickWeaponFx(p, dt) {
-    const w = this.wp;
-    if (p.revengeT > 0) p.revengeT -= dt;
-    if (w.crowd) {
-      let n = 0;
-      const R2 = w.crowd.r * w.crowd.r;
-      for (const e of enemiesNear(p.x, p.y, w.crowd.r)) if (!e.dead && !(e.spawnT > 0) && dist2(e.x, e.y, p.x, p.y) < R2 && ++n >= w.crowd.max) break;
-      p.crowdK = n;
-    } else p.crowdK = 0;
-    // 靜電（軌道升級）：飛船移動的距離充電
-    if (w.static) {
-      if (p.stX != null) p.stD = (p.stD || 0) + Math.hypot(p.x - p.stX, p.y - p.stY);
-      while (p.stD >= w.static.dist && (p.staticK || 0) < w.static.max) { p.stD -= w.static.dist; p.staticK = (p.staticK || 0) + 1; }
-      if ((p.staticK || 0) >= w.static.max) p.stD = 0;
-      p.stX = p.x; p.stY = p.y;
-    } else p.staticK = 0;
-    // 分散、擦彈：一段時間沒疊就開始掉層
-    for (const [U, K, T] of [[w.spreadUp, 'spreadK', 'spreadT'], [w.graze, 'grazeK', 'grazeT'], [w.parryUp, 'parryK', 'parryT']]) {
-      if (!U) { p[K] = 0; continue; }
-      if (p[K] > 0 && (p[T] -= dt) <= 0) { p[K]--; p[T] += U.decay; }
-    }
-  },
-  // 專注（雷射升級）：打中的是上一隻 → 層數 +1，換一隻 → 歸零；回傳這一下的傷害倍率
-  focusMul(P, e, F) {
-    if (!P) return 1;
-    if (P.focusId === e.id) P.focusK = Math.min(F.max, (P.focusK || 0) + 1); else { P.focusId = e.id; P.focusK = 0; }
-    return 1 + F.per * P.focusK;
-  },
-  // 分散（雷射升級）：碎光打中敵人 → 射速疊一層
-  spreadHit(P) {
-    const U = P && (P.L ? P.L.wp : this.wp).spreadUp; if (!U) return;
-    P.spreadK = Math.min(U.max, (P.spreadK || 0) + 1); P.spreadT = U.idle;
-  },
-  // 格擋流（相位刃升級）：刃片砍掉敵彈 → 傷害疊一層
-  parryHit(P) {
-    const U = P && (P.L ? P.L.wp : this.wp).parryUp; if (!U) return;
-    P.parryK = Math.min(U.max, (P.parryK || 0) + 1); P.parryT = U.idle;
-  },
-  // 擦彈（雷射升級）：敵彈從身邊飛過沒打中 → 射速疊一層
-  grazeHit(p) {
-    const U = this.wpOf(p).graze; if (!U) return;
-    p.grazeK = Math.min(U.max, (p.grazeK || 0) + 1); p.grazeT = U.idle;
-    floatText(p.x, p.y - 26, '擦', '#5ef2ff');
-  },
-  // 火毯（散彈升級）：彈丸消失的地方留一團火（場上太多時最舊的先熄）
-  dropFlame(b) {
-    const C = b.carpet;
-    this.flames.push({ x: b.x, y: b.y, r: C.r, t: C.t, max: C.t, dps: C.dps, att: b.att });
-    if (this.flames.length > C.max) this.flames.shift();
-  },
-  // 殘留彈道（軌道升級）：子彈直直飛的一段算一條電軌；轉向（反彈、追蹤）、不在飛（環繞、迴旋回程、停住）、消失時收尾
-  trailStep(b) {
-    if (!b.ta && !b.taDone && b.mode === 'fly') b.ta = [b.sx, b.sy, b.angle];  // 第一段從發射點開始
-    const fly = b.mode === 'fly' && !b.dead;
-    if (b.ta && (!fly || Math.abs(angleDiff(b.ta[2], b.angle)) > 0.12)) {
-      const T = b.trail;
-      this.trails.push({ x1: b.ta[0], y1: b.ta[1], x2: b.x, y2: b.y, t: T.t, max: T.t, dmg: b.damage * T.ratio, att: b.att, hit: new Set(b.hitSet) });
-      if (this.trails.length > T.max) this.trails.shift();
-      b.ta = null; b.taDone = true;
-    }
-    if (fly && !b.ta && b.taDone) b.ta = [b.x, b.y, b.angle];
-  },
-  // 電軌：碰到的敵人受到那發子彈的 50%（每條每隻一次，子彈本身打中的不算）
-  updateTrails(dt) {
-    if (!this.trails.length) return;
-    for (const L of this.trails) {
-      L.t -= dt;
-      if (L.t <= 0) continue;
-      const x0 = Math.min(L.x1, L.x2), x1 = Math.max(L.x1, L.x2), y0 = Math.min(L.y1, L.y2), y1 = Math.max(L.y1, L.y2);
-      for (const e of this.enemies) {
-        if (e.dead || e.spawnT > 0 || L.hit.has(e.id)) continue;
-        const r = e.r + 4;
-        if (e.x < x0 - r || e.x > x1 + r || e.y < y0 - r || e.y > y1 + r || segDist2(L.x1, L.y1, L.x2, L.y2, e.x, e.y) >= r * r) continue;
-        this.trailHit(L, e);
-      }
-    }
-    this.trails = this.trails.filter(L => L.t > 0);
-  },
-  trailHit(L, e) { L.hit.add(e.id); e.hurt(L.dmg, 0, 0, 'shock', L.att); },
-  // 火毯的火：每 0.2 秒讓碰到的敵人燃燒（每秒 dps，持續 3 秒）
-  updateFlames(dt) {
-    if (!this.flames.length) return;
-    this.flameTick = (this.flameTick || 0) + dt;
-    const hit = this.flameTick >= 0.2;
-    if (hit) this.flameTick = 0;
-    for (const z of this.flames) {
-      z.t -= dt;
-      if (!hit || z.t <= 0) continue;
-      for (const e of enemiesNear(z.x, z.y, z.r)) {
-        if (e.dead || e.spawnT > 0 || dist2(e.x, e.y, z.x, z.y) >= (z.r + e.r) ** 2) continue;
-        e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, z.dps); e.burnT = Math.max(e.burnT, 3); e.burnAtt = z.att;
-      }
-    }
-    this.flames = this.flames.filter(z => z.t > 0);
-  },
-  // 野火（散彈升級）：燃燒中的敵人每隔一段時間把火傳給附近一隻還沒燒的；燒著死掉時火噴到附近所有敵人（onEnemyKilled）
-  updateWildfire(dt) {
-    for (const e of this.enemies) {
-      if (e.dead || !(e.burnT > 0) || !e.wild) continue;
-      if ((e.wildT = (e.wildT || 0) + dt) < e.wild.every) continue;
-      e.wildT = 0;
-      let best = null, bd = e.wild.r * e.wild.r;
-      for (const o of enemiesNear(e.x, e.y, e.wild.r)) {
-        if (o === e || o.dead || o.spawnT > 0 || o.burnT > 0) continue;
-        const d = dist2(o.x, o.y, e.x, e.y);
-        if (d < bd) { bd = d; best = o; }
-      }
-      if (best) { this.igniteFrom(e, best); zapFx(e.x, e.y, best.x, best.y, '#ff9f1c'); }
-    }
-  },
-  // 撞牆（散彈升級）：被彈丸打飛的敵人撞到牆、小行星、行星或別的敵人 → 彈丸傷害加總 ×2＋暈眩（同一隻冷卻 0.5 秒）
-  wallSlam(e) {
-    const W = e.wh;
-    if (!W || e.dead || this.time < (e.whCd || 0)) return;
-    e.whCd = this.time + W.cd; e.whT = 0;
-    const dmg = e.whDmg * W.mul;
-    e.stunT = W.stun;
-    e.hurt(dmg, 0, 0, 'shock', e.whAtt || null);
-    floatText(e.x, e.y - e.r, Math.round(dmg), '#ffb347', true);
-    burst(e.x, e.y, '#ffb347', 10, 180, 0.3, 2);
-  },
-  // 共鳴（電漿升級）：連結
-  joinLink(L, e) {
-    if (L.t <= 0 || e.dead || L.es.includes(e)) return;
-    if (L.es.length) zapFx(L.es[0].x, L.es[0].y, e.x, e.y, '#c77dff');
-    L.es.push(e); e.link = L;
-  },
-  shareLink(e, dmg, att) {
-    const L = e.link;
-    if (L.t <= 0) return;
-    const zap = this.time >= (L.zapT || 0);
-    if (zap) L.zapT = this.time + 0.25;
-    for (const o of L.es) {
-      if (o === e || o.dead || o.link !== L) continue;
-      o.hurt(dmg * L.share, 0, 0, 'link', att);
-      if (zap) zapFx(e.x, e.y, o.x, o.y, '#c77dff');
-    }
-  },
-  // 共鳴的連結到時間就斷；餘震到時間就炸
-  updateLinksQuakes(dt) {
-    if (this.links.length) {
-      for (const L of this.links) if ((L.t -= dt) <= 0) for (const e of L.es) if (e.link === L) e.link = null;
-      this.links = this.links.filter(L => L.t > 0);
-    }
-    if (this.quakes.length) {
-      for (const q of this.quakes) if ((q.t -= dt) <= 0) this.explode(q.x, q.y, q.r, q.dmg, q.color, null, q.att);
-      this.quakes = this.quakes.filter(q => q.t > 0);
-    }
-  },
-  igniteFrom(e, o) { o.burnDps = Math.max(o.burnT > 0 ? o.burnDps : 0, e.burnDps); o.burnT = Math.max(o.burnT, 3); o.burnAtt = e.burnAtt; o.wild = e.wild; o.wildT = 0; },
-  // 機體的持續效果（每幀，房主）：沒被打的時間、堡壘號的灰血回復
-  tickMech(p, dt) {
-    p.calm = (p.calm || 0) + dt;
-    // 灰血：只回「最近受的傷」存下來的那段（每次受傷的 40%，最多最大 HP 的 25%）；戰鬥結束時剩下的回滿（見 combatWon）
-    if (p.ship.ability !== 'gray') p.drRec = 0;
-    else if (p.drRec > 0 && p.calm >= CFG.GRAY.delay) {
-      const h = Math.min(p.drRec, CFG.GRAY.rate * dt, Math.max(0, p.maxHp - p.hp));
-      p.hp += h; p.drRec = p.hp >= p.maxHp ? 0 : p.drRec - h;
-    }
-  },
-  // 每場戰鬥開始時重置的機體狀態
-  resetMechCombat(p) {
-    p.shield = 0; p.calm = 0; p.quenchT = 0;
-    p.portalCd = 0; p.pullV = null; p.icWs = [];
-    p.revengeT = 0; p.streak = 0; p.crowdK = 0;  // 逆襲、無傷連殺、群戰
-    p.focusId = null; p.focusK = 0; p.spreadK = 0; p.spreadT = 0; p.grazeK = 0; p.grazeT = 0;  // 專注、分散、擦彈
-    p.staticK = 0; p.stD = 0; p.stX = null; p.stY = null;  // 靜電
-    p.parryK = 0; p.parryT = 0;  // 格擋流
-  },
-  // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
-  // 機體強化（零件 1 層）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
-  mechGain() {
-    const k = CFG.MECH_SLOT_EVERY;
-    if (!k) return '';
-    this.mechN = (this.mechN || 0) + 1;
-    if (this.mechN % k || this.chain.length >= CFG.MAX_SLOTS) return '';
-    this.chain.push(null);
-    this.recalc();
-    if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（機體強化）`);
-    return `；機體強化 ${this.mechN} 個：電路格 +1`;
-  },
-  addPart(id) {
-    if (!PARTS[id] || partsUsed(this.parts) >= this.partSlots) return false;
-    this.parts[id] = (this.parts[id] || 0) + 1;
-    this.recalc();
-    if (this.runStats) this.runStats.got.push(`${this.here()} 零件 ${PARTS[id].name}（${this.parts[id]} 層）`);
-    return true;
-  },
-  swapPart(from, to) {
-    if (!PARTS[from] || !PARTS[to] || from === to || !(this.parts[from] > 0) || this.credits < this.shopPrice(PART_SWAP_PRICE)) return false;
-    this.pay(this.shopPrice(PART_SWAP_PRICE), () => {
-      this.parts[from]--; this.parts[to] = (this.parts[to] || 0) + 1;
-      this.recalc();
-      if (this.runStats) this.runStats.got.push(`${this.here()} 改裝：${PARTS[from].name} → ${PARTS[to].name}`);
-    });
-    return true;
-  },
-  // 雙人：一方被擊墜 → 等隊友；兩人都被擊墜 → 結束（房主判定）
-  // 這個人的統計（房主：自己的 runStats、隊友的 mate.L.R）：倒下、救人次數記在這裡
-  statsOf(p) { return p === this.player ? this.runStats : p && p.L ? p.L.R : null; },
-  playerDown(p) {
-    p.hp = 0; p.dead = true;
-    const RS = this.statsOf(p); if (RS) RS.downs = (RS.downs || 0) + 1;  // 雙人紀錄：被擊墜幾次
-    burst(p.x, p.y, p.ship.color, 80, 400, 1.2, 3);
-    if (this.players().length) {
-      bannerFx(`${this.tagOf(p)} 被擊墜！`, `隊友靠近倒下的位置 ${CFG.REVIVE.time} 秒可以救起來`, 2.5);
-      return;
-    }
-    this.state = 'dead'; Input.down = false;
-    // 結束訊息帶上隊友的最終血量與擊毀原因（最後一次同步可能還沒送到）；先送最終傷害統計
-    Net.sendDmg();
-    Net.sendOver(this.combat.wave);
-    this.saveRecord('dead');
-    Events.emit('died');
-  },
-  // 雙人救援（房主判定）：倒下的人留在原地，活著的隊友待在範圍內累積秒數，離開就慢慢退回
-  updateRevive(dt) {
-    const R = CFG.REVIVE, all = this.allShips();
-    for (const p of all) {
-      if (!p.dead) continue;
-      const q = all.find(q => q !== p && !q.dead && !q.gone && dist2(p.x, p.y, q.x, q.y) < R.range * R.range);  // 救的人：旁邊還活著的任一個
-      p.reviveT = q ? p.reviveT + dt : Math.max(0, p.reviveT - dt);
-      if (p.reviveT >= R.time) this.revivePlayer(p, q);
-    }
-  },
-  revivePlayer(p, q) {  // 救的人分出自己當前一半的血量
-    const give = q.hp / 2, tag = x => this.tagOf(x);  // 只在房主執行：自己是 1P
-    q.hp -= give;
-    p.hp = give; p.dead = false; p.reviveT = 0; p.iframe = CFG.REVIVE.iframe;
-    const RS = this.statsOf(q); if (RS) RS.revives = (RS.revives || 0) + 1;  // 雙人紀錄：救起隊友幾次
-    bannerFx(`${tag(p)} 救援成功！`, `${tag(q)} 分出 ${Math.ceil(give)} HP`, 2);
-    burst(p.x, p.y, '#9dff6b', 40, 260, 0.8, 3);
-    Events.emit('revive', { p, q });
-  },
-
   // ---------- 主更新 ----------
+  // 戰場的一幀：戰鬥和基地共用（基地 = 一個房間的戰場，Hub.update 也呼叫這個；戰場的東西只加在這裡，基地就會跟著有）
+  step(dt) {
+    this.time += dt;
+    if (this.runStats) this.runStats.time += dt;  // 只算實際戰鬥的時間（基地沒有 runStats）
+    if (!this.player.dead) this.player.update(dt);
+    this.updateWaves(dt);
+    this.updateEnemies(dt);
+    for (const p of this.players()) this.withLoadout(p.L, () => this.tickMech(p, dt));
+    if (this.decoys.length) { for (const d of this.decoys) d.t -= dt; this.decoys = this.decoys.filter(d => d.t > 0); }  // 殘影
+    if (this.turrets.length) this.updateTurrets(dt);  // 砲台（哨兵號）
+    Objects.update(dt);
+    this.updatePortals(dt);
+    this.updateBullets(dt);
+    this.updateEnemyBullets(dt);
+    this.capBullets();
+    this.updateZones(dt);
+    this.beamHits();
+    this.updatePickups(dt);
+    if (this.mates.length) this.updateRevive(dt);
+  },
   update(dt) {
     if (this.pauseMenu && (this.state !== 'play' || this.mode === 'coop' && !Net.active())) this.pauseMenu = false;
     if (this.pauseMenu && this.mode !== 'coop') return;  // 選單開著：單人暫停（雙人不暫停，隊友那邊照常進行）
     if (Net.role === 'client' && this.mode === 'coop') { Net.clientUpdate(dt); return; }
     const frozen = !!Net.pauseReason();  // 雙人：隊友在編輯電路、切到其他視窗、斷線重連中 → 全員暫停
     if (this.state === 'play' && !frozen) Net.hostUpdateMates(dt);
-    if (this.state === 'play' && !frozen) {
-      this.time += dt;
-      if (this.runStats) this.runStats.time += dt;  // 只算實際戰鬥的時間
-      if (!this.player.dead) this.player.update(dt);
-      this.updateWaves(dt);
-      this.updateEnemies(dt);
-      for (const p of this.players()) this.withLoadout(p.L, () => { this.tickMech(p, dt); this.tickWeaponFx(p, dt); });
-      if (this.decoys.length) { for (const d of this.decoys) d.t -= dt; this.decoys = this.decoys.filter(d => d.t > 0); }  // 殘影
-      if (this.turrets.length) this.updateTurrets(dt);  // 砲台（哨兵號）
-      this.updateFlames(dt); this.updateWildfire(dt); this.updateLinksQuakes(dt); this.updateTrails(dt);
-      Objects.update(dt);
-      this.updatePortals(dt);
-      this.updateBullets(dt);
-      this.updateEnemyBullets(dt);
-      this.capBullets();
-      this.updateZones(dt);
-      this.beamHits();
-      this.updatePickups(dt);
-      if (this.mates.length) this.updateRevive(dt);
-    }
+    if (this.state === 'play' && !frozen) this.step(dt);
     if (this.state === 'play' || this.state === 'dead') this.updateFx(dt);
     if (this.inArena && this.state !== 'editor') this.updateCamera(dt);
     if (!this.inArena) { this.cam.x += dt * 20; this.cam.y += dt * 8; }
@@ -1589,7 +402,6 @@ const Game = {
   updateEnemies(dt) {
     const E = this.enemies;
     for (const e of E) {
-      if (e.stickT > 0 && (e.stickT -= dt) <= 0) this.detonate(e);  // 黏著的子彈時間到一起爆炸
       if (e.dead) continue;
       e.update(dt, this.enemyTarget(e));  // 追最近的玩家（附近有殘影就追殘影）
       if (e.spawnT <= 0) for (const p of this.players()) {
@@ -1607,6 +419,7 @@ const Game = {
           continue;
         }
         if (!e.t.dmg) continue;  // 沒有撞擊傷害的（寶藏無人機、標靶）：碰到不算被打
+        if (!e.t.boss && (e === p.hookE || (p.hookX && p.hookX.includes(e)))) continue;  // 自己勾住、拉在身前的（暈住）：碰到不算被撞（以前飛船往前走就撞上，牽引鉤扯的時候一直掉血，2026-10-22）
         this.hurtPlayer(e.t.dmg, e.t.name + '（撞擊）', p, e.x, e.y);
       }
     }
@@ -1617,7 +430,6 @@ const Game = {
         if (d2 < rr * rr && d2 > 0.01) {
           const d = Math.sqrt(d2), o = (rr - d) / 2, nx = dx / d, ny = dy / d;
           a.x -= nx * o; a.y -= ny * o; b.x += nx * o; b.y += ny * o;
-          if (a.whT > 0) this.wallSlam(a); if (b.whT > 0) this.wallSlam(b);  // 撞牆（散彈升級）：被打飛的撞到別的敵人
         }
       }
     }
@@ -1625,14 +437,12 @@ const Game = {
     this.enemies = E.filter(e => !e.dead);
   },
   updateBullets(dt) {
-    const B = this.bullets, E = this.enemies, Q = this.triggerQueue, SQ = [];
+    // 能量刃連段排隊的刃片（EnergyBlade.onFire）：時間到就從那艘船現在的位置放出（跟著船走）
+    for (const q of this.slashQ) if ((q.t -= dt) <= 0) this.withLoadout(loadoutOf(q.p), () => spawnShots([q.s], q.p.x + Math.cos(q.a) * 4, q.p.y + Math.sin(q.a) * 4, q.a, 0, null));
+    this.slashQ = this.slashQ.filter(q => q.t > 0);
+    const B = this.bullets, E = this.enemies, Q = this.triggerQueue;
     buildEnemyGrid();  // 共用的敵人格子（追蹤、地雷、迴旋折返、找最近的敵人用；見 spatial.js）
     Objects.buildGrid();  // 地圖物件格子（子彈打行星、小行星、彗星、黑洞）
-    for (const p of this.players()) {  // 環繞：按住射擊越久轉越快（轉速見 orbSpinOf）；orbN（存著幾顆）由存著的子彈每幀重新數
-      p.orbHeld = p.orbT || 0;
-      p.orbT = p.orbN && p.wantFire ? (p.orbT || 0) + dt : 0;
-      p.orbN = 0;
-    }
     // 敵人空間格子（碰撞用）：每幀把敵人照中心點分進 GS 大小的格子，子彈只跟路徑附近幾格的敵人比
     //   （以前每發子彈都跟全部敵人比：7000 發 × 40 隻 = 每幀 28 萬次）。結果跟以前一樣：候選照敵人在 E 裡的順序檢查（先打到排前面的），
     //   這一幀中途才出現的敵人（分裂、召喚，接在 E 後面）另外全部檢查。敵人在這個迴圈裡不會移動（擊退、吸引只改速度）
@@ -1650,14 +460,13 @@ const Game = {
     const fields = E.filter(e => !e.dead && !(e.spawnT > 0) && e.has && e.has('field')), FR2 = AFFIX.field.r ** 2;
     for (const b of B) {
       if (b.dead) continue;
-      b.update(fields.length && fields.some(e => dist2(b.x, b.y, e.x, e.y) < FR2) ? dt * AFFIX.field.slow : dt);
-      if (b.trail) this.trailStep(b);  // 殘留彈道（軌道升級）：記錄飛過的路徑
+      const bdt = fields.length && fields.some(e => dist2(b.x, b.y, e.x, e.y) < FR2) ? dt * AFFIX.field.slow : dt;
+      if (b.owner) this.withLoadout(b.owner, () => b.update(bdt)); else b.update(bdt);  // 隊友的子彈：停留、飛回這些照隊友的武器升級
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
       if (b.comet && this.cometShardHit(b)) continue;  // 彗星碎片：也會打到飛船
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
       if (Objects.bulletHit(b)) continue;  // 行星、小行星、彗星
       if (b.overT > 0) continue;  // 迴旋：正在穿過打中的敵人，準備折返
-      const orbit = b.mode === 'orbit';  // 環繞：繞圈時每碰到一次都算命中、照穿甲規則扣（同一隻隔 0.5 秒），穿甲用完就消失
       cand.length = 0;
       if (grid.size) {
         const pad = b.r + maxR, x0 = Math.floor((Math.min(b.px, b.x) - pad) / GS), x1 = Math.floor((Math.max(b.px, b.x) + pad) / GS),
@@ -1669,56 +478,21 @@ const Game = {
       for (const ci of cand) {
         const e = E[ci];
         if (e.dead) continue;
-        if (orbit ? this.time < ((b.orbitCd && b.orbitCd.get(e.id)) || 0) : b.hitSet.has(e.id)) continue;
+        if (b.hitSet.has(e.id)) continue;
         const rr = b.r + e.r, d2 = segDist2(b.px, b.py, b.x, b.y, e.x, e.y);
         if (d2 >= rr * rr) {  // 沒碰到身體：盾衛的盾（外緣 r+SHIELD_OUT）從盾那一側碰到也算（反彈）
           if (e.shieldA == null || d2 >= (rr + SHIELD_OUT) ** 2 || Math.abs(angleDiff(Math.atan2(b.py - e.y, b.px - e.x), e.shieldA)) >= Math.PI / 3) continue;
         }
-        if (orbit) (b.orbitCd = b.orbitCd || new Map()).set(e.id, this.time + 0.5); else b.hitSet.add(e.id);
-        b.hitAny = true;  // 相刃＋迴旋：揮到盡頭時有砍到過才折返
+        b.hitSet.add(e.id);
         if (e.shieldA != null) {  // 盾衛：從盾的那一側（±60°）打過來的子彈反彈回去
           const ca = Math.atan2(b.py - e.y, b.px - e.x);
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.wakeEnemy(e); this.reflectShot(e, b, ca); break; }  // 打在盾上不扣血，待機的也會醒（CFG.ALERT）
         }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
-        // 玩法擊殺：照著晶片的玩法打中敵人 → 在牠身上貼標記（1 秒），牠死掉時每個標記各算一次（見 tagPlay）
-        const own = b.owner;
-        if (b.mode === 'return') this.tagPlay(e, own, 'boomerang');
-        if (orbit || b.orbShot) this.tagPlay(e, own, 'orbit');
-        if (b.stasis && b.dashed) this.tagPlay(e, own, 'stasis');
-        if (b.accel && b.accelMul >= 2) this.tagPlay(e, own, 'accel');
-        if (b.bounced) this.tagPlay(e, own, 'wallbounce');
-        if (b.full) this.tagPlay(e, own, 'charge');
-        if (b.rear) this.tagPlay(e, own, 'rear');
-        if (b.dashShot) this.tagPlay(e, own, 'dashfire');
-        if (b.stand) this.tagPlay(e, own, 'stand');
-        if (b.infGen > 0) this.tagPlay(e, own, 'infect');
-        if (b.att.src === 'intercept') this.tagPlay(e, own, 'intercept');  // 攔截回射（含反射鏡反彈的敵彈）打中
-        if (b.pull && b.mode !== 'orbit') this.pullAt(b, e);  // 環繞中（還在繞圈）的子彈打中不拉；放出去之後照常拉
-        let dmg = hitDamage(b);  // 速度倍率 = 傷害倍率（加速、環繞放出）
-        let att = b.att;
-        if (dmg !== b.damage && b.damage > 0) {  // 傷害統計：速度倍率多出來的傷害平分給造成它的晶片（環繞放出、加速）
-          const ks = [b.orbShot && 'orbit', b.accel && 'accel'].filter(Boolean);
-          for (const k of ks) att = attCredit(att, k, Math.pow(dmg / b.damage, 1 / ks.length));
-        }
-        if (b.kin) dmg *= kineticMul(b);  // 動能彈頭（雷射升級）：子彈越快越痛（算武器本身的傷害）
-        if (b.focus) dmg *= this.focusMul(b.ownerP, e, b.focus);  // 專注（雷射升級）：連續打中同一隻越打越痛
-        if (b.skewer) dmg *= 1 + b.skewer.per * b.skN++;           // 串燒（雷射升級）：前面每穿過一隻 +30%
-        if (b.spreadSh) this.spreadHit(b.ownerP);                  // 分散（雷射升級）：碎光打中 → 射速疊層
-        if (b.frostbite && e.slowT > 0) dmg *= 1 + e.slowAmt * b.frostbite.per;  // 冰封（電漿升級）：被減速越多越痛
-        if (b.res) this.joinLink(b.res, e);                        // 共鳴（電漿升級）：小電漿打中的加進連結
-        if (b.sticky) {  // 黏著：先造成 30%，黏上去的部分之後一起爆炸（插在黏著上的組件、消失觸發器等爆炸時才算）
-          const P = b.payload && b.payload[0].trig === 'end' ? b.payload : null;
-          // 黏上去的部分（之後爆炸）是產物：不算武器插座的傷害加成（先打的 30% 是直擊，照算）
-          const wb = b.wsb || 0, sd = wb > 0 ? dmg * Math.max(0.1, b.bonus - wb + (b.accelMul || 1)) / Math.max(0.1, b.bonus + (b.accelMul || 1)) : dmg;
-          (e.stuck = e.stuck || []).push({ dmg: sd, att, lv: b.sticky, owner: own, hm: b.hm && b.hm.sticky, hb: b.hb, color: b.color, angle: b.angle,
-            end: P && { payload: P, depth: b.depth + 1 }, fi: b.fromIntercept, rf: b.rareFx });
-          if (!(e.stickT > 0)) e.stickT = 2;
-          dmg *= 0.3;
-        }
+        if (b.ownerP) this.withLoadout(loadoutOf(b.ownerP), () => weaponPlay().onHit(b.ownerP, b, e));  // 打中時（鉤爪勾住、吸能刃）：射的人的武器
+        const dmg = hitDamage(b), att = b.att;
         const knock = b.knock, kb = Math.min(220, dmg * 5) * (14 / e.r) * knock;
-        if (b.wallhit && !e.t.boss) { if (!(e.whT > 0)) e.whDmg = 0; e.whDmg += dmg; e.whT = b.wallhit.t; e.whAtt = att; e.wh = b.wallhit; }  // 撞牆：記下這波彈丸的傷害
-        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.shard ? 'shard' : b.att.src === 'intercept' ? 'counter' : b.turret ? 'turret' : b.depth > 0 ? 'echo' : 'direct', att, knock);
+        e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.turret ? 'turret' : b.depth > 0 ? 'echo' : 'direct', att, knock);
         if (b.mark) e.markT = 3;  // 弱點標記（感測器 4 層）
         const wid = (b.owner ? b.owner.weapon : this.weapon).id;
         floatText(e.x, e.y - e.r, Math.round(dmg), ...dmgTextStyle(dmg, WEAPONS[wid] && WEAPONS[wid].base.damage));
@@ -1726,583 +500,74 @@ const Game = {
         Events.emit('hit', { e, b, dmg });
         this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素組件）：燃燒、減速、爆炸、電弧
         if (b.lifesteal && this.shipOf(b.owner)) this.healPlayer(b.lifesteal, this.shipOf(b.owner));
-        if (b.shards && SQ.length < 60) SQ.push({ x: b.x, y: b.y, angle: b.angle, b, ignore: e.id });
-        if (b.payload && b.payload[0].trig === 'hit' && Q.length < CFG.MAX_TRIGGERS_PER_FRAME)  // 命中觸發器
-          Q.push({ payload: b.payload, x: b.x, y: b.y, angle: b.angle, depth: b.depth + 1, ignore: null, owner: b.owner, fi: b.fromIntercept, rf: b.rareFx });  // 回響可以打到被命中的這一隻
-        if (b.sticky && !b.infPierce && !(b.pierce > 0) && !(b.boom && b.mode === 'fly')) b.dead = true;  // 黏著：穿甲用完才黏住；會穿透的子彈（和迴旋）每穿過一隻就留一份
-        else if (b.infPierce) { /* 迴旋的回程、超音速：不會消失 */ }
+        if (b.ln) { this.linePass(b, 'hit', e); if (e.dead) this.linePass(b, 'kill', e); }  // 線：命中、擊殺往下一格傳
+        if (b.infPierce) { /* 迴旋的回程：不會消失 */ }
         else if (b.pierce > 0) b.pierce--;
         else if (b.boom && b.mode === 'fly') { b.overT = (e.r * 2 + 30) / b.speed; b.overId = e.id; }  // 迴旋：去程穿甲用完，穿過這隻再折返（回程會再打牠一次）
-        else { b.dead = true; b.endTrig(); }  // 穿甲用完：算消失（黏住的等引爆才算）
+        else if (b.rare && b.homing > 0 && !b.hopped) {  // 稀有追蹤彈：彈去附近下一隻（第二下也往下傳）
+          const n = nearestEnemy(e.x, e.y, 300, b.hitSet, true);
+          if (n) { b.hopped = true; b.angle = Math.atan2(n.y - b.y, n.x - b.x); b.life = Math.max(b.life, 1); } else b.dead = true;
+        }
+        else b.dead = true;  // 穿甲用完
         break;
       }
     }
-    this.updateVortices(dt);
-    this.updateStasisArcs(dt);
-    for (const t of Q) {  // 觸發器：從觸發點展開子管線（用射出這顆子彈的人的武器與電路）；回響沿子彈原本的方向射（定時觸發器是往兩側）
-      const ang = t.angle;
-      const n0 = B.length;
-      this.withLoadout(t.owner, () => spawnShots(runOps(t.payload, t.depth), t.x, t.y, ang, t.depth, t.ignore));
-      if (t.rf) this.markRareFx(n0);  // 爆發射出的子彈觸發的回響：一樣不觸發詞條
-      if (t.fi) for (let i = n0; i < B.length; i++) B[i].fromIntercept = true;  // 攔截重射的子彈觸發的回響：一樣算攔截重射（不能再攔截）
-      burst(t.x, t.y, '#ff6b9d', 6, 140, 0.3, 2);
+    const T = Q.splice(0);  // 線：這一幀排進來的觸發（命中往下傳、衝刺、定時）→ 放出產物
+    for (const t of T) this.lineFire(t);
+    let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）；順便數每個人場上的產物（產物預算，見 lineSpawn）
+    const prodN = new Map();
+    for (let i = 0; i < B.length; i++) {
+      const b = B[i];
+      if (b.dead) continue;
+      B[w++] = b;
+      if (b.prod) { const L = b.owner || this.L; prodN.set(L, (prodN.get(L) || 0) + 1); }
     }
-    Q.length = 0;
-    for (const s of SQ) {  // 碎片：從命中點往前方扇形散開（稜鏡：射向附近的敵人）
-      const { n, ratio, homing = 0, refract, focus, spread, breed, resonance, seek } = s.b.shards, list = [];
-      let res = null;
-      if (resonance) {  // 共鳴（電漿升級）：被打中的那隻開一個連結，這一發的小電漿打中的都加進來
-        const e0 = this.enemies.find(o => o.id === s.ignore);
-        if (e0 && !e0.dead) { res = { es: [], t: resonance.t, share: resonance.share }; this.links.push(res); this.joinLink(res, e0); }
-      }
-      if (focus) {  // 專注（雷射升級）：碎光不散開，折回打同一隻（也算連續打中）
-        const e0 = this.enemies.find(o => o.id === s.ignore);
-        for (let k = 0; k < n && e0 && !e0.dead; k++) e0.hurt(s.b.damage * ratio * this.focusMul(s.b.ownerP, e0, s.b.focus || FOCUS), 0, 0, 'shard', s.b.att);
-        burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
-        continue;
-      }
-      let aim = null;
-      if (refract) {  // 折射（雷射稜鏡，2026-10-12）：碎光一道一隻、射向 refract 內最近的其他敵人；不夠的折回打原本那一隻（打王時不會打空）
-        const R2 = refract * refract; aim = [];
-        for (const o of enemiesNear(s.x, s.y, refract)) {
-          if (o.id === s.ignore || o.dead || o.spawnT > 0) continue;
-          const d = dist2(o.x, o.y, s.x, s.y); if (d >= R2) continue;
-          let i = aim.length; while (i > 0 && aim[i - 1].d > d) i--;
-          if (i < n) { aim.splice(i, 0, { a: Math.atan2(o.y - s.y, o.x - s.x) - s.angle, d }); if (aim.length > n) aim.pop(); }
-        }
-        const e0 = aim.length < n && this.enemies.find(o => o.id === s.ignore);
-        for (let k = aim.length; k < n && e0 && !e0.dead; k++) e0.hurt(s.b.damage * ratio, 0, 0, 'shard', s.b.att);
-        if (aim.length < n) burst(s.x, s.y, s.b.color, 6, 160, 0.25, 2);
-      }
-      for (let k = 0; k < (aim ? aim.length : n); k++)
-        list.push(shot({ angle: aim ? aim[k].a : (k - (n - 1) / 2) * (1.6 / n), speed: seek ? seek.speed : 620, damage: s.b.damage * ratio, radius: 3, seekAll: !!seek,
-          life: refract ? refract / 620 + 0.1 : seek ? seek.life : 0.4, color: s.b.color, homing, shard: true, src: s.b.att.src, cr: s.b.att.cr, spreadSh: !!spread, res,
-          shards: breed ? { n: breed.n, ratio: breed.ratio / ratio, homing, seek } : null }));  // 增殖（電漿升級）：小電漿打中再分裂一次（第二代沒有 breed，不再分；一樣追蹤）
-      this.withLoadout(s.b.owner, () => spawnShots(list, s.x, s.y, s.angle, s.b.depth, s.ignore));
-    }
-    let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）
-    for (let i = 0; i < B.length; i++) if (!B[i].dead) B[w++] = B[i]; else if (B[i].carpet) this.dropFlame(B[i]);  // 火毯：消失的地方留火
     B.length = w;
+    for (const p of this.allShips()) { const L = loadoutOf(p); L.prodN = prodN.get(L) || 0; }
   },
   // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
+  // 武器升級的照這一下的傷害算（ratio）；元素插件是屬性傷害，照疊的層數算好的固定值（explode.dmg、burnEl、arcs.dmg，見 elemize）
   hitFx(e, b, dmg, x, y) {
-    const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg;
-    if (bd > 0 && b.inferno) {  // 業火（相位刃升級）：每次命中疊一層；疊滿就爆燃（剩下的火 ×1.5 往四周炸，含牠自己）
-      (e.burnL || (e.burnL = [])).push({ dps: bd, t: Math.max(b.burn ? b.burn.t : 0, b.burnR ? 3 : 0) }); e.burnAtt = b.att;
-      const I = b.inferno;
-      if (e.burnL.length >= I.n) {
-        const left = e.burnL.reduce((a, l) => a + l.dps * l.t, 0);
-        e.burnL = null;
-        burst(e.x, e.y, '#ff9f1c', 14, 220, 0.4, 3);
-        this.explode(e.x, e.y, I.r, left * I.mul, '#ff9f1c', null, b.att);
-      }
-    }
-    else if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR ? 3 : 0); e.burnAtt = b.att; if (b.wild) e.wild = b.wild; }
+    // 只有元素插件造成的（燃燒、爆炸、電弧）：傷害統計記在那個元素插件名下（編輯器插件下面的「每秒傷害」）
+    const elAtt = k => b.att && { ...b.att, src: k, cr: null };
+    const bd = (b.burn ? b.burn.dps : 0) + (b.burnR || 0) * dmg + (b.burnEl || 0);
+    if (bd > 0) { e.burnDps = Math.max(e.burnT > 0 ? e.burnDps : 0, bd); e.burnT = Math.max(e.burnT, b.burn ? b.burn.t : 0, b.burnR || b.burnEl ? 3 : 0); e.burnAtt = bd === b.burnEl ? elAtt('ignite') : b.att; }
     if (b.slow) e.slowBy(b.comet ? 'comet' : 'shot', b.slow, b.slowDur || 1.5);
     if (b.explode) {
-      this.explode(x, y, b.explode.r, b.damage * b.explode.ratio, b.color, e.id, b.att, b.explode.compress || null);
-      if (b.aftershock && this.quakes.length < 40)  // 餘震（電漿升級）：同一點過一下再炸一次
-        this.quakes.push({ x, y, r: b.explode.r, dmg: b.damage * b.explode.ratio, color: b.color, att: b.att, t: b.aftershock.t, max: b.aftershock.t });
+      this.explode(x, y, b.explode.r, b.damage * (b.explode.ratio || 0) + (b.explode.dmg || 0), b.color, e.id, b.explode.ratio ? b.att : elAtt('blast'));
     }
-    if (b.crack) { e.shredAmt = (e.shredT > 0 ? e.shredAmt : 0) + (b.shred || b.crack.per); e.shredT = b.crack.t; }  // 碎甲（軌道升級）：每次命中疊一層（破甲彈頭改疊 +25%），沒有上限
-    else if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）
+    if (b.shred) { e.shredAmt = Math.max(e.shredT > 0 ? e.shredAmt : 0, b.shred); e.shredT = 3; }  // 破甲：打中之後才生效（這一下不算）
     if (b.arcs) this.arc(e, b);
   },
-  // 電弧（軌道砲・磁暴線圈、電擊線圈）：命中時瞬間打中附近其他敵人；附近敵人不夠時，剩下的電弧打回目標本身（傷害減半）
+  // 電弧（電擊線圈）：命中時瞬間打中附近其他敵人；附近敵人不夠時，剩下的電弧打回目標本身（傷害減半）
   arc(hit, b) {
-    const { n, ratio, chain } = b.arcs, R = CFG.ARC_RANGE, dmg = b.damage * ratio;
+    const { n, ratio } = b.arcs, R = CFG.ARC_RANGE, dmg = b.arcs.dmg != null ? b.arcs.dmg : b.damage * ratio;  // 元素插件的電弧：屬性傷害（固定值）
     const near = this.enemies.filter(o => !o.dead && o !== hit && o.spawnT <= 0 && dist2(o.x, o.y, hit.x, hit.y) < (R + o.r) ** 2)
       .sort((p, q) => dist2(p.x, p.y, hit.x, hit.y) - dist2(q.x, q.y, hit.x, hit.y));
     for (let k = 0; k < n; k++) {
       const t = near[k] || hit, d = near[k] ? dmg : dmg * 0.5;
       if (t.dead) continue;
       if (b.slow) t.slowBy('shot', b.slow, b.slowDur || 1.5);
-      t.hurt(d, 0, 0, 'arc', b.att);
+      t.hurt(d, 0, 0, 'arc', b.arcs.dmg != null ? { ...b.att, src: 'shock', cr: null } : b.att);
       floatText(t.x, t.y - t.r, Math.round(d), '#9fe8ff');
       zapFx(hit.x, hit.y, t.x, t.y, { jitter: 6 });
-      if (chain && near[k]) this.arcChain(t, d, chain, new Set([hit, t]), b);
     }
-  },
-  // 導電（軌道升級）：電弧打中後再跳到最近一隻還沒被這道電弧打過的，每跳一次 ×decay
-  arcChain(from, d, C, seen, b) {
-    const R2 = CFG.ARC_RANGE * CFG.ARC_RANGE;
-    for (let j = 0; j < C.jumps; j++) {
-      let best = null, bd = R2;
-      for (const o of this.enemies) {
-        if (o.dead || o.spawnT > 0 || seen.has(o)) continue;
-        const q = dist2(o.x, o.y, from.x, from.y);
-        if (q < bd) { bd = q; best = o; }
-      }
-      if (!best) return;
-      d *= C.decay; seen.add(best);
-      best.hurt(d, 0, 0, 'arc', b.att);
-      floatText(best.x, best.y - best.r, Math.round(d), '#9fe8ff');
-      zapFx(from.x, from.y, best.x, best.y, { jitter: 6 });
-      from = best;
-    }
-  },
-  // ---------- V2 改玩法的晶片（房主執行） ----------
-  // 吸引：命中時把附近的敵人往命中點拉（旗艦不會被拉）；引力漩渦：每命中 8 次生成一個
-  // 吸引：把被打中那一隻附近的敵人拉向牠的中心（被打中的那一隻不動）
-  //   以前是拉向子彈的位置，連被打中的那一隻也拉；命中點在牠靠近飛船的那一側，等於每打一下就把敵人往飛船拖
-  //   往中心的速度「補到」PULL_V，不相加：以前每次命中 +380 疊上去，散彈＋鏡像＋分裂一幀命中 20 次以上，敵人被甩到每秒幾萬、飛進牆裡卡住（2026-10-09）
-  pullAt(b, hit) {
-    const R = (b.pull >= 2 ? 130 : 90) * (b.pullMul || 1);  // 巨彈插在吸引上：範圍 ×1.5
-    const cx = hit.x, cy = hit.y;
-    let n = 0;
-    for (const o of this.enemies) {
-      if (o === hit || o.dead || o.t.boss || o.spawnT > 0) continue;
-      const d = Math.hypot(o.x - cx, o.y - cy);
-      if (d > R + o.r || d < 1) continue;
-      const ux = (cx - o.x) / d, uy = (cy - o.y) / d, add = Math.max(0, PULL_V - (o.vx * ux + o.vy * uy));
-      o.vx += ux * add; o.vy += uy * add;
-      this.tagPlay(o, b.owner, 'pull');
-      n++;
-    }
-    if (n) this.rareAct('pull', cx, cy, b.owner, b);  // 稀有晶片：吸引發動（拉到敵人）
-    if (b.pull >= 3) {
-      const L = b.owner || this;
-      L.pullHits = (L.pullHits || 0) + 1;
-      if (L.pullHits % 8 === 0 && this.vortices.length < 12) this.vortices.push({ x: b.x, y: b.y, t: 1.5, r: 140, fx: 0, owner: b.owner });
-    }
-  },
-  updateVortices(dt) {
-    for (const v of this.vortices) {
-      v.t -= dt; v.fx -= dt;
-      for (const o of this.enemies) {
-        if (o.dead || o.t.boss || o.spawnT > 0) continue;
-        const d = Math.hypot(o.x - v.x, o.y - v.y);
-        if (d > v.r || d < 4) continue;
-        o.vx += (v.x - o.x) / d * 1600 * dt; o.vy += (v.y - o.y) / d * 1600 * dt;
-        this.tagPlay(o, v.owner, 'pull');
-      }
-      if (v.fx <= 0) {
-        v.fx = 0.3;
-        ringFx(v.x, v.y, v.r, '#f78cff');
-      }
-    }
-    this.vortices = this.vortices.filter(v => v.t > 0);
-  },
-  // 伏擊網（停滯 Lv3）：停住的子彈之間拉出電弧，每 0.2 秒傷害碰到的敵人
-  updateStasisArcs(dt) {
-    this.arcT -= dt;
-    if (this.arcT > 0) return;
-    this.arcT = 0.2;
-    // 每顆地雷只連到最近的 2 顆（110 以內），連成一張網；所有地雷都算（原本只取前 120 顆、畫面只畫前 60 條，新放的地雷和側邊、後方的網看不到）
-    const W = this.bullets.filter(b => !b.dead && b.mode === 'wait' && b.stasis >= 3), G = new Map(), C = 110, key = (x, y) => x * 1e4 + y;
-    W.forEach((b, i) => { b.netI = i; const k = key(Math.floor(b.x / C), Math.floor(b.y / C)); (G.get(k) || G.set(k, []).get(k)).push(b); });
-    const links = new Set(), pairs = [];
-    for (const p of W) {
-      const cx = Math.floor(p.x / C), cy = Math.floor(p.y / C), near = [];
-      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) for (const q of G.get(key(cx + ox, cy + oy)) || []) {
-        if (q === p) continue;
-        const d = dist2(p.x, p.y, q.x, q.y);
-        if (d <= C * C && d > 16) near.push([d, q]);  // 疊在同一點的不連（散彈同一發的彈丸幾乎重疊）
-      }
-      near.sort((a, b) => a[0] - b[0]);
-      for (const [, q] of near.slice(0, 2)) {
-        const id = p.netI < q.netI ? p.netI * 1e5 + q.netI : q.netI * 1e5 + p.netI;
-        if (!links.has(id)) { links.add(id); pairs.push([p, q]); }
-      }
-    }
-    for (const [p, q] of pairs) {
-      zapFx(p.x, p.y, q.x, q.y, { life: 0.22, cap: 400, share: 60 / pairs.length });
-      for (const e of this.enemies) {
-        if (e.dead || e.spawnT > 0) continue;
-        if (segDist2(p.x, p.y, q.x, q.y, e.x, e.y) < (e.r + 5) ** 2) e.hurt(p.damage * 0.4, 0, 0, 'arc', p.arcAtt || (p.arcAtt = { ...p.att, src: 'stasis' }));  // 電弧的傷害算伏擊網的
-      }
-    }
-  },
-  // 黏著：時間到，黏在身上的子彈一起爆炸
-  detonate(e) {
-    const S = e.stuck || [], n = S.length;
-    e.stuck = []; e.stickT = 0;
-    if (!n || e.dead) return;
-    // 爆炸倍率隨黏著發數往上加（Lv1 ×1.5＋0.1／發，最多 ×3；Lv2 起 ×2＋0.15／發，最多 ×4.5）；多出來的算黏著的
-    const lv = S[0].lv, M = lv >= 2 ? Math.min(4.5, 2 + 0.15 * n) : Math.min(3, 1.5 + 0.1 * n);
-    let total = S.reduce((a, q) => a + q.dmg, 0) * M, att = attCredit(mergeAtt(S.map(q => ({ att: q.att, w: q.dmg }))), 'sticky', M);
-    const x = e.x, y = e.y, H = this.stickyHost(S, total, att);  // 插在黏著上的組件
-    total = H.total; att = H.att;
-    this.tagPlay(e, S[0].owner, 'sticky');
-    this.rareAct('sticky', x, y, S[0].owner, S[0].att);  // 稀有晶片：黏著發動（爆炸）
-    const ring = (r, c) => ringFx(x, y, r, c);
-    ring(e.r + 20 + n * 3, '#f78cff');
-    e.hurt(total, 0, 0, 'explode', att);
-    floatText(x, y - e.r, Math.round(total), '#f78cff', true);
-    if (H.el.length) {  // 元素組件插在黏著上：爆炸帶命中效果（爆裂再炸一圈、燃燒、冰凍、電弧）
-      const fb = runComps([shot({ damage: total, color: S[0].color || '#f78cff', cr: att.cr })], H.el, 'h')[0];
-      this.hitFx(e, { ...fb, att }, total, x, y);
-    }
-    Events.emit('explode', { x, y });
-    if (lv >= 3) {  // 連鎖引爆：立刻引爆周圍敵人身上的子彈（範圍 90，插巨彈時取波及範圍；波及傷害交給巨彈）
-      const R = Math.max(90, H.splash);
-      for (const o of this.enemies) {
-        if (o === e || o.dead || o.spawnT > 0 || !(o.stuck && o.stuck.length) || dist2(x, y, o.x, o.y) > (R + o.r) ** 2) continue;
-        o.stickT = 0.05;
-      }
-      ring(R, '#f78cff');
-    }
-    if (H.splash) {  // 巨彈插在黏著上：爆炸波及周圍（50%）
-      for (const o of this.enemies) {
-        if (o === e || o.dead || o.spawnT > 0 || dist2(x, y, o.x, o.y) > (H.splash + o.r) ** 2) continue;
-        o.hurt(total * 0.5, 0, 0, 'explode', att);
-      }
-      ring(H.splash, '#ffd166');
-    }
-    if (H.shards) {  // 分裂插在黏著上：爆炸時噴出碎片
-      const a0 = rand(0, TAU), q = S[0];
-      const list = Array.from({ length: H.shards }, (_, k) => shot({ angle: a0 + k / H.shards * TAU, speed: 650, damage: total * 0.2 * H.shardM, radius: 4,
-        life: 0.5, color: q.color || '#f78cff', shard: true, src: 'split', cr: att.cr }));  // 碎片全部是分裂多出來的
-      this.withLoadout(q.owner, () => spawnShots(list, x, y, 0, 0, e.id));
-    }
-    const T = S.find(q => q.end);  // 消失觸發器：黏住的子彈引爆時才算消失（一次爆炸觸發一次）
-    if (T && this.triggerQueue.length < CFG.MAX_TRIGGERS_PER_FRAME)
-      this.triggerQueue.push({ payload: T.end.payload, x, y, angle: T.angle || 0, depth: T.end.depth, ignore: null, owner: T.owner, fi: T.fi, rf: T.rf });
-  },
-  // 插在黏著上的組件（爆炸是產物）：倍增、巨彈的 +30%、超載・威力加進宿主層；巨彈 → 波及周圍；分裂 → 噴出碎片；鏡像 → 再爆一次（傷害、碎片都多一份）
-  stickyHost(S, total, att) {
-    const comps = (S.find(q => q.hm) || {}).hm, out = { total, att, splash: 0, shards: 0, shardM: 0, el: [] };
-    if (!comps) return out;
-    const hb0 = S[0].hb || 0;
-    let add = 0, rep = 1;
-    for (const c of comps) {
-      if (c.flaky && flakyOff()) continue;
-      const b = baseOf(c.id);
-      if (b === 'amp') add += c.m;
-      else if (c.id === 'ov_power') add += 0.5;
-      else if (b === 'bigshot') { add += 0.3 * c.m; out.splash = Math.max(out.splash, 70 + 40 * c.m); }
-      else if (b === 'split') { out.shards += Math.max(2, Math.round(3 + 2 * (c.m - 1))); out.shardM = Math.max(out.shardM, c.m); }
-      else if (b === 'mirror') rep += c.n || 1;
-      else if (CHIPS[c.id] && CHIPS[c.id].elem) out.el.push(c);
-    }
-    if (add) {
-      const f = Math.max(0.1, 1 + hb0 + add) / Math.max(0.1, 1 + hb0);
-      out.total = total * f;
-      out.att = attCredit(att, 'sticky', f);
-    }
-    if (rep > 1) { out.total *= rep; out.att = attCredit(out.att, 'mirror', rep); out.shards *= rep; }
-    return out;
-  },
-  // 感染：被帶感染的子彈（或它造成的燃燒）擊殺的敵人爆出子彈
-  infectBurst(e) {
-    const A = e.killAtt, inf = A && A.inf;
-    if (!inf) return;
-    const n = inf.lv >= 2 ? 5 : 3, gen = inf.gen + 1, base = inf.tpl.infBase || inf.tpl.damage;
-    const tpl0 = { ...inf.tpl, src: 'infect', damage: base * 1.5, infBase: base,  // 爆出的子彈算感染的（src） orbit: 0, full: 0, endBoom: false, rear: false, dashShot: false,
-      infect: inf.lv >= 3 && gen <= 2 ? inf.lv : 0, infGen: gen, color: '#c6ff8a' };
-    const tpl = stripW(tpl0);  // 爆出來的子彈是產物：不算武器插座的傷害加成
-    tpl.infBase = tpl.damage / 1.5;  // 下一代也照拿掉之後的算
-    const a0 = rand(0, TAU), comps = inf.tpl.hm && inf.tpl.hm.infect;
-    if (comps) tpl.hm = { ...tpl.hm, infect: undefined };
-    let list = Array.from({ length: n }, (_, k) => ({ ...tpl, angle: a0 + k / n * TAU }));
-    if (comps) list = runComps(list, comps, 'h');  // 插在感染上的組件：爆出來的子彈
-    const n0 = this.bullets.length;
-    this.withLoadout(A.owner, () => spawnShots(list, e.x, e.y, 0, 0, e.id));
-    if (A.rareFx) this.markRareFx(n0);
-    this.rareAct('infect', e.x, e.y, A.owner, A);  // 稀有晶片：感染發動（爆出子彈）
-  },
-  // 攔截：帶攔截的子彈碰到敵彈就把它打掉（自己照常飛），從那裡用整條電路朝最近的敵人回射；反射鏡（Lv3）把敵彈反彈回去
-  interceptHit(eb, I) {
-    for (const b of I) {
-      if (b.dead) continue;
-      const rr = b.r + eb.r + 2;
-      if (segDist2(b.px, b.py, b.x, b.y, eb.x, eb.y) >= rr * rr) continue;
-      eb.life = 0;
-      burst(eb.x, eb.y, b.intercept ? '#9dff6b' : '#ff8fd8', 6, 140, 0.25, 2);
-      if (!b.infPierce) { if (b.pierce > 0) b.pierce--; else b.dead = true; }  // 打掉一發敵彈跟打中敵人一樣扣穿甲（相刃無限穿透，不受影響）
-      if (b.parry) this.parryHit(b.ownerP);  // 格擋流（相位刃升級）：砍掉敵彈疊傷害
-      if (!b.intercept || b.fromIntercept || b.mode === 'return') return true;  // 格擋（相位刃・格擋流）：只打掉敵彈，沒有攔截晶片就不回射（攔截重射的、飛回來的迴旋也只格擋不回射）
-      this.rareAct('intercept', eb.x, eb.y, b.owner, b);  // 稀有晶片：攔截發動（擋下敵彈）
-      // 合併回射：第一顆擋下的位置當集結點，0.2 秒內 300 以內再擋下的用綠色電弧拉進集結點，時間到才回射一次（見 CFG.COUNTER）
-      //   離所有集結點都太遠就另開一個池。不然「很多攔截子彈 × 很多敵彈 × 整條電路」一幀就能生出幾十萬發
-      const p = this.shipOf(b.owner) || this.player, C = CFG.COUNTER, Ws = p.icWs || (p.icWs = []);
-      let W = null, wd = C.join * C.join;
-      for (const w of Ws) { const d = dist2(w.x, w.y, eb.x, eb.y); if (d <= wd) { wd = d; W = w; } }
-      if (!W) {
-        Ws.push({ x: eb.x, y: eb.y, ang: b.angle, n: 1, t: C.win });
-        this.fxRing(eb.x, eb.y, 18, '#9dff6b');
-      } else {
-        W.n++;
-        const k = this.counterMult(W.n);
-        zapFx(eb.x, eb.y, W.x, W.y, { c: '#9dff6b' });
-        this.fxRing(W.x, W.y, 18 + (k - 1) * 14, mixWhite('#9dff6b', this.counterWhite(k)));
-      }
-      this.withLoadout(b.owner, () => {
-        if (b.intercept >= 3) spawnShots([shot({ angle: 0, speed: Math.min(900, Math.hypot(eb.vx, eb.vy) * 1.5), damage: eb.dmg * 2, radius: Math.max(4, eb.r),
-          life: 2, color: '#9dff6b', shape: 'reflect', src: 'intercept' })], eb.x, eb.y, Math.atan2(-eb.vy, -eb.vx), 1, null);  // 反射鏡：每顆都反彈（一顆換一顆，不受冷卻）
-      });
-      return true;
-    }
-    return false;
-  },
-  counterMult(n) { const C = CFG.COUNTER; return Math.min(C.max, 1 + C.per * (n - 1)); },
-  counterWhite(k) { return Math.min(0.75, (k - 1) * 0.4); },  // 倍率越高越白：×2 約 4 成白
-  fxRing(x, y, r, color) { ringFx(x, y, r, color); },
-  // 合併回射的計時（在 withLoadout 裡呼叫）：每個池時間到就從它的集結點回射
-  tickCounter(p, dt) {
-    const Ws = p.icWs;
-    for (const W of Ws) W.t -= dt;
-    const due = Ws.filter(W => W.t <= 0);
-    if (!due.length) return;
-    p.icWs = Ws.filter(W => W.t > 0);
-    for (const W of due) this.counterFire(W.x, W.y, W.ang, this.counterMult(W.n));
-  },
-  // 攔截回射：從集結點用整條電路朝最近的敵人射出（沒有敵人就照攔截子彈的方向）；mult > 1 的越大、越亮、越白
-  counterFire(x, y, ang, mult) {
-    const t = nearestEnemy(x, y, 900, null);
-    this.fireMode = 'intercept'; this.chargeC = null;
-    let list;
-    try { list = runOps(this.stats.ops, 0); } finally { this.fireMode = null; }
-    for (const s of list) s.src = 'intercept';  // 回射的子彈算攔截的
-    if (mult > 1) {
-      const grow = 1 + 0.3 * (mult - 1), wk = this.counterWhite(mult), c = mixWhite('#9dff6b', wk);
-      for (const s of list) { s.damage *= mult; s.radius *= grow; s.color = mixWhite(s.color, wk); }
-      burst(x, y, c, Math.round(6 + mult * 6), 220, 0.35, 2 + mult);
-      floatText(x, y - 14, '×' + mult.toFixed(1), c, mult >= 2);
-    }
-    const n0 = this.bullets.length;
-    if (list.length) spawnShots(list, x, y, t ? Math.atan2(t.y - y, t.x - x) : ang, 1, null);  // 第 1 層：不會進環繞的圈
-    for (let i = n0; i < this.bullets.length; i++) this.bullets[i].fromIntercept = true;  // 永久標記（迴旋折返會把來源改成迴旋，盾要靠這個認）
-  },
-  // 盾衛反彈：子彈照盾面的法線反彈，變成敵人的子彈（傷害 ×0.5，最多 25），我方子彈消失
-  reflectShot(e, b, ca) {
-    const nx = Math.cos(ca), ny = Math.sin(ca), vx = Math.cos(b.angle), vy = Math.sin(b.angle), dot = vx * nx + vy * ny;
-    // 攔截回射的子彈打到盾只會消失、不反彈：不然「反彈成敵彈 → 被攔截 → 整條電路回射 → 又打到盾」會無限放大（拿掉子彈上限之後）
-    if (b.att.src === 'intercept' || b.fromIntercept) { b.dead = true; burst(e.x + nx * (e.r + SHIELD_OUT), e.y + ny * (e.r + SHIELD_OUT), '#bfefff', 4, 120, 0.2, 2); return; }
-    let rx = vx - 2 * dot * nx, ry = vy - 2 * dot * ny;
-    if (rx * nx + ry * ny < 0.3) { rx = nx; ry = ny; }  // 擦邊的也往外彈
-    const l = Math.hypot(rx, ry) || 1, spd = clamp(b.speed * 0.6, 200, 450), dmg = Math.min(25, hitDamage(b) * 0.5);
-    this.eBullets.push({ x: e.x + nx * (e.r + SHIELD_OUT + 6), y: e.y + ny * (e.r + SHIELD_OUT + 6), vx: rx / l * spd, vy: ry / l * spd, r: 5, dmg, life: 2.5, from: e.t.name, col: b.color });  // col：原本子彈的顏色（畫成紅框＋原本顏色的芯）
-    b.dead = true;
-    burst(e.x + nx * (e.r + SHIELD_OUT), e.y + ny * (e.r + SHIELD_OUT), '#bfefff', 6, 160, 0.25, 2);
-  },
-  // 玩法擊殺標記：照玩法打中時貼上（同一個晶片、同一個人再打中就重新計時），1 秒內敵人死掉就各記一次
-  //   owner = 隊友的配裝（房主這邊記在隊友身上，同步給隊友）；null = 自己
-  //   子彈再多，同一隻敵人死掉也只算一次；紀錄畫面顯示各晶片的玩法擊殺數
-  tagPlay(e, owner, id, dur = CFG.PLAY_TAG_TIME) {
-    const T = e.playTags || (e.playTags = []), o = owner || null;
-    const t = T.find(q => q.id === id && q.owner === o);
-    if (t) { t.t = this.time; t.dur = dur; } else T.push({ id, owner: o, t: this.time, dur });
-  },
-  payPlayTags(e) {
-    if (e.noPlay) { e.playTags = null; return; }  // 叫出來、生出來的小怪不算（不然可以一直刷）
-    for (const q of e.playTags || []) if (this.time - q.t <= (q.dur || CFG.PLAY_TAG_TIME)) {
-      const K = (q.owner || this).playKills;
-      if (K) K[q.id] = (K[q.id] || 0) + 1;
-      this.rareRun('kill', q.id, q.owner, e.x, e.y);  // 稀有晶片：玩法擊殺的詞條（狂熱、結晶、收割）
-    }
-    e.playTags = null;
-  },
-  // ---------- 稀有晶片的詞條（RARE）：只在房主跑；owner = 那個人的配裝 L（房主自己 null） ----------
-  // 這個人電路上那個晶片的詞條（有電的才算，見 analyzeChain 的 rares）
-  rareOf(base, owner) { const S = owner ? owner.stats : this.stats; return (S && S.rares && S.rares[base]) || null; },
-  // 詞條狀態（冷卻、充能、層數…）記在飛船上，每個晶片各一份
-  rareSt(p, base) { const R = p.rare || (p.rare = {}); return R[base] || (R[base] = {}); },
-  // on 符合這個詞條的時機才跑：冷卻照 RARE[k].cd；充能照晶片平常的發動頻率（CHIPS[晶片].actRate 次／秒）算，約 v 秒充滿
-  rareRun(on, base, owner, x, y) {
-    if (this.isClient() || this.rareIn) return;  // 詞條的效果裡（爆發射出的子彈…）不再觸發詞條：蓄力的爆發每發動一次就充滿，射出的蓄滿子彈又會充滿，一直連鎖
-    const r = this.rareOf(base, owner), D = r && RARE[r.k];
-    if (!D || D.on !== on) return;
-    const p = this.shipOf(owner);
-    if (!p || p.dead) return;
-    const st = this.rareSt(p, base), v = D.v ? D.v[r.lv - 1] : null;
-    if (D.cd) { if (this.time < (st.cd || 0)) return; st.cd = this.time + D.cd; }
-    if (on === 'charge') { st.c = (st.c || 0) + 1 / (CHIPS[base].actRate * v); if (st.c < 1) return; st.c = 0; }
-    Events.emit('rare', { k: r.k, x: x ?? p.x, y: y ?? p.y });
-    this.rareIn = true;
-    try { D.fx(p, st, v, x ?? p.x, y ?? p.y, base, owner); } finally { this.rareIn = false; }
-  },
-  // 晶片發動了（迴旋折返、環繞放出、地雷衝出去…；發動點寫在各晶片的程式裡）：發動時的詞條＋充能
-  //   b = 發動的子彈（或黏著、感染的傷害歸屬）：詞條效果（爆發）射出的不算，不然會一直連鎖（爆發 → 子彈發動 → 充能 → 爆發…）
-  rareAct(base, x, y, owner, b = null) { if (b && b.rareFx) return; this.rareRun('act', base, owner, x, y); this.rareRun('charge', base, owner, x, y); },
-  // 第 n0 顆以後的子彈是詞條效果射出的：之後（飛行中、觸發的回響、感染爆出的）都不觸發詞條
-  markRareFx(n0) { for (let i = n0; i < this.bullets.length; i++) { const b = this.bullets[i]; b.rareFx = true; b.att.rareFx = true; } },
-  // 受傷了：這個人電路上「受傷時」的詞條（反擊）
-  rareHurt(p) {
-    const owner = p === this.player ? null : p.L || null, S = owner ? owner.stats : this.stats;
-    for (const base in (S && S.rares) || {}) this.rareRun('hurt', base, owner, p.x, p.y);
-  },
-  // cmp：壓縮（電漿升級）——先把 cmp.pull 內看得到中心的敵人吸到中心附近（旗艦、母巢不吸），
-  //   再數炸到幾隻（含被直擊的 skipId 那隻；牠不再吃爆炸傷害），第 2 隻起每多 1 隻傷害 +cmp.per
-  explode(x, y, r, dmg, color, skipId, att = null, cmp = null) {
-    if (cmp) {
-      let n = 0;
-      for (const e of this.enemies) {
-        if (e.dead || e.spawnT > 0) continue;
-        const d = Math.hypot(e.x - x, e.y - y);
-        if (d > cmp.pull + e.r) continue;
-        if (d > r * 0.5 && !e.t.boss && !e.t.anchored && !Arena.losBlocked(e.x, e.y, x, y, 0)) {  // 牆、閘門另一邊的不吸
-          const k = (d - r * 0.5) / d, ox = e.x, oy = e.y;
-          e.x -= (e.x - x) * k; e.y -= (e.y - y) * k;
-          for (let i = 1; i <= 4; i++) trail(ox + (e.x - ox) * i / 5, oy + (e.y - oy) * i / 5, color, 0.25, 3);  // 被吸過去的軌跡
-        }
-        if (Math.hypot(e.x - x, e.y - y) <= r + e.r) n++;
-      }
-      dmg *= 1 + cmp.per * Math.max(0, n - 1);
-      ringFx(x, y, cmp.pull, color, true);
-    }
-    for (const e of this.enemies) {
-      if (e.dead || e.id === skipId) continue;
-      const d = Math.hypot(e.x - x, e.y - y);
-      if (d > r + e.r) continue;
-      const k = 120 * (14 / e.r) / (d || 1);
-      e.hurt(dmg, (e.x - x) * k, (e.y - y) * k, 'explode', att);
-      floatText(e.x, e.y - e.r, Math.round(dmg), '#ffd166');
-    }
-    Objects.explodeRocks(x, y, r, dmg, att);
-    ringFx(x, y, r, color);
-    Events.emit('explode', { x, y });
-  },
-  healPlayer(v, p = this.player) {  // 吸血：每秒最多回復 4 HP（每位玩家各自計算）
-    if (!p || p.dead) return;
-    if (this.time - (p.healWin || 0) > 1) { p.healWin = this.time; p.healed = 0; }
-    const add = Math.min(v, 4 - p.healed);
-    if (add <= 0) return;
-    p.healed += add;
-    p.hp = Math.min(p.maxHp, p.hp + add);
-  },
-  // 彗星打爆後的碎片打到飛船：每片 10，碎片消失
-  cometShardHit(b) {
-    for (const p of this.players()) {
-      if (p.invuln || dist2(b.x, b.y, p.x, p.y) >= (b.r + p.r) ** 2) continue;
-      Objects.cometFrost(p);  // 先凍再扣血（扣血後的無敵時間會擋掉冰凍）
-      this.hurtPlayer(CFG.COMET_SHARD_DMG, '彗星（碎片）', p, b.px, b.py);
-      b.dead = true; return true;
-    }
-    return false;
-  },
-  // 精英「佈雷」的地雷爆炸：半徑 60 內的玩家受傷
-  mineBlast(b) {
-    const R = AFFIX.mine.r;
-    for (const p of this.players()) if (!p.dead && dist2(b.x, b.y, p.x, p.y) < (R + p.r) ** 2) this.hurtPlayer(b.dmg, b.from || '地雷', p, b.x, b.y);
-    burst(b.x, b.y, '#ffd400', 24, 260, 0.45, 2.5); ringFx(b.x, b.y, R, '#ffd400');
-    Events.emit('mineBlast', b);
-  },
-  updateEnemyBullets(dt) {
-    const ps = this.players();
-    for (const p of ps) if (p.icWs && p.icWs.length) this.withLoadout(p.L, () => this.tickCounter(p, dt));  // 合併回射：集氣時間到就射
-    // 攔截晶片、相位刃的格擋：打掉敵彈。飛回來途中的迴旋不能攔截（攔截會用整條電路重射，裡面又有迴旋 → 飛回飛船附近又攔截，子彈一直翻倍）
-    //   攔截重射出來的子彈（和它們觸發的回響）也不能再攔截：不然「攔截 → 重射 → 再攔截」會一直滾大
-    Objects.buildGrid();  // 地圖物件格子（敵彈打行星、小行星）
-    const I = this.bullets.filter(b => !b.dead && ((b.intercept && b.mode !== 'return' && !b.fromIntercept) || b.parry) && b.mode !== 'wait');
-    // 攔截子彈照這一幀的路徑分進格子，敵彈只跟附近幾格的比（以前每顆敵彈跟全部攔截子彈比：上千 × 上千）；候選照 I 的順序，結果不變
-    if (I.length > 16) IGrid.build(I, q => { const p = q.r + 2; return [Math.min(q.px, q.x) - p, Math.min(q.py, q.y) - p, Math.max(q.px, q.x) + p, Math.max(q.py, q.y) + p]; });
-    for (const b of this.eBullets) {
-      if (b.home > 0) {  // 精英「追蹤彈」：射出後一段時間內轉向最近的玩家（每秒最多 40°）
-        b.home -= dt;
-        const q = this.nearestPlayer(b.x, b.y);
-        if (q) {
-          const a = Math.atan2(b.vy, b.vx), s = Math.hypot(b.vx, b.vy), st = AFFIX.homing.turn * dt;
-          const na = a + clamp(angleDiff(a, Math.atan2(q.y - b.y, q.x - b.x)), -st, st);
-          b.vx = Math.cos(na) * s; b.vy = Math.sin(na) * s;
-        }
-      }
-      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-      this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
-      if (!Arena.rect && (Arena.f(b.x, b.y) < 0 || Arena.gateCross(b.x - b.vx * dt, b.y - b.vy * dt, b.x, b.y))) { b.life = 0; continue; }  // 大地圖：敵彈打到牆、閘門就消失
-      if (Objects.eBulletHit(b)) continue;
-      if (I.length && this.interceptHit(b, I.length > 16 ? IGrid.query(b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r) : I)) continue;
-      for (const p of ps) {
-        const rr = b.r + p.r, d2 = dist2(b.x, b.y, p.x, p.y);
-        if (d2 < rr * rr && !p.invuln && !p.dead) {
-          b.life = 0;
-          if (b.mine) { this.mineBlast(b); break; }  // 精英「佈雷」：碰到就爆炸（範圍內的玩家都受傷）
-          if (b.dmg > 0) this.hurtPlayer(b.dmg, (b.from || '敵人') + '（子彈）', p, b.x - b.vx, b.y - b.vy);
-          break;
-        }
-        const Gz = this.wpOf(p).graze;  // 擦彈（雷射升級）：進到身邊又離開、沒打中才算
-        if (Gz && !p.dead) {
-          const gz = b.gz || (b.gz = new Map()), st = gz.get(p);
-          if (d2 < (rr + Gz.r) ** 2) { if (!st) gz.set(p, 1); }
-          else if (st === 1) { gz.set(p, 2); this.grazeHit(p); }
-        }
-      }
-    }
-    this.eBullets = this.eBullets.filter(b => b.life > 0);
-  },
-  // 砲艦的砲擊（CFG.ARTILLERY）：在目標 p 附近放 n 個落點紅圈（第一個在 p 前進方向 lead 秒後的位置），跟王的落點轟炸一樣時間到才爆炸
-  artilleryVolley(e, p) {
-    const A = CFG.ARTILLERY;
-    for (let i = 0; i < A.n; i++) {
-      const a = rand(0, TAU), r = i ? rand(60, A.spread) : 0;
-      const [x, y] = Arena.clampIn(p.x + (p.vx || 0) * A.lead + Math.cos(a) * r, p.y + (p.vy || 0) * A.lead + Math.sin(a) * r, 20);
-      this.zones.push({ x, y, r: A.r, t: A.delay, max: A.delay, dmg: A.dmg, from: `${e.t.name}（砲擊）` });
-    }
-    burst(e.x + Math.cos(e.chargeA) * e.r, e.y + Math.sin(e.chargeA) * e.r, e.t.color, 12, 200, 0.3, 2);
-    Events.emit('enemyShot', e);
-  },
-  // 拖曳艦的牽引（CFG.TRACTOR）：被拉的船在自己的電腦上拉（房主拉自己、隊友拉自己；e.tgt = 被拉的號碼），拉到離牠 stop 為止；
-  //   衝刺中不拉（衝刺 = 掙脫，光束由房主那邊斷掉）。在飛船移動、撞牆之前呼叫（Player.update）
-  beamPull(P, dt) {
-    if (P.dashT > 0 || !this.enemies.length) return;
-    const me = this.slotOf(P), T = CFG.TRACTOR;
-    for (const e of this.enemies) {
-      if (e.mode !== 'pull' || e.tgt !== me || e.dead) continue;
-      const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1, k = Math.min(T.speed * dt, d - (e.r + P.r + T.stop));
-      if (k > 0) { P.x += dx / d * k; P.y += dy / d * k; }
-    }
-  },
-  // 旗艦的光束：雙子獵艦兩艘中間的（兩艘都在隊形上才連著）、星環守門者的旋轉光束（cd 倒數：> rest 開著、< warn 預警）
-  //   回傳 [{ x1, y1, x2, y2, w, dmg, from, warn }]；房主算傷害、畫面、模擬電腦都用這個，只讀欄位（隊友那邊的敵人是同步來的資料）；同一幀只算一次
-  bossBeams() {
-    if (this.beamMemo && this.beamMemo.t === this.time && this.beamMemo.n === this.enemies) return this.beamMemo.list;
-    const list = [], up = e => !e.dead && !(e.spawnT > 0), C = CFG.TWIN, W = CFG.WARDEN;
-    const tw = this.enemies.filter(e => e.t.twin && up(e));
-    if (tw.length === 2 && tw.every(e => e.mode === 'chase')) list.push({ x1: tw[0].x, y1: tw[0].y, x2: tw[1].x, y2: tw[1].y, w: C.beamW, dmg: C.beamDmg, from: `${tw[0].t.name}（光束）`, warn: false });
-    for (const e of this.enemies) if (e.t.beams && up(e)) {
-      const on = e.cd > W.rest, warn = !on && e.cd < W.warn;
-      if (!on && !warn) continue;
-      const n = e.enraged ? 3 : 2;
-      for (let k = 0; k < n; k++) {
-        const a = e.rot + k * TAU / n, c = Math.cos(a), s = Math.sin(a), L = Arena.rayLen(e.x, e.y, a, 1500);
-        list.push({ x1: e.x + c * e.r, y1: e.y + s * e.r, x2: e.x + c * L, y2: e.y + s * L, w: warn ? 3 : W.beamW, dmg: warn ? 0 : W.beamDmg, from: `${e.t.name}（光束）`, warn });
-      }
-    }
-    this.beamMemo = { t: this.time, n: this.enemies, list };
-    return list;
-  },
-  // 光束打到飛船（房主算，隊友的也是）：碰到就受傷，之後的無敵時間內不會再扣
-  beamHits() {
-    for (const B of this.bossBeams()) {
-      if (B.warn) continue;
-      for (const p of this.players()) if (segDist2(B.x1, B.y1, B.x2, B.y2, p.x, p.y) < (p.r + B.w / 2) ** 2) this.hurtPlayer(B.dmg, B.from, p, p.x, p.y);
-    }
-  },
-  // 王的落點轟炸：時間到就爆炸，圈裡的飛船受傷
-  updateZones(dt) {
-    for (const z of this.zones) {
-      if ((z.t -= dt) > 0) continue;
-      for (const p of this.players()) if (dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2) this.hurtPlayer(z.dmg, z.from, p, z.x, z.y);
-      burst(z.x, z.y, '#ff4d6d', 24, 260, 0.5, 3);
-      ringFx(z.x, z.y, z.r, '#ff4d6d');
-      this.shake(4); Events.emit('explode', z);
-    }
-    this.zones = this.zones.filter(z => z.t > 0);
-  },
-  updatePickups(dt) {
-    for (const c of this.pickups) {  // 晶體不會消失（以前 14 秒沒撿就不見）；life 只在撿到時歸零
-      const p = this.nearestPlayer(c.x, c.y), range = CFG.MAGNET_RANGE * (1 + this.passivesOf(p).magnet);  // 晶體飛向最近的玩家（雙人：撿到的人和隊友都 +1）
-      const d2 = dist2(c.x, c.y, p.x, p.y);
-      stepPickup(c, p, range, d2, dt);
-      if (!Arena.rect && !c.vacuum && Arena.f(c.x, c.y) < 6) [c.x, c.y] = Arena.clampIn(c.x, c.y, 6);  // 大地圖：晶體不會飛進牆裡（全場吸取時直接穿過）
-      if (d2 < 20 * 20) {
-        c.life = 0; this.credits++; Events.emit('pickup', c);
-        if (this.mode === 'coop') Net.lootTotal++;  // 雙人：不管誰撿到，隊友也 +1（透過同步傳過去）
-      }
-    }
-    this.pickups = this.pickups.filter(c => c.life > 0);
-  },
-  updateFx(dt) {
-    Events.emit('fxTick', dt);  // 粒子、浮動數字、光圈、電弧、閃光、橫幅、震動（ui/fx.js）
-  },
-  updateCamera(dt) {
-    const p = this.viewShip(), c = this.cam;  // 自己被擊墜時看隊友
-    const tx = clamp(p.x - ZW / 2, -80, Arena.W - ZW + 80);
-    const ty = clamp(p.y - ZH / 2, -80, Arena.H - ZH + 80);
-    c.x += (tx - c.x) * Math.min(1, dt * 8);
-    c.y += (ty - c.y) * Math.min(1, dt * 8);
   },
 };
+
+// ---------- 座位：每個玩家一份配裝 L ----------
+//   房主（單人就是只有自己的房間）的配裝是 Game.L；隊友的是 mate.L（Net.makeLoadout）
+//   Game 身上這些欄位 = 「目前在算的那個人」的配裝（Game.cur）：平常是自己，withLoadout(L, fn) 時換成那個人的
+const LOADOUT_KEYS = ['chain', 'socks', 'inventory', 'wSock', 'weapon', 'wp', 'stats', 'passives', 'shipId', 'playKills', 'parts', 'partSlots', 'cap', 'mech', 'boons'];
+Game.L = {};
+for (const k of LOADOUT_KEYS) {
+  Game.L[k] = Game[k];
+  delete Game[k];
+  Object.defineProperty(Game, k, { get() { return this.cur[k]; }, set(v) { this.cur[k] = v; }, enumerable: true, configurable: true });
+}
+Game.cur = Game.L;
+// 這艘船（房主自己或隊友）的配裝
+const loadoutOf = p => (p && p.L) || Game.L;
 
 // 主題小兵：cost = 佔一波的預算、from = 第幾星區開始出現、max = 一波最多幾隻
 const THEMES = {

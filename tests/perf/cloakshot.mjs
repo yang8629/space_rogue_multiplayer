@@ -1,10 +1,10 @@
 // 潛伏者隱形時的狀態圈截圖：三隻並排（左：完全隱形、中：半隱形、右：現形），都帶減速、標記、燃燒、黏著
 //   用法：node perf/cloakshot.mjs   → art_lab/screenshots/潛伏者狀態圈_新畫面.png、潛伏者狀態圈_舊畫面.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 for (const [mode, name] of [['gl', '新畫面'], ['2d', '舊畫面']]) {

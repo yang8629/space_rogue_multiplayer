@@ -1,9 +1,9 @@
 // 操作台放大看：三個操作台（軍械庫、晶片實驗室、戰績室；飛船停在旁邊 = 靠近變亮）＋戰績室的獎盃牆 → art_lab/screenshots/操作台_*.png
 //   用法：node perf/consolezoom.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

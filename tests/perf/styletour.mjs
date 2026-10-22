@@ -1,10 +1,10 @@
 // 介面巡覽：主要畫面各截一張，看介面風格統不統一 → art_lab/screenshots/風格_*.png
 //   基地、發射台、軍械庫、選武器、起始晶片、航圖、三選一、補給站、軍械台、？事件、電路編輯器、戰鬥（HUD）、暫停選單、結算、多人連線、電路總覽
 //   用法：node perf/styletour.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

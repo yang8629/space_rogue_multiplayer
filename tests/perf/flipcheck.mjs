@@ -1,8 +1,8 @@
 // 三選一翻牌動畫逐幀量：每一幀記下各卡片的透明度（w = 稀有那格還蓋著）、卡片是不是還在等（hold），和卡住主執行緒的長工作
 // 用法：node perf/flipcheck.mjs（真的 Chrome 視窗，GPU 照實際）
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false, defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: false, defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 2000));

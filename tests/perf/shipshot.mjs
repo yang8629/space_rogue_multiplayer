@@ -1,10 +1,10 @@
 // 飛船外觀截圖：四艘船在靶場（移動中、裝零件、衝刺中）各截一張放大圖，再截選飛船畫面
 // 用法：node perf/shipshot.mjs <輸出資料夾>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const out = process.argv[2] || '.';
 const url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const page = await b.newPage();
 page.on('pageerror', e => console.log('頁面錯誤', e.message));
 await page.goto(url); await new Promise(r => setTimeout(r, 1200));

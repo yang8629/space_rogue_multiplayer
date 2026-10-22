@@ -1,9 +1,9 @@
 // 分裂電漿的畫面截圖（2026-10-13）：小電漿慢慢飄、四面八方都追；前方一隻靶，旁邊、後面散幾隻不會動的靶
 //   用法：node perf/prismshot.mjs <輸出資料夾>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const dir = process.argv[2], url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));

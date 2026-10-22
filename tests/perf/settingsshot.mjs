@@ -1,10 +1,10 @@
 // 設定頁在真的 Chrome 裡：從基地打開 → 拉主音量滑桿、取消「畫面震動」→ 重新整理 → 設定還在；戰鬥中的選單也打得開
 //   截圖 art_lab/screenshots/設定_*.png；印出每一步過了沒
 //   用法：node perf/settingsshot.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 let fails = 0;
@@ -21,7 +21,7 @@ for (let i = 0; i < 12; i++) await p.keyboard.press('ArrowLeft');
 await p.click('[data-set="shake"]');
 ok(await p.evaluate(() => Settings.vol === 0.4 && !Settings.shake && document.querySelector('[data-setv="vol"]').textContent === '40%'), '拉滑桿、取消畫面震動：馬上生效、數字跟著變');
 await p.click('[data-act="setback"]'); await wait(300);
-ok(await p.evaluate(() => Screen.hubOn), '返回：回到基地');
+ok(await p.evaluate(() => Hub.driving), '返回：回到基地');
 await p.reload(); await wait(1500);
 ok(await p.evaluate(() => Settings.vol === 0.4 && !Settings.shake), '重新整理後設定還在');
 // 戰鬥中：Esc 選單 → 設定 → 返回回到選單

@@ -1,11 +1,11 @@
 // 反彈子彈的樣子：盾衛把我方子彈反彈回來（紅框＋原本顏色）、反射鏡（攔截 Lv3）把敵彈反彈回去（敵彈外形、綠色）
 //   → art_lab/screenshots/新畫面_反彈子彈.png   用法：node perf/reflshots.mjs [canvas]
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const MODE = process.argv[2] === 'canvas' ? 'canvas' : 'gl';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 const wait = ms => new Promise(r => setTimeout(r, ms));

@@ -1,11 +1,11 @@
 // 地圖形狀一覽：幾個種子的一般地圖（3 區）＋三種王場地，畫成黑白小圖（白 = 空地）拼成一張
 //   用法：node perf/mapshots.mjs <檔名後綴>   → art_lab/screenshots/地圖形狀_<後綴>.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const tag = process.argv[2] || '現在';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1600, height: 1000 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1600, height: 1000 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1500));

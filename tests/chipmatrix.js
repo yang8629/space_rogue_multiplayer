@@ -11,9 +11,10 @@ const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('
 const has = k => process.argv.includes(`--${k}`);
 const BASE = path.join(__dirname, 'chipmatrix_base.json');
 const dt = 1 / 60, SEC = 4;
-const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃' };
+const WN = Object.fromEntries(Object.entries(T_.WEAPONS).map(([id, w]) => [id, w.short || w.name]));
 const WPN = arg('w') ? arg('w').split(',') : Object.keys(WN);
-const CH = [null, ...(arg('chips') ? arg('chips').split(',') : ['boomerang', 'orbit', 'stasis', 'accel', 'wallbounce', 'rear', 'charge', 'sticky', 'infect', 'pull'])];
+const CH = [null, ...(arg('chips') ? arg('chips').split(',') : ['boomerang', 'stasis', 'infect', 'echo', 'shard', 'homing', 'vortex',
+  'amp', 'bigshot', 'blast', 'ignite', 'frost', 'shred', 'shock'])];
 const ring = (n, r) => Array.from({ length: n }, (_, i) => [Math.cos(i / n * 6.283) * r, Math.sin(i / n * 6.283) * r]);
 const SC = {
   '包圍8隻': () => M.targets(ring(8, 70), 'brute', true, 60),
@@ -37,7 +38,7 @@ function run(w, chip, sc) {
     if (bt) p.aim = Math.atan2(bt.y - p.y, bt.x - p.x);
     const want = chip === 'orbit' ? (f * dt) % 2.5 < 2.2 : chip === 'charge' ? (f * dt) % 1.1 < 0.1 : true;  // 環繞：按 2.2 秒放 0.3 秒；蓄力：每 1.1 秒點一下（停火 1 秒蓄滿）
     p.wantFire = want;
-    G.time += dt; p.tickFire(dt, want);
+    G.time += dt; p.tickAlt(dt); p.tickFire(dt, want);  // tickAlt：武器每幀的事（熱度、無人機；不按右鍵）
     G.updateEnemies(dt); G.updateBullets(dt); G.updateEnemyBullets(dt);
   }
   if (isKill(sc)) return es.filter(e => e.dead || e.hp <= 0).length;

@@ -1,7 +1,7 @@
 'use strict';
 const { loadGame } = require('./load_game');
 const T = loadGame();
-const { Game, Net, Player, SHIPS, render } = T;
+const { Game, Net, NetView, Player, SHIPS, render } = T;
 const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode = 1; } else console.log('ok  ', m); };
 
 // ---- 房主：假連線，攔截送出的訊息 ----
@@ -11,7 +11,7 @@ Net.role = 'host'; Net.linked = true; Net.resetStats();
 const q2 = { conn: { open: true, send: m => sent.push(JSON.parse(JSON.stringify(m))), close() {} }, slot: 2, linked: true, inRoom: true, cleared: [] };
 Net.peers = [q2]; Net.refreshPeers();
 Net.myPick = { ship: 'bulwark', weapon: 'plasma', chip: 'amp' }; q2.pick = Net.cleanPick({ ship: 'wraith', weapon: 'railgun', chip: 'weapon' }); Net.startHost(); const packedMap = Net.packMap(Game.map), mapBoss = Game.bossId; Game.startCombat({ sandbox: true, level: 0 });
-assert(Game.inventory[0] === 'amp' && Game.chain[1] === null && Game.mates[0].L.chain[1] === null && Game.mates[0].L.inventory[0] === null, 'start chips: host amp (component -> inventory), mate invalid chip rejected');
+assert(Game.socks[0] && Game.socks[0][0] === 'amp' && Game.inventory[0] === null && Game.chain[1] === null && Game.mates[0].L.chain[1] === null && Game.mates[0].L.inventory[0] === null, 'start chips: host amp (component -> weapon socket), mate invalid chip rejected');
 assert(Game.state === 'play' && Game.mode === 'coop', 'host started coop combat');
 assert(Game.mates[0] && Game.mates[0].L.weapon.id === 'railgun' && Game.weapon.id === 'plasma', 'separate loadouts');
 assert(sent.some(m => m.t === 'start' && m.ship === 'bulwark'), 'start message sent');
@@ -30,7 +30,7 @@ for (let i = 0; i < 300 * 60 && !(Game.combat.wave >= 2 && i >= 60 * 60); i++) {
   mateBullets = Math.max(mateBullets, Game.bullets.filter(b => b.owner).length);
   for (const m of sent) if (m.t === 's') {
     maxBytes = Math.max(maxBytes, JSON.stringify(m).length);
-    if (m.pal && m.pal.length >= 1 && m.b.some(b => b[6] === 'rail')) railSnap = true;
+    if (m.pal && m.pal.length >= 1 && m.b.some(b => b[7] === 'rail')) railSnap = true;
   }
   if (sent.length > 50) sent = sent.slice(-5);
 }
@@ -104,7 +104,7 @@ assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.r
   assert(h && !h.ahead && b1 && b1.ahead === h && b2 && b2.ahead === b1, `client links worm segments (${b1 && b1.ahead ? b1.ahead.id : '-'}, ${b2 && b2.ahead ? b2.ahead.id : '-'})`);
 }
 const rows = Net.teamRows(); assert(rows[1].me && rows[1].dmg > 0 && rows[0].dmg === 0, 'team rows: 2P is me with damage');
-assert(Net.teamSummaryHtml().includes('多人傷害結算'), 'team summary html');
+assert(NetView.teamSummaryHtml().includes('多人傷害結算'), 'team summary html');
 assert(sent.some(m => m.t === 'i'), 'client sends input');
 const rec = Net.buildRecord('dead'); assert(rec.coop && rec.coop.role === '隊友' && String(rec.chain[1]).startsWith('迴旋'), 'coop record built: ' + JSON.stringify(rec.coop).slice(0, 160));
 // 結束訊息帶擊毀原因；回到房間

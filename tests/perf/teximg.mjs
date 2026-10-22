@@ -15,9 +15,10 @@
 //     平均剛好等於底色（跟 gl_hub.js 的 HUB_FLOOR 同一個顏色），強度 0 = 純底色、1 = 原圖的明暗差
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
+import { CHROME } from './paths.mjs';
 const [mode, ...a] = process.argv.slice(2);
 const url = f => `data:image/${f.split('.').pop().toLowerCase() === 'jpg' ? 'jpeg' : 'png'};base64,` + fs.readFileSync(f).toString('base64');
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new' });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
 const p = await b.newPage();
 const run = (fn, ...args) => p.evaluate(fn, ...args);
 // 在頁面裡：載入圖 → 畫到畫布 → 回傳 PNG 的 base64

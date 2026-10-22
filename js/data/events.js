@@ -16,7 +16,7 @@ const leaveOpt = (lab, msg) => ({ lab, txt: () => lab, go: () => msg });
 const chanceTxt = v => `🎲 ${pctTxt(v)}`;
 // 下一場變難的說明（CFG.EVENT.sos 的一種）：敵人 +x%、打贏的獎勵
 const sosTxt = k => { const S = CFG.EVENT.sos[k];
-  return `下一場戰鬥（一般戰鬥或精英戰）敵人 +${pctTxt(S.mul - 1)}${S.bonus ? `，打贏的三選一保證 ${CFG.BONUS[S.bonus].rare} 格稀有` : ''}${S.again ? `，打贏後多一次三選一` : ''}`; };
+  return `下一場戰鬥（一般戰鬥或精英戰）敵人 +${pctTxt(S.mul - 1)}${S.bonus ? `，打贏後多 ${CFG.BONUS[S.bonus].again} 次三選一` : ''}${S.again ? `，打贏後多一次三選一` : ''}`; };
 const hoardIds = node => String(node.evArg || '').split('|').filter(Boolean);  // 星圖情報可以標的寶藏星域（第一個 = 解讀座標標的那個）
 const EVENTS = {
   wreck: {
@@ -26,9 +26,9 @@ const EVENTS = {
       { lab: '搜刮', txt: G => `搜刮貨艙：HP −${G.evHp(CFG.EVENT.wreck.hp)}（最大 HP 的 ${pctTxt(CFG.EVENT.wreck.hp)}，最少留 1 HP），晶片三選一`,
         go: G => { G.evHurt(CFG.EVENT.wreck.hp); G.openReward('event', { note: '漂流殘骸的貨艙' }); return true; } },
       { lab: '拆反應爐', txt: G => { const C = CFG.EVENT.wreck.core;
-          return `${chanceTxt(C.chance)} 強行拆反應爐：成功 → 三選一保證 ${C.rare} 格稀有；失敗 → 爆炸 HP −${G.evHp(C.hp)}（最大 HP 的 ${pctTxt(C.hp)}，最少留 1 HP），什麼都沒拿到`; },
+          return `${chanceTxt(C.chance)} 強行拆反應爐：成功 → 三選一 ${1 + C.again} 次；失敗 → 爆炸 HP −${G.evHp(C.hp)}（最大 HP 的 ${pctTxt(C.hp)}，最少留 1 HP），什麼都沒拿到`; },
         go: G => { const C = CFG.EVENT.wreck.core;
-          if (Math.random() < C.chance) return { msg: '✦ 拆到了！完好的核心晶片', color: '#ffd166', then: G => { G.openReward('event', { rareAdd: C.rare, note: '反應爐的核心晶片' }); return true; } };
+          if (Math.random() < C.chance) return { msg: '✦ 拆到了！完好的核心晶片', color: '#ffd166', then: G => { G.openReward('event', { again: C.again, note: '反應爐的核心晶片' }); return true; } };
           const hp = G.evHurt(C.hp);
           return { msg: `💥 反應爐爆炸！HP −${hp}`, color: '#ff4d6d' }; } },
       leaveOpt('不冒險，離開', '你沒有靠近殘骸'),
@@ -38,22 +38,22 @@ const EVENTS = {
     name: '黑市商人', icon: '⚖', color: '#ff9f1c',
     text: () => '一艘沒有識別碼的貨船靠過來：「改造晶片、走私零件、還有幾個連我都不知道裝了什麼的包裹。改造晶片要拆掉你一點裝甲，其他的付錢就行。」',
     opts: [
-      { lab: '改造晶片', txt: G => `改造晶片：◆${G.shopPrice(CFG.EVENT.market.price)}，這一局最大 HP −${pctTxt(CFG.EVENT.market.hpCut)}；三選一保證 ${CFG.EVENT.market.rare} 格稀有`,
+      { lab: '改造晶片', txt: G => `改造晶片：◆${G.shopPrice(CFG.EVENT.market.price)}，這一局最大 HP −${pctTxt(CFG.EVENT.market.hpCut)}；三選一 ${1 + CFG.EVENT.market.again} 次`,
         can: G => G.credits >= G.shopPrice(CFG.EVENT.market.price),
-        go: G => G.pay(G.shopPrice(CFG.EVENT.market.price), () => { G.boons.hp++; G.recalc(); G.openReward('event', { rareAdd: CFG.EVENT.market.rare, note: '黑市的改造晶片' }); }) },
+        go: G => G.pay(G.shopPrice(CFG.EVENT.market.price), () => { G.boons.hp++; G.recalc(); G.openReward('event', { again: CFG.EVENT.market.again, note: '黑市的改造晶片' }); }) },
       { lab: '走私零件', txt: G => `走私零件：◆${G.shopPrice(CFG.EVENT.market.part)}，零件三選一（佔 1 個零件格）${partsUsed(G.parts) < G.partSlots ? '' : '——零件格已滿'}`,
         can: G => G.credits >= G.shopPrice(CFG.EVENT.market.part) && partsUsed(G.parts) < G.partSlots,
         go: G => G.pay(G.shopPrice(CFG.EVENT.market.part), () => { G.openReward('eventPart', { note: '黑市的走私零件' }); }) },
       { lab: '神祕包裹', txt: G => { const B = CFG.EVENT.market.box;
-          return `🎲 神祕包裹：◆${G.shopPrice(B.price)}，直接拿到一個晶片：${pctTxt(B.rare)} 稀有、${pctTxt(B.chip)} 一般、${pctTxt(1 - B.rare - B.chip)} 空包${G.inventory.includes(null) ? '' : '——倉庫已滿'}`; },
+          return `🎲 神祕包裹：◆${G.shopPrice(B.price)}，${pctTxt(B.chip)} 直接拿到一個晶片、${pctTxt(1 - B.chip)} 空包${G.inventory.includes(null) ? '' : '——倉庫已滿'}`; },
         can: G => G.credits >= G.shopPrice(CFG.EVENT.market.box.price) && G.inventory.includes(null),
         go: G => { const B = CFG.EVENT.market.box;
           G.pay(G.shopPrice(B.price), () => {});
-          const r = Math.random(), pool = G.chipOffers(), play = pool.filter(hasLv);
-          if (r >= B.rare + B.chip || !pool.length) return { msg: '📦 空包……只有一堆填充泡棉', color: '#8fa3d9' };
-          const id = r < B.rare && play.length ? newChip(pick(play), null, rollRare()) : newChip(pick(pool));  // 稀有：身上沒有的玩法晶片＋詞條
+          const pool = G.chipOffers();
+          if (Math.random() >= B.chip || !pool.length) return { msg: '📦 空包……只有一堆填充泡棉', color: '#8fa3d9' };
+          const id = newChip(pick(pool));
           G.acquire(id);
-          return { msg: `${rareOf(id) ? '✦ 稀有晶片！' : '📦 '}${CHIPS[id].name}（放進倉庫）`, color: rareOf(id) ? '#ffd166' : '#cfe8ff' }; } },
+          return { msg: `📦 ${CHIPS[id].name}（放進倉庫）`, color: '#cfe8ff' }; } },
       leaveOpt('不交易，離開', '黑市商人消失在星塵裡'),
     ],
   },

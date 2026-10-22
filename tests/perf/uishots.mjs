@@ -1,9 +1,9 @@
 // 介面截圖：改裝廠（零件卡）、精英獎勵（模組卡）、電路編輯器的機體分頁 → art_lab/screenshots/介面_*.png
 //   用法：node perf/uishots.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 1500));

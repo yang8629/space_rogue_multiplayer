@@ -1,11 +1,11 @@
 // 裂界獵艦新舊畫面比較：舊畫面、新畫面（現在）、新畫面加幾種染色，各截一張放大圖，再拼成一張
 //   用法：node perf/boss2cmp.mjs   （染色只在頁面上試：包住 GLActors.enemy/spr，不改遊戲檔案）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const CASES = [['canvas', 0, '舊畫面'], ['gl', 0, '新畫面 現在'], ['gl', 0xdcd6ec, '染色 dcd6ec（淺）'], ['gl', 0xcdc6e0, '染色 cdc6e0（建議）'], ['gl', 0xbfb8d6, '染色 bfb8d6（深）']];
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 const wait = ms => new Promise(r => setTimeout(r, ms));

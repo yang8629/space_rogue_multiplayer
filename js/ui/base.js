@@ -7,13 +7,12 @@
 // 門後的面板：每個面板顯示哪幾類解鎖（「新」標記照這個算）；launch = 發射台
 const BASE_PANELS = [
   { id: 'armory', label: '⚔ 軍械庫', kinds: ['weapon'] },
-  { id: 'chips', label: '◈ 晶片庫', kinds: ['play', 'comp', 'trigger'] },
+  { id: 'chips', label: '◈ 晶片庫', kinds: ['play', 'comp'] },
   { id: 'stats', label: '🏆 戰績', kinds: [] },
   { id: 'launch', label: '🚀 發射台', kinds: [] },
 ];
 
 Object.assign(Screen, {
-  hubOn: false,  // 基地畫面（沒有面板）：飛船可以動
 
   // 進基地；tab = 直接打開哪個面板（結算畫面的「回基地看」）
   title(tab = null) {
@@ -43,14 +42,14 @@ Object.assign(Screen, {
       <div id="hubInfo" class="hub-info"></div>
     </div>`);
     this.el.classList.add('hub');
-    this.hubOn = true;
+    Hub.setDriving(true);
     this.hubInfo(Hub.near);
     this.checkVersion();
     Game.unlockFresh = [];  // 新達成的解鎖只顯示一次
   },
   // 多人房間列：房號（📋 複製）、章節（房主在發射台選）、每個人（號碼色，✓ = 準備好了，後面是他到房主的延遲；房主自己不寫）
   roomBar() {
-    const who = Net.roomList().map(([s, r, me]) => `<b style="color:${Game.slotColor(s)}"${me ? ' class="me" title="你"' : ''}>${s}P</b>${r ? '<span class="ok">✓</span>' : '<span class="ty">…</span>'}<span class="ty" data-pslot="${s}">${Net.pingTag(s)}</span>`).join('　');
+    const who = Net.roomList().map(([s, r, me]) => `<b style="color:${Game.slotColor(s)}"${me ? ' class="me" title="你"' : ''}>${s}P</b>${r ? '<span class="ok">✓</span>' : '<span class="ty">…</span>'}<span class="ty" data-pslot="${s}">${NetView.pingTag(s)}</span>`).join('　');
     const alone = Net.role === 'host' && !Net.peers.some(q => q.linked);
     return `<div class="ulk-fresh hub-coop">👥 房號 <b class="code">${Net.code}</b><button data-act="copycode" title="複製房號，貼給朋友">📋 複製</button>　${chapterById(Net.chapter).name.split('　')[0]}　${alone ? '<span class="ty">把房號告訴朋友，等隊友加入…</span>' : who}
       <button data-act="title">離開</button></div>`;
@@ -58,7 +57,7 @@ Object.assign(Screen, {
   // 靠近的東西的說明卡（hubNear 事件）：停機坪 = 飛船的能力、數值（沒解鎖 = 條件和進度），門、發射台、終端機 = 按 E 做什麼
   hubInfo(z) {
     if (z && z.kind === 'pad' && isUnlocked('ship', z.ship)) unlockMarkSeen([unlockEntry('ship', z.ship)].filter(Boolean));  // 靠近解鎖的飛船 = 看過
-    const el = this.hubOn && typeof document !== 'undefined' && document.getElementById('hubInfo');
+    const el = Hub.driving && typeof document !== 'undefined' && document.getElementById('hubInfo');
     if (!el) return;
     if (!z) { el.innerHTML = ''; el.classList.remove('on'); return; }
     let body = '';

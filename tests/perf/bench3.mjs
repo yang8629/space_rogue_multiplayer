@@ -1,9 +1,9 @@
 // （2026-10-05，原本在暫存資料夾；要先 npm i puppeteer-core，用電腦上的 Chrome）
 // 瀏覽器實測：照 QA 第 195 局的配裝（散彈 A＋迴旋風暴［鏡像］等）在沙盒打標靶，每秒記錄 FPS、子彈數、運算／畫圖時間
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const url = GAME + 'index.html';
-const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false,
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: false,
   defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 const page = await browser.newPage();
 page.on('pageerror', e => console.log('頁面錯誤', e.message));

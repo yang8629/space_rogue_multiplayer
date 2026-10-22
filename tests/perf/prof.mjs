@@ -1,9 +1,9 @@
 // （2026-10-05，原本在暫存資料夾；要先 npm i puppeteer-core，用電腦上的 Chrome）
 // Chrome 效能分析：迴旋風暴配裝打 12 秒，列出最花時間的函式（自己的時間）
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const url = GAME + 'index.html';
-const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false,
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: false,
   defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 const page = await browser.newPage();
 await page.goto(url);

@@ -1,8 +1,8 @@
 // 寶藏無人機截圖：出場（橫幅＋逃跑中）、特寫、打掉（金色爆炸＋橫幅）、戰鬥結束的三選一（保證稀有）
 //   用法：node perf/treasureshot.mjs   → art_lab/screenshots/寶藏_出場.png、寶藏_特寫.png、寶藏_到手.png、寶藏_三選一.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 p.on('console', m => { if (m.type() === 'error') console.log('console', m.text()); });

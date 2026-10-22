@@ -48,29 +48,6 @@ const GLWorld = {
       this.gObj.circle(z.x, z.y, z.r).stroke({ width: 3, color: 0xff2a2a, alpha: 0.5 + 0.4 * Math.sin(G.time * 20) ** 2 });
       this.gObj.circle(z.x, z.y, z.r * k).fill({ color: 0xff2a2a, alpha: 0.18 + 0.2 * k });
     }
-    for (const z of G.flames) {  // 火毯（散彈升級）：地上的火，外圈橘、中心黃，快燒完時變淡（加法發光）
-      const k = Math.min(1, Math.max(0, z.t) / z.max * 2), fl = 0.85 + 0.15 * Math.sin(G.time * 18 + z.x * 0.07);
-      this.gAdd.circle(z.x, z.y, z.r * fl).fill({ color: 0xff6a1c, alpha: 0.22 * k });
-      this.gAdd.circle(z.x, z.y, z.r * 0.5 * fl).fill({ color: 0xffd166, alpha: 0.28 * k });
-    }
-    for (const L of G.trails) {  // 殘留彈道（軌道升級）：電軌，外層黃光、中間白芯，快消失時變淡、一閃一閃
-      const k = Math.min(1, Math.max(0, L.t) / L.max * 2), fl = 0.75 + 0.25 * Math.sin(G.time * 40 + L.x1 * 0.05);
-      this.gAdd.moveTo(L.x1, L.y1).lineTo(L.x2, L.y2).stroke({ width: 6, color: 0xffd166, alpha: 0.35 * k * fl });
-      this.gAdd.moveTo(L.x1, L.y1).lineTo(L.x2, L.y2).stroke({ width: 2, color: 0xfff6d8, alpha: 0.8 * k * fl });
-    }
-    if (G.links.length) {  // 共鳴（電漿升級）：連結中的敵人之間畫淡紫色的線，快斷時變淡（隊友那邊只有敵人 id）
-      const byId = G.links.some(L => L.ids) ? new Map(G.enemies.map(e => [e.id, e])) : null;
-      for (const L of G.links) {
-        const es = (L.es || L.ids.map(id => byId.get(id))).filter(e => e && !e.dead && (!L.es || e.link === L));
-        const a = 0.25 + 0.35 * Math.min(1, L.t / 0.6);
-        for (let i = 1; i < es.length; i++) this.gAdd.moveTo(es[0].x, es[0].y).lineTo(es[i].x, es[i].y).stroke({ width: 2, color: 0xc77dff, alpha: a });
-      }
-    }
-    for (const q of G.quakes) {  // 餘震（電漿升級）：外圈固定，裡面的圈往內縮，縮完就炸
-      const k = Math.max(0, q.t) / q.max;
-      this.gAdd.circle(q.x, q.y, q.r).stroke({ width: 1.5, color: 0xc77dff, alpha: 0.35 });
-      this.gAdd.circle(q.x, q.y, q.r * k).stroke({ width: 3, color: 0xe0b3ff, alpha: 0.4 + 0.5 * (1 - k) });
-    }
     // 晶體：青白色光暈（呼吸）＋冰晶（輕輕上下浮）＋不定時閃一下白光；每顆照 id 錯開（冷色：敵人大多是暖色，分裂體、碎裂體是橘金色）
     const pt = GLR.T('pickup'), pr = GLR.res('pickup'), gt = GLR.T('glow'), gr = GLR.res('glow'), st = GLR.T('pickup_spark'), sr = GLR.res('pickup_spark'), t = G.time;
     const put = (tex, x, y, sc, blend, alpha, tint = 0xffffff, rot = 0) => { const s = GLR.sprite(this.pPick, tex); s.position.set(x, y); s.scale.set(sc); s.blendMode = blend; s.alpha = alpha; s.tint = tint; s.rotation = rot; };
@@ -233,7 +210,7 @@ const GLWorld = {
     for (const [o, H] of this.holes) if (!seen.has(o)) { H.c.destroy({ children: true }); this.holes.delete(o); }
     for (const q of G.portals) this.portal(gO, q.ax, q.ay, q.bx, q.by, q.color, Math.min(1, q.t * 2), t);  // 星門
   },
-  // 一對星門：兩個圈＋裡面轉的弧，中間一條淡線（基地的衝刺效果也用：Hub.dfx）
+  // 一對星門：兩個圈＋裡面轉的弧，中間一條淡線
   portal(g, ax, ay, bx, by, color, a, t) {
     const col = glColor(color);
     for (const [x, y] of [[ax, ay], [bx, by]]) { g.circle(x, y, 22).stroke({ width: 3, color: col, alpha: a }); glArc(g, x, y, 14, t * 4, t * 4 + 4); g.stroke({ width: 1.5, color: col, alpha: a }); }

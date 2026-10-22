@@ -1,9 +1,9 @@
 // ？事件節點截圖：航圖（？節點、寶藏星域金框）、事件畫面（黑市 4 個選項、拆反應爐的揭曉）、戰鬥開場（寶藏星域＋追兵橫幅、終焉護殼的血條金框）
 //   用法：node perf/eventshot.mjs
 //   → art_lab/screenshots/事件_航圖.png、事件_黑市.png、事件_揭曉.png、事件_星圖情報.png、事件_寶藏星域開場.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 p.on('console', m => { if (m.type() === 'error') console.log('console', m.text()); });

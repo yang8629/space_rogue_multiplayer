@@ -40,11 +40,13 @@ function frame(now) {
   TouchUI.sync();
   Music.update();
   Net.tick(dt);
-  const gdt = Game.mode === 'range' && Range.slow ? dt * Range.SLOW : dt;  // 靶場慢動作
+  let gdt = Game.mode === 'range' && Range.slow ? dt * Range.SLOW : dt;  // 靶場慢動作
+  if (Game.hitstopT > 0) { Game.hitstopT -= dt; gdt *= PARRY.stopScale; }  // 頓幀（能量刃彈反成功）
   Game.update(gdt);
-  if (Hub.shown() && (Hub.seq || (Screen.hubOn && !Codex.isOpen))) Hub.update(dt);  // 基地：開著飛船走（開了面板、總覽就停；出發動畫照播）
+  if (Hub.shown() && (Hub.seq || (Hub.driving && !Codex.isOpen))) Hub.update(dt);  // 基地：開著飛船走（開了面板、總覽就停；出發動畫照播）
   if (Game.mode === 'range' && Game.state === 'play') Range.tick(gdt);  // 靶場「擋彈」：標靶射彈幕
-  Range.syncBar();  // 靶場按鈕列（只在靶場戰鬥中顯示）
+  RangeBar.sync();  // 靶場按鈕列（只在靶場戰鬥中顯示）
+  NetView.tick();  // 多人的倒數數字（重連、投票、出發）
   render();
   requestAnimationFrame(frame);
 }

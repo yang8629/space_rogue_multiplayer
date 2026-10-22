@@ -1,9 +1,9 @@
 // 軌道砲新終極升級的畫面截圖（2026-10-09）：碎甲（敵人身上的紅色準星）、導電（連鎖電弧）、靜電（左上小條，繞圈移動充電）
 //   用法：node perf/railshot.mjs <輸出資料夾>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const dir = process.argv[2], url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));

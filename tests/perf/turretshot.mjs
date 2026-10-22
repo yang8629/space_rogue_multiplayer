@@ -1,10 +1,10 @@
 // 哨兵號・砲台的截圖 → art_lab/screenshots/
 //   選飛船畫面（5 艘）、衝刺後留下的砲台朝敵人開火
 //   用法：node perf/turretshot.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 p.on('console', m => { if (m.type() === 'error') console.log('console', m.text().slice(0, 200)); });

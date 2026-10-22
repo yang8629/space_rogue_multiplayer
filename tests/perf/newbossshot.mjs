@@ -1,9 +1,9 @@
 // 章節專屬王的截圖：真的開一場王戰（雙子獵艦、星環守門者），飛船無敵、不開火，等幾秒讓招式出來
 //   守門者等到光束開著時拍；另外各拍一張美術放大圖（tools/art 的畫法）
 //   用法：node perf/newbossshot.mjs   → art_lab/screenshots/王_雙子獵艦.png、王_星環守門者.png、王_美術.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

@@ -1,8 +1,8 @@
 // 戰鬥中的變化截圖：蟲潮（橫幅、成群湧過來）、精英亂入（橫幅＋精英血條）、寶藏無人機快逃走（閃）
 //   用法：node perf/waveeventshot.mjs   → art_lab/screenshots/蟲潮_橫幅.png、蟲潮_湧過來.png、精英亂入.png、寶藏_快逃走.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 p.on('console', m => { if (m.type() === 'error') console.log('console', m.text()); });

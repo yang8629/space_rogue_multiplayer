@@ -10,7 +10,7 @@ const T_ = require('./load_game').loadGame();
 const G = T_.Game, CH = T_.CHIPS;
 G.simFast = true;  // 模擬：不等給人看的時間（區域肅清 1.6 秒）
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
-const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃' };
+const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃', drone: '蜂群' };
 const WPN = arg('w') ? arg('w').split(',') : Object.keys(WN);
 const N = +(arg('n') || 20), dt = 1 / 60;
 const SHIP = arg('ship') || null;
@@ -141,6 +141,7 @@ function oneRun(w, s) {
       (log.secT = log.secT || []).push(G.runStats.time);  // 打完這個星區時累計的戰鬥秒數（算每星區多久）
       G.nextSector(); log.sector = G.sector; equip();  // 旗艦送的插槽馬上補上
     } else if (st === 'dead') {
+      log.killer = G.lastHit || '不明';  // 死亡畫面的「擊毀原因」：一般戰死因（旗艦戰細節看 --bossdiag）
       if (process.env.RS_WATCH) console.error(`死 ${G.sector}-${G.node ? G.node.L + 1 : 0} DPS估 ${Math.round(G.stats.dpsEst)} 電路 ${G.chain.map((id, i) => (id || '空') + (G.stats.info && G.stats.info[i].idle ? '(✗)' : '') + ((G.socks || [])[i] && G.socks[i].length ? '[' + G.socks[i].join('+') + ']' : '')).join(',')} 倉庫 ${G.inventory.filter(Boolean).join(',')} 武器 ${G.weapon.path || '-'}${G.weapon.final ?? ''} 受傷 ${JSON.stringify(Object.fromEntries(Object.entries(G.runStats.taken || {}).map(([k, v]) => [k, Math.round(v)])))}`);
       break;
     }
@@ -209,7 +210,7 @@ if (arg('replay')) {
 console.log(`整局模擬：${N} 局 × 每把武器（飛船隨機、起始晶片隨機）。電腦是熟練玩家`);
 const all = { runs: 0, won: 0, dieAt: {} };
 for (const w of WPN) {
-  let won = 0, stuck = 0; const dieAt = {}; const reach = []; const byPath = {}, byCode = {}, wonT = [];  // wonT：通關局的 [總戰鬥秒數, 每星區秒數]  // byPath：武器升級路線 → [通關, 局數, 升滿局數]；byCode 同樣、用代號（A0）存檔，多一格「死在第一星區的局數」
+  let won = 0, stuck = 0; const dieAt = {}, killers = {}; const reach = []; const byPath = {}, byCode = {}, wonT = [];  // wonT：通關局的 [總戰鬥秒數, 每星區秒數]  // byPath：武器升級路線 → [通關, 局數, 升滿局數]；byCode 同樣、用代號（A0）存檔，多一格「死在第一星區的局數」
   for (let s = 0; s < N; s++) {
     if (GAME != null && s !== GAME) continue;
     if (s < FROM) continue;
@@ -221,12 +222,14 @@ for (const w of WPN) {
     reach.push(r.won ? 22 : (r.sector - 1) * 7 + r.layer);  // 打到第幾個節點（1～21；通關 = 22）
     if (r.build) { const k = r.build.route || (r.build.path + (r.build.final ? '→' + r.build.final : '')), g = byPath[k] = byPath[k] || [0, 0, 0]; g[1]++; if (r.won) g[0]++; if (r.build.done) g[2]++; if (r.build.code) { const c = byCode[r.build.code] = byCode[r.build.code] || [0, 0, 0]; c[1]++; if (r.won) c[0]++; if (r.build.done) c[2]++; c[3] = (c[3] || 0) + (!r.won && r.sector === 1 ? 1 : 0); } }
     if (r.won) { const c = [...(r.secT || []), r.time]; wonT.push([r.time, c.map((v, i) => v - (c[i - 1] || 0))]); }
-    if (r.won) { won++; (all.endlessReach = all.endlessReach || []).push(r.sector); } else { const k = `${r.sector}-${r.layer}`; dieAt[k] = (dieAt[k] || 0) + 1; all.dieAt[k] = (all.dieAt[k] || 0) + 1; }
+    if (r.won) { won++; (all.endlessReach = all.endlessReach || []).push(r.sector); } else { const k = `${r.sector}-${r.layer}`; dieAt[k] = (dieAt[k] || 0) + 1; killers[r.killer] = (killers[r.killer] || 0) + 1; all.dieAt[k] = (all.dieAt[k] || 0) + 1; }
   }
   all.runs += RUNS - stuck; all.won += won;
   (all.surv = all.surv || {})[WN[w]] = Array.from({ length: 22 }, (_, k) => Math.round(reach.filter(v => v > k).length / Math.max(1, reach.length) * 100));
   const top = Object.entries(dieAt).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k}×${v}`).join('、');
   console.log(`${WN[w].padEnd(4)} 通關 ${String(Math.round(won / Math.max(1, RUNS - stuck) * 100)).padStart(3)}%${stuck ? `（${stuck} 局卡住不算）` : ''}　死在（星區-層）：${top || '—'}`);
+  const kt = Object.entries(killers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k}×${v}`).join('、');
+  if (kt) console.log(`    擊毀原因：${kt}`);
   if (wonT.length) { const avg = a => a.reduce((x, y) => x + y, 0) / a.length, m = v => (v / 60).toFixed(1), tt = wonT.map(q => q[0]).sort((x, y) => x - y);
     console.log(`    通關局的戰鬥時間（${wonT.length} 局，只算戰鬥）：平均 ${m(avg(tt))} 分（${m(tt[0])}～${m(tt[tt.length - 1])}）｜每星區平均 ${wonT[0][1].map((_, i) => m(avg(wonT.map(q => q[1][i] || 0)))).join('／')} 分`); }
   // 按武器升級路線分組（最後的升級；局數少的組別參考就好）

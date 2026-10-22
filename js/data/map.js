@@ -14,16 +14,15 @@ const NODE_META = {
   shop:   { label: '補給站', icon: '◆', color: '#2ee6a6',
     desc: () => `買晶片、補血（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）、電路擴充（◆${Game.shopPrice(CFG.SHOP_SLOT)}）。不賣武器升級。價格隨星區上漲（第 2 星區 ×${+(1 + CFG.SHOP_PRICE_UP).toFixed(2)}、第 3 星區 ×${+(1 + 4 * CFG.SHOP_PRICE_UP).toFixed(2)}）。` },
   repair: { label: '維修站', icon: '✚', color: '#9dff6b', desc: () => `修復 ${CFG.REPAIR_RATIO * 100}% 最大 HP。` },
-  blackhole: { label: '奇異點', icon: '◐', color: '#b388ff', desc: () => `投入 1 個晶片：隨機一個還沒強化過的電路格（武器格也可能）得到一個屬性（好結果 70%～90%，看晶片等級；也可能是壞的）。也可以不投入直接離開。一條路線最多一個黑洞。` },
   armory: { label: '軍械台', icon: '⚒', color: '#ff9f1c', desc: () => `武器升級（每張圖只有 1 個）。武器升滿後改選「插槽 +1」或 ◆${CFG.ARMORY_BONUS.credits}＋HP ${CFG.ARMORY_BONUS.hp}。` },
   event:  { label: '事件', icon: '?', color: '#f4a6ff', desc: () => `隨機事件，進去才知道是哪一種：${EVENT_IDS.map(k => EVENTS[k].name).join('、')}。大多是用血量、晶體或風險換晶片和好處，也可以直接離開。每張圖 ${CFG.EVENT.count[0]}～${CFG.EVENT.count[1]} 個（通常 2 個，在第 2～5 層）。` },
   boss:   { fight: true, label: '旗艦', icon: '♛', color: '#ff4d6d', desc: () => '守關旗艦（戰場可能有行星、小行星帶、彗星；旗艦的子彈會削掉行星、打碎小行星）。勝利後 ◆50，電路插槽 +1／零件格 +1 二選一；進入下一關時修復 30% HP。' },
 };
 
 // 生成後檢查保底條件，不符合就重新生成（保底規則之間可能互相覆蓋）
-//   精英、黑洞、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
-//   每個精英的下一步至少有一條路通維修站；黑洞之後的路上走得到維修站；
-//   任何一條路線最多經過一個黑洞；維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
+//   精英、補給站至少各一；軍械台整張圖剛好一個（第 2～5 層）；
+//   每個精英的下一步至少有一條路通維修站；
+//   維修站、補給站都不會連著出現（沒有「維修站 → 維修站」「補給站 → 補給站」）；
 //   ？事件至少 CFG.EVENT.count[0] 個（第 2～5 層）；
 //   每條路線到旗艦前至少打 3 場（戰鬥或精英）；旗艦前一層至少一個補給站、一個維修站；
 //   同一個分岔的選項不重複：不會兩個都是同一種重要房間，也不會兩個選項一模一樣（同種、接到同樣的下一步）
@@ -49,14 +48,12 @@ function fewestFights(m, byId) {
 function mapOk(m) {
   const has = (from, to, type) => m.slice(from, to).flat().some(n => n.type === type);
   const all = m.flat(), byId = id => all.find(n => n.id === id);
-  const armories = all.filter(n => n.type === 'armory'), holes = all.filter(n => n.type === 'blackhole');
+  const armories = all.filter(n => n.type === 'armory');
   const pre = m[m.length - 2];
-  return has(2, 4, 'elite') && has(2, 4, 'blackhole') && has(1, 5, 'shop') && has(1, 5, 'workshop') && all.filter(n => n.type === 'event').length >= CFG.EVENT.count[0] &&
+  return has(2, 4, 'elite') && has(1, 5, 'shop') && has(1, 5, 'workshop') && all.filter(n => n.type === 'event').length >= CFG.EVENT.count[0] &&
     pre.some(n => n.type === 'shop') && pre.some(n => n.type === 'repair') && fewestFights(m, byId) >= 3 &&
     armories.length === 1 && armories[0].L >= 1 && armories[0].L <= 4 &&
     all.filter(n => NEED_REPAIR_AFTER.includes(n.type)).every(n => n.next.some(id => byId(id).type === 'repair')) &&
-    holes.every(h => descendants(h, byId).some(d => d.type === 'repair')) &&
-    holes.every(h => !descendants(h, byId).some(d => d.type === 'blackhole')) &&
     !all.some(n => ['repair', 'shop'].includes(n.type) && n.next.some(id => byId(id).type === n.type)) &&
     !all.some(n => branchDup(n.next.map(byId))) && !branchDup(m[0]);
 }
@@ -100,9 +97,9 @@ function genMapOnce() {
   }
   for (let L = 2; L < LAYERS - 2; L++) for (const nd of layers[L]) {
     const r = Math.random();
-    nd.type = r < 0.2 ? 'elite' : r < 0.3 ? 'shop' : r < 0.38 ? 'repair' : r < 0.48 ? 'blackhole' : r < 0.58 ? 'workshop' : 'combat';
-    // 精英、黑洞只放第 3～4 層（精英後面要接維修站；黑洞之後的路上要有維修站）
-    if (['elite', 'blackhole'].includes(nd.type) && L > 3) nd.type = 'combat';
+    nd.type = r < 0.2 ? 'elite' : r < 0.3 ? 'shop' : r < 0.38 ? 'repair' : r >= 0.48 && r < 0.58 ? 'workshop' : 'combat';  // 0.38～0.48 原本是奇異點（10-21 拿掉，等重新設計）
+    // 精英只放第 3～4 層（精英後面要接維修站）
+    if (nd.type === 'elite' && L > 3) nd.type = 'combat';
   }
   if (Math.random() < 0.5) pick(layers[1]).type = 'shop';
   // 保底：優先把「戰鬥」節點改成缺少的類型
@@ -112,7 +109,6 @@ function genMapOnce() {
     pick(cands.length ? cands : nodes).type = type;
   };
   ensure(layers.slice(2, 4).flat(), 'elite');
-  ensure(layers.slice(2, 4).flat(), 'blackhole');
   ensure(layers.slice(1, 5).flat(), 'shop');
   ensure(layers.slice(1, 5).flat(), 'workshop');
   // 軍械台整張圖只有一個，隨機放在第 2～5 層的戰鬥節點上
@@ -134,16 +130,6 @@ function genMapOnce() {
       link([...A].sort((x, y) => Math.abs(rel(x) - rel(b)) - Math.abs(rel(y) - rel(b)))[0], b);
   }
   const byId = id => layers.flat().find(n => n.id === id);
-  // 一條路線最多一個黑洞：黑洞後面走得到的其他黑洞改成戰鬥
-  for (const h of layers.flat().filter(n => n.type === 'blackhole'))
-    if (h.type === 'blackhole') for (const d of descendants(h, byId)) if (d.type === 'blackhole') d.type = 'combat';
-  // 黑洞之後：路上走得到維修站就好（旗艦前一層之後會放一個；走不到的話，把後面一個戰鬥節點改成維修站）
-  for (const h of layers.flat().filter(n => n.type === 'blackhole')) {
-    const ds = descendants(h, byId);
-    if (ds.some(d => d.type === 'repair' || d.L === LAYERS - 2)) continue;
-    const c = ds.find(d => d.type === 'combat');
-    if (c) c.type = 'repair';
-  }
   // 精英之後：下一步至少有一條路通維修站（優先把戰鬥節點改掉，其次補給站）
   for (const e of layers.flat().filter(n => NEED_REPAIR_AFTER.includes(n.type))) {
     const next = e.next.map(byId);
@@ -177,10 +163,10 @@ function genMapOnce() {
     if (c) c.type = type;
   }
   // 每條路線至少 3 場戰鬥：找出戰鬥最少的那條路，把路上可以改的節點改成戰鬥
-  //   （改裝廠、補給站、黑洞要留至少一個；精英後面必要的維修站不改）
+  //   （改裝廠、補給站要留至少一個；精英後面必要的維修站不改）
   const count = (type, from, to) => layers.slice(from, to).flat().filter(n => n.type === type).length;
   const spare = x => x.type === 'workshop' ? count('workshop', 1, 5) > 1 : x.type === 'shop' ? count('shop', 1, 5) > 1
-    : x.type === 'blackhole' ? count('blackhole', 2, 4) > 1 : x.type === 'repair' ? !needed(x) : false;
+    : x.type === 'repair' ? !needed(x) : false;
   for (let tries = 0; tries < 6; tries++) {
     const memo = {};
     const mf = n => n.type === 'boss' ? 0 : memo[n.id] != null ? memo[n.id]
@@ -194,7 +180,7 @@ function genMapOnce() {
     if (!c) break;
     c.type = 'combat';
   }
-  // ？事件：最後才放，第 2～5 層最多 count[1] 個：改戰鬥（改了每條路線還有 3 場以上才改）或多出來的補給站、改裝廠、維修站、奇異點（spare）
+  // ？事件：最後才放，第 2～5 層最多 count[1] 個：改戰鬥（改了每條路線還有 3 場以上才改）或多出來的補給站、改裝廠、維修站（spare）
   //   同一個分岔不放兩個事件
   const sibs = n => [n.L === 0 ? layers[0] : [], ...parentsOf(n).map(p => p.next.map(byId))];
   for (const c of pickN(layers.slice(1, 5).flat(), 99)) {

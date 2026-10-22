@@ -11,10 +11,7 @@ const STATS = {
   hp: { name: '最大 HP', good: 1 }, speed: { name: '移動速度', good: 1 }, dashCd: { name: '衝刺冷卻', good: -1 },
   taken: { name: '受到的傷害', good: -1 }, rate: { name: '射速', good: 1 }, bspeed: { name: '子彈速度', good: 1 }, slots: { name: '零件格', good: 1 }, cap: { name: '能量容量', good: 1 },
 };
-const statIcon = id => `<img class="si" src="assets/ui/stat_${id}.png" alt="${STATS[id].name}" title="${STATS[id].name}">`;
 const signed = (v, pct) => `${v > 0 ? '+' : '−'}${Math.abs(v)}${pct ? '%' : ''}`;
-// 一項效果：圖示＋數值，對玩家有利綠色、不利紅色（例：受到的傷害 +3% 紅、衝刺冷卻 −8% 綠）
-const statFx = ({ stat, v, pct }) => `<span class="sv ${v * STATS[stat].good > 0 ? 'good' : 'bad'}">${statIcon(stat)}${signed(v, pct)}</span>`;
 const statFxText = ({ stat, v, pct }) => `${STATS[stat].name} ${signed(v, pct)}`;  // 純文字（複製紀錄、滑鼠提示）
 // 疊 n 層的總效果：增加的百分比相加（+4% × 3 = +12%）；減少的百分比相乘（0.96² = −8%，疊再多也不會變成 0 或負的）；數值相加
 const fxTimes = (f, n) => ({ ...f, v: f.pct && f.v < 0 ? Math.round(((1 + f.v / 100) ** n - 1) * 100) : f.v * n });
@@ -45,11 +42,10 @@ const BALANCE = { id: 'balance', name: '均衡', desc: '5 種零件都至少 1 �
 const PART_SWAP_PRICE = 30;  // 改裝廠：把 1 層零件換成另一種
 
 // 機體數值：零件層數 → 倍率、特性
-// wp：目前的武器參數（玻璃砲自帶受到的傷害 +10%）
 // 疊法：同一項屬性「增加」的百分比全部相加，「減少」的各自相乘（疊再多也不會變成 0 或負的），最後 =（1 ＋ 增加的總和）× 減少的乘積
-//   rate＝1 ＋ 射速增加（開火時再加上疾風、急冷、裝甲供能、架設），rateMul＝射速減少；dashUp＝衝刺冷卻增加（最後乘進 dashCd）
+//   rate＝1 ＋ 射速增加（開火時再加上疾風、急冷、架設），rateMul＝射速減少；dashUp＝衝刺冷卻增加（最後乘進 dashCd）
 // boons：？事件拿到的這一局效果（Game.boons：黑市 hp 次、終焉護殼 taken 次）
-function mechStats(parts, wp, boons) {
+function mechStats(parts, boons) {
   const n = id => (parts && parts[id]) || 0;
   const T = {};
   for (const id of PART_IDS) { T[PARTS[id].t2.id] = n(id) >= 2; T[PARTS[id].t4.id] = n(id) >= 4; }
@@ -62,8 +58,6 @@ function mechStats(parts, wp, boons) {
   s.speed *= 1 + 0.06 * k * n('booster'); s.maxHp -= 10 * n('booster');
   s.cap += CFG.CAP_SINK * n('sink'); s.taken += 0.04 * n('sink');  // 散熱片：能量容量 +2（2026-10-10，以前射速 +6%）；受到的傷害：增加的都相加
   s.bspeed *= 1 + 0.08 * k * n('sensor'); s.dashUp += 0.05 * n('sensor');
-  if (wp && wp.glass) s.taken += wp.glass.self;  // 玻璃砲（相位刃升級）
-  if (wp && wp.weight) s.speed *= 1 - wp.weight.self;  // 重量砲（電漿升級）：自帶變慢
   if (boons) { s.hpMul *= Math.pow(1 - CFG.EVENT.market.hpCut, boons.hp || 0); s.taken += CFG.EVENT.ward.taken * (boons.taken || 0); }  // 減少的相乘、增加的相加
   s.dashCd *= 1 + s.dashUp;
   s.maxHp = Math.round(s.maxHp);
@@ -72,4 +66,3 @@ function mechStats(parts, wp, boons) {
 const partsUsed = parts => PART_IDS.reduce((a, id) => a + ((parts && parts[id]) || 0), 0);
 // 零件的一句話說明（卡片、編輯器用）
 // 每層的效果（圖示＋數值）；n：疊 n 層的總效果
-const partLine = (id, n = 1) => PARTS[id].fx.map(f => statFx(fxTimes(f, n))).join('');

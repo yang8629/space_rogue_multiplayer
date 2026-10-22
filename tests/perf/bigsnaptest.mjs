@@ -1,10 +1,10 @@
 // 很長的同步訊息（真的 PeerJS）：兩個 Chrome 進同一場戰鬥，房主在隊友身邊一次放 600 顆子彈（像散彈＋環繞放開那一刻）
 //   PeerJS json 模式一則 ≥16300 位元組會報錯、以前被當成隊友斷線；現在切段送（Net.put），隊友要照樣收到、還連著
 //   用法：node perf/bigsnaptest.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const launch = () => puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const launch = () => puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const [bA, bB] = await Promise.all([launch(), launch()]);
 const [A, B] = await Promise.all([bA.newPage(), bB.newPage()]);
 let fails = 0;

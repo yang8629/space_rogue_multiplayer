@@ -2,6 +2,19 @@
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
+// 武器的狀態小條（左上，右鍵冷卻條下面）：每把武器顯示什麼、什麼顏色（讀玩家身上的武器狀態；隊友那邊是房主同步來的，p.wN = 場上幾個飛輪／重力井）
+const WEAPON_HUD = {
+  laser: p => ({ label: p.hLock > 0 ? '過熱！' : `熱度 ${pct(p.hHeat || 0)}`, k: p.hLock > 0 ? 1 : p.hHeat || 0, color: p.hLock > 0 ? '#ff4d6d' : '#ff9f1c' }),
+  scatter: p => { const W = WEAPON_PLAY.scatter, M = W.max(), n = p.wN ?? W.count(p); return { label: `飛輪 ${M - n} / ${M}`, k: (M - n) / M, color: '#ffb347' }; },
+  plasma: p => { const W = WEAPON_PLAY.plasma, M = W.max(), n = p.wN ?? W.count(p); return { label: `重力井 ${n} / ${M}`, k: n / M, color: '#c77dff' }; },
+  railgun: p => ({ label: p.hookE ? (p.hookE.t.boss ? '釘住旗艦！' : `勾住了！${(p.hookX || []).length ? '×' + (1 + p.hookX.length) : ''}`) : '鉤爪', k: p.hookE ? p.hookT / WEAPON_PLAY.railgun.holdT() : 0, color: '#ffd166' }),
+  drone: p => {
+    if (p.guardT > 0) return { label: `收攏中 還能擋 ${p.guardN}`, k: p.guardN / WEAPON_PLAY.drone.blockMax(), color: '#7cf5c8' };
+    const D = p.drones || [], up = D.filter(d => !(d.down > 0)).length;
+    return { label: `無人機 ${up} / ${D.length}`, k: D.length ? up / D.length : 1, color: up < D.length ? '#ff9f1c' : '#7cf5c8' };
+  },
+};
+
 // =====================================================================
 // RENDER（戰鬥畫面）
 // =====================================================================
@@ -184,7 +197,7 @@ function drawShipArt(c, S, o = {}) {
   c.beginPath(); c.ellipse(x1, 0, 0.9, 3.1, 0, 0, TAU); c.fill();
 }
 
-// 靶場數據面板（右上）：DPS、總傷害、命中次數、傷害來源、這條電路每發幾顆、觸發層
+// 靶場數據面板（右上）：DPS、總傷害、命中次數、傷害來源、每發幾顆、每條線
 function drawRangePanel() {
   const s = Game.stats, fmt = n => Math.round(n).toLocaleString('zh-TW');
   const src = DMG_SOURCES.filter(([k]) => Range.bySrc[k] > 0).map(([k, label]) => `${label} ${fmt(Range.bySrc[k])}（${Math.round(Range.bySrc[k] / Range.total * 100)}%）`);
@@ -193,9 +206,8 @@ function drawRangePanel() {
     [`估算 DPS ${fmt(s.dpsEst)}　·　總傷害 ${fmt(Range.total)}　·　命中 ${Range.hits} 次　·　最高單發 ${fmt(Range.maxHit)}`, '#cfe8ff'],
     ...src.map(t => [t, '#8fa3d9']),
     [`開火：每發 ${s.count} 顆、共 ${fmt(s.dmg)} 傷害　·　每秒 ${s.rps.toFixed(2)} 發`, '#ffd166'],
-    ...s.layers.map((l, i) => [`◎ 命中第 ${i + 1} 層：每次命中展開 ${l.count} 顆 / ${fmt(l.dmg)} 傷害`, '#ff9dbd']),
+    ...(s.line.cells.length ? [[`◎ 線：${s.line.cells.map(c => lvName(c.id, c.lv)).join(' → ')}`, '#ff9dbd']] : []),
     [Input.touch ? '「電路」改電路（改完數據歸零）' : '1 單一　2 一排　3 密集　4 散開　6 爆量　5 實戰　·　R 清除數據　·　T 慢動作　·　Tab 改電路（改完數據歸零）', '#6a79ad'],
-    ['粉紅外圈 = 帶「命中觸發」的子彈（命中時才展開觸發器右邊的晶片）', '#6a79ad'],
   ];
   const w = Math.min(470, VW - 40), x = VW - 20 - w;
   let y = 70;
@@ -274,8 +286,6 @@ function drawHubHud() {
       if (n) badge(n, x + 60, y - 18);
     }
   }
-  for (const n of Hub.nums) { ctx.globalAlpha = Math.min(1, n.t * 2.5); label(String(n.v), sx(n.x), sy(n.y - (0.8 - n.t) * 40), '#ffe9a8', 14); }  // 打中跳出的傷害數字（往上飄）
-  ctx.globalAlpha = 1;
   for (const [i, T] of HUB.targets.entries()) { const v = Hub.dps(i); if (v) label(`每秒 ${v}`, sx(T.x), sy(T.y - T.r - 22), '#ffd166', 13); }  // 標靶機：最近 3 秒的每秒傷害
   if (Hub.coop()) {  // 多人房間：每艘船頭上的號碼（號碼色），✓ = 準備好了，📖 = 在看面板
     const tag = (slot, x, y, r, b) => label(`${slot}P${r ? ' ✓' : ''}${b ? ' 📖' : ''}`, sx(x), sy(y) - 24, Game.slotColor(slot), 13);
@@ -329,8 +339,28 @@ function hudText(txt, x, y, col, font) {
   ctx.strokeText(txt, x, y); ctx.fillStyle = col; ctx.fillText(txt, x, y);
 }
 
+// 寶藏無人機的位置：在畫面外就在邊緣畫金色箭頭指向它，旁邊寫還剩幾秒（modeT，隊友那邊也有）；在畫面內頭上寫秒數
+function drawTreasureMarks() {
+  const M = 34;
+  for (const e of Game.enemies) {
+    if (e.dead || !e.t.treasure || e.spawnT > 0) continue;
+    const sx = (e.x - Game.cam.x) * ZOOM, sy = (e.y - Game.cam.y) * ZOOM, left = Math.max(0, Math.ceil(e.modeT || 0));
+    const fl = left <= CFG.TREASURE.blink ? 0.5 + 0.5 * Math.sin(Game.time * 18) : 1;
+    ctx.globalAlpha = fl; ctx.textAlign = 'center';
+    if (sx > M && sx < VW - M && sy > M && sy < VH - M) { hudText(`寶藏 ${left}s`, sx, sy - 26 * ZOOM - 8, '#ffd166', 'bold 12px Microsoft JhengHei'); ctx.globalAlpha = 1; continue; }
+    const cx = VW / 2, cy = VH / 2, a = Math.atan2(sy - cy, sx - cx);
+    const k = Math.min((VW / 2 - M) / Math.abs(Math.cos(a) || 1e-9), (VH / 2 - M) / Math.abs(Math.sin(a) || 1e-9));
+    const x = cx + Math.cos(a) * k, y = cy + Math.sin(a) * k;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-4, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    hudText(`寶藏 ${left}s`, x - Math.cos(a) * 26, y - Math.sin(a) * 26 + 4, '#ffd166', 'bold 12px Microsoft JhengHei');
+    ctx.globalAlpha = 1;
+  }
+}
 function drawHUD() {
   const p = Game.player, s = Game.stats, C = Game.combat, T = Input.touch;
+  drawTreasureMarks();
   const hpW = Math.min(220, VW * 0.42);
   hudBar(22, 22, hpW, 14, p.hp / p.maxHp, p.hp / p.maxHp > 0.3 ? '#4cc9f0' : '#ff4d6d', 10);  // 每格 10%
   if (p.drRec > 0 && p.hp < p.maxHp) {  // 灰血（堡壘號）：之後還能補回來的血量（淡色接在血條後面）
@@ -348,39 +378,24 @@ function drawHUD() {
   // 衝刺冷卻
   const dashMax = p.ship.dashCd * (1 - Game.passives.dashCd) * Game.mech.dashCd, dr = 1 - clamp(p.dashCd / dashMax, 0, 1);
   hudBar(22, 44, 106, 5, dr, dr >= 1 ? '#bdf0ff' : '#4a6aa8');
-  hudText(T ? '衝刺' : '衝刺 [Space/右鍵]', 136, 50, '#8fa3d9', '10px Microsoft JhengHei');
-  // 蓄力／超頻模組過熱（隊友：數值由房主同步過來）
-  const heat = Net.role === 'client' ? p.heatR || 0 : s.heatLimit ? p.ohT / s.heatLimit : 0;
+  const A = WEAPONS[Game.weapon.id].alt;  // 武器有右鍵：右鍵不再是衝刺
+  hudText(T ? '衝刺' : A ? '衝刺 [Space]' : '衝刺 [Space/右鍵]', 136, 50, '#8fa3d9', '10px Microsoft JhengHei');
+  const WH = WEAPON_HUD[Game.weapon.id], hb = WH && WH(p);  // 武器的狀態：熱度、飛輪數、重力井數、鉤住、收攏
+  if (A) {  // 武器右鍵的冷卻（強化下一刀的期間整條變白）；下面一條細的是武器狀態，文字接在右鍵後面
+    const ar = 1 - clamp((p.altCd || 0) / A.cd, 0, 1), up = p.edgeT > 0;
+    hudBar(22, 52, 106, 4, up ? 1 : ar, up ? '#ffffff' : ar >= 1 ? '#ff8fd8' : '#7a4a6a');
+    if (hb) hudBar(22, 58, 106, 3, hb.k, hb.color);
+    hudText(`${A.name}${T ? '' : ' [右鍵]'}${up ? '　下一刀強化！' : ''}`, 136, 58, up ? '#ffffff' : '#ff8fd8', '10px Microsoft JhengHei');
+    if (hb) hudText(hb.label, 136 + 12 + ctx.measureText(`${A.name}${T ? '' : ' [右鍵]'}${up ? '　下一刀強化！' : ''}`).width, 58, hb.color, '10px Microsoft JhengHei');
+  }
   let bx = T ? 180 : 250;  // 小條由左往右排（文字長短不一）
   const bar = (label, k, col) => {
     hudBar(bx + 2, 44, 66, 5, k, col);
     hudText(label, bx + 74, 50, col, '10px Microsoft JhengHei');
     bx += 84 + ctx.measureText(label).width;
   };
-  if (s.charge) bar(p.chargeC >= 1 ? '蓄滿' : '蓄力', p.chargeC || 0, p.chargeC >= 1 ? '#ffffff' : '#ffb347');
-  if (s.heatLimit) bar(p.ohLock > 0 ? '過熱！' : `熱度 傷害 +${Math.round(heat * 40)}%`, p.ohLock > 0 ? 1 : heat, p.ohLock > 0 ? '#ff4d6d' : '#ff9f1c');
-  if (s.stand) {  // 架設：站著不動的層數（隊友：房主同步過來）
-    const sk = Net.role === 'client' ? p.standK || 0 : standStacks(p, s.stand), mx = standMax(s.stand);
-    bar(`架設 射速 +${sk * 10}%`, sk / mx, sk >= mx ? '#ffffff' : '#9dff6b');
-  }
-  // 武器升級（散彈、雷射）、輕裝甲 4 層（隊友：房主同步過來）
-  const W = Game.wp;
-  if (W.focus) { const k = p.focusK || 0; bar(`專注 傷害 +${Math.round(k * W.focus.per * 100)}%`, k / W.focus.max, k >= W.focus.max ? '#ffffff' : '#5ef2ff'); }
-  if (W.spreadUp) { const k = p.spreadK || 0; bar(`分散 射速 +${Math.round(k * W.spreadUp.per * 100)}%`, k / W.spreadUp.max, k >= W.spreadUp.max ? '#ffffff' : '#5ef2ff'); }
-  if (W.graze) { const k = p.grazeK || 0; bar(`擦彈 射速 +${Math.round(k * W.graze.per * 100)}%`, k / W.graze.max, k >= W.graze.max ? '#ffffff' : '#5ef2ff'); }
-  if (W.parryUp) { const k = p.parryK || 0; bar(`格擋流 傷害 +${Math.round(k * W.parryUp.per * 100)}%`, k / W.parryUp.max, k >= W.parryUp.max ? '#ffffff' : '#ff8fd8'); }
-  if (W.static) { const k = p.staticK || 0; bar(`靜電 電弧 +${k}`, k / W.static.max, k >= W.static.max ? '#ffffff' : '#9fe8ff'); }
-  if (W.rage) { const k = rageAdd(p, W.rage); bar(`狂怒 射速 +${Math.round(k * 100)}%`, k, '#ff4d6d'); }
-  if (W.crowd) { const k = Math.min(W.crowd.max, p.crowdK || 0); bar(`群戰 射速 +${Math.round(k * W.crowd.per * 100)}%`, k / W.crowd.max, k >= W.crowd.max ? '#ffffff' : '#ffb347'); }
-  if (W.revenge && p.revengeT > 0) bar(`逆襲 ${p.revengeT.toFixed(1)} 秒`, p.revengeT / W.revenge.t, '#ff4d6d');
-  if (W.ascetic) { const n = emptySlots(); bar(`空格苦行 傷害 +${Math.round(n * W.ascetic.per * 100)}%`, n / 4, n ? '#ffd166' : '#8fa3d9'); }
+  // 輕裝甲 4 層（隊友：房主同步過來）
   if (Game.mech.traits.streak) { const n = p.streak || 0; bar(`無傷連殺 傷害 +${Math.round(n * STREAK.per * 100)}%`, n / STREAK.max, n >= STREAK.max ? '#ffffff' : '#9fe8ff'); }
-  // 奇異點「間歇失效」的格子：失效的那 2 秒標出來
-  const fk = (Game.slotAttr || []).map((a, i) => a === 'flaky' && Game.chain[i] ? i : -1).filter(i => i >= 0);
-  if (fk.length && flakyOff()) {
-    ctx.font = 'bold 11px Microsoft JhengHei'; ctx.fillStyle = '#ff6b6b';
-    ctx.fillText(`✖ 間歇失效中：${fk.map(i => CHIPS[Game.chain[i]].short || CHIPS[Game.chain[i]].name).join('、')}`, Math.max(bx, T ? 320 : 410), 50);
-  }
   hudText(`◆ ${Game.credits}`, 20, 72, '#9ff0ff', 'bold 14px Segoe UI');  // 晶體的顏色（跟戰場上的晶體一樣）
   hudText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 72, 72, p.ship.color, 'bold 12px Microsoft JhengHei');  // 護盾層數
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
@@ -390,7 +405,7 @@ function drawHUD() {
       : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`;  // ⛨：還有終焉護殼
     hudText(line, mw + 32, y + 11, m.dead ? '#ff4d6d' : '#cfe8ff', '11px Microsoft JhengHei');
     const ms = m.gone ? null : Net.pingOf(m.slot);  // 這個隊友到房主的延遲（房主自己不寫）
-    if (ms != null) { ctx.font = '11px Microsoft JhengHei'; hudText(`　${ms}ms`, mw + 32 + ctx.measureText(line).width, y + 11, Net.pingColor(ms), '11px Microsoft JhengHei'); }
+    if (ms != null) { ctx.font = '11px Microsoft JhengHei'; hudText(`　${ms}ms`, mw + 32 + ctx.measureText(line).width, y + 11, NetView.pingColor(ms), '11px Microsoft JhengHei'); }
   });
 
   ctx.textAlign = 'right';
@@ -400,14 +415,14 @@ function drawHUD() {
   if (Settings.fps) { ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b'; ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14); }  // 設定頁可以關掉
   if (Game.mode === 'range') drawRangePanel();
   if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
-    ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = Net.pingColor(Net.ping);
+    ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = NetView.pingColor(Net.ping);
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
   // 大地圖：小地圖（電腦在右上角；手機的右邊有按鈕，放在左上角 HP 下面）
   if (T) drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
   else drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
 
-  // 電路鏈縮圖（觸控時移到上方，避開拇指）
+  // 電路縮圖（觸控時移到上方，避開拇指）
   const n = Game.chain.length, w = T ? 40 : 54, gap = T ? 5 : 8, total = n * w + (n - 1) * gap;
   let x = VW / 2 - total / 2;
   const y = T ? 84 : VH - 70;
@@ -418,7 +433,6 @@ function drawHUD() {
       const col = id === 'weapon' ? Game.wp.color : TYPE_META[CHIPS[id].type].color;
       hudFrame(x, y, w, 40, col);
       hudText(lvShort(id, slotLv(i)), x + w / 2, y + 25, col, `bold ${T ? 11 : 13}px Microsoft JhengHei`);
-      if (rareOf(id)) { ctx.fillStyle = '#ffd166'; ctx.font = `bold ${T ? 10 : 12}px Segoe UI`; ctx.fillText('★', x + w - 7, y + 12); }  // 稀有晶片
     } else hudFrame(x, y, w, 40, null, 0.55);  // 空格：暗一點的空框（不用虛線）
     if (i < n - 1) {
       ctx.fillStyle = '#4c5a8f'; ctx.font = '12px Segoe UI';
@@ -428,9 +442,9 @@ function drawHUD() {
   }
   if (T) hudText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒`, VW / 2, y + 56, '#8fa3d9', '11px Microsoft JhengHei');
   else {
-    hudText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒 · ⚡${s.used}/${s.cap}${s.off ? `（沒電 ${s.off}）` : ''}　[Tab] 編輯電路`, VW / 2, VH - 16, '#8fa3d9', '11px Microsoft JhengHei');
+    hudText(`每發 ${s.count} 顆 · 射速 ${s.rps.toFixed(1)}/秒　[Tab] 編輯電路`, VW / 2, VH - 16, '#8fa3d9', '11px Microsoft JhengHei');
     ctx.textAlign = 'left'; ctx.fillStyle = '#4a5886';
-    ctx.fillText('WASD 移動 · 左鍵射擊 · Space 衝刺', 20, VH - 16);
+    ctx.fillText(`WASD 移動 · 左鍵射擊 · Space 衝刺${WEAPONS[Game.weapon.id].alt ? ` · 右鍵${WEAPONS[Game.weapon.id].alt.name}` : ''}`, 20, VH - 16);
   }
 
   const boss = Game.enemies.find(e => e.t.boss && !e.dead);

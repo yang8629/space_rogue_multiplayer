@@ -1,7 +1,8 @@
 // 星環電路 多人版 · hub.js：基地（主畫面）：開著飛船走動的太空站，邏輯（配置、碰撞、移動、靠近哪裡、互動）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 //   畫面：js/ui/gl/gl_hub.js（場景）、render.js 的 drawHubHud（文字標籤）、js/ui/base.js（面板、上方列、說明卡）
-//   這裡不碰畫面：互動結果交給 Screen（面板），靠近的東西換了就發 hubNear 事件
+//   這裡不碰畫面：打開面板發 hubPanel、靠近的東西換了發 hubNear 事件
+//   飛船、子彈、衝刺跟戰鬥同一套（見 build）
 'use strict';
 
 // 基地配置：分區的太空站。中間是中央大廳（出生點在正中），下面延伸出去發射甲板（發射台、跑道）；左翼機庫（停機位沿大圓排一圈、船頭朝中間的轉盤）；右翼軍械庫（武器架靠上牆排）；
@@ -11,7 +12,6 @@
 //   kind 決定按 E 做什麼（Hub.ACT）：pad 停機位、rack 武器架、console 房間裡的操作台（打開面板）、launch 發射台、term 終端機
 const HUB = {
   WT: 40, MARGIN: 140, TOP: 100,          // 牆厚；基地外圍留白（看得到太空）；畫面上方標題列的高度（螢幕 px）
-  SPEED: 320,                            // 移動速度；衝刺照戰鬥（CFG.DASH_SPEED、DASH_TIME，冷卻照飛船的 dashCd）
   HALL_W: 860, HALL_H: 640,               // 中央大廳（最小）
   BAY_W: 320, BAY_H: 400, BAY_DOOR: 230,   // 發射甲板（大廳下面延伸出去）：寬、高、跟大廳之間的開口寬
   BAY_ARC: 200, RING_MIN: 230, RING_GAP: 1.3, PAD_R: 60,  // 機庫：每個停機位佔的弧長、圓圈最小半徑、對著大廳那側的缺口（弧度）
@@ -19,7 +19,7 @@ const HUB = {
   TOP_W: 440, TOP_H: 380,                 // 上面一排三個房間的大小
   DOOR_W: 170,                            // 牆上開口的寬
   CONSOLE_R: 70, TERM_R: 70, LAUNCH_R: 72, LAUNCH_PAD: 62, RUNWAY_W: 84,
-  TARGET_R: 24, DPS_WIN: 3, KNOCK: 520,   // 軍械庫標靶機的半徑、每秒傷害算最近幾秒；被別人的子彈打中往後推的速度
+  TARGET_R: 24, DPS_WIN: 3,               // 軍械庫標靶機的半徑、每秒傷害算最近幾秒
 };
 // 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的操作台打開哪個面板
 const HUB_ROOMS = {
@@ -89,16 +89,15 @@ Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
 // 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間或開口裡
 function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h); }
 
-const HUB_LAST_KEY = 'v2_lastPick';  // 上次選的飛船、武器存在瀏覽器的名稱：{ ship, weapon }
 const Hub = {
-  dfx: [], puffs: [],  // 衝刺的效果（飛船能力：瞬移的電光、殘影、砲台、星門；sl = 誰的，自己 0）、衝刺噴的粒子
-  shots: [], sparks: [], fireCd: 0,  // 基地裡射出去的子彈（多人時別人的也在：sl = 誰射的，自己的 0）、打到東西的火花（只是好玩：沒有血量）
-  nums: [], hits: [], kick: { x: 0, y: 0 }, hitT: 0, hitN: 0, mateHit: {},  // 跳出的傷害數字；標靶機每一發 { i, t, dmg }；被打中往後推的速度、閃白剩幾秒、被打中幾次；其他人的閃白
-  ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0,  // k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
+  driving: false,  // 基地的飛船現在能開（基地畫面、沒開面板）；畫面開關面板時用 setDriving 設
+  setDriving(on) { this.driving = !!on; },
+  ready: false, shipId: null, weaponId: null, ship: null, near: null, seq: null, cam: { x: 0, y: 0 }, k: 1, t: 0,  // ship = Game.player（戰鬥的 Player）；k：基地的縮放（螢幕 px / 基地座標）；seq：出發動畫播到哪（null = 沒在播）
+  ghosts: {},  // 多人房間：其他人的飛船（號碼 → Player，見 updateGhosts）
 
   // 上次選的飛船、武器（存在瀏覽器 HUB_LAST_KEY：重新整理、下次打開遊戲還記得）；壞掉的存檔當成沒有
-  last() { try { const o = JSON.parse(localStorage.getItem(HUB_LAST_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } },
-  saveLast() { try { localStorage.setItem(HUB_LAST_KEY, JSON.stringify({ ship: this.shipId, weapon: this.weaponId })); } catch (e) {} },
+  last() { const o = Save.load('lastPick', {}); return o && typeof o === 'object' ? o : {}; },  // 上次選的飛船、武器
+  saveLast() { Save.save('lastPick', { ship: this.shipId, weapon: this.weaponId }); },
   // 進基地：飛船在大廳正中（spawn）；選的飛船（這次開著的 → 上次存的）沒解鎖（例如存檔重來）就換成第一艘解鎖的
   //   存的排在 Game.weapon 前面：遊戲一打開 Game.weapon 就是預設的雷射（真的 Chrome 測到存的武器被它蓋掉）；存的每次換都會更新，一定是最新的
   enter() {
@@ -106,20 +105,37 @@ const Hub = {
     this.shipId = SHIPS[want] && isUnlocked('ship', want) ? want : ids.find(id => isUnlocked('ship', id)) || ids[0];
     const ws = Object.keys(WEAPONS), ww = this.weaponId || L.weapon || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
     this.weaponId = WEAPONS[ww] && isUnlocked('weapon', ww) ? ww : ws.find(id => isUnlocked('weapon', id)) || ws[0];
-    const P = HUB.spawn;
-    if (!this.ship || this.seq) this.ship = { x: P.x, y: P.y, vx: 0, vy: 0, aim: -Math.PI / 2, r: 12, moving: false, iframe: 0, dashT: 0, dashCd: 0, dashA: 0, overdrive: 0 };  // 出發過（飛出去了）：回來從大廳正中開始
+    const s = this.ship && !this.seq ? this.ship : null;  // 出發過（飛出去了）：回來從大廳正中開始
     this.seq = null;
-    this.setShip(this.shipId);
-    this.ship.weaponId = this.weaponId;  // 飛船物件帶著裝的武器（GLActors.ship 畫在船頭，跟戰鬥中同一段）
+    this.build(s ? s.x : HUB.spawn.x, s ? s.y : HUB.spawn.y, s ? s.aim : -Math.PI / 2);
     this.ready = true;
     this.near = null;
     this.follow();
   },
+  // 基地 = 一個房間的戰場：房間、開口的矩形做成場地（Arena.fromRects），飛船、子彈、衝刺、飛船能力、武器右鍵都是戰鬥那一套（Player、Bullet、Dash）；
+  //   標靶機 = 打不死的標靶（dummy，hits 記每一下，見 dps）；自己的配裝（Game.L）照開的船、裝的武器重建，電路只有武器
+  build(x, y, aim) {
+    const G = Game, S = SHIPS[this.shipId];
+    G.mode = 'hub'; G.shipId = this.shipId;
+    Arena.fromRects(HUB.walk, HUB.W, HUB.H, HUB.spawn);
+    Object.assign(G, { weapon: { id: this.weaponId, path: null, final: null }, chain: ['weapon', null, null, null], socks: [], inventory: Array(CFG.INV_SLOTS).fill(null),
+      wSock: CFG.WEAPON_SOCKETS, playKills: {}, parts: { ...S.parts }, partSlots: S.partSlots, cap: S.cap, boons: cleanBoons() });
+    Object.assign(G, { runStats: null, combat: null, objs: [], mates: [], bullets: [], slashQ: [], eBullets: [], pickups: [], triggerQueue: [],
+      portals: [], decoys: [], turrets: [], zones: [], nextId: 1 });
+    this.ghosts = {};
+    Events.emit('fxClear');
+    const p = G.player = this.ship = new Player(S);
+    p.x = x; p.y = y; p.aim = aim;
+    G.enemies = HUB.targets.map(T => { const e = new Enemy('dummy', T.x, T.y, 1); e.r = T.r; e.hx = T.x; e.hy = T.y; e.spawnT = 0; e.hits = []; return e; });
+    G.refreshWeapon();  // 內含 recalc（血量、數值）
+    p.hp = p.maxHp;
+  },
+  rebuild() { const s = this.ship; this.build(s.x, s.y, s.aim); },  // 換船、換武器：原地重建
+  setShip(id) { this.shipId = id; if (this.ship) this.rebuild(); },
   zone(id) { return HUB.zones.find(z => z.id === id) || null; },
   // 基地畫在畫面上：主畫面（title）、多人連線畫面（lobby，從基地的終端機打開，基地留在後面）、多人房間（pick）
   shown() { return this.ready && !Game.inArena && ['title', 'lobby', 'pick'].includes(Game.state); },
   coop() { return Game.state === 'pick'; },  // 多人選配裝中：發射台 = 準備，終端機不能用
-  setShip(id) { const S = SHIPS[id]; Object.assign(this.ship, { ship: S, parts: S.parts }); this.shipId = id; },
   // 換船：沒解鎖的不能換；回傳有沒有換
   pick(id) {
     if (!SHIPS[id] || !isUnlocked('ship', id) || id === this.shipId || (this.coop() && Net.meReady)) return false;  // 多人：準備好了就不能換
@@ -130,44 +146,24 @@ const Hub = {
   // 裝武器：沒解鎖的不能裝；多人準備好了不能換
   equip(id) {
     if (!WEAPONS[id] || !isUnlocked('weapon', id) || id === this.weaponId || (this.coop() && Net.meReady)) return false;
-    this.weaponId = this.ship.weaponId = id; this.saveLast();
+    this.weaponId = id; this.rebuild(); this.saveLast();
     Events.emit('hubSwap', id);
     return true;
   },
   // 選的章：沒解鎖就用第一章
   chapter() { return chapterUnlocked(Game.chapterId) ? Game.chapterId : CHAPTERS[0].id; },
 
-  // 每幀（只在基地畫面、沒開面板時）：WASD 移動、Space 衝刺、船頭朝滑鼠（沒動滑鼠就朝移動方向）、找最近的互動點
+  // 每幀（只在基地畫面、沒開面板時）：跑戰鬥那一套（飛船、標靶、殘影、砲台、星門、子彈、特效），找最近的互動點
   update(dt) {
-    const s = this.ship, K = Input.keys;
+    const G = Game;
     this.t += dt;
     if (this.seq) { this.updateLaunch(dt); return; }  // 出發動畫中：不能操作
-    let mx = 0, my = 0;
-    if (K.has('w') || K.has('arrowup')) my -= 1;
-    if (K.has('s') || K.has('arrowdown')) my += 1;
-    if (K.has('a') || K.has('arrowleft')) mx -= 1;
-    if (K.has('d') || K.has('arrowright')) mx += 1;
-    const len = Math.hypot(mx, my);
-    s.moving = len > 0;
-    const wasDash = s.dashT > 0, x0 = s.x, y0 = s.y;
-    if (Dash.input(s, dt, len ? Math.atan2(my, mx) : s.aim, s.ship.dashCd, true, (x, y) => this.free(x, y, s.r))) this.startDash();  // 衝刺：跟戰鬥同一套（Dash，冷卻照飛船）
-    if (Dash.move(s, dt)) { if (s.ship.ability !== 'phase') this.puffs.push({ x: s.x, y: s.y, vx: 0, vy: 0, t: 0.25, col: s.ship.color }); }  // 衝的時候船尾的光跡（戰鬥的 trail）
-    else { const k = Math.min(1, dt * 12), l = Math.max(1, len); s.vx += (mx / l * HUB.SPEED - s.vx) * k; s.vy += (my / l * HUB.SPEED - s.vy) * k; }
-    // 撞牆、撞柱子：x、y 分開試，擋住的那個方向停下（可以貼著牆滑）
-    const kd = Math.exp(-6 * dt), nx = s.x + (s.vx + this.kick.x) * dt, ny = s.y + (s.vy + this.kick.y) * dt;  // kick：被別人打中的推力（慢慢消失）
-    this.kick.x *= kd; this.kick.y *= kd; this.hitT = Math.max(0, this.hitT - dt);
-    if (this.free(nx, s.y, s.r)) s.x = nx; else { s.vx = 0; this.kick.x = 0; }
-    if (this.free(s.x, ny, s.r)) s.y = ny; else { s.vy = 0; this.kick.y = 0; }
-    const hop = this.hop(s, s.r, x0, y0);
-    if (hop && !this.free(s.x, s.y, s.r)) [s.x, s.y] = hop;  // 從門出來的地方卡牆：停在門上
-    if (wasDash && s.dashT <= 0 && s.ship.ability === 'portal' && Math.hypot(s.x - s.dashSX, s.y - s.dashSY) >= 40) this.dash('portal', s.dashSX, s.dashSY, s.x, s.y, s.aim);  // 星門號：衝刺結束在起點、落點開門
-    const wx = Input.mx / this.k + this.cam.x, wy = Input.my / this.k + this.cam.y;
-    if (Input.mouseMoved) s.aim = Math.atan2(wy - s.y, wx - s.x);
-    else if (s.moving) s.aim = Math.atan2(my, mx);
+    if (this.coop()) this.updateGhosts(dt);
+    G.step(dt);  // 戰場那一套（跟戰鬥同一個函式）
+    G.updateFx(dt);
     this.follow(dt);
-    this.updateDash(dt);
-    this.updateShots(dt);
     // 最近的互動點（自己開的那艘的停機坪、裝著的武器的架子也算：看數據，按 E 不會換）
+    const s = this.ship;
     let best = null, bd = Infinity;
     for (const z of HUB.zones) {
       const d = Math.hypot(z.x - s.x, z.y - s.y);
@@ -175,130 +171,38 @@ const Hub = {
     }
     if (best !== this.near) { this.near = best; Events.emit('hubNear', best); }
   },
+  // 多人房間：其他人的飛船在自己這邊也跑一份（G.mates，配裝照他開的船、裝的武器）——位置照同步，開火、衝刺、右鍵照同步來的按鍵（Net.onRoomPos）；
+  //   開火、右鍵、飛船能力照戰鬥的隊友一樣算（Net.hostUpdateMate）。只是看得到、打得到標靶機，不影響對方
+  updateGhosts(dt) {
+    const G = Game, list = [];
+    for (const o of Net.roomShips()) {
+      let m = this.ghosts[o.slot];
+      if (!m || m.ship !== SHIPS[o.s] || m.L.weapon.id !== o.w) {
+        m = this.ghosts[o.slot] = new Player(SHIPS[o.s]);
+        m.slot = o.slot; m.L = Net.makeLoadout({ ship: o.s, weapon: WEAPONS[o.w] ? o.w : 'laser', chip: null }); m.dashSeq = o.ds; m.altSeq = o.as;
+      }
+      m.x = o.x; m.y = o.y; m.vx = o.vx; m.vy = o.vy; m.aim = o.a; m.moving = o.m; m.dashT = o.dT; m.wantFire = o.f && !o.b;
+      if (o.ds > m.dashSeq) { m.dashSeq = o.ds; m.dashSX = o.x; m.dashSY = o.y; G.withLoadout(m.L, () => m.onDash()); }  // 殘影、砲台、星門
+      if (o.as > m.altSeq) { m.altSeq = o.as; m.altQ = true; }
+      list.push(m);
+    }
+    G.mates = list;
+    for (const m of list) Net.hostUpdateMate(m, dt);
+  },
   // 飛船（半徑 r）放在 (x, y) 可不可以：整個在某個房間或開口裡
   free(x, y, r) {
     return hubFree(HUB, x, y, r);
   },
-  // 射擊：按住左鍵，照裝備武器的基本數值（射速 interval、一次 count 發、散開 spread、彈速 speed、射程 life）從船頭射出；
-  //   子彈撞牆（出了房間和開口）就在那裡爆火花；打到軍械庫的標靶機跳傷害數字、算每秒傷害；
-  //   多人房間：開火時發 hubFire 事件（net.js 轉給其他人，addFire 在對方那邊生出同樣的子彈）；別人的子彈打到自己 = 被往子彈方向推、閃白；
-  //   打到別人的船只畫火花和數字（推他的是他那邊自己算）；最多 MAX_SHOTS 顆
-  updateShots(dt) {
-    const s = this.ship;
-    this.fireCd -= dt;
-    if (Input.down && this.fireCd <= 0) {
-      this.fireCd = weaponParams({ id: this.weaponId, path: null, final: null }).interval;
-      const mx = s.x + Math.cos(s.aim) * 24, my = s.y + Math.sin(s.aim) * 24;
-      this.addFire(0, mx, my, s.aim, this.weaponId);
-      Events.emit('shoot', { weapon: this.weaponId });
-      Events.emit('hubFire', { x: mx, y: my, a: s.aim, w: this.weaponId });
-    }
-    const others = this.coop() ? Net.roomShips() : [], spark = (b, x, y) => { b.t = 0; this.sparks.push({ x, y, t: 0.3, col: b.col }); };
-    for (const b of this.shots) {
-      const bx0 = b.x, by0 = b.y;
-      b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt;
-      this.hop(b, b.r, bx0, by0);  // 子彈也穿星門
-      if (!hubFree(HUB, b.x, b.y, 1)) { spark(b, b.x - b.vx * dt, b.y - b.vy * dt); continue; }
-      // 打中標靶：照武器的穿透值穿過去（穿透 N = 最多打中 N+1 個，跟戰鬥一樣），同一顆不重複打同一個靶
-      const ti = HUB.targets.findIndex((T, i) => !b.done.has(i) && Math.hypot(T.x - b.x, T.y - b.y) < T.r + b.r);
-      if (ti >= 0) {
-        b.done.add(ti); this.hits.push({ i: ti, t: this.t, dmg: b.dmg }); this.num(b.x, b.y - 10, b.dmg);
-        if (b.pierce > 0) { b.pierce--; this.sparks.push({ x: b.x, y: b.y, t: 0.2, col: b.col }); } else spark(b, b.x, b.y);
-        continue;
-      }
-      if (b.sl && Math.hypot(s.x - b.x, s.y - b.y) < s.r + b.r + 4) {  // 別人的子彈打到自己
-        const sp = Math.hypot(b.vx, b.vy) || 1;
-        this.kick.x += b.vx / sp * HUB.KNOCK; this.kick.y += b.vy / sp * HUB.KNOCK; this.hitT = 0.25; this.hitN++;
-        spark(b, b.x, b.y); this.num(s.x, s.y - 22, b.dmg); continue;
-      }
-      const o = others.find(o => o.slot !== b.sl && Math.hypot(o.x - b.x, o.y - b.y) < 16 + b.r);
-      if (o) { spark(b, b.x, b.y); this.num(o.x, o.y - 22, b.dmg); this.mateHit[o.slot] = 0.25; }
-    }
-    this.shots = this.shots.filter(b => b.t > 0);
-    for (const k of this.sparks) k.t -= dt;
-    this.sparks = this.sparks.filter(k => k.t > 0);
-    for (const n of this.nums) n.t -= dt;
-    this.nums = this.nums.filter(n => n.t > 0);
-    this.hits = this.hits.filter(h => this.t - h.t < HUB.DPS_WIN);
-    for (const k in this.mateHit) this.mateHit[k] = Math.max(0, this.mateHit[k] - dt);
-  },
-  // 一次開火：照武器的基本數值（一次 count 發、散開 spread、彈速 speed、射程 life、傷害 damage）；sl = 誰射的（自己 0）
-  addFire(sl, x, y, aim, w, mul = 1) {  // mul：傷害倍率（哨兵號的砲台 CFG.TURRET.dmg）
-    const P = weaponParams({ id: w, path: null, final: null }), n = P.count;
-    for (let i = 0; i < n && this.shots.length < Hub.MAX_SHOTS; i++) {
-      const a = aim + (n > 1 ? (i / (n - 1) - 0.5) * P.spread : 0);
-      this.shots.push({ x, y, vx: Math.cos(a) * P.speed, vy: Math.sin(a) * P.speed, t: P.life, life: P.life, r: P.radius, col: P.color, w, sl, dmg: Math.round(P.damage * mul), pierce: P.pierce || 0, done: new Set() });  // done：打過的標靶
-    }
-  },
-  // ---------- 衝刺：跟戰鬥一樣噴粒子、播音效，飛船能力做出樣子（基地沒有敵人：殘影不吸引火力；砲台打標靶機） ----------
-  //   多人房間：hubDash 事件（net.js 轉給其他人），對方用 dashFx 畫出同樣的效果；砲台的子彈走 hubFire
-  startDash() {  // Dash.input 已經衝了（先鋒號已經瞬移：可以穿牆，落點要在房間或開口裡）：畫出效果、告訴其他人
-    const s = this.ship, ab = s.ship.ability;
-    this.dash(['phase', 'decoy', 'turret'].includes(ab) ? ab : 'dash', s.dashSX, s.dashSY, s.x, s.y, s.aim);
-  },
-  dash(k, x0, y0, x1, y1, a) {
-    this.dashFx(0, k, x0, y0, x1, y1, a, this.shipId);
-    Events.emit('hubDash', { k, x0, y0, x1, y1, a, s: this.shipId });
-  },
-  // 畫衝刺效果（自己的、別人傳來的）：k = dash（只有粒子）／phase（起點、落點的圈＋電光）／decoy（殘影）／turret（砲台）／portal（一對門）
-  //   殘影、砲台、星門每個人同時只有一個（跟戰鬥一樣）；顏色：多人用號碼色，單人用船色（星門一律船色）
-  dashFx(sl, k, x0, y0, x1, y1, a, shipId) {
-    const S = SHIPS[shipId] || SHIPS.vanguard, col = this.coop() ? Game.slotColor(sl || Net.mySlot()) : S.color;
-    if (k !== 'portal') this.puff(x0, y0, S.color);
-    if (k === 'phase') { this.puff(x1, y1, S.color); this.dfx.push({ k, sl, x: x0, y: y0, x1, y1, t: 0.3, max: 0.3, col: S.color }); }
-    if (k === 'decoy' || k === 'turret' || k === 'portal') {
-      const T = k === 'decoy' ? CFG.DECOY.t : k === 'turret' ? CFG.TURRET.t : 3;
-      this.dfx = this.dfx.filter(f => !(f.k === k && f.sl === sl));
-      this.dfx.push({ k, sl, x: x0, y: y0, x1, y1, aim: a, t: T, max: T, col: k === 'portal' ? S.color : col, cd: 0 });
-    }
-  },
-  puff(x, y, col) {  // 衝刺噴的粒子（跟戰鬥的 burst 差不多：10 顆、0.3 秒）
-    for (let i = 0; i < 10; i++) { const a = rand(0, TAU), v = rand(50, 160); this.puffs.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.3, col }); }
-  },
-  // 每幀：效果倒數；自己的砲台朝射程內最近的標靶機開火（武器的基本數值、傷害 ×CFG.TURRET.dmg、射速跟飛船一樣）
-  updateDash(dt) {
-    for (const f of this.dfx) {
-      f.t -= dt;
-      if (f.k !== 'turret' || f.sl || (f.cd -= dt) > 0) continue;
-      const P = weaponParams({ id: this.weaponId, path: null, final: null }), R = clamp(P.speed * P.life + 40, 140, CFG.AUTO_RANGE);
-      let T = null, bd = R;
-      for (const o of HUB.targets) { const d = Math.hypot(o.x - f.x, o.y - f.y); if (d < bd) { bd = d; T = o; } }
-      if (!T) continue;
-      f.aim = Math.atan2(T.y - f.y, T.x - f.x); f.cd = P.interval;
-      const x = f.x + Math.cos(f.aim) * 10, y = f.y + Math.sin(f.aim) * 10;
-      this.addFire(0, x, y, f.aim, this.weaponId, CFG.TURRET.dmg);
-      Events.emit('hubFire', { x, y, a: f.aim, w: this.weaponId, m: CFG.TURRET.dmg });
-    }
-    this.dfx = this.dfx.filter(f => f.t > 0);
-    const kd = Math.exp(-8 * dt);
-    for (const q of this.puffs) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= kd; q.vy *= kd; q.t -= dt; }
-    this.puffs = this.puffs.filter(q => q.t > 0);
-  },
-  // 星門：o（飛船、子彈）這一幀從門外走進門（(x0, y0) = 移動前）→ 從另一個門出來、放在前方；0.3 秒內不能再走。回傳出口的門（沒穿過 null）
-  hop(o, r, x0, y0) {
-    if (this.t < (o.pcd || 0)) return null;
-    for (const q of this.dfx) {
-      if (q.k !== 'portal') continue;
-      for (const [ax, ay, bx, by] of [[q.x, q.y, q.x1, q.y1], [q.x1, q.y1, q.x, q.y]]) {
-        const rr = 22 + r;
-        if (Math.hypot(o.x - ax, o.y - ay) > rr || Math.hypot(x0 - ax, y0 - ay) <= rr) continue;
-        const a = Math.atan2(o.y - y0, o.x - x0);
-        o.x = bx + Math.cos(a) * (rr + 2); o.y = by + Math.sin(a) * (rr + 2); o.pcd = this.t + 0.3;
-        this.puff(bx, by, q.col);
-        return [bx, by];
-      }
-    }
-    return null;
-  },
-  num(x, y, v) { this.nums.push({ x: x + rand(-8, 8), y, v, t: 0.8 }); },
   // 標靶機 i 的每秒傷害（畫在靶上面）：最近 DPS_WIN 秒的傷害 ÷ 從這段裡第一發到現在的時間（最少 1 秒）
-  //   以前一律除以 DPS_WIN：剛開始打的前幾秒偏低（軌道砲第一發 30 只顯示 10）
+  //   以前一律除以 DPS_WIN：剛開始打的前幾秒偏低（射速慢的武器第一發只顯示三分之一）
   dps(i) {
+    const e = Game.enemies[i], now = Game.time;
+    if (!e || !e.hits) return 0;
+    e.hits = e.hits.filter(h => now - h[0] < HUB.DPS_WIN);
     let sum = 0, t0 = Infinity;
-    for (const h of this.hits) if (h.i === i) { sum += h.dmg; t0 = Math.min(t0, h.t); }
-    return sum ? Math.round(sum / clamp(this.t - t0, 1, HUB.DPS_WIN)) : 0;
+    for (const [t, d] of e.hits) { sum += d; t0 = Math.min(t0, t); }
+    return sum ? Math.round(sum / clamp(now - t0, 1, HUB.DPS_WIN)) : 0;
   },
-  MAX_SHOTS: 200,
   // 出發動畫：開到發射台正中（off = 多人時左右錯開）、船頭轉向跑道 → 發射台蓄能 → 沿跑道加速衝出出口 → then()
   //   只在基地真的畫在畫面上時播；模擬、測試（沒有畫面）、死亡畫面的「重新開始」直接 then()
   //   mates：多人時其他人的 { slot, off }——大家同時出發，其他人的船在自己這邊照同一套動畫畫（mateSeq），不靠位置同步（同步來的位置會跳、出了基地邊界被夾住）
@@ -311,7 +215,7 @@ const Hub = {
     this.seq = { t: 0, then, x0: s.x, y0: s.y, a0: s.aim, x1: L.x + off, y1: L.y, y2: HUB.H + 240 };
     const ships = this.coop() ? Net.roomShips() : [];
     this.mateSeq = mates.map(m => { const o = ships.find(o => o.slot === m.slot); return o && { slot: m.slot, s: o.s, w: o.w, x0: o.x, y0: o.y, a0: o.a, x1: L.x + m.off, y1: L.y, y2: HUB.H + 240 }; }).filter(Boolean);
-    s.vx = s.vy = 0; this.shots = []; s.dashT = 0; this.dfx = [];
+    s.vx = s.vy = 0; s.dashT = 0; Game.bullets = []; Game.decoys = []; Game.turrets = []; Game.portals = []; Game.mates = [];  // 其他人改照 mateSeq 畫
     if (this.near) { this.near = null; Events.emit('hubNear', null); }
     Events.emit('hubLaunch');
   },
@@ -364,8 +268,8 @@ const Hub = {
   ACT: {
     pad: z => Hub.pick(z.ship),
     rack: z => Hub.equip(z.weapon),
-    console: z => Screen.basePanel(z.tab),
-    launch: () => Screen.basePanel('launch'),
+    console: z => Events.emit('hubPanel', z.tab),  // 打開面板（ui/base.js）
+    launch: () => Events.emit('hubPanel', 'launch'),
     term: z => { if (!Hub.coop()) { if (z.id === 'coop') Net.lobby(); else Game.newRun('range', Hub.shipId, Hub.weaponId); } },  // 靶場：用目前開的船、裝的武器
   },
 };

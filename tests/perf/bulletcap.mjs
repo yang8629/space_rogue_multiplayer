@@ -2,12 +2,12 @@
 //   記每幀時間（平均、95%）、遊戲邏輯（Game.update）、畫面（GLR.render）→ 找出從哪個數量開始卡，定 CFG.BULLET_CAP
 //   三種：雷射（一般子彈）、雷射＋攔截（每幀要找最近的敵彈、合併回射）、敵彈
 //   用法：node perf/bulletcap.mjs [數量…]（預設 2000～40000；一段 95% 的幀超過 200ms 就停）
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const steps = process.argv.slice(2).map(Number).filter(Boolean);
 const NS = steps.length ? steps : [2000, 5000, 10000, 15000, 20000, 30000, 40000];
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await wait(1500);

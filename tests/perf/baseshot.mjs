@@ -1,10 +1,10 @@
 // 基地（主畫面：js/game/hub.js、js/ui/gl/gl_hub.js、js/ui/base.js）截圖 → art_lab/screenshots/
 //   假的進度（4 局、到過第 2 星區、雷射打倒星噬母艦）→ 全景、靠近停機坪（解鎖／鎖住）、門口、發射台，門後的面板，出發後的選武器，多人房間（共用的基地），結算的新解鎖
 //   用法：node perf/baseshot.mjs（用 puppeteer 自己的瀏覽器資料，不動到平常玩的存檔）；印出一幀基地畫面花幾 ms
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 p.on('console', m => { if (m.type() === 'error') console.log('console', m.text().slice(0, 200)); });
@@ -32,7 +32,7 @@ await p.evaluate(() => { const d = HUB.rooms.deck, s = Hub.ship; s.x = d.x + d.w
 // 射擊：飛船在大廳，滑鼠指向右上、按住左鍵 0.6 秒（散彈）
 await p.evaluate(() => { const L = Hub.zone('launch'), s = Hub.ship; s.x = L.x - 170; s.y = L.y; Hub.equip('scatter'); Hub.update(0.016); });
 await p.mouse.move(1000, 250); await p.mouse.down(); await wait(600); await p.screenshot({ path: SHOTS + '基地_射擊.png' }); await p.mouse.up();
-console.log('射擊：子彈', await p.evaluate(() => Hub.shots.length + Hub.sparks.length));
+console.log('射擊：子彈', await p.evaluate(() => Game.bullets.length));
 await p.evaluate(() => { const h = HUB.rooms.hall, s = Hub.ship; s.x = h.x + h.w / 2; s.y = h.y + 60; Hub.update(0.016); }); await shot('大廳上方');
 await at('launch', -40); await shot('發射台旁');
 for (const id of ['armory', 'chips', 'stats', 'launch']) { await p.evaluate(id => Screen.basePanel(id), id); await shot('面板_' + { armory: '軍械庫', chips: '晶片庫', stats: '戰績', launch: '發射台' }[id]); }

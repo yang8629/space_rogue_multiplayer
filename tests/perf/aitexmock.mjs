@@ -1,13 +1,13 @@
 // AI 生的地板貼圖試鋪（不改遊戲程式）：截圖時把圖鋪到某間房的地板上，跟原本的並排比較
 //   用法：node perf/aitexmock.mjs <圖片> [房間 hangar] [一格板子在圖上幾 px] [一格板子在遊戲裡多大] [輸出名]
 //   → art_lab/screenshots/AI地板_<輸出名>.png（左：原本、右：鋪了圖）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 const [img, room = 'hangar', panelPx = '208', panelWorld = '120', name = 'test'] = process.argv.slice(2);
 const ext = img.split('.').pop().toLowerCase(), mime = ext === 'jpg' ? 'jpeg' : ext;
 const dataUrl = `data:image/${mime};base64,` + fs.readFileSync(img).toString('base64');
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const shot = async (withTex) => {
   const p = await b.newPage();
   p.on('pageerror', e => console.log('頁面錯誤', e.message)); p.on('console', m => { if (/貼圖|PIXI|Error|error/.test(m.text())) console.log('頁面：', m.text()); });

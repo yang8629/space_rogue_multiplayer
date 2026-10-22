@@ -1,9 +1,9 @@
 // 相位刃新終極升級的畫面截圖（2026-10-09）：格擋流（前方一直有敵彈飛過來讓刃片砍，左上小條）、灼燒處決（燒著、血很少的靶被斬殺）
 //   用法：node perf/bladeshot.mjs <輸出資料夾>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const dir = process.argv[2], url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));

@@ -1,10 +1,10 @@
 // 裂界獵艦「裂縫改淡紫、變細」的預覽：在圖集工具頁重畫 boss2 的 4 格（不改檔案），換進新畫面的貼圖再截圖、拼成比較圖
 //   用法：node perf/boss2slit.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const ROOT = GAME;
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 const wait = ms => new Promise(r => setTimeout(r, ms));

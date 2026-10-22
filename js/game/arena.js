@@ -50,6 +50,26 @@ const Arena = {
     this.val = this.owner = this.path = null; this.exitFlow = null;
   },
 
+  // ---------- 基地（Hub）：房間、開口都是矩形；場地值 = 在矩形裡離邊多遠（取最大：在任一個矩形裡就是空地），矩形外是負的距離 ----------
+  fromRects(rects, W, H, start) {
+    const CELL = ARENA.CELL;
+    this.rect = false; this.seed = 0; this.n = 1; this.bossId = null; this.sc = 1;
+    this.W = Math.ceil(W / CELL) * CELL; this.H = Math.ceil(H / CELL) * CELL;
+    const NX = this.NX = this.W / CELL, NY = this.NY = this.H / CELL, N = (NX + 1) * (NY + 1);
+    const val = this.val = new Float32Array(N), owner = this.owner = new Int8Array(N);
+    for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+      const x = i * CELL, y = j * CELL;
+      let v = -Infinity;
+      for (const R of rects) {
+        const dx = Math.max(R.x - x, x - R.x - R.w), dy = Math.max(R.y - y, y - R.y - R.h);
+        v = Math.max(v, dx <= 0 && dy <= 0 ? -Math.max(dx, dy) : -Math.hypot(Math.max(dx, 0), Math.max(dy, 0)));
+      }
+      val[j * (NX + 1) + i] = v; owner[j * (NX + 1) + i] = v > 0 ? 0 : -1;
+    }
+    this.areas = [{ k: 0, cx: start.x, cy: start.y, shapes: [] }]; this.gates = []; this.corridors = []; this.cuts = [];
+    this.start = { x: start.x, y: start.y }; this.center = { x: start.x, y: start.y }; this.exitFlow = null; this.path = null;
+  },
+
   // ---------- 產生大地圖：n 個區域 ----------
   // sc：區域大小的縮放（照難度，見 Game.areaScale；主圓、衛星圓、手臂長、區域間距一起縮，通道寬、牆厚不縮）
   gen(seed, n, sc = 1) {

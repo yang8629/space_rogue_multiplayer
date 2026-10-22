@@ -1,20 +1,15 @@
 // 整套配裝評分（2026-10-09）：要選東西時把每個選項「試裝」上去、用遊戲自己的數字算整套配裝的分數，挑最高的
-//   以前零件、武器升級隨機，背包模組照固定排名 → 不會疊數值（玻璃砲＋增加受傷的零件、重量砲＋變慢的零件…）
+//   以前零件、武器升級隨機，背包模組照固定排名 → 不會疊數值
 //   分數 = 每秒傷害 × √(有效 HP) × √(移動速度) × 衝刺 × 特性 × 模組
-//     每秒傷害：遊戲的估算 DPS（stats.dpsEst，已含玻璃砲、重量砲）× 機體射速（散熱片、疾風、裝甲供能、架設；重力井）× 動能彈頭（打中時的彈速）
+//     每秒傷害：遊戲的估算 DPS（stats.dpsEst）× 機體射速（散熱片、疾風、架設）
 //     有效 HP：最大 HP ÷ 受到的傷害；衝刺：冷卻越短越好（^0.15）；特性：零件 2／4 層的特性每個 ×1.04（效果多半不在數值裡）
 //   改玩法晶片的效果（環繞、蓄力…）估算 DPS 算不到 → 晶片仍照晶片價值表（chipScore）；價值表沒有資料的晶片才用試裝
 
-const ACCEL_HIT = 1.6;  // 裝加速晶片時，子彈打中時大約是出手彈速的幾倍（動能彈頭用）
 
 function buildScore() {
   const S = G.stats, M = G.mech, p = G.player, T = M.traits;
-  const standAvg = S.stand ? 0.1 * standMax(S.stand) * 0.4 : 0;  // 架設：平均約四成滿（模擬裡停下來 4 成時間）
-  const rate = (M.rate + (T.gale ? 0.2 * 0.6 : 0) + hpRateAdd(p) + (T.quench ? 0.3 * 0.25 : 0) + standAvg) * M.rateMul;
-  let kin = 1;
-  const K = G.wp.kinetic;
-  if (K) { const v = G.wp.speed * M.bspeed * (hasChip('accel') ? ACCEL_HIT : 1); kin = 1 + Math.max(0, v / K.ref - 1) * K.per; }
-  const dps = S.dpsEst * rate * kin;
+  const rate = (M.rate + (T.gale ? 0.2 * 0.6 : 0) + (T.quench ? 0.3 * 0.25 : 0)) * M.rateMul;
+  const dps = S.dpsEst * rate;
   const ehp = p.maxHp / M.taken;
   const traits = Object.values(T).filter(Boolean).length;
   return dps * Math.sqrt(ehp) * Math.sqrt(M.speed) * Math.pow(1 / M.dashCd, 0.15) * Math.pow(1.04, traits);

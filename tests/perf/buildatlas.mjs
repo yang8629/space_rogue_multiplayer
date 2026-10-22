@@ -2,10 +2,10 @@
 //   multiplayer/assets/atlas_N.png（每頁 2048×2048）、atlas.json（每張貼圖在哪一頁、位置、錨點、每單位幾像素）、
 //   atlas_data.js（同樣的內容，圖片內嵌成 data URL：用 file:// 打開遊戲時 WebGL 不能讀本機圖片檔，要靠這個）
 // 用法：node perf/buildatlas.mjs   （改了 tools/art/*.js 的美術就重跑）
-import { ROOT, GAME } from './paths.mjs';
+import { ROOT, GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new' });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 p.on('console', m => { if (m.type() === 'error') console.log('console', m.text()); });

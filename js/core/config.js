@@ -15,12 +15,11 @@ const CFG = {
   BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
   START_SLOTS: 3, MAX_SLOTS: 8, INV_SLOTS: 6,  // START_SLOTS 含武器格：開局 2 格晶片
   MECH_SLOT_EVERY: 0,       // 機體強化（零件每 1 層）每拿幾個，電路格 +1（0 = 關閉；10-08 關掉：旗艦改成電路插槽／零件格二選一，零件不再間接給電路格）
-  MAX_CHIP_LV: 3,           // 玩法晶片等級上限（Lv3 = 進化）；每級效果強度 +50%
-  LV_PER_COMP: 1,           // 玩法晶片上每插 1 個組件升幾級（見 compileChain）
-  PLAY_TAG_TIME: 1,         // 玩法擊殺：照玩法打中後 1 秒內敵人死掉才算（見 Game.tagPlay）
+  RARE: { chance: 0.04, shop: 0.15, price: 2 },  // 稀有晶片：三選一每格晶片 chance、商店每件 shop 機率是稀有版，價錢 ×price；精英戰、寶藏的三選一保證一張
+  MAX_CHIP_LV: 3,           // 玩法晶片等級上限（同種合成）；倍率見 LV_MUL
   GRAY: { share: 0.4, cap: 0.25, delay: 4, rate: 6 },  // 堡壘號・灰血：受傷的 40% 變成灰血（最多最大 HP 的 25%），4 秒沒被打開始回每秒 6；戰鬥結束時剩下的回滿
   DECOY: { t: 1.5, r: 400 },  // 幻影號・殘影：衝刺起點留殘影 1.5 秒，附近 400 內的敵人改打殘影
-  UNLOCK_ALL: false,  // 局外成長（js/data/unlocks.js）：true = 全部開放（測試用，進度照樣記）；模擬預設 true，--locked 才上鎖（tests/load_game.js）
+  UNLOCK_ALL: false,  // 局外成長（js/data/unlocks.js）：true = 全部開放（測試用，進度照樣記）；遊戲裡由設定頁「測試：全部解鎖」開關（Settings.unlockAll）；模擬預設 true，--locked 才上鎖（tests/load_game.js）
   TURRET: { t: 3, dmg: 0.5 },  // 哨兵號・砲台：衝刺起點留一座砲台 t 秒（每人同時一座），用那個人的整條電路朝射程內最近的敵人開火，傷害 ×dmg、射速跟飛船一樣
   PHASE: { dist: 150, t: 0.05 },  // 先鋒號・相位跳躍：衝刺改成瞬移 dist（穿牆、穿小行星，不落在裡面、不跳到別區）；瞬移後停 t 秒（算衝刺中，衝刺結束的效果照常）；無敵時間跟一般衝刺一樣是 DASH_TIME（以前只有 t：電腦用衝刺躲子彈，第 2 星區多死，整局模擬 2026-10-18）
   WORM_FAST: 0.8,  // 列隊蟲越短越快：只剩頭時速度 ×(1 ＋ 0.8)
@@ -37,8 +36,6 @@ const CFG = {
     event:  { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },  // ？事件節點給的三選一（漂流殘骸、黑市）
     eventPart: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0, parts: true },  // 黑市的走私零件：三格都是零件
   },
-  // 稀有晶片（玩法晶片＋詞條，見 RARE）：三選一每一格玩法晶片 chance 機率變稀有；詞條等級 Lv1／Lv2／Lv3 的機率 lv
-  RARE: { chance: 0.04, lv: [0.7, 0.25, 0.05] },
   ELITE_ESCORT: 0.3,         // 精英戰最後一區（精英的場子）的護衛：一般一波預算的幾倍
   // 精英池（精英戰、精英亂入、沙盒從這裡抽）：from = 第幾星區開始出現、w = 權重；章節的 eliteW 再乘上去（CHAPTERS）
   ELITE_POOL: { elite: { from: 1, w: 1 }, artillery: { from: 1, w: 1 }, tractor: { from: 2, w: 1 }, wing: { from: 2, w: 1 } },
@@ -48,7 +45,7 @@ const CFG = {
     near: 220, shotCd: 1.5, shot: 5, arc: 0.7, speed: 260, sdmg: 12 },
   // 拖曳艦：在 range[0]～range[1] 內、看得到目標時，鎖定 aim 秒（預警線）後用牽引光束拉 pull 秒（每秒把目標往牠拉 speed，拉到 stop 以內停）；
   //   目標衝刺、被擋住、離開 lose 以外就斷掉，自己暈 stun 秒；每 cd 秒一次。近身 near 以內每 shotCd 秒散射 shot 發
-  TRACTOR: { range: [140, 480], aim: 0.7, pull: 1.8, speed: 230, stop: 90, lose: 700, stun: 1, cd: 4.5,
+  TRACTOR: { stunBrake: 0.9, range: [140, 480], aim: 0.7, pull: 1.8, speed: 230, stop: 90, lose: 700, stun: 1, cd: 4.5,
     near: 200, shotCd: 1.6, shot: 7, arc: 0.9, bspeed: 260, bdmg: 12 },
   // 三艦編隊：3 艘繞著同一個中心轉（半徑 radius、每秒 spin 弧度；每少一艘轉速再 +lost），中心跟玩家保持 keep[0]～keep[1]、速度 speed；
   //   每 fireCd 秒每艘朝玩家射一發（速度 bspeed、傷害 bdmg；剩越少間隔越短：× (1 − fireLost × 少幾艘)）；
@@ -70,41 +67,41 @@ const CFG = {
   //   delay 秒後開始每 every 秒叫醒身邊 r 以內待機的敵人（邊逃邊叫），一直響到被打掉；倒數內打掉就完全不會叫
   ALARM: { chance: 0.3, from: 2, delay: 1.5, every: 0.5, r: 400, flee: 170 },
   // 戰鬥中額外打到的稀有晶片保證：這場的三選一多保證 rare 格（同一場可以疊），note 寫在三選一上
-  BONUS: { treasure: { rare: 1, note: '寶藏到手' }, intrude: { rare: 1, note: '擊敗亂入的精英' }, sos: { rare: 1, note: '回應求救訊號' } },
+  BONUS: { treasure: { again: 1, note: '寶藏到手' }, intrude: { again: 1, note: '擊敗亂入的精英' }, sos: { again: 1, note: '回應求救訊號' } },  // 戰鬥中拿到的額外獎勵：打贏後多 again 次三選一
   // ？事件節點（EVENTS，見 data/events.js）的數字：每張航圖 count 個（第 2～5 層；最少 count[0]、最多 count[1]，產生時優先挑有 2 個以上的；每條路線還是要有 3 場戰鬥）
-  //   wreck 漂流殘骸：搜刮扣最大 HP 的 hp 換晶片三選一；core 拆反應爐 chance 機率三選一保證 rare 格稀有，不然扣 hp
-  //   market 黑市（價格都隨星區上漲）：◆price 換保證 rare 格稀有的三選一（三選一一定留一格組件，所以最多 2），這一局最大 HP ×(1 − hpCut)；◆part 零件三選一；
-  //     box 神祕包裹 ◆price：rare 機率稀有晶片、chip 機率一般晶片、其他空包
-  //   sos 下一場一般戰鬥或精英戰變難（全隊）：敵人數量 ×mul；打贏 bonus（CFG.BONUS 的稀有保證）或 again 多幾次三選一（每個人照自己選的）
+  //   wreck 漂流殘骸：搜刮扣最大 HP 的 hp 換晶片三選一；core 拆反應爐 chance 機率三選一 1 ＋ again 次，不然扣 hp
+  //   market 黑市（價格都隨星區上漲）：◆price 換三選一 1 ＋ again 次，這一局最大 HP ×(1 − hpCut)；◆part 零件三選一；
+  //     box 神祕包裹 ◆price：chip 機率一個晶片，其他空包
+  //   sos 下一場一般戰鬥或精英戰變難（全隊）：敵人數量 ×mul；打贏 bonus（CFG.BONUS）或 again 多幾次三選一（每個人照自己選的）
   //     full 全力救援、escort 只護送（求救訊號）、caught 被發現（星圖情報強行破解失敗，沒有獎勵）
   //   ward 終焉護殼：裝上 = 這一局一次受到致命傷害時留 1 HP、無敵 iframe 秒，受到的傷害 +taken；拆下核心 = 回復最大 HP 的 heal
   //   chart 星圖情報：強行破解 chance 機率標出 2 個寶藏星域
   EVENT: { count: [1, 3],
-    wreck: { hp: 0.15, core: { chance: 0.5, rare: 2, hp: 0.25 } },
-    market: { price: 60, rare: 2, hpCut: 0.1, part: 40, box: { price: 30, rare: 0.3, chip: 0.5 } },
+    wreck: { hp: 0.15, core: { chance: 0.5, again: 1, hp: 0.25 } },
+    market: { price: 60, again: 1, hpCut: 0.1, part: 40, box: { price: 30, chip: 0.8 } },
     sos: { full: { mul: 1.3, bonus: 'sos' }, escort: { mul: 1.15, again: 1 }, caught: { mul: 1.3 } },
     ward: { taken: 0.1, iframe: 2, heal: 0.4 },
     chart: { chance: 0.6 } },
   // 雙人（隊友在線時）：敵人數量、血量的倍數隨難度增加（[難度 0, 難度 20]，中間線性，無盡模式停在最後的值）——兩個人的配裝一起疊，後期成長比單人快
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
   COOP_EXTRA: 0.6,  // 三、四人：在線的人每多一個（超過 2 人），敵人數量的倍數再 +0.6（血量不變；2026-10-18 使用者定，實際玩過再調）
-  MAX_TRIGGER_DEPTH: 3,     // 觸發器巢狀上限
-  WEAPON_SOCKETS: 3, START_WSOCK: 0, MAX_SOCKETS: 3,  // 武器插座開局 0 個、每打完一隻王 +1（打第三關的王時是 2 個）、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
-  HOST_SPEED: 1.5,          // 加速的產物：速度倍率 1.5 以上
-  TIMER_TRIG: 0.3, TIMER_MAX: 5,  // 定時觸發器：每 0.3 秒一次，每顆子彈最多 5 次
+  MEASURE_MIN: 10,  // 電路編輯器的實測 DPS：晶片裝上後戰鬥滿這麼多秒才顯示（太短的數字會亂跳）
+  WEAPON_SOCKETS: 3, START_WSOCK: 1, MAX_SOCKETS: 3,  // 武器插座開局 1 個（第一次拿組件就有地方插）、每打完一隻王 +1、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
   MAX_TRIGGERS_PER_FRAME: 200,  // 同一幀最多處理的觸發次數（防止無限連鎖卡住）；子彈數量本身沒有上限
-  BASE_INTERVAL: 0.16, MIN_INTERVAL: 0.06,
+  HIT_PT: { per: 10, ring: 0.5 },  // 旗艦命中點（hitPts）：半徑每 per 一點，排在 ring 倍半徑的圓上、單數時中心多一點；重力井塌縮照罩到幾點算幾隻（使用者 10-22 定：照體型、只算數量不重複扣血）
+  DEBUG_HIT: false,  // 除錯畫面：true = 畫出敵人、玩家的身體命中範圍和旗艦命中點（console 打 CFG.DEBUG_HIT = true）
+  PROD_CAP: 300,  // 每個玩家場上最多幾個晶片的產物；超過的不再多放，改成讓這一批變大變痛（見 LINE_FX、lineShots；多人 4 人也撐得住）
+  MIN_INTERVAL: 0.06,
   // 能量容量（2026-10-10 改成供電制，見 compileChain）：以前超過容量每 1 點射速 ×0.85，相刃不怕慢（整局 ×0.85 時相刃 40%、其他 8～25%）
-  CAP_SHOP_ADD: 2,          // 補給站買一次容量 +2
   CAP_SINK: 2,              // 散熱片每層容量 +2
   MAGNET_RANGE: 140,
+  PICKUP_DRAG: 0.92,  // 晶體飛向飛船時每幀（照 60fps）剩下的速度比例：像摩擦力，太大會繞著飛船轉、太小飛得慢（見 stepPickup）
+  BRAKE: 0.85,  // 敵人起手、蓄力時停下來的快慢：每幀（照 60fps）剩下的速度比例，越小停得越急；ENEMY_TYPES 的 brake 可以各自改（見 Enemy.brake）
   BULLET_CAP: { mine: 15000, enemy: 2000 },  // 子彈上限（防呆）：超過就刪最舊的，免得爆量卡死；碰到會記進遊玩紀錄。
   //   我方是實測（tests/perf/bulletcap.mjs，RTX 3070）：15000 顆一幀 26～28ms（雷射＋攔截最重），20000 顆掉到 30fps 以下；
   //   敵方照實際最多：旗艦戰站著挨打 90 秒最多 168 顆（第 6 星區終焉核心），2000 留給盾衛反彈我方子彈爆量（敵彈很便宜：40000 顆還有 19ms）
   AUTO_RANGE: 560,          // 手機自動攻擊的索敵距離
-  RESONANCE: 0.5,           // 每個相鄰共振器 +50% 效果
-  RICOCHET_RANGE: 420,      // 彈射尋找下一個目標的距離
-  ARC_RANGE: 260,           // 電弧（軌道砲・磁暴線圈）找附近敵人的距離
+  ARC_RANGE: 260,           // 電弧（電擊線圈）找附近敵人的距離
   // 刺殼：距離 range 內開始縮球 windup 秒（最後 lock 秒鎖定方向）→ 以 rollSpeed 滾 rollT 秒 → 暈眩 stunT 秒 → 冷卻 cooldown 秒
   CHARGE: { elite: { speed: 800, t: 0.45 }, boss2: { speed: 760, t: 0.6 }, boss4: { speed: 700, t: 0.5 }, lurker: { speed: 520, t: 0.4 } },  // 衝鋒：速度、時間（預警線長度也照這個算，見 telegraphLen）
   BRUTE: { range: 350, windup: 0.7, lock: 0.3, rollSpeed: 520, rollT: 0.9, stunT: 1, cooldown: 1.5 },
@@ -113,11 +110,10 @@ const CFG = {
   SHOP_REPAIR: { price: 40, ratio: 0.2 },  // 補給站補血：回復最大 HP 的 20%，每間只能補一次
   SHOP_PRICE_UP: 0.35,      // 所有花晶體的價格 ×（1 ＋ 0.35 ×（星區 − 1）²），跟晶體收入的成長一樣（整局模擬實測）：第 2 星區 ×1.35、第 3 ×2.4、第 4 ×4.15；補給站、刷新獎勵、換零件
   SHOP_SLOT: 70,            // 補給站購買電路擴充（插槽 +1）
-  SHOP_CAP: 50,             // 補給站購買能量容量 +2（CAP_SHOP_ADD）
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   PLAYER_COLORS: ['#4cc9f0', '#ff9dbd', '#ffd166', '#9dff6b'],  // 雙人：1P～4P 各自的顏色（號碼標籤、船底光暈、隊友血條、小地圖、傷害結算；航圖投票標記見 style.css 的 .vote.v1～v4）
   REVIVE: { range: 70, time: 2, iframe: 1.5 },  // 雙人救援：活著的隊友待在倒下位置 70 內滿 2 秒；救起後無敵 1.5 秒
-  VERSION: 'mp-2.28.1（2026-10-21 01:07）',  // 版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
+  VERSION: 'v0.1.0（2026-10-23 02:12）',  // 版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   // 無盡模式：每過一個星區（乘算）敵人攻擊 ×1.25、攻擊頻率 ×1.1、移動速度 ×1.05、血量 ×1.2（另外還有本來的每層血量成長）
   ENDLESS_DMG: 1.25, ENDLESS_ATK: 1.1, ENDLESS_SPD: 1.05, ENDLESS_HP: 1.2,
   BOSS_ORDER: ['boss', 'boss2', 'boss3', 'boss4', 'boss5'],  // 全部的旗艦（沙盒輪流、無盡模式隨機抽）；各章每個星區的王見 chapters.js
@@ -131,8 +127,7 @@ const CFG = {
   MAX_RECORDS: 50,          // 瀏覽器保留的遊玩紀錄筆數
 };
 
-// 遊玩紀錄存在瀏覽器的名稱：V2 用新的名稱，不會蓋掉 V1（同一個網域）的紀錄
-const RECORDS_KEY = 'v2_runRecords';
+
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));

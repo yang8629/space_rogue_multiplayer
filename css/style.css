@@ -158,9 +158,15 @@ button.big:active:not(:disabled) { background: linear-gradient(180deg, #134467, 
 .slot .idx { position: absolute; top: -9px; left: 6px; font-size: 10px; color: #6a79ad; background: #070b1a; padding: 0 4px; white-space: nowrap; }
 .slot .empty { font-size: 11px; color: #3e4c80; }
 .arrow { color: #4c5a8f; font-size: 18px; width: 22px; text-align: center; }
-.arrow.trig { color: #ff6b9d; font-size: 11px; width: 38px; line-height: 1.1; }
 /* 電路：每一格一欄，晶片卡靠上，下面固定留一排插座（大圓，組件插在裡面；滑鼠移上去看是什麼） */
 .chain { align-items: flex-start; }
+/* 電路：一條線一排（線頭在最左），排尾的「＋」是共用的空位 */
+.chain { flex-direction: column; align-items: stretch; gap: 10px; }
+.lrow { display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap; padding: 10px 8px 6px; border-left: 3px solid #4cc9f0; border-radius: 6px; background: rgba(12, 18, 48, .6); }
+.slot .idx:empty { display: none; }  /* 晶片格不編號（一條線一排，看位置就知道順序） */
+.slot.head .idx { color: #4cc9f0; font-weight: 700; font-size: 11px; }  /* 線頭：角標寫什麼時候觸發 */
+.slot.addslot { border-style: dashed; cursor: pointer; }
+.slot.addslot .empty { font-size: 12px; color: #6a79ad; text-align: center; line-height: 1.5; }
 #edMain.free #chain { position: sticky; top: -1px; z-index: 3; background: #0b1024; box-shadow: 0 6px 10px -6px #000; }  /* 沙盒／靶場：電路固定在上方 */
 .chain .arrow { margin-top: 43px; width: 16px; }
 /* 電路、倉庫的晶片放大（晶片庫維持小格，一次看得到全部） */
@@ -212,12 +218,12 @@ button.big:active:not(:disabled) { background: linear-gradient(180deg, #134467, 
 .chip.idle { opacity: .4; filter: grayscale(.7); }
 .t-source { border-color: #4cc9f0; color: #bdf0ff; box-shadow: inset 0 0 14px rgba(76, 201, 240, .22); }
 .t-path { border-color: #5ef2d0; color: #c9fff3; box-shadow: inset 0 0 14px rgba(94, 242, 208, .22); }
+.t-chip { border-color: #5ef2d0; color: #c9fff3; box-shadow: inset 0 0 14px rgba(94, 242, 208, .22); }
 .t-launch { border-color: #ffb347; color: #ffe6c2; box-shadow: inset 0 0 14px rgba(255, 179, 71, .22); }
 .t-impact { border-color: #f78cff; color: #fde0ff; box-shadow: inset 0 0 14px rgba(247, 140, 255, .22); }
 .t-body { border-color: #9dff6b; color: #e2ffd2; box-shadow: inset 0 0 14px rgba(157, 255, 107, .2); }
 .t-mod { border-color: #b388ff; color: #e3d4ff; box-shadow: inset 0 0 14px rgba(179, 136, 255, .22); }
 .t-amp { border-color: #ffd166; color: #fff0c7; box-shadow: inset 0 0 14px rgba(255, 209, 102, .2); }
-.t-trigger { border-color: #ff6b9d; color: #ffd3e2; box-shadow: inset 0 0 14px rgba(255, 107, 157, .25); }
 .t-comp { border-color: #d4a373; color: #f3e1cc; background: linear-gradient(160deg, #2a1d12, #110c08); box-shadow: inset 0 0 14px rgba(212, 163, 115, .25); }  /* 組件：青銅色（金色留給稀有晶片） */
 .chip.t-comp { border-radius: 26px; border-style: double; border-width: 3px; }
 .chip.rare { border-color: #ffd166; box-shadow: 0 0 10px rgba(255, 209, 102, .55), inset 0 0 12px rgba(255, 209, 102, .18); animation: rareGlow 2.4s ease-in-out infinite; }  /* 稀有晶片 */
@@ -229,7 +235,7 @@ button.big:active:not(:disabled) { background: linear-gradient(180deg, #134467, 
   box-shadow: inset 0 0 18px rgba(224, 170, 255, .4); }
 .t-scrap { border-color: #555b66; color: #9aa0aa; cursor: not-allowed;
   background: repeating-linear-gradient(45deg, #1a1c22 0 6px, #23262e 6px 12px); }
-.card.t-source, .card.t-path, .card.t-launch, .card.t-impact, .card.t-body, .card.t-mod, .card.t-amp, .card.t-trigger, .card.t-link, .card.t-comp, .card.t-composite,
+.card.t-source, .card.t-chip, .card.t-path, .card.t-launch, .card.t-impact, .card.t-body, .card.t-mod, .card.t-amp, .card.t-link, .card.t-comp, .card.t-composite,
 .card.t-singularity, .card.t-scrap { border-width: 1px; border-style: solid; }
 /* 卡片大類：外框＋頂端色帶（見 screens.js 的 CARD_CAT） */
 .card.cat-chip, .card.cat-comp, .card.cat-mech { padding-top: 0; overflow: hidden; border-width: 2px; border-style: solid; }
@@ -293,7 +299,7 @@ button.big:active:not(:disabled) { background: linear-gradient(180deg, #134467, 
 /* 說明欄貼在面板底部：沙盒／靶場的晶片庫很長，點電路上的晶片時也看得到說明 */
 .infodock { position: sticky; bottom: -1px; z-index: 2; background: #0e1530; margin-top: 12px; padding: 8px;
   border: 1px solid #4cc9f0; border-radius: 10px; box-shadow: 0 -6px 18px rgba(0, 0, 0, .6), 0 0 12px rgba(76, 201, 240, .25); }
-.infodock .info { margin-top: 0; }
+.infodock .info { margin-top: 0; height: auto; min-height: 44px; max-height: 120px; }  /* 跟著字數伸縮（往上長，不推動版面） */
 
 /* ===== 觸控操作 ===== */
 #touchUI { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -436,7 +442,6 @@ button.big:active:not(:disabled) { background: linear-gradient(180deg, #134467, 
   .chip .nm, .chain .chip .nm, .inv .chip .nm { font-size: 12px; }
   .chip .top, .chain .chip .top, .inv .chip .top { font-size: 9px; }
   .arrow { width: 14px; font-size: 14px; }
-  .arrow.trig { width: 30px; font-size: 9px; }
   .sock { width: 28px; height: 28px; font-size: 9px; }
   .socks { height: 34px; }
   .chain .arrow { margin-top: 24px; }
@@ -485,6 +490,9 @@ body.detail .detail-hint button { background: #1c3a6e; }
 /* 拖曳或選取時：放了會沒作用（或放不進去）的位置變灰，放得進去的亮起來 */
 .slot.nogo, .sock.nogo { opacity: .25; filter: grayscale(1); }
 .slot.go { box-shadow: 0 0 0 2px #4cc9f0, 0 0 10px #4cc9f066; }
+.slot[data-merge] { box-shadow: 0 0 0 2px #ffd166, 0 0 12px #ffd16688; }  /* 拖過去會合成 */
+.slot[data-merge]::after { content: attr(data-merge); position: absolute; top: -9px; right: 6px; font-size: 11px; font-weight: 700;
+  color: #ffd166; background: #070b1a; padding: 0 5px; white-space: nowrap; pointer-events: none; }
 .sock.go { box-shadow: 0 0 0 3px #4cc9f0; }
 /* 數值圖示（assets/ui/stat_*.png）：好處綠、代價紅 */
 .si { width: 1.3em; height: 1.3em; vertical-align: -0.32em; margin-right: 2px; }
@@ -577,3 +585,4 @@ i.new { position: absolute; top: -7px; right: -7px; font-style: normal; font-siz
 .map, .nleg, .rec, .stat, .info, .rules > div, .tree > div, .slotrow, .summary, .sum-tile, .library, .st-box, .wt-path, .wt-finals .wt-node, .mech-row {
   background: var(--inset); box-shadow: var(--inset-sh); border-radius: 4px; }
 .sum-track { background: #05070f; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .7); }
+

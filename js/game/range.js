@@ -58,11 +58,10 @@ const Range = {
       e.hx = e.x; e.hy = e.y;
       G.enemies.push(e);
     }
-    if (layout === 'flood') {  // 爆量重現：QA 第 195 局那組配裝（以前一擋下環形波就整條電路回射，幾秒內幾萬發）
-      G.weapon = { id: 'scatter', path: 'A', final: 0 }; G.refreshWeapon();
-      // 等級靠插組件：收束透鏡插在玩法晶片上沒有效果、只升級（反向 Lv2、加速 Lv3、環繞 Lv3、牆反彈 Lv2、攔截 Lv3）
-      G.chain = ['weapon', chipId('rear', 2), chipId('accel', 2), chipId('orbit', 2), chipId('wallbounce', 1), chipId('intercept', 2), chipId('dashfire', 3)];
-      G.socks = [['mirror', 'split'], ['shock'], ['ignite', 'focus'], ['focus', 'focus'], ['focus'], ['focus', 'focus'], []];
+    if (layout === 'flood') {  // 爆量：產物多、連鎖長的配裝（看產物預算 CFG.PROD_CAP、效能）
+      G.weapon = { id: 'laser', path: null, final: null }; G.refreshWeapon();
+      G.chain = ['weapon', chipId('shard', 3), chipId('boomerang', 3), chipId('shard', 3), chipId('infect', 3), chipId('shard', 3)];
+      G.socks = [['shock', 'shock', 'shock'], ['blast', 'amp'], ['ignite'], ['amp', 'amp'], [], ['frost'], ['blast']];
       G.wSock = Math.max(G.wSock || 0, 3); G.recalc();
       this.ringT = 1;
       floatText(p.x, p.y - 30, '已換上爆量配裝（按住射擊）', '#ff9f1c', true);
@@ -108,37 +107,8 @@ const Range = {
     G.player.hp = G.player.maxHp;
     this.clearStats();
   },
-  // 畫面上的按鈕（1～5、R、T）：只在靶場戰鬥中顯示，目前的排列／實戰／慢動作亮起來
-  bar: null,
-  syncBar() {
-    if (!this.bar) {
-      this.bar = document.getElementById('rangeBar');
-      if (!this.bar) return;
-      this.bar.addEventListener('click', ev => {
-        const b = ev.target.closest('[data-rk]');
-        if (!b) return;
-        if (b.dataset.rk === 'g') this.spawnAt(1, false);  // 按鈕：生在飛船前方（滑鼠在按鈕上）
-        else this.key(b.dataset.rk);
-        b.blur();
-      });
-      const ty = document.getElementById('rgType'), lv = document.getElementById('rgLv');
-      if (ty && lv) {
-        ty.innerHTML = this.spawnTypes().map(k => `<option value="${k}">${ENEMY_TYPES[k].name}${ENEMY_TYPES[k].boss ? '（王）' : ''}</option>`).join('');
-        lv.innerHTML = this.SPAWN_LV.map(l => `<option value="${l}">難度 ${l}</option>`).join('');
-        ty.value = this.spawnType; lv.value = String(this.spawnLv);
-        ty.addEventListener('change', () => { this.spawnType = ty.value; ty.blur(); });  // 選完就離開選單（不然按鍵會改到選項）
-        lv.addEventListener('change', () => { this.spawnLv = +lv.value; lv.blur(); });
-      }
-    }
-    const show = Game.mode === 'range' && Game.state === 'play';
-    this.bar.classList.toggle('hidden', !show);
-    if (!show) return;
-    for (const b of this.bar.querySelectorAll('[data-rk="move"]')) b.textContent = this.spawnMove ? '會動' : '不動';
-    for (const b of this.bar.querySelectorAll('[data-rk="kill"]')) b.textContent = this.spawnKill ? '打得死' : '打不死';
-    const cur = this.live ? '5' : this.KEY_CH[this.KEYS.indexOf(this.layout)];
-    for (const b of this.bar.querySelectorAll('[data-rk]'))
-      b.classList.toggle('on', b.dataset.rk === cur || (b.dataset.rk === 't' && this.slow));
-  },
+  // 靶場的「生成敵人」設定（按鈕列的下拉選單）
+  setSpawn(type, lv) { if (type in ENEMY_TYPES) this.spawnType = type; if (this.SPAWN_LV.includes(lv)) this.spawnLv = lv; },
   key(k, shift = false) {  // 靶場快捷鍵：1～4 換標靶、5 實戰、R 清除數據、T 慢動作、G 生成敵人（Shift：5 隻）、C 清除手動生的敵人
     if (k === 'g') { this.spawnAt(shift ? 5 : 1, true); return true; }
     if (k === 'c') { Game.enemies = Game.enemies.filter(e => !e.manual); return true; }

@@ -1,10 +1,10 @@
 // 電漿補強的畫面截圖（2026-10-12）：壓縮（往內收的吸入光圈、被吸過去的軌跡）、增殖（追蹤的小電漿）
 //   右邊擺一群不會動的靶（散在 150 內外），瞄著打；壓縮連拍 6 張抓 0.3 秒的光圈
 //   用法：node perf/compressshot.mjs <輸出資料夾>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const dir = process.argv[2], url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));

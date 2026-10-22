@@ -1,11 +1,11 @@
 // 彗星爆炸（新畫面）：飛船旁邊讓彗星撞爆，爆炸後 0.08／0.25／0.6 秒各截一張，拼成一張 → art_lab/screenshots/新畫面_彗星爆炸.png
 //   用法：node perf/cometshot.mjs [canvas]
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const MODE = process.argv[2] === 'canvas' ? 'canvas' : 'gl';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1.5 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1.5 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 const wait = ms => new Promise(r => setTimeout(r, ms));

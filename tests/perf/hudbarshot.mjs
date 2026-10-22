@@ -1,9 +1,9 @@
 // 左上角小條截圖（蓄力、超頻熱度、架設）：裝上這三個，站著不動按住射擊幾秒後截左上角
 //   用法：node perf/hudbarshot.mjs <輸出檔> <gl|2d>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const out = process.argv[2], mode = process.argv[3] || 'gl', url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url);

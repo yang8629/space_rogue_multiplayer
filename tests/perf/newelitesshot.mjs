@@ -1,9 +1,9 @@
 // 新精英截圖：砲艦（蓄力）、拖曳艦（牽引光束連到飛船）、三艦編隊（交叉齊射的預警線）、虛空獵手並排；
 //   另一張：砲艦真的開打（砲擊的落點紅圈）＋拖曳艦鎖定的預警線
 //   用法：node perf/newelitesshot.mjs   → art_lab/screenshots/新精英.png、新精英_放大.png、新精英_開打.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

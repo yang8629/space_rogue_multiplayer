@@ -10,7 +10,7 @@ const HTML_PATH = path.join(GAME_DIR, 'index.html');
 
 function readGame() {
   const html = fs.readFileSync(HTML_PATH, 'utf8');
-  const files = [...html.matchAll(/<script src="(js\/[^"]+)"><\/script>/g)].map(m => ({
+  const files = [...html.matchAll(/<script src="(js\/[^"?]+)(?:\?v=[^"]*)?"><\/script>/g)].map(m => ({
     name: m[1], code: fs.readFileSync(path.join(GAME_DIR, m[1]), 'utf8') }));
   if (!files.length) throw new Error('index.html 裡找不到 js/*.js');
   return { html, files, js: files.map(f => f.code).join('\n') };
@@ -44,8 +44,8 @@ globalThis.location = { hash: '' };
 // 從遊戲腳本內部匯出的名稱（都是遊戲的頂層宣告）
 const EXPORTS = `Game, CHIPS, WEAPONS, NORMAL_IDS, COMPOSITE_IDS, OVERLOADS, CFG, SHIPS, Enemy, Screen, Editor, Codex,
   TYPE_META, NODE_META, PASSIVE_LABEL, LV_INFO, ENEMY_TYPES, lvMulOf,
-  chipId, fullChip, newChip, socketsOf, isComp, isHost, parseChipId, SLOT_ATTRS, splitChain, flatChain, sockCount, analyzeChain, compileChain, runOps, weaponParams, weaponTitle, genMap,
-  hasLv, slotLv, lvName, startChipPicks, isUnlocked, openChips, compsFor, bhGood, baseOf, MechCheck, SockCheck, Net, Player, render, Objects, Arena`;
+  chipId, fullChip, newChip, socketsOf, isComp, isHost, parseChipId, splitChain, flatChain, sockCount, analyzeChain, compileLine, weaponParams, weaponTitle, genMap,
+  hasLv, slotLv, lvName, startChipPicks, isUnlocked, openChips, lvOf, rareOf, mergedChip, baseOf, MechCheck, Net, NetView, Player, render, Objects, Arena, WEAPON_PLAY, Hub, HUB, Input`;
 
 // 在某個 vm context 裡依序執行每個遊戲檔案（run = vm.runInThisContext 或 (code, opt) => vm.runInContext(code, ctx, opt)）
 function runFiles(run, pre = '') {

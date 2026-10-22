@@ -1,10 +1,10 @@
 // 環繞卡頓實測（2026-10-19 使用者實玩：散彈＋環繞會卡，把環繞拿下來）：照那局的配裝在沙盒打 40 隻標靶，
 //   按住射擊 2.5 秒（子彈存在身邊繞）→ 放開 0.3 秒（全部射出）一直循環；每秒記 FPS、子彈數、運算／畫圖時間、最慢一幀
 //   用法：node perf/orbitlag.mjs [orbit|none]   orbit：散彈［爆裂］＋環繞・爆發＋反向・餘波＋架設；none：同一組拿掉環繞（比較用）
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const which = process.argv[2] || 'all', builds = which === 'all' ? ['orbit', 'none'] : [which];
-const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false,
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: false,
   defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 for (const build of builds) {
   const page = await browser.newPage();

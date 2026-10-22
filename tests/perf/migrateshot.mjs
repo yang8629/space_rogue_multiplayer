@@ -1,10 +1,10 @@
 // 存檔升級（js/data/unlocks.js 的 unlockUpgrade）在真的瀏覽器裡：放一份老玩家的存檔 → 重新整理 → 看紀錄、章節、選章畫面
 //   老玩家：2.19 的紀錄 2 筆（通關第一、二章）、2.20.0 的紀錄 1 筆（通關第一章）、2.20.0 的解鎖進度、章節進度 [1, 2]
 //   用法：node perf/migrateshot.mjs（用 puppeteer 自己的瀏覽器資料，不動到平常玩的存檔）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

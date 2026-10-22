@@ -1,11 +1,11 @@
 // 小行星的視野陰影：飛船周圍放幾顆小行星，新畫面、舊畫面各截一張 → art_lab/screenshots/新畫面_視野陰影.png
 //   用法：node perf/shadowshot.mjs [belt|wall]（wall：第 1 星區大地圖、岩石洞壁）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const BELT = process.argv[2] === 'belt' ? true : process.argv[2] === 'wall' ? 'wall' : false;  // belt：一排小行星（小行星帶），飛船站在一端、旁邊有黑洞
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 const wait = ms => new Promise(r => setTimeout(r, ms));

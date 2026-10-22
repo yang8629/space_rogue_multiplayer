@@ -1,10 +1,10 @@
 // 供電制（2026-10-10）的電路編輯器截圖：斷在晶片（容量 7）、斷在組件（容量 6）→ art_lab/screenshots/供電_斷在晶片.png、供電_斷在組件.png
 //   用法：node perf/powershot.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1.5 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1.5 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 await p.goto(url); await new Promise(r => setTimeout(r, 1500));

@@ -6,6 +6,7 @@
 // INPUT
 // =====================================================================
 const Input = { keys: new Set(), mx: 0, my: 0, down: false, dash: false, dashHeld: false,  // dashHeld：衝刺鍵按住中（冷卻好就自動再衝；不靠系統的按鍵重複，按別的鍵也不會斷）
+  alt: false,                      // 這一幀按了武器的右鍵（Player.tickAlt 用掉）
   touch: false,                    // 偵測到觸控後切換為雙搖桿操作
   autoFire: true,                  // 手機自動攻擊（可切換，記在瀏覽器）
   joy: null, aimStick: null };     // { id, bx, by, x, y }
@@ -20,7 +21,7 @@ addEventListener('keydown', e => {
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
   if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k, e.shiftKey)) return;
-  if (k === ' ') { e.preventDefault(); if (Game.state === 'play' || Screen.hubOn) { Input.dash = true; Input.dashHeld = true; } return; }
+  if (k === ' ') { e.preventDefault(); if (Game.state === 'play' || Hub.driving) { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
   if (k === 'escape' && Game.state === 'play' && !e.repeat) { Game.togglePauseMenu(); return; }  // 戰鬥中：選單（繼續／離開遊戲）
@@ -28,7 +29,7 @@ addEventListener('keydown', e => {
     const back = !Screen.el.classList.contains('hidden') && Screen.el.querySelector('[data-back]');
     if (back) { Screen.act(back); return; }
   }
-  if ((k === 'e' || k === 'enter') && Screen.hubOn && !e.repeat) Hub.interact();  // 基地：對靠近的停機坪、門、發射台做事
+  if ((k === 'e' || k === 'enter') && Hub.driving && !e.repeat) Hub.interact();  // 基地：對靠近的停機坪、門、發射台做事
   else if (k === 'enter' && Game.state === 'title' && Screen.el.querySelector('[data-act="depart"]')) Screen.depart();  // 發射台的面板：Enter = 出發
   if (k === 'enter' && Game.state === 'lobby' && document.activeElement && document.activeElement.id === 'netCode') Net.join(document.activeElement.value);
   if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();
@@ -44,9 +45,12 @@ const ctx = canvas.getContext('2d');
 const canvasPos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 addEventListener('mousemove', e => { const p = canvasPos(e); Input.mx = p.x; Input.my = p.y; Input.mouseMoved = true; });  // mouseMoved：基地的船頭要不要朝滑鼠
 canvas.addEventListener('mousedown', e => {
-  if ((Game.state !== 'play' && !Screen.hubOn) || Input.touch) return;  // 戰鬥中，或基地（可以射著玩）
+  if ((Game.state !== 'play' && !Hub.driving) || Input.touch) return;  // 戰鬥中，或基地（可以射著玩）
   if (e.button === 0) Input.down = true;
-  if (e.button === 2) { Input.dash = true; Input.dashHeld = true; }
+  if (e.button === 2) {
+    if (Game.state === 'play' && WEAPONS[Game.weapon.id].alt) Input.alt = true;  // 武器的右鍵（見 WEAPONS[id].alt）
+    else { Input.dash = true; Input.dashHeld = true; }
+  }
 });
 addEventListener('mouseup', e => { if (e.button === 0) Input.down = false; if (e.button === 2) Input.dashHeld = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -89,14 +93,14 @@ const TouchUI = {
     const dash = document.getElementById('tDash'), edit = document.getElementById('tEdit');
     document.getElementById('tMenu').addEventListener('click', () => { if (Game.state === 'play') Game.togglePauseMenu(); });
     this.autoBtn = document.getElementById('tAuto');
-    try { if (localStorage.getItem('autoFire') === '0') Input.autoFire = false; } catch (e) {}
+    if (!Save.flag('autoFire', true)) Input.autoFire = false;
     dash.addEventListener('pointerdown', e => { e.preventDefault(); if (Game.state === 'play') { Input.dash = true; Input.dashHeld = true; } });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) dash.addEventListener(ev, () => { Input.dashHeld = false; });
     edit.addEventListener('click', () => Game.toggleEditor());
     this.autoBtn.addEventListener('click', () => {
       Input.autoFire = !Input.autoFire;
       if (Input.autoFire) Input.aimStick = null;
-      try { localStorage.setItem('autoFire', Input.autoFire ? '1' : '0'); } catch (e) {}
+      Save.setFlag('autoFire', Input.autoFire);
       this.renderAuto();
     });
     this.renderAuto();

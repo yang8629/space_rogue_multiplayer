@@ -1,9 +1,9 @@
 // 旋風斬（8 段）、追蹤飛刃的畫面截圖（2026-10-13）：旋風斬四周放 6 隻不會動的靶；追蹤飛刃的靶放在準心偏 30° 的地方，看刃片有沒有彎過去
 //   用法：node perf/cycloneshot.mjs <輸出資料夾>
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const dir = process.argv[2], url = process.env.GAME_URL || GAME + 'index.html';  // GAME_URL：試改版
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));

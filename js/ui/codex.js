@@ -3,7 +3,7 @@
 'use strict';
 
 // =====================================================================
-// CODEX — 電路總覽（規則 / 晶片 / 插座與奇異點 / 武器 / 目前配置）
+// CODEX — 電路總覽（規則 / 晶片 / 插件 / 武器 / 目前配置）
 // =====================================================================
 const Codex = {
   el: document.getElementById('codex'),
@@ -29,11 +29,11 @@ const Codex = {
   close() { this.el.classList.add('hidden'); },
 
   render() {
-    const tabs = [['rules', '規則'], ['chips', '晶片'], ['comps', '組件'], ['body', '機體與地圖'], ['special', '插座與奇異點'], ['weapons', '武器']];
+    const tabs = [['rules', '規則'], ['chips', '晶片'], ['comps', '插件'], ['body', '機體與地圖'], ['weapons', '武器']];
     if (this.hasRun()) tabs.push(['current', '目前配置']);
     tabs.push(['charts', '數值圖表'], ['mech', '機制檢查']);
     this._charts = {};
-    const content = { rules: this.rules, chips: this.chips, comps: this.comps, body: this.bodyTab, special: this.special, weapons: this.weapons, current: this.current,
+    const content = { rules: this.rules, chips: this.chips, comps: this.comps, body: this.bodyTab, weapons: this.weapons, current: this.current,
       charts: this.charts, mech: this.mech }[this.tab].call(this);
     this.body.innerHTML = `<div class="between"><h2>📖 電路總覽</h2><button data-cx="close">關閉 (Esc)</button></div>
       <div class="tabs">${tabs.map(([k, l]) => `<button data-cx="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
@@ -315,55 +315,39 @@ const Codex = {
           return `<b style="color:${T.color}">${T.group || T.name}</b>${from > 1 ? `（第 ${from} 星區起）` : ''}${ch.length ? `（${ch.join('、')}比較常出現）` : ''}：${T.desc}`; }).join('<br>')}`)}
       ${R('精英詞綴', `精英戰的最後一區是精英的場子（精英最先出場，護衛只有一般一波的 ${Math.round(CFG.ELITE_ESCORT * 100)}%）。精英隨機帶詞綴：第 1 星區 1 個、第 2 星區 2 個、第 3 星區以後 3 個，名字照詞綴改（例如「分裂・狂暴的虛空獵手」）；閃現＋隱形、召喚＋統帥不會一起出現。<br>
         ${AFFIX_IDS.map(id => `<b>${AFFIX[id].name}</b>：${AFFIX[id].desc}`).join('<br>')}`)}
-      ${R('執行順序', '電路由左至右執行。第 1 格固定是你的武器，負責產生子彈；右邊的玩法晶片依序改變「目前已經存在」的子彈。玩法晶片（迴旋、黏著⋯⋯）是貼在子彈上的特性，分裂複製子彈時會一起複製。<b>觸發器</b>右邊的晶片只作用在觸發後射出的回響上。')}
-      ${R('晶片種類', `<b>改變玩法的晶片</b>（插組件升級）：
-        <span style="color:${TYPE_META.path.color}">${TYPE_META.path.icon} 彈道</span>（子彈怎麼飛）、
-        <span style="color:${TYPE_META.launch.color}">${TYPE_META.launch.icon} 發射</span>（從哪裡、朝哪裡射）、
-        <span style="color:${TYPE_META.impact.color}">${TYPE_META.impact.icon} 命中</span>（打中之後）、
-        <span style="color:${TYPE_META.body.color}">${TYPE_META.body.icon} 機體</span>（跟衝刺連動）。掉落時隨機有 1～3 個<b>插座</b>。<br>
-        <span style="color:#ffd166">◇ 組件</span>：分裂、巨彈、穿甲、倍增、超頻模組、鏡像，還有元素組件（爆裂、燃燒、冰凍、電擊：命中效果，跟武器升級的爆炸、燃燒、減速、電弧相加；破甲：命中的敵人受傷 +25%，跟感測器的弱點標記相加）。插進武器、玩法晶片或觸發器的插座（不佔電路格），本身不會升級，拿到重複的就是多一個；插在玩法晶片上讓它升級。<br>
-        <span style="color:${TYPE_META.trigger.color}">◎ 觸發器</span>：命中、消失、定時三種，放在電路格。觸發時用武器再射一次回響（50%），右邊的晶片只作用在回響上，最多巢狀 ${CFG.MAX_TRIGGER_DEPTH} 層。也有插座：插在上面的組件作用在回響上。`)}
-      ${R('插座', `武器插座開局 ${CFG.START_WSOCK} 個，每打完一隻王 +1，最多 ${CFG.WEAPON_SOCKETS} 個；其他晶片掉落時隨機 1～3 個（沙盒、靶場一律 ${CFG.MAX_SOCKETS} 個）。組件拖進晶片的插座（不佔電路格），超過插座數的組件沒有作用（變灰）；黑洞屬性只強化放在那一格的晶片（效果 ×1.5 = 它插座上的組件 ×1.5）。<br>
-        <b>插在武器上</b>：作用在射出的全部子彈，但倍增、巨彈的傷害加成只算直擊（迴旋回程、環繞放出、地雷衝出、加速 1.5 倍以上、反彈後、反向往後、蓄滿、衝刺、攔截回射、黏著爆炸、感染爆出這些產物不吃，要插在那個晶片上）。觸發器的插座也一樣（作用在回響上，傷害加成只算回響的直擊），武器插座的組件<b>不會</b>作用在回響上。<br>
-        <b>插在玩法晶片上</b>：只作用在那個晶片的「產物」（例：插在環繞上 = 放出的那一波；插在黏著上 = 爆炸）。每個晶片的產物見「插座與奇異點」分頁。<br>
-        超頻模組、收束透鏡只有插在武器上才有效果；鏡像 = 再來一次（武器多射一次、玩法晶片的產物多一份，插哪個插座都一樣）；巨彈不改子彈數量，插座的順序不影響結果；吸引只有巨彈有效果。插在玩法晶片上沒效果的組件照樣算等級（只升級）。`)}
-      ${R('組件升級與進化', `改變玩法的晶片的等級 ＝ 1 ＋ 插在它上面的組件數（每個 +${CFG.LV_PER_COMP} 級），最多 Lv${CFG.MAX_CHIP_LV}；Lv${CFG.MAX_CHIP_LV} 是<b>進化</b>，改名、玩法再變一次。隨時可以在電路編輯器拔插，等級跟著變；移到倉庫就回到 Lv1。<br>任何組件都算，插了沒效果的也算（例：吸引只有巨彈有效果、超頻模組只有插在武器上才有效果），編輯器會標「只升級，沒有效果」；超過插座數、沒電的組件不算。插座數（1～3）決定最高等級。<br>撿到重複的玩法晶片不會合成（獎勵、補給站也不再出現已經有的）。`)}
-      ${R('稀有晶片', `玩法晶片＋1 個<b style="color:#ffd166">詞條</b>（詞條 Lv1～${RARE_MAX_LV}，Lv1 ${Math.round(CFG.RARE.lv[0] * 100)}%、Lv2 ${Math.round(CFG.RARE.lv[1] * 100)}%、Lv3 ${Math.round(CFG.RARE.lv[2] * 100)}%）。卡片金框、電路格有 ★。<br>
-        出現：一般戰鬥的三選一每一格玩法晶片 ${Math.round(CFG.RARE.chance * 100)}%；${Object.keys(CFG.REWARDS).filter(k => CFG.REWARDS[k].rare).map(k => ({ elite: '精英', boss: '旗艦' }[k] || k)).join('、')}的三選一保證一格（刷新也保證）；一般戰鬥打掉<b style="color:${ENEMY_TYPES.treasure.color}">${ENEMY_TYPES.treasure.name}</b>也保證一格（${Math.round(CFG.TREASURE.chance * 100)}% 的戰鬥會出現，不攻擊、會逃，${CFG.TREASURE.life} 秒沒打掉就躍遷離開）；3 區的一般戰鬥 ${Math.round(CFG.INTRUDE.chance * 100)}% 有精英亂入，打掉也保證一格（同一場可以疊）；擊沉旗艦先三選一，選完再領旗艦獎勵。三選一有稀有晶片時，其他卡先翻開，稀有那格最後才翻開。<br>
-        身上已經有這個晶片也會出現：拿了之後身上那個變稀有（留在原本的格子、組件不動、插座數取兩個裡比較多的，不用倉庫）；已經有詞條時：同一個詞條 +1 級，不同詞條可以選「替換」（新詞條從 Lv1）或「增強」（原本的 +1 級）。<br>
-        ${RARE_IDS.map(k => `<b>${RARE[k].name}</b>：${rareAllTxt(k)}`).join('<br>')}（數字是 Lv1／Lv2／Lv3）`)}
-      ${R('能量與容量', `每個晶片、組件右上角的 ⚡ 是能量；機體有<b>能量容量</b>。電路<b>從左往右供電</b>：武器插座上的組件 → 第 1 格晶片 → 它插座上的組件 → 第 2 格晶片…，一個一個扣容量。<br>
-        遇到<b>第一個電不夠的</b>，它和它右邊的全部都<b>沒電、沒有作用</b>（不會跳過去找便宜的），編輯器上會變暗並畫出「⚡ 斷電」線；沒電的組件不算等級。能量不影響射速。放錯位置、插座不夠這類本來就沒作用的不吃電；但插在玩法晶片上的照樣吃電（它算等級）。<br>
-        例：容量 7，第 1 格晶片 ⚡2（插一個 ⚡2 組件）、第 2 格晶片 ⚡2、第 3 格晶片 ⚡2 → 第 1 格連組件用掉 4、第 2 格到 6，第 3 格要到 8 > 7 → 第 3 格開始沒電。重要的晶片放左邊。<br>
-        容量的來源：飛船開局（${Object.values(SHIPS).map(s => s.name + ' ' + s.cap).join('、')}）、補給站每間可以買 +${CFG.CAP_SHOP_ADD}、散熱片零件每層 +${CFG.CAP_SINK}。放在倉庫的晶片不吃電。
-        超頻模組讓射速 ×2，但連續射擊太久會過熱停火 1.5 秒。`)}
-      ${R('擊退', `每把武器的擊退值不同：${Object.values(WEAPONS).map(W => `${W.name} ${W.base.knock}`).join('、')}（鋼珠、攻城砲 ×2）。巨彈每級擊退 +0.5。<br>
+      ${R('線', `電路是一條<b>線</b>。第 1 格是<span style="color:${TYPE_META.source.color}">◉ 飛船晶片</span>（線頭，固定不能拔）：插在它上面的插件作用在飛船的所有攻擊（左鍵、右鍵、武器升級、衝刺撞擊、砲台），也往下傳給整條線。<br>
+        線頭在武器打中敵人時觸發（每把武器命中的次數不同，所以照<b>觸發係數</b>累積：${Object.values(WEAPONS).map(W => `${W.short} ${+W.trig.toFixed(2)}`).join('、')}，滿 1 觸發一次），在命中點；武器的<b>招牌動作</b>直接觸發一次：光束排熱、飛輪召回（每個飛輪回程第一下）、重力井塌縮（每個井）、鉤爪甩擊（第一次撞到）、能量刃重斬（第一下）、蜂群收攏（有擋到敵彈）。<br>
+        電路開局 ${CFG.START_SLOTS} 格、最多 ${CFG.MAX_SLOTS} 格。`)}
+      ${R('晶片', `<span style="color:${TYPE_META.chip.color}">➰ 晶片</span>被觸發時放出自己的東西（產物）；產物打中（或打死）敵人時，再觸發同一條線的下一片晶片。<b>晶片不改武器的攻擊</b>，武器永遠照自己的打。<br>
+        每片晶片有固定的「往下傳」條件和次數：${NORMAL_IDS.filter(id => CHIPS[id].type === 'chip').map(id => `${CHIPS[id].name} ${CHIPS[id].pass === 'kill' ? '擊殺' : CHIPS[id].pass === 'end' ? '結束' : '命中'}${id === 'echo' ? '（照武器的觸發係數）' : ` ×${CHIPS[id].coef}`}`).join('、')}。<br>
+        產物的傷害照武器每 ${REF_T} 秒的輸出算（武器變強，晶片跟著變強），每往下一層 ×${LINE_DECAY}。`)}
+      ${R('插件與等級', `<span style="color:${TYPE_META.comp.color}">◆ 插件</span>插在武器或晶片的插座上（不佔電路格），<b>會傳給同一條線上它後面的所有晶片，同種加總</b>（插越前面影響越多片）：物理傷害 +${Math.round(PLUG.dmg * 100)}%、大小 +${Math.round(PLUG.size * 100)}%；元素讓產物打到的東西帶上元素。<br>
+        傷害分兩種：<b>物理</b>是產物本身打中的那一下，吃傷害插件和晶片等級；<b>屬性</b>是元素造成的（爆炸、燃燒、電弧…），強度只看疊了幾個同種元素（例：3 個電擊 = 電 3 隻、每道更痛）。<br>
+        數量只靠晶片的觸發：每個人場上最多 ${CFG.PROD_CAP} 個產物，超過的不再多放，改成讓那一批變大變痛（總傷害不變）。<br>
+        插件不影響晶片等級。同種晶片拖到一起就合成升級：等級相加、插座取大的、兩片的插件都移過去（插不下的退回倉庫），最多 Lv${CFG.MAX_CHIP_LV}，物理傷害 Lv2 ×${LV_MUL[2]}、Lv3 ×${LV_MUL[3]}；合成不能拆回來，不合成就分開放。武器插座開局 ${CFG.START_WSOCK} 個，每打完一隻王 +1，最多 ${CFG.WEAPON_SOCKETS} 個；晶片掉落時隨機 1～3 個插座（沙盒、靶場一律 ${CFG.MAX_SOCKETS} 個）。`)}
+      ${R('擊退', `每把武器的擊退值不同：${Object.values(WEAPONS).map(W => `${W.name} ${W.base.knock}`).join('、')}。<br>
         一般敵人都會被推。旗艦有抗擊退，子彈的擊退值<b>超過</b>抗性才推得動，力道只看超過的部分：${CFG.BOSS_ORDER.map(id => `${ENEMY_TYPES[id].name} ${ENEMY_TYPES[id].knockResist}`).join('、')}。爆炸、震波、電弧不會推王。被擊退撞上行星的敵人多受 20 傷害。`)}
-      ${R('傷害加成分兩種', '<b>武器加成</b>：插在武器（或觸發器）上的倍增、巨彈的 +30%，加上蓄力、速度倍率（加速、環繞放出）、衝刺射擊，全部<b>相加</b>：兩個倍增器是 +100% +100% = ×3，不是 ×4。<br><b>晶片加成</b>：插在玩法晶片上的倍增、巨彈，作用在同一下命中的全部相加。<br>最終傷害 ＝ 基礎 ×（1 ＋ 武器加成）×（1 ＋ 晶片加成）。分裂（每顆 ×0.4）、迴旋（×0.7）、武器升級照舊相乘。')}
-      ${R('子彈數量', `子彈數量<b>沒有上限</b>：分裂、觸發疊多少就射多少（手機可能會卡）。只有一個防止無限連鎖的上限：同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次觸發，超過的那幾次不會觸發。`)}
+      ${R('子彈數量', `子彈數量<b>沒有上限</b>：數量插件、連鎖疊多少就放多少（手機可能會卡）。只有一個防止無限連鎖的上限：同一幀最多處理 ${CFG.MAX_TRIGGERS_PER_FRAME} 次觸發，超過的那幾次不會觸發。`)}
       ${R('倉庫', `倉庫 ${CFG.INV_SLOTS} 格，放暫時不用的晶片。不要的晶片可以回收，拿回 40% 售價。`)}
       ${R('插槽', `開局 ${CFG.START_SLOTS} 格，最多 ${CFG.MAX_SLOTS} 格。來源：擊敗 Boss、補給站購買（◆${CFG.SHOP_SLOT} 起，隨星區上漲）、精英戰獎勵、武器升滿後的軍械台。`)}
-      ${R('奇異點（航圖）', `投入 1 個晶片（晶片會消失）：隨機一個還沒強化過的電路格（武器格也可能）得到一個屬性，每格只能強化一次，屬性留在格子上（換晶片也還在）。好結果的機率看投入晶片的插座數：${bhOddsTxt()}。也可以不投入直接離開。屬性見「插座與奇異點」分頁。`)}
       ${R('？事件（航圖）', `進去才知道是哪一種；選項上寫著代價、獎勵（🎲 = 賭運氣，寫著機率），賭的結果先揭曉再繼續。<br>${EVENT_IDS.map(k => `<b style="color:${EVENTS[k].color}">${EVENTS[k].icon} ${EVENTS[k].name}</b>：${EVENTS[k].opts.map(o => o.lab).join('／')}`).join('<br>')}<br><b style="color:#ffd166">✦ 寶藏星域</b>：${HOARD_TXT}<br>下一場變難（求救訊號、星圖情報被發現）和寶藏星域是全隊的；其他都是自己的。`)}
       ${R('機體與地圖', '零件（改裝廠）、5 艘飛船（各自的能力）與地圖物件，見「機體與地圖」分頁。')}
     </div>`;
   },
 
-  // 晶片：改變玩法的晶片和觸發器（組件另外一頁）
-  chips(groups = ['path', 'launch', 'impact', 'body', 'trigger']) {
+  // 晶片：晶片和觸發器（插件另外一頁）
+  chips(groups = ['chip']) {
     return groups.map(t => {
       const ids = NORMAL_IDS.filter(id => CHIPS[id].type === t);
       if (!ids.length) return '';
       const m = TYPE_META[t];
-      const cards = ids.map(id => {
-        return chipCard(id, `${hasLv(id) ? `<div class="ty" style="color:#9dff6b">插 ${compsFor(2)} 個組件 → Lv2、插 ${compsFor(CFG.MAX_CHIP_LV)} 個 → 進化「${CHIPS[id].evo}」</div>` : ''}${isComp(id) || CHIPS[id].type === 'trigger' ? '<div class="ty">不會升級</div>' : ''}<div class="ty">售價 ◆${chipPrice(id)} 起（每個插座 +◆6）</div>`);
-      }).join('');
+      const cards = ids.map(id => chipCard(id, hasLv(id) ? `<div class="ty" style="color:#9dff6b">同種 2 片合成 → Lv2、3 片 → Lv${CFG.MAX_CHIP_LV}</div>` : '')).join('');
       return `<div class="codex-sec"><h3 style="color:${m.color}">${m.icon} ${m.label}（${ids.length}）</h3><div class="cards" style="justify-content:flex-start;margin:0">${cards}</div></div>`;
     }).join('');
   },
-  // 組件：不佔電路格，插在晶片（或武器、觸發器）的插座上；插在哪裡作用在哪裡，見「插座與奇異點」
+  // 插件：不佔電路格，插在武器或晶片的插座上，只改那一片
   comps() {
-    return `<div class="sub" style="margin:6px 0 10px">組件不佔電路格，拖到晶片、武器或觸發器的<b>插座</b>上才有作用（超過插座數的變灰）。插在武器上作用在射出的子彈；插在玩法晶片上只作用在那個晶片的產物。每個晶片的產物見「插座與奇異點」分頁。</div>` + this.chips(['comp']);
+    return `<div class="sub" style="margin:6px 0 10px">插件不佔電路格，拖到武器或晶片的<b>插座</b>上才有作用（超過插座數的變灰）。插在哪一片，就只改那一片（插在武器上 = 武器本身；插在晶片上 = 它放出的東西）。</div>` + this.chips(['comp']);
   },
 
   // 機體與地圖：飛船、零件、地圖物件
@@ -379,25 +363,11 @@ const Codex = {
       <div class="codex-sec"><h3>🪐 地圖物件</h3><div class="rules">
         ${R('大地圖', '一般戰、精英戰是一張不規則的大地圖，分成 2～3 個區域（一區一波），區域之間用通道相連、通道中間有閘門。牆擋住飛船、敵人和雙方的子彈：牆反彈的子彈照牆面的角度彈開，其他子彈打到牆就消失（敵人的子彈也一樣，牆可以當掩護）。閘門在這一區清完才打開，穿過去就開始下一區，不能回頭（多人：一個人穿過去就開始，另一個人之後自己飛過去）。右上角有小地圖。沙盒、靶場是方形場地。旗艦戰是一區的王關場地，形狀照王（母艦：圓形大廳＋凹室；獵艦：細長菱形；核心：中間四根柱子），終焉核心會在你身邊標紅圈轟炸。')}
         ${R('擺放', '大地圖的每個區域各自抽：一半機率沒有，有的話一般戰 1～2 種、精英戰 1 種（行星或彗星）。行星、黑洞放在空地上，不擋閘門；小行星帶從一邊的牆拉到另一邊的牆；彗星只在你所在的區域出現。旗艦戰沒有（王關場地本身就有凹室、柱子這些地形）。沙盒、靶場沒有。')}
-        ${R('行星', '實心大球，擋住雙方的子彈。周圍的虛線圈是引力範圍：經過的子彈會被彎過去（彈弓），越慢的子彈彎越多（電漿砲最明顯、軌道砲幾乎不彎）。牆反彈的子彈會從行星表面反彈。')}
+        ${R('行星', '實心大球，擋住雙方的子彈。周圍的虛線圈是引力範圍：經過的子彈會被彎過去（彈弓），越慢的子彈彎越多。牆反彈的子彈會從行星表面反彈。')}
         ${R('黑洞', '把附近所有東西（敵人、雙方子彈、飛船）往中心拉；核心吞掉子彈，敵人和飛船碰到核心會受傷。旗艦不會被拉。')}
         ${R('彗星', '定時從場外（大地圖：從這一區的牆邊）沿直線橫越，進場前 1.5 秒有藍白色預警線（敵人的預警線是紅色）。撞到的敵人受 40、飛船受 20 傷害；打爆後碎片沿原本的方向炸出 10 發，敵人和飛船都會被打到（飛船每片 ${CFG.COMET_SHARD_DMG}）；撞到牆會爆炸。行星讓它彎軌道，黑洞吞掉它時會爆炸。')}
-        ${R('小行星帶', `一整排小行星，擋住雙方的子彈；<b>被小行星擋住的敵人看不到</b>，只在小行星邊緣顯示「？」（感測器 4 層看得到）。只有單發傷害 ≥ ${OBJ.ROCK_MIN_DMG} 的子彈或爆炸打得動（電漿砲、軌道砲、獨頭彈、巨彈、蓄力），打爆掉晶體（耐久每 ${OBJ.ROCK_CREDIT_HP} 一顆，大約 2～4 顆）。旗艦的子彈、旗艦和滾動的刺殼撞上去也會打碎（不掉晶體）。`)}
+        ${R('小行星帶', `一整排小行星，擋住雙方的子彈；<b>被小行星擋住的敵人看不到</b>，只在小行星邊緣顯示「？」（感測器 4 層看得到）。只有單發傷害 ≥ ${OBJ.ROCK_MIN_DMG} 的子彈或爆炸打得動（巨彈、蓄力這類），打爆掉晶體（耐久每 ${OBJ.ROCK_CREDIT_HP} 一顆，大約 2～4 顆）。旗艦的子彈、旗艦和滾動的刺殼撞上去也會打碎（不掉晶體）。`)}
       </div></div>`;
-  },
-
-  // 插座與奇異點：每個晶片的產物（插在它上面的組件作用在哪裡）、奇異點的格子屬性
-  special() {
-    const hosts = ['weapon', ...NORMAL_IDS.filter(id => isHost(id))];
-    const name = id => id === 'weapon' ? '武器' : CHIPS[id].name;
-    const rows = hosts.map(id => `<tr><td><b style="color:${id === 'weapon' ? '#4cc9f0' : TYPE_META[CHIPS[id].type].color}">${name(id)}</b></td><td>${HOST_PRODUCT[id] || ''}</td></tr>`).join('');
-    const attr = k => `<div><b style="color:${SLOT_ATTRS[k].good ? '#9dff6b' : '#ff6b6b'}">${SLOT_ATTRS[k].name}</b>：${SLOT_ATTRS[k].desc}</div>`;
-    return `<div class="codex-sec"><h3 style="color:#ffd166">◇ 每個晶片的產物（插在它上面的組件只作用在這裡）</h3>
-        <div class="sub">組件插在晶片的插座裡。插在武器、觸發器上算進武器加成；插在玩法晶片上算進晶片加成。</div>
-        <table class="dmg-table"><thead><tr><th>晶片</th><th>產物</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="codex-sec"><h3 style="color:#b388ff">◐ 奇異點的格子屬性</h3>
-        <div class="sub">好結果的機率：${bhOddsTxt()}。好結果、壞結果各自平均抽一個。</div>
-        <div class="rules"><div><b style="color:#9dff6b">好</b>${GOOD_ATTRS.map(attr).join('')}</div><div><b style="color:#ff6b6b">壞</b>${BAD_ATTRS.map(attr).join('')}</div></div></div>`;
   },
 
   weapons() {
@@ -409,7 +379,7 @@ const Codex = {
         <td>${Math.round(p.speed * p.life)}</td><td>${p.pierce >= 99 ? '無限' : p.pierce}</td></tr>`;
     }).join('');
     const table = `<div class="codex-sec viz"><h3>基礎數值</h3>
-      <div class="sub" style="margin:0">沒升級、沒晶片、能量 0。射程 = 子彈速度 × 存活時間；加速、佈雷的效果都照「飛了射程的幾成」算。</div>
+      <div class="sub" style="margin:0">沒升級、沒晶片、沒插件。射程 = 子彈速度 × 存活時間。</div>
       <div class="tbl"><table><tr><th>武器</th><th>單發傷害</th><th>發數</th><th>每次開火</th><th>每秒開火</th><th>子彈速度</th><th>存活時間</th><th>射程</th><th>穿透</th></tr>${rows}</table></div></div>`;
     return table + Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
@@ -428,28 +398,23 @@ const Codex = {
   },
 
   current() {
-    const s = Game.stats, info = Editor.slotInfo(Game.chain), ops = s.ops;
-    const rows = Game.chain.map((id, i) => {
-      if (!id) return `<div class="slotrow idle"><div class="no">第 ${i + 1} 格</div><div>空插槽</div></div>`;
-      const d = CHIPS[id], m = TYPE_META[d.type], I = info[i], A = (Game.slotAttr || [])[i];
+    const s = Game.stats, info = Editor.slotInfo(Game.chain);
+    const cell = i => {
+      const id = Game.chain[i], d = CHIPS[id], m = TYPE_META[d.type], S = Game.socks[i] || [], SI = info.socks[i] || [];
       const notes = [];
       if (i === 0) notes.push(`武器：${weaponTitle(Game.weapon)}`);
-      const S = Game.socks[i] || [], SI = info.socks[i] || [];
-      notes.push(`插座 ${S.length} / ${socketsOf(id)}：${S.length ? S.map((c, k) => SI[k] && SI[k].idle ? `<span style="color:#ff8a8a">${CHIPS[c].name}（沒作用：${SI[k].why}）</span>` : SI[k] && SI[k].lvOnly ? `${CHIPS[c].name}（只升級）` : `<b>${CHIPS[c].name}</b>`).join('、') : '空'}${i > 0 ? `（產物：${HOST_PRODUCT[baseOf(id)] || ''}）` : ''}`);
-      if (A) notes.push(`<span style="color:${SLOT_ATTRS[A].good ? '#9dff6b' : '#ff8a8a'}">奇異點：${SLOT_ATTRS[A].name}</span>`);
-      if (I.seg) notes.push(`觸發第 ${I.seg} 層才執行`);
-      if (info[i].idle) notes.push(`<span style="color:#ff8a8a">不會生效：${info[i].why}</span>`);
+      if (isHost(id)) notes.push(`插座 ${S.length} / ${socketsOf(id)}：${S.length ? S.map((c, k) => SI[k] && SI[k].idle ? `<span style="color:#ff8a8a">${CHIPS[c].name}（沒作用：${SI[k].why}）</span>` : `<b>${CHIPS[c].name}</b>`).join('、') : '空的'}`);
       const color = id === 'weapon' ? Game.wp.color : m.color;
-      return `<div class="slotrow${info[i].idle ? ' idle' : ''}"><div class="no">第 ${i + 1} 格</div>
-        <div><b style="color:${color}">${m.icon} ${lvName(id, slotLv(i, info))}</b>　<span style="color:#6a79ad">${id === 'weapon' ? '武器' : m.label} · ⚡${d.cost}</span>
+      return `<div class="slotrow"><div class="no">第 ${i + 1} 格</div>
+        <div><b style="color:${color}">${m.icon} ${lvName(id, slotLv(i, info))}</b>　<span style="color:#6a79ad">${m.label}</span>
         ${notes.length ? `<br>${notes.join('　·　')}` : ''}<br>${d.desc}${hasLv(id) ? '<br>' + lvLine(baseOf(id), slotLv(i, info)) : ''}</div></div>`;
-    }).join('');
+    };
+    const lines = `<div class="codex-sec"><h3>線（命中時觸發）</h3><div class="rules">${Game.chain.map((id, i) => id ? cell(i) : '').join('')}</div></div>`;
     const stat = (k, v) => `<div class="stat">${k}<b>${v}</b></div>`;
     return `<div class="stats">
         ${stat('每次開火子彈', s.count + ' 顆')}${stat('單次總傷害', s.dmg.toFixed(0))}${stat('射速', s.rps.toFixed(1) + ' 次/秒')}
-        ${stat('估算 DPS', s.dpsEst.toFixed(0))}${stat('能量 / 容量', '⚡ ' + s.used + ' / ' + s.cap + (s.off ? '（沒電 ' + s.off + ' 個）' : ''))}</div>
-      ${s.layers.length ? `<div class="layers">${s.layers.map((l, i) => `◎ 觸發第 ${i + 1} 層：每次觸發展開 ${l.count} 顆 / ${l.dmg.toFixed(0)} 傷害`).join('　')}</div>` : ''}
-      <div class="codex-sec"><h3>電路逐格拆解（${Game.chain.length} 格）</h3><div class="rules">${rows}</div></div>
+        ${stat('武器估算 DPS', s.dpsEst.toFixed(0))}${stat('電路格', `${Game.chain.filter(Boolean).length - 1} / ${Game.chain.length - 1}`)}</div>
+      ${lines}
       <div class="codex-sec"><h3>機體（零件 ${partsUsed(Game.parts)} / ${Game.partSlots}）</h3>
         <div class="sub">${PART_IDS.filter(id => Game.parts[id]).map(id => `${PARTS[id].name} ${Game.parts[id]} 層`).join('、') || '沒有零件'}</div></div>
       <div class="codex-sec"><h3>倉庫（${Game.inventory.filter(Boolean).length} / ${CFG.INV_SLOTS}）</h3>
@@ -460,11 +425,10 @@ const Codex = {
 
 // 一把武器所有型態的估算 DPS（電路只有武器時），照升級樹的形狀回傳
 function weaponDpsTree(id) {
-  const W = WEAPONS[id], saved = Game.wp;
-  const dps = (path, final) => { Game.wp = weaponParams({ id, path, final }); return analyzeChain(['weapon']).dpsEst; };
+  const W = WEAPONS[id];
+  const dps = (path, final) => { const p = weaponParams({ id, path, final }); return weaponEmit(p, 1).reduce((a, b) => a + b.damage, 0) / Math.max(CFG.MIN_INTERVAL, p.interval * p.rate); };
   const tree = { base: dps(null, null), paths: {} };
   for (const k of Object.keys(W.paths)) tree.paths[k] = { dps: dps(k, null), next: W.paths[k].next.map((_, i) => dps(k, i)) };
-  Game.wp = saved;
   return tree;
 }
 const pctUp = (v, base) => { const p = Math.round((v / base - 1) * 100); return p === 0 ? '±0%' : (p > 0 ? '+' : '') + p + '%'; };

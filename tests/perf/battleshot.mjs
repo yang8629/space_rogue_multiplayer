@@ -1,9 +1,9 @@
 // 戰鬥畫面截圖：開一場大地圖一般戰（有牆、閘門、地圖物件），跑幾秒後截整個畫面
 //   用法：node perf/battleshot.mjs <輸出檔> [遊戲資料夾網址]
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const out = process.argv[2], url = process.argv[3] || GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1200));

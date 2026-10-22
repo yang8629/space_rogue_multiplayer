@@ -1,6 +1,6 @@
 # 星環電路 多人版（V2）
 
-GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計方向.md`（遊戲目標與方向，使用者決定）、`架構.md`（程式架構）、`進度.md`（兩台電腦接著做）、`版本紀錄.md`、`模擬.md`。
+GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計方向.md`（遊戲目標與方向，使用者決定）、`架構.md`（程式架構）、`進度.md`（兩台電腦接著做）、`版本紀錄.md`、`版號.md`（版號規則）、`模擬.md`。
 
 ## 檔案：只讀要改的
 
@@ -22,6 +22,7 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 7. **有方向性的小工具在定義旁寫清楚方向**（`angleDiff(a, b)` = 從 a 轉到 b）。
 8. **改了遊戲的名稱或欄位，同一個提交裡改好 `tests/`**，`node release.js` 全過才提交。
 9. **註解用中文，寫為什麼**；說明文字（畫面、README）只寫現在的規則，舊的寫進 `docs/版本紀錄.md`。
+10. **每一層放什麼看 `docs/架構.md`「程式風格」**：資料層不放畫面排版、表裡的函式只能「算」不能「做」、行為不同走繼承（基底寫預設、子類別只覆寫不一樣的）、重複的程式抽成函式、存檔只走 `Save`、系統層要畫面做事就發事件。
 
 ## 跟使用者合作
 
@@ -52,7 +53,7 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 2. 規則改了就更新 `README.md`；還沒上傳的改動記在 `docs/版本紀錄.md` 的「（下一版）」那一行，版號先不動。
 3. 平常只在本機提交，**不主動上傳**。git 不在 PATH 時，`release.js` 會去找 Program Files 裡的 git。
    - 提交訊息不加 Claude 署名（`Co-Authored-By`、`Claude-Session`）：每台電腦在 `.claude/settings.local.json` 設 `"attribution": { "commit": "", "pr": "" }`（不上傳，寫進 `.git/info/exclude`）。`release.js` 會擋。
-4. 上傳：`node release.js <新版號> --push`（例如 `2.16.0`）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。
+4. 上傳：`node release.js --patch --push` 或 `--minor --push`（版號規則在 `docs/版號.md`：規則或內容有變加「次」，其餘加「修」）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。版號相關的兩項檢查只在換版號時跑，平常 `node release.js` 應該全綠。
 5. 私人資訊掃描的額外字詞放本機 `tests/private_words.txt`（一行一個，不上傳）。
 
 ## 瀏覽器測試
@@ -63,6 +64,7 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 
 ## 踩過的坑
 
+- 每幀的衰減（煞車、阻力）用 `v *= decay(f, dt)`（敵人起手停下用 `Enemy.brake`，快慢寫在 `ENEMY_TYPES` 的 `brake`／`CFG.BRAKE`），不要直接 `v *= f`：直接乘會跟著幀率變，120fps 時晶體飛的距離只剩 60fps 的一半多（機制檢查「高幀率不會改變動作」）。
 - 回傳「字串或物件」的地方，物件欄位不要用 `String.prototype` 有的名字（`big`、`link`、`small`…）：用 `r.big` 判斷時字串也有（事件的賭運氣結果踩過）。
 - 收到的 JSON 物件 key 是字串：拿來當號碼要 `Number(k)`（延遲廣播的號碼踩過，隊友全讀成 0 號）。
 - PixiJS `poly(pts, false)` 不封口的線會往多邊形一側偏：折線用 `moveTo`／`lineTo`（`gl_hub.js` 的導管）。

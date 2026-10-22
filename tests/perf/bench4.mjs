@@ -2,12 +2,12 @@
 //   每秒記錄 FPS、子彈數；每幀時間拆成：運算（再細分：子彈、敵彈與攔截、敵人、其他）／畫圖
 //   用法：node perf/bench4.mjs [storm|intercept|trig2|all]   （要先 npm i puppeteer-core；用電腦上的 Chrome，會開一個視窗）
 //   storm：迴旋風暴（QA 第 195 局）；intercept：以前攔截爆量那組；trig2：散彈 A＋消失［分裂］＋消失［分裂］
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const url = GAME + 'index.html';
 const which = process.argv[2] || 'all', builds = which === 'all' ? ['storm', 'intercept', 'trig2'] : [which];
 const NAME = { storm: '迴旋風暴', intercept: '爆量配裝（攔截）', trig2: '雙觸發器散彈' };
-const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false,
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: false,
   defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 for (const build of builds) {
   const page = await browser.newPage();

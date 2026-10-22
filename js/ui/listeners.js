@@ -9,7 +9,6 @@
     map: m => Screen.map(m),
     reward: () => Screen.reward(),
     shop: m => Screen.shop(m),
-    blackhole: () => Screen.blackhole(),
     event: () => Screen.event(),
     armory: () => Screen.armory(Game.armorySource || 'armory'),
     workshop: () => Screen.workshop(),
@@ -23,8 +22,9 @@
   Events.on('died', () => setTimeout(() => { if (Game.state === 'dead') Screen.dead(); }, 900));  // 先看一下爆炸再顯示結算
   Events.on('combatWon', () => { Screen.clickLock = performance.now() + 600; });  // 戰鬥中連點射擊：勝利／三選一畫面剛出現 0.6 秒內不接受點擊（免得直接按到按鈕）
   Events.on('hubNear', z => Screen.hubInfo(z));  // 基地：靠近的東西換了 → 換說明卡
+  Events.on('hubPanel', tab => Screen.basePanel(tab));  // 基地：按 E 打開面板（操作台、發射台）
   Events.on('hubSwap', () => { SFX.play('click'); Screen.hubInfo(Hub.near); });
-  Events.on('hubLaunch', () => { if (!Screen.hubOn) Screen.hubView(); });  // 出發動畫：蓋著的面板（起始晶片、發射台）收起來
+  Events.on('hubLaunch', () => { if (!Hub.driving) Screen.hubView(); });  // 出發動畫：蓋著的面板（起始晶片、發射台）收起來
   Events.on('editor', d => { if (d.open) Editor.open(); else Editor.close(); });
   Events.on('editorMsg', d => {
     if (d.hint === 'newChip') Editor.infoEl.innerHTML = `<b style="color:#9dff6b">${d.msg}</b><br>新晶片在下方倉庫：拖到上方電路（或點一下再點插槽）就能裝上。按 Tab 或「返回」回到航圖。`;
@@ -34,7 +34,6 @@
 {
   const S = (ev, name) => Events.on(ev, () => SFX.play(name));
   S('dash', 'dash');
-  S('hubDash', 'dash');  // 基地裡衝刺
   S('overheat', 'hurt');
   S('enemyShot', 'eshot');
   S('bossSkill', 'boss');

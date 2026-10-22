@@ -7,15 +7,17 @@
 const R4 = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 const WEAPON_MODEL = {
   laser: { parts: [[[[-40, -6], [-28, -8], [-28, 8], [-40, 6]], 'dark'], [[[-28, -7], [10, -7], [14, -4], [14, 4], [10, 7], [-28, 7]], 'metal'],
-    [R4(14, -3, 38, 3), 'dark'], [R4(-22, -2, 8, 2), 'accent']], glow: [[40, 0, 4]] },  // 雷射步槍：長槍管＋發光槍口
+    [R4(14, -3, 38, 3), 'dark'], [R4(-22, -2, 8, 2), 'accent']], glow: [[40, 0, 4]] },  // 熱能光束：長槍管＋發光槍口
   scatter: { parts: [[R4(-34, -6, -26, 6), 'dark'], [[[-26, -12], [12, -12], [16, -8], [16, 8], [12, 12], [-26, 12]], 'metal'],
-    ...[-8, -3, 3, 8].map(y => [R4(16, y - 2, 30, y + 2), 'dark']), [R4(-6, -12, 0, 12), 'accent']], glow: [[31, -5, 3], [31, 5, 3]] },  // 散彈砲：短粗＋4 個槍口
+    ...[-8, -3, 3, 8].map(y => [R4(16, y - 2, 30, y + 2), 'dark']), [R4(-6, -12, 0, 12), 'accent']], glow: [[31, -5, 3], [31, 5, 3]] },  // 迴旋飛輪：短粗＋4 個槍口
   plasma: { parts: [[[[-30, -10], [8, -10], [12, -6], [12, 6], [8, 10], [-30, 10]], 'metal'], [[[12, -6], [32, -5], [32, 5], [12, 6]], 'dark'], [R4(24, -7, 28, 7), 'accent']],
-    orb: [-8, 0, 9], glow: [[-8, 0, 9]] },  // 電漿砲：中間一顆發光的能量艙
+    orb: [-8, 0, 9], glow: [[-8, 0, 9]] },  // 重力井：中間一顆發光的能量艙
   railgun: { parts: [[R4(-38, -10, -24, 10), 'metal'], [R4(-24, -9, 44, -5), 'metal'], [R4(-24, 5, 44, 9), 'metal'],
-    [R4(-6, -9, -1, 9), 'dark'], [R4(20, -9, 25, 9), 'dark'], [[[-18, -2], [30, -2], [36, 0], [30, 2], [-18, 2]], 'accent']], glow: [[36, 0, 4]] },  // 軌道砲：兩條導軌夾著穿甲彈
+    [R4(-6, -9, -1, 9), 'dark'], [R4(20, -9, 25, 9), 'dark'], [[[-18, -2], [30, -2], [36, 0], [30, 2], [-18, 2]], 'accent']], glow: [[36, 0, 4]] },  // 牽引鉤：兩條導軌夾著穿甲彈
+  drone: { parts: [[R4(-22, -5, 8, 5), 'metal'], [R4(-16, -15, -6, -8), 'dark'], [R4(-16, 8, -6, 15), 'dark'], [R4(2, -14, 14, -7), 'accent'], [R4(2, 7, 14, 14), 'accent']],
+    glow: [[8, -10, 4], [8, 10, 4]] },  // 無人機蜂群：機身＋兩側的無人機
   blade: { parts: [[R4(-34, -4, -12, 4), 'dark'], [R4(-12, -11, -6, 11), 'metal'], [[[-6, -6], [30, -4], [44, 0], [30, 4], [-6, 6]], 'accent'],
-    [[[-4, -2], [34, 0], [-4, 2]], 'light']], glow: [[20, 0, 8]] },  // 相位刃：刀柄＋護手＋能量刃
+    [[[-4, -2], [34, 0], [-4, 2]], 'light']], glow: [[20, 0, 8]] },  // 能量刃：刀柄＋護手＋能量刃
 };
 // 畫一把武器：(x, y) 中心、rot 朝向、k 大小、col 武器色；mode：'' 正常、'ghost' 很淡的輪廓（裝走了）、'dark' 暗色剪影（沒解鎖）；a = 透明度（無敵時間閃爍）
 function glWeapon(g, id, x, y, rot, k, col, mode = '', glowFn = null, a = 1) {
@@ -51,7 +53,8 @@ const GLActors = {
   spr(tex, x, y, scale, rot = 0) { const s = GLR.sprite(this.pE, tex); s.position.set(x, y); s.scale.set(scale); s.rotation = rot; return s; },
   glowAt(P, x, y, r, col, a) { const s = GLR.sprite(P, this.glow); s.position.set(x, y); s.scale.set(r / this.glowRes); s.tint = col; s.alpha = a; s.blendMode = 'add'; return s; },
 
-  draw() {
+  // 敵人本體和狀態圈（戰鬥、基地的標靶機共用）
+  enemies() {
     const G = Game, g = this.gE; g.clear();
     const viewer = G.viewShip();
     this.wormInfo();
@@ -64,6 +67,10 @@ const GLActors = {
       }
       this.enemy(e);
     }
+  },
+  draw() {
+    const G = Game, g = this.gE;
+    this.enemies();
     for (const e of G.enemies) this.telegraph(e);
     this.bossBeams();
     const tg = G.player.target;
@@ -71,7 +78,7 @@ const GLActors = {
       const r = tg.r + 10, s = G.time * 3;
       for (let i = 0; i < 4; i++) { glArc(g, tg.x, tg.y, r, s + i * TAU / 4, s + i * TAU / 4 + 0.6); g.stroke({ width: 2, color: 0x9dff6b, alpha: 0.85 }); }
     }
-    this.ships();
+    this.gS.clear(); this.ships();
   },
 
   // 列隊蟲：每節要知道自己是不是頭（前面沒有活著的節）、是不是尾（後面沒有節）
@@ -162,7 +169,7 @@ const GLActors = {
     if (cv > 0.05) {
       if (e.slowT > 0) g.circle(e.x, e.y, e.r + 5).stroke({ width: 1.5, color: 0x7fd4ff, alpha: 0.8 * cv });
       if (e.markT > 0 || e.shredT > 0) for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + t; glArc(g, e.x, e.y, e.r + 8, a, a + 0.5); g.stroke({ width: 1.5, color: 0xff5a5a, alpha: 0.8 * cv }); }
-      if (e.burnT > 0 || e.burnL) g.circle(e.x, e.y, e.r + 2).stroke({ width: 2, color: 0xff9f1c, alpha: (0.4 + 0.4 * Math.sin(t * 20)) * cv });
+      if (e.burnT > 0) g.circle(e.x, e.y, e.r + 2).stroke({ width: 2, color: 0xff9f1c, alpha: (0.4 + 0.4 * Math.sin(t * 20)) * cv });
       const stuck = e.stuckN != null ? e.stuckN : e.stuck ? e.stuck.length : 0;
       if (stuck) { const n = Math.min(stuck, 16); for (let i = 0; i < n; i++) { const a = i / n * TAU + t * 2; g.circle(e.x + Math.cos(a) * (e.r + 3), e.y + Math.sin(a) * (e.r + 3), 2.5).fill({ color: 0xf78cff, alpha: cv }); } }
     }
@@ -248,24 +255,34 @@ const GLActors = {
   },
 
   // ---------- 飛船 ----------
-  ships() {
-    const G = Game, g = this.gS; g.clear();
-    const tagOf = p => G.mates.length ? G.tagOf(p) : '';
+  ships() {  // gS 由呼叫的人先清（基地：停機位的船也畫在 gS）
+    const G = Game, g = this.gS;
+    const tagOf = p => G.mates.length && G.inArena ? G.tagOf(p) : '';  // 基地的號碼牌畫在 HUD（drawHubHud）
     if (G.mates.length && G.state === 'play') {
       for (const m of G.mates) if (m.dead && !m.gone) this.downed(m, tagOf(m), !G.player.dead);
       if (G.player.dead) this.downed(G.player, tagOf(G.player), false);
     }
-    if (G.decoys.length && G.state === 'play') this.decoys();
-    if (G.turrets.length && G.state === 'play') this.turrets();
+    if (G.decoys.length && (G.state === 'play' || Hub.shown())) this.decoys();
+    if (G.turrets.length && (G.state === 'play' || Hub.shown())) this.turrets();
     for (const m of G.mates) if (!m.dead && !m.gone) this.ship(m, tagOf(m));
     if (G.state !== 'dead' && !G.player.dead) this.ship(G.player, tagOf(G.player));
+    if (CFG.DEBUG_HIT) this.debugHit();
+  },
+  // 除錯畫面（CFG.DEBUG_HIT）：敵人身體 = 紅圈、玩家身體 = 青圈、旗艦命中點 = 黃點
+  debugHit() {
+    const G = Game, g = this.gS;
+    for (const e of G.enemies) {
+      if (e.dead) continue;
+      g.circle(e.x, e.y, e.r).stroke({ width: 1.5, color: 0xff3b3b, alpha: 0.9 });
+      for (const q of hitPts(e) || []) g.circle(q.x, q.y, 4).fill({ color: 0xffe14d }).stroke({ width: 1, color: 0x03050c });
+    }
+    for (const p of G.allShips()) if (p && !p.dead && !p.gone) g.circle(p.x, p.y, p.r).stroke({ width: 1.5, color: 0x3bf0ff, alpha: 0.9 });
   },
   // 哨兵號的砲台：底座＋跟著瞄準轉的砲管、中心玩家色的光（多人用號碼色，單人用船色）；外圈弧線 = 剩下的時間；出現時從小長大、最後 0.5 秒變淡
-  //   list、colOf：要畫的砲台、每座的顏色（基地的衝刺效果也用這段：Hub.dfx）
-  turrets(list = Game.turrets, colOf = q => Game.mates.length ? Game.slotColor(q.slot || 1) : SHIPS.sentry.color) {
+  turrets() {
     const G = Game, g = this.gS, P = this.pS;
-    for (const q of list) {
-      const col = glColor(colOf(q)), k = Math.min(1, q.t / 0.5), grow = Math.min(1, (CFG.TURRET.t - q.t) / 0.15);
+    for (const q of G.turrets) {
+      const col = glColor(G.mates.length ? G.slotColor(q.slot || 1) : SHIPS.sentry.color), k = Math.min(1, q.t / 0.5), grow = Math.min(1, (CFG.TURRET.t - q.t) / 0.15);
       const sc = (0.6 + 0.4 * grow) * 1.3 / 4;  // 畫大一點（實際大小跟飛船差不多，看起來太小）
       const b = GLR.sprite(P, GLR.T('s/turret_base')); b.position.set(q.x, q.y); b.scale.set(sc); b.rotation = 0; b.alpha = k; b.tint = 0xffffff; b.blendMode = 'normal';
       const s = GLR.sprite(P, GLR.T('s/turret_gun')); s.position.set(q.x, q.y); s.scale.set(sc); s.rotation = q.aim || 0; s.alpha = k; s.tint = 0xffffff; s.blendMode = 'normal';
@@ -274,11 +291,10 @@ const GLActors = {
     }
   },
   // 幻影號的殘影：半透明的船身一閃一閃＋淡紫光，快消失時變淡；朝向衝刺當下的準星
-  //   list、colOf、t：要畫的殘影、每個的顏色、閃爍用的時間（基地的衝刺效果也用這段：Hub.dfx）
-  decoys(list = Game.decoys, colOf = d => Game.mates.length ? Game.slotColor(d.slot || 1) : SHIPS.wraith.color, t = Game.time) {
-    const A = SHIP_ART.get(SHIPS.wraith), P = this.pS;
-    for (const d of list) {
-      const k = Math.min(1, d.t / 0.4), col = glColor(colOf(d));
+  decoys() {
+    const G = Game, A = SHIP_ART.get(SHIPS.wraith), P = this.pS, t = G.time;
+    for (const d of G.decoys) {
+      const k = Math.min(1, d.t / 0.4), col = glColor(G.mates.length ? G.slotColor(d.slot || 1) : SHIPS.wraith.color);
       this.glowAt(P, d.x, d.y, 34, col, 0.35 * k);
       const s = GLR.sprite(P, GLR.T(`s/${A.id}/0`)); s.position.set(d.x, d.y); s.scale.set(1 / 4); s.rotation = d.aim || 0;
       s.tint = col; s.alpha = (0.65 + 0.2 * Math.sin(t * 24)) * k;
@@ -310,7 +326,7 @@ const GLActors = {
       const f = sprL(GLR.T('s/flame'), A.nx - 2.8, 0, 1); f.anchor.set(0.75, 0.5); f.scale.set(len / fr, 6.4 / fr); f.alpha = fade * rand(0.75, 1); f.blendMode = 'add'; if (n('booster')) f.tint = 0xcfeeff;
     }
     if (A.id === 'gate') sprL(GLR.T('s/gate_ring'), -9, 0, 1 / 4, t * 2);  // 星門號：船尾旋轉的傳送環
-    // 裝上的武器：船頭底下（槍管從船頭伸出去）；戰鬥中自己的看 Game.weapon、房主那邊的隊友看配裝，其他（基地的船、隊友那邊的其他人）看飛船物件的 weaponId
+    // 裝上的武器：船頭底下（槍管從船頭伸出去）；自己的看 Game.weapon、有配裝的看配裝（房主那邊的隊友、基地裡其他人），其他（停機位、隊友那邊的其他人）看飛船物件的 weaponId
     const wid = own ? G.weapon.id : p.L ? p.L.weapon.id : p.weaponId, W = WEAPONS[wid];
     if (W) glWeapon(g, wid, p.x + ca * 14, p.y + sa * 14, a, 0.62, glColor(W.color), '', (x, y, r, c, al) => this.glowAt(P, x, y, r, c, al), fade);
     // 船身（重裝甲層數決定哪一張）
@@ -319,19 +335,9 @@ const GLActors = {
       const fr = sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4); fr.tint = 0xbfe9ff; fr.blendMode = 'add'; fr.alpha = fade * 0.5;
       this.glowAt(P, p.x, p.y, 30, 0x9fdcff, 0.35 * fade);
     }
-    if (p.revengeT > 0) {  // 逆襲（散彈升級）：受傷後的爆發時間，船身發紅光
-      const fr = sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4); fr.tint = 0xff4d6d; fr.blendMode = 'add'; fr.alpha = fade * (0.75 + 0.25 * Math.sin(t * 16));
-      this.glowAt(P, p.x, p.y, 40, 0xff4d6d, 0.8 * fade);
-    }
-    // 外圈：輕裝甲薄殼、護盾、蓄力環
+    // 外圈：輕裝甲薄殼、護盾
     for (let i = 0; i < Math.min(3, n('larmor')); i++) g.circle(p.x, p.y, 22 + i * 4).stroke({ width: 1, color: 0x9fe8ff, alpha: 0.45 * fade });
     for (let i = 0; i < (p.shield || 0); i++) g.circle(p.x, p.y, 26 + i * 5).stroke({ width: 2.5, color: 0x4cc9f0, alpha: 0.85 * fade });
-    if (own && G.stats && G.stats.charge && (p.chargeC || 0) > 0.02) {
-      const k = Math.min(1, p.chargeC), full = k >= 1;
-      g.circle(p.x, p.y, 34).stroke({ width: 4, color: 0xffb347, alpha: 0.18 });
-      glArc(g, p.x, p.y, 34, -Math.PI / 2, -Math.PI / 2 + TAU * k); g.stroke({ width: full ? 5 : 4, color: full ? 0xffffff : 0xffb347 });
-      if (full) this.glowAt(P, p.x, p.y, 44, 0xffffff, 0.25 + 0.15 * Math.sin(t * 10));
-    }
   },
   dashed(g, x, y, r, on, off, st) {  // 虛線圓
     const step = (on + off) / r, seg = on / r;

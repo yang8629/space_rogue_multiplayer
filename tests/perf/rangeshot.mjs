@@ -1,9 +1,9 @@
 // 軍械庫靶場：站在標靶機左邊朝右射一陣子（看傷害數字、每秒傷害）→ art_lab/screenshots/靶場_*.png
 //   用法：node perf/rangeshot.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await p.evaluate(() => localStorage.clear()); await p.reload(); await wait(1800);

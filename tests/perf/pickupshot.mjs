@@ -1,8 +1,8 @@
 // 晶體（錢）跟分裂體、碎裂體擺在一起截圖：看分不分得出來（2026-10-19 使用者「錢跟分裂體看起來太像」）
 //   用法：node perf/pickupshot.mjs   → art_lab/screenshots/晶體與分裂體.png（＋放大的 _放大.png）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

@@ -1,10 +1,10 @@
 // 拿掉背包模組＋飛船能力的截圖（2026-10-14）→ art_lab/screenshots/
 //   選飛船畫面（堡壘號灰血、幻影號殘影的說明）、堡壘號被打後的灰血血條、幻影號衝刺留下的殘影（附近敵人追殘影）、精英獎勵（三選一＋電路擴充）、旗艦勝利畫面（沒有模組）
 //   用法：node perf/shipabilityshot.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html');

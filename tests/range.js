@@ -17,7 +17,7 @@ Input.down = true;
 const aimAt = () => { const p = G.player; Input.mx = (e.x - G.cam.x) * 1; Input.my = (e.y - G.cam.y) * 1; };
 for (let i = 0; i < 600; i++) { aimAt(); G.player.aim = Math.atan2(e.y - G.player.y, e.x - G.player.x); G.update(1 / 60); }
 ok(!e.dead && G.enemies.length === 1 && Range.total > 0, `dummy survives (total ${Math.round(Range.total)}, hits ${Range.hits})`);
-const d = Range.dps(), est = G.stats.dpsEst;
+const d = Range.total / 10, est = G.stats.dpsEst;  // 整段 10 秒的平均：Range.dps() 只看最近 3 秒，光束會剛好落在過熱停火那段（四快一慢讓過熱時間點變了，2026-10-22）
 ok(Math.abs(d - est) / est < 0.25, `measured DPS ${Math.round(d)} ≈ estimate ${Math.round(est)}`);
 ok(Math.hypot(e.x - e.hx, e.y - e.hy) < 30, 'dummy stays near its home');
 Range.key('2');
@@ -30,10 +30,12 @@ G.player.iframe = 0; G.player.dashT = 0; G.hurtPlayer(9999);  // 先清掉衝刺
 Range.key('2'); ok(!Range.live && G.enemies.length === 8 && G.enemies.every(x => x.t.dummy), 'key 2 after live: back to dummies');
 Range.key('t'); ok(Range.slow, 'key t: slow motion on');
 Range.key('r'); ok(Range.total === 0, 'key r: clear');
-// 觸發＋分裂：開火的片數帶觸發，命中後展開 3 倍
-G.weapon = { id: 'blade', path: 'B', final: null }; G.refreshWeapon();
-G.chain = ['weapon', T.chipId('trigger', 1), null, null, null, null]; G.socks = [[], ['split']]; G.recalc();  // 分裂插在觸發器上 = 作用在回響
-const bc = WEAPONS.blade.base.count;  // 相刃基礎型的片數（分裂後 ×3）
-ok(G.stats.count === bc && G.stats.layers[0] && G.stats.layers[0].count === bc * 3, `blade+trigger+split: fire ${G.stats.count}, on-hit ${G.stats.layers[0] && G.stats.layers[0].count}`);
+// 靶場打一條線：熱能光束 → 迴旋（插傷害插件），打標靶 3 秒：迴旋有打出傷害
+G.weapon = { id: 'laser', path: null, final: null }; G.refreshWeapon();
+G.chain = ['weapon', T.chipId('boomerang', 1), null, null, null, null]; G.socks = [[], ['amp']]; G.recalc();
+Range.key('1'); Range.key('r');
+for (let i = 0; i < 180; i++) { const t = G.enemies[0]; Input.mx = (t.x - G.cam.x) * ZOOM; Input.my = (t.y - G.cam.y) * ZOOM; Input.down = true; G.update(1 / 60); }
+Input.down = false;
+ok(G.stats.line.cells.length === 1 && (G.runStats.chips.boomerang || 0) > 0, `laser → boomerang line: boomerang dmg ${Math.round(G.runStats.chips.boomerang || 0)}`);
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');
 process.exitCode = fails ? 1 : 0;

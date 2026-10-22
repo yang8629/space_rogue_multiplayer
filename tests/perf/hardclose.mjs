@@ -3,10 +3,10 @@
 //   2. 房主「網路斷掉」（訊息全部送不出去、頁面還開著）：隊友要在 NET_SILENT（5 秒）左右發現（以前 60 秒內都沒發現）
 //   3. 再開一組：房主關掉分頁（照常跑 beforeunload → Net.close 送 bye）：隊友馬上知道
 //   用法：node perf/hardclose.mjs
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const launch = () => puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+const launch = () => puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 let fails = 0;
 const ok = (c, msg) => { console.log((c ? 'ok   ' : 'FAIL ') + msg); if (!c) fails++; };
 const until = async (p, fn, ms = 20000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await p.evaluate(fn)) return true; await wait(100); } return false; };

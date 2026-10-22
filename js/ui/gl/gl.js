@@ -7,6 +7,7 @@
 
 // 戰鬥用的圖層：在基地時藏起來（飛船圖層 ships 兩邊都用）
 const GL_BATTLE_LAYERS = ['grid', 'map', 'mapFx', 'pickups', 'bullets', 'fx', 'eBullets', 'enemies', 'eFx', 'texts'];
+const GL_HUB_LAYERS = GL_BATTLE_LAYERS.filter(k => !['grid', 'map', 'mapFx'].includes(k));  // 基地只換掉場地（地板、牆在 hub 圖層），其餘跟戰鬥同一套
 const GLR = {
   ready: false, failed: false, app: null, L: {}, tex: {}, frames: null,
   // 啟動：PixiJS（從 CDN 載入）或圖集沒載入、WebGL 開不起來 → failed（render.js 在戰鬥畫面中間寫原因）
@@ -120,7 +121,7 @@ const GLR = {
     GLWorld.drawBg();
     const hub = Hub.shown();  // 基地（主畫面、多人選配裝；蓋著面板時也畫在後面）
     L.world.visible = !!Game.inArena || hub;
-    for (const k of GL_BATTLE_LAYERS) L[k].visible = !hub;
+    for (const k of GL_BATTLE_LAYERS) L[k].visible = !hub || GL_HUB_LAYERS.includes(k);
     L.hub.visible = hub;
     if (Game.inArena) {
       const sh = FX.shake, sx = sh ? rand(-sh, sh) : 0, sy = sh ? rand(-sh, sh) : 0;
@@ -128,7 +129,7 @@ const GLR = {
       GLWorld.draw(); GLFx.draw(); GLActors.draw(); GLFx.drawTexts();
     } else if (hub) {
       L.world.scale.set(Hub.k); L.world.position.set(-Hub.cam.x * Hub.k, -Hub.cam.y * Hub.k);
-      GLHub.draw();
+      GLHub.draw(); GLFx.draw(); GLActors.draw(); GLFx.drawTexts();  // 基地只有場地（GLHub）不一樣，敵人、飛船、子彈、特效跟戰鬥同一套
     }
     this.endPools();
     this.app.render();

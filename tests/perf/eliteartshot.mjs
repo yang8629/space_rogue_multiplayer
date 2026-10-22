@@ -1,9 +1,9 @@
 // 新精英美術預覽：用 tools/art/build.html 載入的美術程式，把三種新精英（各種狀態）放大畫在一張圖上（右邊放虛空獵手對照大小）
 //   用法：node perf/eliteartshot.mjs   → art_lab/screenshots/新精英_美術.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const out = SHOTS + '新精英_美術.png';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1200, height: 420 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1200, height: 420 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'tools/art/build.html');

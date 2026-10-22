@@ -1,10 +1,10 @@
 // 黑洞吸引範圍＋出口箭頭：飛船旁邊放一個黑洞、出口放在畫面外，隔 0.5 秒截兩張 → art_lab/screenshots/新畫面_黑洞範圍_1/2.png
 //   用法：node perf/holeshot.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 const wait = ms => new Promise(r => setTimeout(r, ms));

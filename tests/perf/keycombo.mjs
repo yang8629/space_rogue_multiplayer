@@ -1,17 +1,17 @@
 // 空白鍵＋方向鍵一起按：基地、戰鬥中都要衝得出去（衝刺方向照方向鍵）。用法：node perf/keycombo.mjs
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage(); await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 2500));
 const w = ms => new Promise(r => setTimeout(r, ms));
 for (const combo of [['ArrowUp'], ['ArrowUp', 'ArrowLeft'], ['ArrowDown', 'ArrowRight'], ['w', 'a']]) {
-  await p.evaluate(() => { Hub.ship.dashCd = 0; Hub.ship.dashT = 0; Hub.dfx = []; const P = HUB.spawn; Hub.ship.x = P.x; Hub.ship.y = P.y; });
+  await p.evaluate(() => { Hub.ship.dashCd = 0; Hub.ship.dashT = 0; Hub.ship.dashSeq = 0; const P = HUB.spawn; Hub.ship.x = P.x; Hub.ship.y = P.y; });
   for (const k of combo) await p.keyboard.down(k);
   await w(150); const x0 = await p.evaluate(() => [Hub.ship.x, Hub.ship.y]);
   await p.keyboard.press(' '); await w(250);
-  const r = await p.evaluate(() => ({ puffs: Hub.puffs.length, a: Math.round(Hub.ship.dashA * 180 / Math.PI) }));
+  const r = await p.evaluate(() => ({ dashes: Hub.ship.dashSeq || 0, a: Math.round(Hub.ship.dashA * 180 / Math.PI) }));
   for (const k of combo) await p.keyboard.up(k);
-  console.log('基地', combo.join('+'), '＋空白：衝刺方向', r.a, '度、粒子', r.puffs);
+  console.log('基地', combo.join('+'), '＋空白：衝刺方向', r.a, '度、衝了', r.dashes, '次');
 }
 // 按住空白再按方向鍵：冷卻一好就再衝（不靠系統的按鍵重複）；冷卻照飛船（先鋒號 1.8 秒）。鏡頭平滑跟上（瞬移那一幀不跳）
 {

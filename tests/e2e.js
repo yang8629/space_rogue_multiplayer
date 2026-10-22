@@ -10,7 +10,7 @@ function make(name) {
     performance: { now: () => now }, navigator: {} };
   vm.createContext(ctx);
   runFiles((code, opt) => vm.runInContext(code, ctx, opt));
-  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileChain, WEAPONS, CFG, Arena, Hub, Enemy };', ctx);
+  vm.runInContext('globalThis.__T = { Game, Net, Screen, Editor, CHIPS, NODE_META, Input, chipId, compileLine, WEAPONS, CFG, Arena, Hub, Enemy };', ctx);
   return {
     T: ctx.__T,
     run: code => vm.runInContext(code, ctx),
@@ -60,14 +60,14 @@ ok(HA.Game.state === 'pick' && HB.Game.state === 'pick', 'both in the room (shar
 HB.Hub.ship.x = 333; HB.Hub.ship.y = 444; HB.Net.sendRoomPos(); HA.Net.sendRoomPos(); pump();
 ok(HA.Net.roomShips().some(o => o.slot === 2 && o.x === 333 && o.y === 444) && HB.Net.roomShips().some(o => o.slot === 1), 'room positions synced both ways');
 HA.Net.setChapter(1); pump();
-HB.Net.ready('gate', 'railgun', 'split'); pump();
+HB.Net.ready('gate', 'railgun', 'amp'); pump();
 ok(HB.Game.state === 'pick' && HB.Net.meReady && HA.Net.peers[0].ready && HA.Game.state === 'pick', 'client ready, waits in the room');
 HA.Net.ready('bulwark', 'plasma', 'amp'); pump(); step(2);
 ok(HA.Game.state === 'map' && HB.Game.state === 'map', 'both on map after start');
 ok(JSON.stringify(HA.Net.packMap(HA.Game.map)) === JSON.stringify(HB.Net.packMap(HB.Game.map)), 'client received identical map');
 ok(HA.Net.peers[0].at === 'map' && HA.Net.voteEnd > 0, 'vote timer started when both on map');
-ok(HA.Game.mates[0].L.inventory[0] === 'split' && HB.Game.inventory[0] === 'split' && HB.Game.chain[1] === null, 'host knows client start chip (component -> inventory)');
-ok(HA.Game.inventory[0] === 'amp' && HA.Game.chain[1] === null, 'start component goes to inventory, not circuit');
+ok(HA.Game.mates[0].L.socks[0][0] === 'amp' && HB.Game.socks[0][0] === 'amp' && HB.Game.chain[1] === null, 'host knows client start chip (component -> weapon socket)');
+ok(HA.Game.socks[0][0] === 'amp' && HA.Game.inventory[0] === null && HA.Game.chain[1] === null, 'start component goes to weapon socket, not circuit');
 
 // ---- 錢：各自的錢包 ----
 HA.Game.credits = 100; HB.Game.credits = 40; step(3);
@@ -79,17 +79,17 @@ HB.Game.earn(10); pump(); step(1);
 ok(HB.Game.credits === 20 && HA.Game.credits === 100, 'skip/recycle income is own only');
 paid = false; HB.Game.pay(30, () => { paid = true; });
 ok(!paid && HB.Game.credits === 20, 'cannot overspend own wallet');
-// ---- 插座（晶片 id 帶插座數）、黑洞強化的格子與配裝同步；隊友電路上的等級（組件升級）房主照插座算 ----
-const sk = HB.chipId('sticky', 2);
-HB.Game.inventory[0] = sk; HB.Game.socks = [['amp']]; HB.Game.wSock = 2; HB.Game.slotAttr = [null, 'eff', 'flaky']; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
+// ---- 插座（晶片 id 帶插座數）與配裝同步；隊友電路上的等級（合成過的晶片 id）房主照 id 算 ----
+const sk = HB.chipId('stasis', 2);
+HB.Game.inventory[0] = sk; HB.Game.socks = [['amp']]; HB.Game.wSock = 2; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
 ok(HA.Game.mates[0].L.inventory[0] === sk && HA.CHIPS[sk] && HA.CHIPS[sk].sk === 2, `socketed chip registered on host (${sk})`);
 {
-  HB.Game.chain[1] = HB.chipId('rear', 2); HB.Game.socks = [['amp'], ['split', 'pierce']]; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
-  const L = HA.Game.mates[0].L, lv = HA.compileChain(L.chain, L.slotAttr, L.socks, 99).info[1].lv;
-  ok(lv === 3, `mate chip level from its sockets on host (rear + 2 comps → Lv${lv})`);
+  HB.Game.chain[1] = HB.chipId('boomerang', 2, 3); HB.Game.socks = [['amp'], ['frost', 'amp']]; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
+  const L = HA.Game.mates[0].L, lv = HA.compileLine(L.chain, L.socks).info[1].lv;
+  ok(lv === 3, `mate merged chip level synced to host (${L.chain[1]} → Lv${lv})`);
   HB.Game.chain[1] = null; HB.Game.socks = [['amp']]; HB.Game.recalc(); HB.Net.sendLoadout(); pump();
 }
-ok(JSON.stringify(HA.Game.mates[0].L.socks[0]) === '["amp"]' && HA.Game.mates[0].L.slotAttr[1] === 'eff' && HA.Game.mates[0].L.slotAttr[2] === 'flaky', 'slot attributes synced to host');
+ok(JSON.stringify(HA.Game.mates[0].L.socks[0]) === '["amp"]', 'weapon plugs synced to host');
 ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mates[0].L.wSock})`);
 
 // ---- 跑完整個星區：投票 → 進節點 → 處理 → 回航圖 ----
@@ -101,13 +101,14 @@ function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <=
 function finishNode(H) {
   const G = H.Game;
   switch (G.state) {
-    case 'reward':
-      G.takeReward(G.reward.options.find(id => G.canAcquire(id)) || null); if (G.state === 'editor') G.toggleEditor(); break;
+    case 'reward':  // 可能連選好幾次（寶藏、求救的獎勵：多幾次三選一）
+      for (let k = 0; k < 9 && G.state === 'reward'; k++) { G.takeReward(G.reward.options.find(id => G.canAcquire(id)) || null); if (G.state === 'editor') G.toggleEditor(); }
+      break;
     case 'workshop': G.wsPick(G.ws.options[0]); G.showMap(); break;
-    case 'shop': case 'blackhole': case 'armory': case 'event': G.showMap(); break;
+    case 'shop': case 'armory': case 'event': G.showMap(); break;
   }
 }
-// ？事件：航圖上的事件兩邊一樣；隊友回應求救訊號 → 房主也記下（第一場戰鬥變難、兩邊都保證稀有）；隊友的終焉護殼傳到房主
+// ？事件：航圖上的事件兩邊一樣；隊友回應求救訊號 → 房主也記下（第一場戰鬥變難、兩邊都多一次三選一）；隊友的終焉護殼傳到房主
 {
   const evs = H => H.Game.map.flat().filter(n => n.type === 'event').map(n => `${n.id}:${n.ev}:${n.evArg || ''}`).join(',');
   ok(evs(HA) && evs(HA) === evs(HB), `events synced on the map (${evs(HB)})`);
@@ -148,9 +149,9 @@ while (!sector2 && guard++ < 40) {
       const snap = HA.Game.enemies.map(e => e.x + ',' + e.y).join('|'), t0 = HA.Game.time;
       step(60);
       ok(HA.Net.mateEditing && HA.Game.time === t0 && HA.Game.enemies.map(e => e.x + ',' + e.y).join('|') === snap, 'client editing freezes host simulation');
-      HB.Game.chain[2] = 'pierce';
+      HB.Game.chain[2] = 'echo';
       HB.Game.toggleEditor(); pump(); step(5);
-      ok(!HA.Net.mateEditing && HA.Game.time > t0 && HA.Game.mates[0].L.chain[2] === 'pierce', 'closing editor resumes and syncs new chain');
+      ok(!HA.Net.mateEditing && HA.Game.time > t0 && HA.Game.mates[0].L.chain[2] === 'echo', 'closing editor resumes and syncs new chain');
       pausedChecked = true;
       // 救援：隊友倒下 → 房主離很遠不會救 → 靠近 2 秒救起，房主分出一半血量
       const GA = HA.Game, P = GA.player, M = GA.mates[0], R = HA.CFG.REVIVE;
@@ -209,6 +210,10 @@ while (!sector2 && guard++ < 40) {
       step(2);
       const sent = GA.bullets.length, got = CB.bullets.length;
       ok(tooBig === big0 && sent >= 600 && got >= 600 && CL.T.Net.linked, `long snapshot is split, client still gets it (host ${sent} bullets, client ${got}, oversized messages ${tooBig - big0})`);
+      for (const b of GA.bullets) b.dead = true;
+      A.run(`{ const M = Game.mates[0]; spawnShots([shot({ speed: 0, life: 1, vortex: 130 })], M.x, M.y, 0, 0, null); }`);  // 漩渦：隊友那邊也要知道吸引半徑（畫範圍圈）
+      step(2);
+      ok(CB.bullets.some(b => b.vortex === 130), `vortex radius synced to client (${CB.bullets.map(b => b.vortex).filter(Boolean).join() || 'none'})`);
       for (const b of GA.bullets) b.dead = true;
       P.iframe = me.iframe = GA.mates[0].iframe = 0;
     }
@@ -273,18 +278,18 @@ while (!sector2 && guard++ < 40) {
     if (!sosChecked && type !== 'boss') {
       sosChecked = true;
       const RA = HA.Game.reward || {}, RB = HB.Game.reward || {}, B = HA.CFG.BONUS;
-      ok(HA.Game.combat.sos === HA.CFG.EVENT.sos.full.mul && HA.Game.combat.sosKey === 'full' && HB.Game.combat.sosKey === 'full' && !HA.Game.sos && RA.rareAdd >= B.sos.rare && RB.rareAdd >= B.sos.rare,
-        `SOS fight: harder, both get the rare bonus (host ×${HA.Game.combat.sos} +${RA.rareAdd}, client +${RB.rareAdd})`);
+      ok(HA.Game.combat.sos === HA.CFG.EVENT.sos.full.mul && HA.Game.combat.sosKey === 'full' && HB.Game.combat.sosKey === 'full' && !HA.Game.sos && RA.again >= B.sos.again && RB.again >= B.sos.again,
+        `SOS fight: harder, both get an extra pick (host ×${HA.Game.combat.sos} +${RA.again}, client +${RB.again})`);
     }
     if (treas) {
-      const rare = H => H.Game.state === 'reward' && H.Game.reward.options.some(id => H.CHIPS[id] && H.CHIPS[id].rare);
-      ok((HA.Game.combat.bonus || []).includes('treasure') && (HB.Game.combat.bonus || []).includes('treasure') && rare(HA) && rare(HB), `treasure drone killed: both get a rare chip (host ${(HA.Game.combat.bonus || []).includes('treasure')}/${rare(HA)}, client ${(HB.Game.combat.bonus || []).includes('treasure')}/${rare(HB)})`);
+      const rare = H => H.Game.state === 'reward' && H.Game.reward.again >= 1;
+      ok((HA.Game.combat.bonus || []).includes('treasure') && (HB.Game.combat.bonus || []).includes('treasure') && rare(HA) && rare(HB), `treasure drone killed: both get an extra pick (host ${(HA.Game.combat.bonus || []).includes('treasure')}/${rare(HA)}, client ${(HB.Game.combat.bonus || []).includes('treasure')}/${rare(HB)})`);
     }
     if (type === 'boss') {
-      // 擊沉旗艦：先各自三選一（保證一格稀有），選完才到勝利畫面
+      // 擊沉旗艦：先各自三選一，選完才到勝利畫面
       const RA = HA.Game.reward, RB = HB.Game.reward;
-      ok(HA.Game.state === 'reward' && RA.kind === 'boss' && HB.Game.state === 'reward' && RB.kind === 'boss' && RA.options.some(id => HA.CHIPS[id] && HA.CHIPS[id].rare),
-        `both get the boss 3-pick first, with a rare chip (host ${HA.Game.state}, client ${HB.Game.state})`);
+      ok(HA.Game.state === 'reward' && RA.kind === 'boss' && HB.Game.state === 'reward' && RB.kind === 'boss',
+        `both get the boss 3-pick first (host ${HA.Game.state}, client ${HB.Game.state})`);
       finishNode(HA); finishNode(HB); pump();
       ok(HA.Game.state === 'victory' && HB.Game.state === 'victory', 'both see victory');
       // 旗艦二選一（電路插槽 +1／零件格 +1，各選各的）：房主要等隊友選好才能前往
@@ -385,8 +390,8 @@ pump(); step(3);
 const skId = JSON.parse(invB)[0];
 ok(HC.Game.mode === 'coop' && HC.Game.state === 'map' && HA.Net.linked && !HA.Net.mateAway, 'refreshed client resumed the run');
 ok(JSON.stringify(HC.Game.chain) === chainB && JSON.stringify(HC.Game.inventory) === invB, `refreshed: loadout restored from host (${chainB})`);
-// 插座數跟房主那邊一樣（一開始放的是 2 插座的黏著；途中拿到稀有版黏著會變稀有、插座數取比較多的，所以不寫死 2）
-ok(HC.CHIPS[skId] && HA.CHIPS[skId] && HC.CHIPS[skId].sk === HA.CHIPS[skId].sk && HC.CHIPS[skId].sk >= 2 && HC.Game.slotAttr[1] === 'eff', `refreshed: socketed chip ${skId} and slot attributes restored`);
+// 插座數跟房主那邊一樣（一開始放的是 2 插座的佈雷）
+ok(HC.CHIPS[skId] && HA.CHIPS[skId] && HC.CHIPS[skId].sk === HA.CHIPS[skId].sk && HC.CHIPS[skId].sk >= 2, `refreshed: socketed chip ${skId} restored`);
 ok(HC.Game.credits === crB, `refreshed: wallet restored (${HC.Game.credits} = ${crB})`);
 ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.map)) === JSON.stringify(HA.Net.packMap(HA.Game.map)), 'refreshed: same sector and map');
 // 繼續玩：一起進下一個節點
@@ -463,7 +468,7 @@ ok(HC.Game.sector === HA.Game.sector && JSON.stringify(HC.Net.packMap(HC.Game.ma
   ok(s1 === 'ended/ended' && s2 === 'ended/pick' && s3 === 'pick/pick' && HA.Net.peers[0].inRoom,
     `finish run: each player leaves the results on their own (finish ${s1}, client back ${s2}, host back ${s3})`);
   // 在看結算時有人離開（關掉、斷線）：不跳錯誤、不等重連；房主可以自己回房間，隊友的結算照看（按鈕換成回到基地）
-  for (const H of [HA, HE]) { H.Game.inArena = false; H.Game.state = 'victory'; H.Game.victory = { pick: 'part', boss: H.Game.bossId }; }
+  for (const H of [HA, HE]) { H.Game.mode = 'coop'; H.Game.inArena = false; H.Game.state = 'victory'; H.Game.victory = { pick: 'part', boss: H.Game.bossId }; }
   HA.Game.finishRun(); pump();
   HA.Net.lost(undefined, HA.Net.peers[0]);  // 隊友那條連線斷了
   const hostOk = HA.Game.state === 'ended' && !HA.Net.waiting && HA.Net.peers.length === 0 && HA.Net.roomOpen();

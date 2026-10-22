@@ -1,8 +1,8 @@
 // 記住上次的飛船和武器（真的 Chrome）：在基地換船、換武器 → 重新整理 → 進基地還是那組
 //   用法：node perf/lastpicktest.mjs
-import { GAME } from './paths.mjs';
+import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 1500));

@@ -428,10 +428,7 @@ const GLHub = {
       g.rect(x0, ar.y + 6, x1 - x0, 26).fill(0x4a3a2a).stroke({ width: 2, color: HUB_INK });
       for (const z of racks) g.rect(z.x - 30, ar.y + 10, 60, 18).fill(0x2a2018).stroke({ width: 2, color: HUB_INK });
     }
-    for (const T of HUB.targets) {  // 靶場：標靶機（切面底座＋紅白靶面＋中間的感測器）
-      this.hexPad(g, T.x, T.y, T.r + 12, 0x3a4466);
-      for (const [r, c] of [[T.r, 0xe8ecf6], [T.r * 0.7, 0xd04050], [T.r * 0.42, 0xe8ecf6], [T.r * 0.18, 0xd04050]]) g.circle(T.x, T.y, r).fill(c).stroke({ width: 1.5, color: HUB_INK });
-    }
+    for (const T of HUB.targets) this.hexPad(g, T.x, T.y, T.r + 12, 0x3a4466);  // 靶場：標靶機的切面底座；標靶機本身是敵人（dummy），跟戰鬥一樣由 GLActors.enemies 畫（以前手畫在底座上不動：被鉤爪拉走時畫面沒動，10-22）
     this.crate(g, ar.x + 20, ar.y + ar.h - 82, 64, 64, 0x5a3a2a); this.crate(g, ar.x + 92, ar.y + ar.h - 70, 52, 52, 0x5a4a32);
     this.crate(g, ar.x + ar.w - 84, ar.y + ar.h - 82, 64, 64, 0x5a3a2a); this.barrel(g, ar.x + ar.w - 112, ar.y + ar.h - 30, 15, 0x7a3b33);
     // 晶片實驗室：上牆、左牆一排伺服器機櫃（燈每幀閃）
@@ -499,7 +496,7 @@ const GLHub = {
   draw() {
     if (!this.built) this.build();
     const g = this.gAnim, t = Hub.t, s = Hub.ship, seen = unlockSeen(), D = this.decor;
-    g.clear(); GLActors.gS.clear();
+    g.clear();
     this.skyDraw(t);
     // 導管的光點、燈照在地板上、信號燈、伺服器的燈、獎盃、無人機
     for (const P of D.paths) {  // 左右兩條同時出發（對稱）
@@ -595,47 +592,18 @@ const GLHub = {
         this.glow(x0 + 27, z.y - 14, near ? 90 : 60, col, near ? 0.5 : 0.28);
       }
     }
-    if (Hub.coop()) {  // 多人房間：其他人的飛船（位置同步來的），船底號碼色的光
-      const ML = Hub.mateLaunch();  // 出發動畫中：其他人的船照同一套動畫畫（不用同步來的位置）
-      for (const o of ML || Net.roomShips()) {
-        const S = SHIPS[o.s], col = glColor(Game.slotColor(o.slot));
-        if (ML) this.launchTrail(g, o);
-        this.glow(o.x, o.y, 34, col, 0.45);
-        GLActors.ship({ x: o.x, y: o.y, aim: ML ? o.aim : o.a, r: 12, ship: S, parts: S.parts, weaponId: o.w, moving: ML ? o.moving : o.m, iframe: 0, dashT: ML ? o.dashT : 0, overdrive: 0 }, '');
+    if (Hub.coop()) {  // 多人房間：船底號碼色的光；出發動畫中其他人的船照同一套動畫畫（Hub.mateLaunch，不用同步來的位置），平常是 Game.mates（GLActors.ships 畫）
+      const ML = Hub.mateLaunch();
+      for (const o of ML || []) {
+        const S = SHIPS[o.s];
+        this.launchTrail(g, o);
+        this.glow(o.x, o.y, 34, glColor(Game.slotColor(o.slot)), 0.45);
+        GLActors.ship({ x: o.x, y: o.y, aim: o.aim, r: 12, ship: S, parts: S.parts, weaponId: o.w, moving: o.moving, iframe: 0, dashT: o.dashT, overdrive: 0 }, '');
       }
-      this.glow(s.x, s.y, 34, glColor(Game.slotColor(Net.mySlot())), 0.45);
+      for (const p of Game.allShips()) this.glow(p.x, p.y, 34, glColor(Game.slotColor(p === s ? Net.mySlot() : p.slot)), 0.45);
     }
-    // 基地裡射出去的子彈（快的拖一條光、慢的是光球）、打到牆的火花（擴散的圈）
-    for (const b of Hub.shots) {
-      const c = glColor(b.col), fade = Math.min(1, b.t / b.life * 3), sp = Math.hypot(b.vx, b.vy), tail = Math.min(40, sp * 0.03);
-      if (tail > 14) { g.moveTo(b.x - b.vx / sp * tail, b.y - b.vy / sp * tail).lineTo(b.x, b.y).stroke({ width: b.r * 1.6, color: c, alpha: 0.7 * fade }); g.moveTo(b.x - b.vx / sp * tail * 0.6, b.y - b.vy / sp * tail * 0.6).lineTo(b.x, b.y).stroke({ width: b.r * 0.6, color: 0xffffff, alpha: fade }); }
-      else { g.circle(b.x, b.y, b.r).fill({ color: c, alpha: fade }); g.circle(b.x, b.y, b.r * 0.45).fill({ color: 0xffffff, alpha: fade }); }
-      this.glow(b.x, b.y, b.r * 5, c, 0.5 * fade);
-    }
-    for (const [i, T] of HUB.targets.entries()) { const h = Hub.hits.findLast(h => h.i === i), k = h ? Math.max(0, 1 - (Hub.t - h.t) / 0.15) : 0; if (k) this.glow(T.x, T.y, 50, 0xffffff, 0.6 * k); }  // 標靶機被打中：閃白
-    if (Hub.hitT > 0) this.glow(s.x, s.y, 44, 0xffffff, 3 * Hub.hitT);  // 自己被打中：閃白
-    for (const o of Hub.coop() ? Net.roomShips() : []) if (Hub.mateHit[o.slot] > 0) this.glow(o.x, o.y, 44, 0xffffff, 3 * Hub.mateHit[o.slot]);
-    for (const k of Hub.sparks) { const c = glColor(k.col), q = 1 - k.t / 0.3; g.circle(k.x, k.y, 4 + q * 14).stroke({ width: 2, color: c, alpha: 1 - q }); this.glow(k.x, k.y, 26, c, 0.6 * (1 - q)); }
-    this.launchTrail(g, s);
-    this.dashFx(g, t);
-    GLActors.ship(s, '');  // 自己開的船（船頭的武器也在裡面畫）
-  },
-  // 衝刺的效果（Hub.dfx、Hub.puffs）：跟戰鬥同樣的畫法——星門、殘影、砲台；先鋒號瞬移 = 起點收縮的圈、落點擴散的圈、中間一道電光；噴的粒子
-  dashFx(g, t) {
-    const F = Hub.dfx, col = f => f.col;
-    for (const f of F) if (f.k === 'portal') GLWorld.portal(g, f.x, f.y, f.x1, f.y1, f.col, Math.min(1, f.t * 2), t);
-    const dec = F.filter(f => f.k === 'decoy'), tur = F.filter(f => f.k === 'turret');
-    if (dec.length) GLActors.decoys(dec, col, t);
-    if (tur.length) GLActors.turrets(tur, col);
-    for (const f of F) {
-      if (f.k !== 'phase') continue;
-      const c = glColor(f.col), q = 1 - f.t / f.max;
-      g.circle(f.x, f.y, 28 * (1 - q)).stroke({ width: 2, color: c, alpha: 1 - q });
-      g.circle(f.x1, f.y1, 34 * q + 6).stroke({ width: 2, color: c, alpha: 1 - q });
-      g.moveTo(f.x, f.y).lineTo(f.x1, f.y1).stroke({ width: 2, color: 0xffffff, alpha: 0.9 * (1 - q) });
-      g.moveTo(f.x, f.y).lineTo(f.x1, f.y1).stroke({ width: 6, color: c, alpha: 0.35 * (1 - q) });
-    }
-    for (const p of Hub.puffs) { const c = glColor(p.col), k = p.t / 0.3; g.circle(p.x, p.y, 2).fill({ color: c, alpha: k }); this.glow(p.x, p.y, 10, c, 0.5 * k); }
+    for (const q of Game.portals) GLWorld.portal(g, q.ax, q.ay, q.bx, q.by, q.color, Math.min(1, q.t * 2), t);  // 星門（星門號衝刺）
+    this.launchTrail(g, s);  // 自己的船由 GLActors.ships 畫（跟戰鬥一樣）
   },
   // 出發動畫衝出去：船尾拖一道能量光跡（越快越長）；o = 自己的船或其他人（mateLaunch）
   launchTrail(g, o) {

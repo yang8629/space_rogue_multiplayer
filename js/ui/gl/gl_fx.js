@@ -5,6 +5,8 @@
 
 // 子彈尾巴的長度：最長 max，但不超過從發射點飛過的距離
 const tail = (b, max) => Math.min(max, Math.hypot(b.x - b.sx, b.y - b.sy));
+// 能量刃的刃片外觀：圖案是判定半徑的 size 倍、後面拖 trail 張殘影（間隔 gap）
+const BLADE_FX = { size: 2.4, trail: 3, gap: 8 };
 
 const GLFx = {
   init() {
@@ -49,18 +51,32 @@ const GLFx = {
         const s = this.spr(P, tx.ebw, b.x, b.y); s.scaleX = s.scaleY = b.r / R.ebw; s.tint = col; s.alpha = fa;
       } else if (b.shape === 'dart') {
         const s = this.spr(P, tx.dart, b.x, b.y); s.rotation = b.angle; s.scaleX = s.scaleY = b.r / R.dart; s.tint = col; s.alpha = fa;
+      } else if (b.park && b.park.kind === 'disc') {  // 迴旋飛輪：外環＋三片轉動的刃（停住時轉得快）
+        const spin = G.time * (b.mode === 'park' ? 22 : 12), w = b.r * 1.5;
+        const o = this.spr(P, tx.ring, b.x, b.y); o.scaleX = o.scaleY = b.r / R.ring; o.tint = col; o.alpha = fa;
+        for (let k = 0; k < 3; k++) {
+          const a = spin + k * TAU / 3, s = this.spr(P, tx.blade, b.x + Math.cos(a) * b.r * 0.55, b.y + Math.sin(a) * b.r * 0.55);
+          s.rotation = a + Math.PI / 2; s.scaleX = s.scaleY = w / R.blade; s.tint = col; s.alpha = fa;
+        }
+        continue;
       } else if (b.shape === 'blade') {
-        const w = b.r * 1.6, a0 = Math.min(1, b.life * 6), cos = Math.cos(b.angle), sin = Math.sin(b.angle);
-        for (let k = b.splits * 2; k >= 1; k--) { const s = this.spr(P, tx.blade, b.x - cos * k * 6, b.y - sin * k * 6); s.rotation = b.angle; s.scaleX = s.scaleY = w * (1 - k * 0.08) / R.blade; s.tint = col; s.alpha = a0 * 0.35 / k; }
+        const w = b.r * BLADE_FX.size, a0 = Math.min(1, b.life * 6), cos = Math.cos(b.angle), sin = Math.sin(b.angle);
+        for (let k = BLADE_FX.trail; k >= 1; k--) {  // 殘影：往飛回來的方向排幾張淡的，看得出刃片揮過的軌跡
+          const s = this.spr(P, tx.blade, b.x - cos * k * BLADE_FX.gap, b.y - sin * k * BLADE_FX.gap); s.rotation = b.angle; s.scaleX = s.scaleY = w * (1 - k * 0.1) / R.blade; s.tint = col; s.alpha = a0 * 0.4 / k;
+        }
         const s = this.spr(P, tx.blade, b.x, b.y); s.rotation = b.angle; s.scaleX = s.scaleY = w / R.blade; s.tint = col; s.alpha = a0;
-        if (b.splits) { const c2 = this.spr(P, tx.blade, b.x, b.y); c2.rotation = b.angle; c2.scaleX = c2.scaleY = w * 0.7 / R.blade; c2.alpha = a0; }
-        if (b.payload) for (const [px, py, pr] of [[b.x + cos * w * 0.45, b.y + sin * w * 0.45, 2.6], [b.x - sin * w, b.y + cos * w, 2], [b.x + sin * w, b.y - cos * w, 2]]) { const d = this.spr(P, tx.dot, px, py); d.scaleX = d.scaleY = pr / R.dot; d.tint = 0xff6b9d; }
         continue;
       } else {
         if (b.shape === 'orb') { const h = this.spr(P, tx.halo, b.x, b.y); h.scaleX = h.scaleY = b.r * 1.8 / R.dot; h.tint = col; h.alpha = fa; }
         const s = this.spr(P, tx.dot, b.x, b.y); s.scaleX = s.scaleY = b.r / R.dot; s.tint = col; s.alpha = fa;
       }
-      if (b.payload) { const r = this.spr(P, tx.ring, b.x, b.y); r.scaleX = r.scaleY = (b.r + 4) / R.ring; r.tint = 0xff6b9d; r.alpha = fa; }
+    }
+    // 能量刃彈反的格擋時間：飛船外圍一圈亮的護盾（最後幾幀淡掉）
+    for (const p of ships) {
+      if (!(p.parryWinT > 0)) continue;
+      const al = Math.min(1, p.parryWinT / 0.08);
+      const h = this.spr(P, tx.halo, p.x, p.y); h.scaleX = h.scaleY = PARRY.r * 1.1 / R.dot; h.tint = 0xff8fd8; h.alpha = 0.35 * al;
+      const r = this.spr(P, tx.ring, p.x, p.y); r.scaleX = r.scaleY = PARRY.r / R.ring; r.tint = 0xffd6f3; r.alpha = al;
     }
     // 彗星爆炸的閃光：淡藍白的光暈很快擴大變淡＋中心亮點
     for (const f of FX.flashes) {
@@ -72,6 +88,20 @@ const GLFx = {
     for (const q of FX.particles) { const s = this.spr(this.pP, tx.sq, q.x, q.y); s.scaleX = s.scaleY = q.size / R.sq; s.tint = glColor(q.color); s.alpha = q.life / q.max; }
     // 電弧、光圈
     const g = this.g; g.clear();
+    // 武器原型：重力井的吸引範圍、鉤爪拉著的線、無人機
+    for (const b of G.bullets) if (b.mode === 'park' && b.park.kind === 'well') g.circle(b.x, b.y, wellR(b)).stroke({ width: 1.5, color: 0xc77dff, alpha: 0.18 + 0.12 * Math.sin(G.time * 6) ** 2 });
+    for (const b of G.bullets) if (b.vortex > 0) for (let k = 0; k < 3; k++) {  // 漩渦晶片：吸引範圍，三圈往中心收
+      const q = (G.time * 1.5 + k / 3) % 1;
+      g.circle(b.x, b.y, b.vortex * (1 - q)).stroke({ width: 2, color: 0xb388ff, alpha: 0.5 * q });
+    }
+    for (const p of ships) {
+      if (p.hookE && !p.hookE.dead) { g.moveTo(p.x, p.y); g.lineTo(p.hookE.x, p.hookE.y); g.stroke({ width: 2.5, color: 0xffd166, alpha: 0.85 }); }
+      for (const d of ((Net.role === 'client' || loadoutOf(p).weapon.id === 'drone') && p.drones) || []) {  // 隊友那邊：房主同步來的（換武器就是空的）
+        if (d.down > 0) continue;  // 壞掉、等重生
+        const h = this.spr(this.pP, tx.halo, d.x, d.y); h.scaleX = h.scaleY = 16 / R.dot; h.tint = p.guardT > 0 ? 0xffffff : 0x7cf5c8; h.alpha = 0.45;
+        const c = this.spr(this.pP, tx.dart, d.x, d.y); c.rotation = d.a || 0; c.scaleX = c.scaleY = 9 / R.dart; c.tint = 0xe8fff6;  // 機身朝移動方向（DroneSwarm.tick 的 d.a）
+      }
+    }
     for (const z of FX.zaps) {
       const dx = z.x2 - z.x1, dy = z.y2 - z.y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
       g.moveTo(z.x1, z.y1);

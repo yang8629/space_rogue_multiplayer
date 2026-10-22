@@ -167,7 +167,6 @@ const Objects = {
         }
         if (o.type === 'rock' && e.escT > OBJ.ESC_GHOST) continue;
         if (!this.pushOut(e, o, e.r)) continue;
-        if (e.whT > 0) G.wallSlam(e);  // 撞牆（散彈升級）
         if (Math.hypot(e.vx, e.vy) > 300 && G.time > (e.slamT || 0)) {
           e.slamT = G.time + 0.5;
           e.hurt(20, 0, 0, 'shock', e.lastAtt || null);
@@ -393,9 +392,6 @@ const Objects = {
         b.angle = Math.atan2(vy - 2 * dot * ny, vx - 2 * dot * nx);
         b.x = o.x + nx * (o.r + b.r + 1); b.y = o.y + ny * (o.r + b.r + 1); b.px = b.x; b.py = b.y;
         b.hitSet.clear(); b.life = Math.max(b.life, 0.5);
-        b.bounced = true;
-        if (b.prism) { b.copy(0.4); b.angle -= 0.2; }
-        Game.rareAct('wallbounce', b.x, b.y, b.owner, b);  // 稀有晶片：牆反彈發動（撞行星、小行星反彈）
         return false;
       }
       b.x = o.x + nx * (o.r + b.r); b.y = o.y + ny * (o.r + b.r);
@@ -536,7 +532,7 @@ const Objects = {
   // 新畫面風格的爆炸：淡藍白閃光＋往外擴的衝擊波＋殘留的冰霧
   cometFx(x, y, r) {
     flashFx(x, y, r);
-    Game.fxRing(x, y, r, '#bfe9ff');
+    ringFx(x, y, r, '#bfe9ff');
     burst(x, y, '#cfefff', 22, 90, 1.1, 4);
   },
   cometBoom(o, r, dmg) {  // 撞爆：爆炸範圍、傷害照彗星大小（範圍最大 180，不會炸到整個畫面）；敵人和玩家都會受傷、冰凍，再往四周噴碎片；不算任何人的

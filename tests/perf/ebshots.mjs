@@ -1,12 +1,12 @@
 // 敵彈出膛檢查：各種會射擊的敵人放在飛船周圍（不扣血），每隻在剛開火時截一張放大圖，拼成一張
 //   → art_lab/screenshots/新畫面_敵彈出膛.png   用法：node perf/ebshots.mjs [canvas]
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const MODE = process.argv[2] === 'canvas' ? 'canvas' : 'gl';
 const TYPES = ['spitter', 'gunboat', 'elite', 'boss2', 'boss', 'boss3'];
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 const wait = ms => new Promise(r => setTimeout(r, ms));

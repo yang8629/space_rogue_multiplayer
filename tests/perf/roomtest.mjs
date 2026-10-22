@@ -1,17 +1,18 @@
 // 多人房間（共用的基地）真的連線測試：兩個 Chrome、真的 PeerJS（要有網路）
-//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、互射 → 到武器架換武器 → 兩邊準備（起始晶片）→ 一起播出發動畫 → 開始
+//   房主開房 → 隊友輸入房號加入 → 用鍵盤開飛船 → 看對方畫面的位置有沒有同步 → 換船、看得到對方開火 → 到武器架換武器 → 兩邊準備（起始晶片）→ 一起播出發動畫 → 開始
 //   截圖 art_lab/screenshots/房間測試_*.png；印出每一步過了沒
 //   用法：node perf/roomtest.mjs
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const launch = () => puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 800 } });
+setTimeout(() => { console.log('FAIL 逾時 4 分鐘：強制結束'); process.exit(2); }, 240000).unref();  // 卡住（瀏覽器關不掉、連線沒回應）時不會一直掛著
+const launch = () => puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 800 } });
 const [bA, bB] = await Promise.all([launch(), launch()]);  // 兩個瀏覽器：各自的存檔、都在前景（畫面不會被節流）
 const [A, B] = await Promise.all([bA.newPage(), bB.newPage()]);
-let fails = 0;
+let fails = 0, errs = 0;
 const ok = (c, msg) => { console.log((c ? 'ok   ' : 'FAIL ') + msg); if (!c) fails++; };
 for (const [p, n] of [[A, '房主'], [B, '隊友']]) {
-  p.on('pageerror', e => console.log(n, '頁面錯誤', e.message));
+  p.on('pageerror', e => { errs++; console.log(n, '頁面錯誤', e.message); });
   p.on('console', m => { if (m.type() === 'error') console.log(n, 'console', m.text().slice(0, 200)); });
 }
 const until = async (p, fn, ms = 20000, arg) => { const t = Date.now(); while (Date.now() - t < ms) { if (await p.evaluate(fn, arg)) return true; await wait(200); } return false; };
@@ -22,13 +23,13 @@ await A.evaluate(() => { const z = Hub.zone('coop'), s = Hub.ship; s.x = z.x + 4
 await wait(300); await A.keyboard.press('e'); await wait(300);
 ok(await A.evaluate(() => Game.state === 'lobby'), '房主：終端機按 E 打開連線畫面');
 await A.click('[data-act="nethost"]');
-ok(await until(A, () => Game.state === 'pick' && Net.code && Screen.hubOn), '房主：開好房間，進到基地（房間列有房號）');
+ok(await until(A, () => Game.state === 'pick' && Net.code && Hub.driving), '房主：開好房間，進到基地（房間列有房號）');
 const code = await A.evaluate(() => Net.code);
 console.log('房號', code);
 // 隊友：輸入房號加入
 await B.evaluate(() => Net.lobby());
 await B.type('#netCode', code); await B.click('[data-act="netjoin"]');
-ok(await until(B, () => Game.state === 'pick' && Net.linked && Screen.hubOn), '隊友：加入房間，進到同一個基地');
+ok(await until(B, () => Game.state === 'pick' && Net.linked && Hub.driving), '隊友：加入房間，進到同一個基地');
 ok(await until(A, () => Net.peers.some(q => q.linked && q.slot === 2)), '房主：看到 2P 進來');
 
 // 隊友用鍵盤往右開 0.8 秒；房主那邊看到的位置要跟著動
@@ -60,13 +61,13 @@ await B.evaluate(() => { const z = Hub.zone('pad:bulwark'), s = Hub.ship; s.x = 
 await wait(300); await B.keyboard.press('e'); await wait(500);
 ok(await until(A, () => (Net.roomShips().find(o => o.slot === 2) || {}).s === 'bulwark', 5000), '隊友換成堡壘號，房主看得到');
 
-// 互射：隊友停在大廳，房主在他左邊朝右開火 → 隊友那邊被打中、被往右推
-await B.evaluate(() => { const P = HUB.spawn, s = Hub.ship; s.x = P.x + 120; s.y = P.y; s.vx = s.vy = 0; Hub.hitN = 0; });
+// 看得到別人開火：房主開火 → 隊友那邊也跑一份房主的飛船（Hub.updateGhosts），看得到房主的子彈
+await B.evaluate(() => { const P = HUB.spawn, s = Hub.ship; s.x = P.x + 120; s.y = P.y; s.vx = s.vy = 0; });
 await wait(400);
 await A.evaluate(() => { const P = HUB.spawn, s = Hub.ship; s.x = P.x - 120; s.y = P.y; s.aim = 0; Input.mouseMoved = false; Input.down = true; });
-await wait(600); await A.evaluate(() => { Input.down = false; });
-ok(await until(B, () => Hub.hitN > 0, 4000), '互射：房主開火，隊友那邊被打中（被推開、閃白）');
-await A.screenshot({ path: SHOTS + '房間測試_互射.png' });
+ok(await until(B, () => Game.bullets.some(b => b.ownerP && b.ownerP.slot === 1), 4000), '房主開火，隊友那邊看得到房主的子彈');
+await A.evaluate(() => { Input.down = false; });
+await A.screenshot({ path: SHOTS + '房間測試_開火.png' });
 
 // 隊友準備：發射台按 E → 準備 → 選武器 → 起始晶片
 const prepare = async (p, wpn) => {
@@ -74,13 +75,13 @@ const prepare = async (p, wpn) => {
     await p.evaluate(w => { const z = Hub.zone('rack:' + w), s = Hub.ship; s.x = z.x; s.y = z.y; }, wpn);
     await wait(300); await p.keyboard.press('e'); await wait(300);
   }
-  await p.evaluate(() => { const z = Hub.zone('launch'), s = Hub.ship; s.x = z.x; s.y = z.y; Hub.kick = { x: 0, y: 0 }; });  // 推力歸零（互射剛被打中）
+  await p.evaluate(() => { const z = Hub.zone('launch'), s = Hub.ship; s.x = z.x; s.y = z.y; });
   await wait(300); await p.keyboard.press('e'); await wait(300);
   await p.click('[data-act="depart"]'); await wait(300);
   await p.click('[data-act="startchip"]'); await wait(500);
 };
 await prepare(B, 'laser');
-ok(await B.evaluate(() => Game.state === 'pick' && Net.meReady && Screen.hubOn), '隊友：準備好，回到基地等');
+ok(await B.evaluate(() => Game.state === 'pick' && Net.meReady && Hub.driving), '隊友：準備好，回到基地等');
 ok(await until(A, () => Net.peers[0].ready && document.querySelector('.hub-coop') && document.querySelector('.hub-coop').textContent.includes('✓')), '房主：房間列看到 2P ✓');
 await A.screenshot({ path: SHOTS + '房間測試_隊友準備好.png' });
 await prepare(A, 'scatter');
@@ -98,11 +99,41 @@ ok(await B.evaluate(() => Game.shipId === 'bulwark' && Game.weapon.id === 'laser
 ok(await B.evaluate(() => (Game.mates.find(m => m.slot === 1) || {}).weaponId === 'scatter') && await A.evaluate(() => Game.mates[0].L.weapon.id === 'laser'), '兩邊都知道對方裝的武器（戰鬥中畫在船頭）');
 await B.screenshot({ path: SHOTS + '房間測試_開始.png' });
 
+// 一起打一場（10-22 晶片改版後）：投同一個戰鬥節點 → 兩邊都進戰鬥、開火；房主那邊有隊友的晶片產物，隊友那邊看得到子彈和敵人
+const node = await A.evaluate(() => Game.map[0].find(n => n.type === 'combat').id);
+await A.evaluate(id => Net.vote(id), node); await B.evaluate(id => Net.vote(id), node);
+ok(await until(A, () => Game.state === 'play') && await until(B, () => Game.state === 'play'), '投同一個戰鬥節點：兩邊都進戰鬥');
+// 配裝：稀有碎片、迴旋、稀有漩渦（稀有 id 帶 !，要同步給房主）
+const kit = () => { Game.chain.splice(1, Infinity, chipId('shard', 2, 1, true), chipId('boomerang', 2), chipId('vortex', 2, 1, true), null); Game.socks = [['shock'], ['amp'], [], []]; Game.recalc(); if (Net.role === 'client') Net.sendLoadout();
+  window.__aim = setInterval(() => {  // 瞄最近的敵人、按住左鍵（autoFire 只有觸控模式才會自己開火）
+    const p = Game.player; let best = null, bd = Infinity;
+    for (const e of Game.enemies) { if (e.dead || e.spawnT > 0) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < bd) { bd = d; best = e; } }
+    if (best) { Input.mx = (best.x - Game.cam.x) * ZOOM; Input.my = (best.y - Game.cam.y) * ZOOM; }
+    Input.down = !!best;
+  }, 100); };
+await A.evaluate(kit); await B.evaluate(kit); await wait(500);  // 等隊友的電路送到房主
+await A.evaluate(() => {  // 房主：數線觸發了幾次（房主自己／隊友），產物活不久，戰鬥結束那一刻數場上的會數不到
+  window.__fires = { me: 0, mate: 0 }; const f = Game.lineFire.bind(Game); Game.lineFire = t => { __fires[t.owner ? 'mate' : 'me']++; return f(t); };
+});
+await A.evaluate(() => {  // 房主：把幾隻敵人移到兩艘船前面（不然在石頭後面打不到，線不會觸發）
+  const p = Game.player; Game.enemies.filter(e => !e.dead).slice(0, 8).forEach((e, i) => { e.x = p.x + 220 + (i % 4) * 40; e.y = p.y - 60 + Math.floor(i / 4) * 120; e.spawnT = 0; });
+});
+await wait(8000);
+const hostSaw = await A.evaluate(() => ({ mateProd: __fires.mate, mine: __fires.me, kills: Game.kills || 0, mateRare: Game.mates[0].L.chain.filter(id => id && rareOf(id)).length }));
+const clientSaw = await B.evaluate(() => ({ bullets: Game.bullets.length, enemies: Game.enemies.length, vortex: Game.bullets.filter(b => b.vortex > 0).length, linked: Net.linked }));
+await Promise.all([A.screenshot({ path: SHOTS + '房間測試_戰鬥_房主.png' }), B.screenshot({ path: SHOTS + '房間測試_戰鬥_隊友.png' })]);
+const chains = { 隊友自己: await B.evaluate(() => Game.chain.join()), 房主看隊友: await A.evaluate(() => Game.mates[0].L.chain.join()) };
+ok(hostSaw.mateRare === 2, `房主收到隊友的稀有晶片（${hostSaw.mateRare} 片；${JSON.stringify(chains)}）`);
+ok(hostSaw.mateProd > 0, `戰鬥：隊友的線在房主那邊有觸發晶片（房主自己的只印出來：飛輪停的位置看運氣；房主 ${hostSaw.mine} 次、隊友 ${hostSaw.mateProd} 次，擊殺 ${hostSaw.kills}）`);
+ok(clientSaw.linked && clientSaw.bullets > 0 && clientSaw.enemies >= 0, `戰鬥：隊友那邊還連著、看得到子彈 ${clientSaw.bullets} 顆、敵人 ${clientSaw.enemies} 隻（漩渦 ${clientSaw.vortex}）`);
+ok(errs === 0, `戰鬥中沒有頁面錯誤（${errs}）`);
+for (const p of [A, B]) await p.evaluate(() => { clearInterval(window.__aim); Input.down = false; });
+
 // 一局結束回到房間：兩邊都按「離開」不算，這裡直接回房間（backToRoom）
 await A.evaluate(() => Net.backToRoom()); await B.evaluate(() => Net.backToRoom());
 ok(await until(A, () => Game.state === 'pick' && Net.peers[0].inRoom) && await until(B, () => Game.state === 'pick'), '回到房間：兩邊都在共用的基地');
 ok(await A.evaluate(() => !Net.meReady && !Net.peers[0].ready), '回到房間要重新準備');
 ok(await B.evaluate(() => !Hub.seq && Hub.free(Hub.ship.x, Hub.ship.y, Hub.ship.r)), '回到房間：飛船回到基地裡（不是停在飛出去的地方）');
-await Promise.all([bA.close(), bB.close()]);
 console.log(fails ? `${fails} 項沒過` : '全部通過');
-process.exitCode = fails ? 1 : 0;
+await Promise.race([Promise.all([bA.close(), bB.close()]), wait(5000)]);  // 關瀏覽器最多等 5 秒
+process.exit(fails ? 1 : 0);

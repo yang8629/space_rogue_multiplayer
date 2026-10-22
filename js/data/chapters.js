@@ -22,15 +22,12 @@ const CHAPTERS = [
     intro: '直接跳進星環內側。外圍已經打通，沒有時間慢慢準備了。',
     outro: '守門者倒下，星環內側的門打開了。訊號的源頭就在更深處……（待續）' },
 ];
-const CHAPTER_KEY = 'v2_chapters';  // 章節進度存在瀏覽器的名稱：{ cleared: [已通關的章號] }
 
 function chapterById(id) { return CHAPTERS.find(c => c.id === id) || CHAPTERS[0]; }
 // 已通關的章號；存檔壞掉（不是 JSON、格式不對）就當成都沒通關
 function chapterProgress() {
-  try {
-    const p = JSON.parse(localStorage.getItem(CHAPTER_KEY) || '{}');
-    return p && Array.isArray(p.cleared) ? p.cleared.filter(n => CHAPTERS.some(c => c.id === n)) : [];
-  } catch (e) { return []; }
+  const p = Save.load('chapters', {});
+  return p && Array.isArray(p.cleared) ? p.cleared.filter(n => CHAPTERS.some(c => c.id === n)) : [];
 }
 // 第一章一開始就能玩；之後每章要先通關前一章
 function chapterUnlocked(id) { return id === CHAPTERS[0].id || chapterProgress().includes(id - 1); }
@@ -38,5 +35,5 @@ function markChapterCleared(id) {
   const c = chapterProgress();
   if (c.includes(id)) return;
   c.push(id);
-  try { localStorage.setItem(CHAPTER_KEY, JSON.stringify({ cleared: c })); } catch (e) {}
+  Save.save('chapters', { cleared: c });
 }

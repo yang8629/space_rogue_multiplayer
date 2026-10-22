@@ -1,9 +1,9 @@
 // 只剩新畫面（2026-10-09 拿掉舊的 2D 畫面）：標題畫面（沒有切換按鈕）、大地圖戰鬥（牆、敵人、小地圖、HUD）、PixiJS 載入失敗時的提示
 //   用法：node perf/onlyglshot.mjs → art_lab/screenshots/只剩新畫面_*.png
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS, url = GAME + 'index.html';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(url); await new Promise(r => setTimeout(r, 1500));

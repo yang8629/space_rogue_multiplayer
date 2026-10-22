@@ -1,12 +1,12 @@
 // 新畫面（WebGL）檢查截圖：擺出好幾個場景各截一張，存到 art_lab/screenshots/新畫面_*.png
 //   用法：node perf/glshots.mjs [場景名…]   場景：enemies、bosses、objects、walls、bullets、gate
 //   （新畫面要開著：腳本會把 localStorage 的 renderer 設成 gl）
-import { GAME, SHOTS } from './paths.mjs';
+import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
 const want = process.argv.slice(2);
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: process.env.DSF ? +process.env.DSF : 1 } });
+const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: process.env.DSF ? +process.env.DSF : 1 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 4).join(' / ')));
 p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log('console', m.type(), m.text().slice(0, 200)); });
