@@ -181,7 +181,7 @@ const GLActors = {
     }
     if (e.affixes && sp >= 1) this.affixFx(e, cv);
     if (e.spawnT > 0) g.circle(e.x, e.y, e.r * (2.2 - sp)).stroke({ width: 1, color: glColor(T.color), alpha: 0.8 });
-    if ((e.hp < e.maxHp || T.elite) && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !(e.cloak > 0.5)) {  // 精英一直顯示（同一隻有好幾艘時，靠這個找出殘血的那艘）
+    if ((e.hp < e.maxHp || T.elite) && !['swarmer', 'worm', 'splitling'].includes(ty) && !T.boss && !T.dummy && !(e.cloak > 0.5)) {  // 標靶打不死（扣到 0 就回滿）：不畫血條，看標靶上面的每秒傷害  // 精英一直顯示（同一隻有好幾艘時，靠這個找出殘血的那艘）
       const w = T.elite ? e.r * 3 : e.r * 2;
       g.rect(e.x - w / 2, e.y - e.r - 12, w, 4).fill({ color: 0x330000 });
       g.rect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4).fill({ color: glColor(T.color) });

@@ -1,8 +1,8 @@
 'use strict';
 // 上傳前檢查（雙人版）：只印摘要，失敗才印細節
 //   node release.js                  只檢查（不改檔、不提交）
-//   node release.js --patch          版號「修」+1（v0.0.1 → v0.0.2）：只有修錯誤、調數值、美術、文字
-//   node release.js --minor          版號「次」+1、「修」歸零（v0.0.2 → v0.1.0）：規則或內容有變
+//   node release.js --patch          版號「修」+1（v0.1.0 → v0.1.1）：原型期每次上傳都用這個
+//   node release.js --minor          版號「次」+1、「修」歸零（v0.1.1 → v0.2.0）：使用者說是大調整才用
 //   node release.js 1.0.0            直接指定（「主」只在使用者說要的時候改；第一次從舊版號換過來也用這個）
 //   以上加 --push：全部通過才提交並推上 GitHub。版號規則見 docs/版號.md
 //   改版號 = VERSION 改成 v主.次.修（今天日期＋時間）、index.html 的檔案網址、README 目前版本、docs/版本紀錄.md「（下一版）」改名
@@ -17,7 +17,7 @@ const GIT = process.env.GIT || (() => {
   return win && fs.existsSync(win) ? win : 'git';
 })();
 const REPO = path.join(__dirname, '..');
-const TESTS = ['smoke.js', 'range.js', 'e2e.js', 'maptest.js', 'editortest.js', 'beamlag.js', 'roomlag.js', 'matelag.js', 'silent.js'];  // 插座檢查已經併進機制檢查（SockCheck）
+const TESTS = ['smoke.js', 'range.js', 'e2e.js', 'roomhit.js', 'maptest.js', 'editortest.js', 'beamlag.js', 'roomlag.js', 'matelag.js', 'silent.js'];  // 插座檢查已經併進機制檢查（SockCheck）
 const args = process.argv.slice(2);
 const push = args.includes('--push');
 const verOf = src => (src.match(/VERSION: *'([^']+)'/) || [])[1];

@@ -27,12 +27,12 @@ const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; retur
 //   為什麼：訊息時快時慢（網路抖動），直接蓋過去會先被晚到的舊位置拉回、下一幀一口氣跳 2 倍（tests/matelag.js、roomlag.js 加抖動量到）
 const NET_EASE = 12, NET_SNAP = 150;
 // 武器狀態（隊友那邊畫 HUD、無人機、鉤爪的線、彈反的護盾用）：
-//   [熱度, 過熱, 右鍵冷卻, 下一刀強化, 收攏, 還能擋, 彈反格擋, 勾住的敵人 id, 勾住剩幾秒, 多勾幾隻, 場上的飛輪／重力井, 無人機 [x, y, 方向, 壞掉]…]
+//   [熱度, 過熱, 右鍵冷卻, 下一刀強化, 收攏, 還能擋, 彈反格擋, 勾住的敵人 id, 勾住剩幾秒, 多勾幾隻, 場上的飛輪／重力井, 無人機 [x, y, 方向, 壞掉]…, 勾住的隊友號碼]
 const weaponRow = p => {
   const W = weaponPlay(p), D = loadoutOf(p).weapon.id === 'drone' ? p.drones || [] : [];
   return [r2(p.hHeat || 0), r2(Math.max(0, p.hLock || 0)), r2(p.altCd || 0), r2(Math.max(0, p.edgeT || 0)), r2(Math.max(0, p.guardT || 0)), p.guardN || 0,
     r2(Math.max(0, p.parryWinT || 0)), p.hookE && !p.hookE.dead ? p.hookE.id : 0, r2(p.hookT || 0), (p.hookX || []).length, W.count ? W.count(p) : 0,
-    D.flatMap(d => [Math.round(d.x), Math.round(d.y), r2(d.a || 0), d.down > 0 ? 1 : 0])];
+    D.flatMap(d => [Math.round(d.x), Math.round(d.y), r2(d.a || 0), d.down > 0 ? 1 : 0]), p.hookShip ? Game.slotOf(p.hookShip) : 0];
 };
 const applyWeaponRow = (p, a) => {  // 套用的時候敵人要已經更新完（鉤爪找勾住的那隻）
   if (!Array.isArray(a)) return;
@@ -41,6 +41,7 @@ const applyWeaponRow = (p, a) => {  // 套用的時候敵人要已經更新完�
   p.wN = num(a[10]);
   const d = Array.isArray(a[11]) ? a[11].slice(0, 4 * 12) : [];
   p.drones = Array.from({ length: Math.floor(d.length / 4) }, (_, i) => ({ x: num(d[i * 4]), y: num(d[i * 4 + 1]), a: num(d[i * 4 + 2]), down: d[i * 4 + 3] ? 1 : 0 }));
+  p.hookShipSlot = clamp(Math.floor(num(a[12])), 0, 9);  // 勾住的隊友（畫繩子）
 };
 function netMove(o, x, y) {
   if (Number.isFinite(o.x) && Number.isFinite(o.y)) {
@@ -1131,6 +1132,7 @@ const Net = {
   },
   hostUpdateMates(dt) { for (const m of Game.mates) this.hostUpdateMate(m, dt); },
   hostUpdateMate(m, dt) {
+    if (m.dead && !m.gone) Game.dragDowned(m, dt);  // 倒下的隊友被勾住：房主拖著走（位置放進快照 me）
     if (m.dead || m.gone) return;
     coast(m, dt);  // 兩次輸入之間先照速度往前推
     m.x = clamp(m.x, m.r, Arena.W - m.r); m.y = clamp(m.y, m.r, Arena.H - m.r);
@@ -1188,7 +1190,8 @@ const Net = {
       this.sendTo(q, { t: 's', ...shared,
         p: rows.filter(a => a[0] !== q.slot),  // 其他人的飛船
         me: [r2(m.hp), m.maxHp, r2(Math.max(0, m.iframe)), m.dead ? 1 : 0, m.lastHit || '', r2(m.reviveT),
-        0, 0, 0, m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), 0, 0, 0, m.streak || 0],  // …、（空位 ×3）、護盾、灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）、（空位 ×3）、無傷連殺層數
+        m.grabBy || 0, m.flingSeq || 0, 0, m.shield || 0, r2(m.drRec || 0), 0, r2(Math.max(0, m.frostT || 0)), m.flingV ? r(m.flingV[0]) : 0, m.flingV ? r(m.flingV[1]) : 0, 0, m.streak || 0,
+        m.dead ? r(m.x) : null, m.dead ? r(m.y) : null],  // …、被誰的鉤爪勾住（號碼）、被甩了幾次、（空位）、護盾、灰血（畫血條用）、（空位）、被凍住剩幾秒（隊友自己的船要變慢）、甩出去的速度 x／y、（空位）、無傷連殺層數、倒下時的位置（被勾住拖著走，房主算）
         ws: weaponRow(m),  // 自己的武器狀態（HUD）
         kp: m.L.playKills,  // 這個隊友各晶片的玩法擊殺數（隊友那邊的紀錄用；pk 是晶體，名字不能撞）
         ...this.bulletRows(q, near, ci),
@@ -1256,7 +1259,7 @@ const Net = {
         this.inAcc = Math.min(this.inAcc - NET_RATE, NET_RATE);
         this.send({ t: 'i', x: Math.round(P.x), y: Math.round(P.y), vx: Math.round(P.vx), vy: Math.round(P.vy), a: r2(P.aim),
           mv: P.moving ? 1 : 0, dT: r2(Math.max(0, P.dashT)), ds: P.dashSeq || 0, as: P.altSeq || 0, f: P.wantFire ? 1 : 0,
-          ad: Math.round(P.aimD || 300), sx: Math.round(P.dashSX == null ? P.x : P.dashSX), sy: Math.round(P.dashSY == null ? P.y : P.dashSY), au: P.autoMode ? 1 : 0 });
+          ad: Math.round(P.aimD ?? 300), sx: Math.round(P.dashSX == null ? P.x : P.dashSX), sy: Math.round(P.dashSY == null ? P.y : P.dashSY), au: P.autoMode ? 1 : 0 });
       }
     }
     if (G.state === 'play' || G.state === 'dead') G.updateFx(dt);
@@ -1294,6 +1297,10 @@ const Net = {
       P.shield = num(s.me[9]);
       if (s.me[12] > 0) P.frostT = Math.max(P.frostT || 0, num(s.me[12]));
       P.streak = num(s.me[16], 0);  // 無傷連殺（畫左上小條用）
+      P.grabBy = P.grabFreeT > G.time ? 0 : clamp(Math.floor(num(s.me[6])), 0, 9);  // 被隊友勾住（自己拉自己，Game.shipPull）；剛衝刺掙脫的等房主更新
+      const fs = num(s.me[7]);
+      if (fs > (P.flingSeq || 0)) { P.flingSeq = fs; P.vx = num(s.me[13]); P.vy = num(s.me[14]); P.kbT = HOOK.flyT; P.grabBy = 0; }  // 被甩出去：照速度飛（kbT 不吃操控）
+      if (P.dead && s.me[17] != null) { P.x = num(s.me[17], P.x); P.y = num(s.me[18], P.y); }  // 倒下被拖著走：位置照房主
     }
     if (s.kp && typeof s.kp === 'object')  // 玩法擊殺：房主算好的次數，這邊只增不減
       for (const k in s.kp) if (hasLv(k) && num(s.kp[k]) > (G.playKills[k] || 0)) G.playKills[k] = Math.floor(num(s.kp[k]));

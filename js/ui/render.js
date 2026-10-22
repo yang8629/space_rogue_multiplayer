@@ -7,7 +7,7 @@ const WEAPON_HUD = {
   laser: p => ({ label: p.hLock > 0 ? '過熱！' : `熱度 ${pct(p.hHeat || 0)}`, k: p.hLock > 0 ? 1 : p.hHeat || 0, color: p.hLock > 0 ? '#ff4d6d' : '#ff9f1c' }),
   scatter: p => { const W = WEAPON_PLAY.scatter, M = W.max(), n = p.wN ?? W.count(p); return { label: `飛輪 ${M - n} / ${M}`, k: (M - n) / M, color: '#ffb347' }; },
   plasma: p => { const W = WEAPON_PLAY.plasma, M = W.max(), n = p.wN ?? W.count(p); return { label: `重力井 ${n} / ${M}`, k: n / M, color: '#c77dff' }; },
-  railgun: p => ({ label: p.hookE ? (p.hookE.t.boss ? '釘住旗艦！' : `勾住了！${(p.hookX || []).length ? '×' + (1 + p.hookX.length) : ''}`) : '鉤爪', k: p.hookE ? p.hookT / WEAPON_PLAY.railgun.holdT() : 0, color: '#ffd166' }),
+  railgun: p => ({ label: p.hookE ? (p.hookE.t.boss ? '釘住旗艦！' : `勾住了！${(p.hookX || []).length ? '×' + (1 + p.hookX.length) : ''}`) : '鉤爪', k: p.hookE ? p.hookT / WEAPON_PLAY.railgun.holdT(p.hookE) : 0, color: '#ffd166' }),
   drone: p => {
     if (p.guardT > 0) return { label: `收攏中 還能擋 ${p.guardN}`, k: p.guardN / WEAPON_PLAY.drone.blockMax(), color: '#7cf5c8' };
     const D = p.drones || [], up = D.filter(d => !(d.down > 0)).length;
@@ -286,7 +286,7 @@ function drawHubHud() {
       if (n) badge(n, x + 60, y - 18);
     }
   }
-  for (const [i, T] of HUB.targets.entries()) { const v = Hub.dps(i); if (v) label(`每秒 ${v}`, sx(T.x), sy(T.y - T.r - 22), '#ffd166', 13); }  // 標靶機：最近 3 秒的每秒傷害
+  for (const [i, T] of HUB.targets.entries()) { const v = Hub.dps(i), e = Game.enemies[i] || T; if (v) label(`每秒 ${v}`, sx(e.x), sy(e.y - T.r - 22), '#ffd166', 13); }  // 標靶機：最近 3 秒的每秒傷害；跟著標靶機實際的位置（被鉤爪拉走、甩走時一起動）
   if (Hub.coop()) {  // 多人房間：每艘船頭上的號碼（號碼色），✓ = 準備好了，📖 = 在看面板
     const tag = (slot, x, y, r, b) => label(`${slot}P${r ? ' ✓' : ''}${b ? ' 📖' : ''}`, sx(x), sy(y) - 24, Game.slotColor(slot), 13);
     const ML = Hub.mateLaunch();  // 出發動畫中：名牌跟著動畫裡的船（Hub.mateLaunch），不是同步來的位置

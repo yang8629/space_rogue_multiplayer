@@ -96,6 +96,10 @@ const CFG = {
   CAP_SINK: 2,              // 散熱片每層容量 +2
   MAGNET_RANGE: 140,
   PICKUP_DRAG: 0.92,  // 晶體飛向飛船時每幀（照 60fps）剩下的速度比例：像摩擦力，太大會繞著飛船轉、太小飛得慢（見 stepPickup）
+  // 控制抗性（Enemy.ccDur／ccImmune／ccEnd）：CC[等級][控制種類] = { t: 控制最多幾秒（沒寫 = 照控制本身）, immune: 結束後幾秒不能再被同種控制 }
+  //   等級：normal 一般、elite 精英、boss 旗艦（看 ENEMY_TYPES 的 elite／boss）。新的控制（暈眩、減速、吸引…）要有抗性就在這裡加一欄、呼叫同樣的方法
+  CC: { elite: { hook: { t: 1.2, immune: 3 } } },  // hook：牽引鉤勾住（升級的勾住時間另外加）；10-23 精英以前可以一直被拎著
+  ROOM_HIT: { push: 320, t: 0.2 },  // 多人房間：別人的子彈打到自己 → 往子彈方向推（速度 push、t 秒不吃操控）、閃白；不扣血（使用者 10-23 要加回來）
   BRAKE: 0.85,  // 敵人起手、蓄力時停下來的快慢：每幀（照 60fps）剩下的速度比例，越小停得越急；ENEMY_TYPES 的 brake 可以各自改（見 Enemy.brake）
   BULLET_CAP: { mine: 15000, enemy: 2000 },  // 子彈上限（防呆）：超過就刪最舊的，免得爆量卡死；碰到會記進遊玩紀錄。
   //   我方是實測（tests/perf/bulletcap.mjs，RTX 3070）：15000 顆一幀 26～28ms（雷射＋攔截最重），20000 顆掉到 30fps 以下；
@@ -113,7 +117,7 @@ const CFG = {
   ARMORY_BONUS: { credits: 30, hp: 20 },  // 武器已升滿時，軍械台改給的補償
   PLAYER_COLORS: ['#4cc9f0', '#ff9dbd', '#ffd166', '#9dff6b'],  // 雙人：1P～4P 各自的顏色（號碼標籤、船底光暈、隊友血條、小地圖、傷害結算；航圖投票標記見 style.css 的 .vote.v1～v4）
   REVIVE: { range: 70, time: 2, iframe: 1.5 },  // 雙人救援：活著的隊友待在倒下位置 70 內滿 2 秒；救起後無敵 1.5 秒
-  VERSION: 'v0.1.0（2026-10-23 02:12）',  // 版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
+  VERSION: 'v0.1.1（2026-10-23 04:04）',  // 版號：標題、大廳、遊玩紀錄都會顯示；兩邊版號不同不讓連線
   // 無盡模式：每過一個星區（乘算）敵人攻擊 ×1.25、攻擊頻率 ×1.1、移動速度 ×1.05、血量 ×1.2（另外還有本來的每層血量成長）
   ENDLESS_DMG: 1.25, ENDLESS_ATK: 1.1, ENDLESS_SPD: 1.05, ENDLESS_HP: 1.2,
   BOSS_ORDER: ['boss', 'boss2', 'boss3', 'boss4', 'boss5'],  // 全部的旗艦（沙盒輪流、無盡模式隨機抽）；各章每個星區的王見 chapters.js

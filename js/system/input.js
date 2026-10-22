@@ -9,7 +9,15 @@ const Input = { keys: new Set(), mx: 0, my: 0, down: false, dash: false, dashHel
   alt: false,                      // 這一幀按了武器的右鍵（Player.tickAlt 用掉）
   touch: false,                    // 偵測到觸控後切換為雙搖桿操作
   autoFire: true,                  // 手機自動攻擊（可切換，記在瀏覽器）
-  joy: null, aimStick: null };     // { id, bx, by, x, y }
+  joy: null, aimStick: null,       // { id, bx, by, x, y }
+  // 能不能開飛船：戰鬥中，或在基地開著船（基地 = 戰場，按鍵跟戰鬥一樣）
+  piloting() { return Game.state === 'play' || Hub.driving; },
+  // 滑鼠右鍵：武器有右鍵就是武器技能，沒有就衝刺（以前只在戰鬥中算武器技能，基地的右鍵變成衝刺，10-23）
+  right() {
+    if (!this.piloting()) return;
+    if (WEAPONS[Game.weapon.id].alt) this.alt = true;
+    else { this.dash = true; this.dashHeld = true; }
+  } };
 
 addEventListener('keydown', e => {
   if (e.key === 'Shift' && !e.repeat) document.body.classList.toggle('detail');  // 按 Shift：卡片切換精簡／詳細說明
@@ -21,7 +29,7 @@ addEventListener('keydown', e => {
   }
   if (k === 'tab') { e.preventDefault(); if (!e.repeat) Game.toggleEditor(); return; }
   if (Game.mode === 'range' && Game.state === 'play' && !e.repeat && Range.key(k, e.shiftKey)) return;
-  if (k === ' ') { e.preventDefault(); if (Game.state === 'play' || Hub.driving) { Input.dash = true; Input.dashHeld = true; } return; }
+  if (k === ' ') { e.preventDefault(); if (Input.piloting()) { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
   if (k === 'escape' && Game.state === 'play' && !e.repeat) { Game.togglePauseMenu(); return; }  // 戰鬥中：選單（繼續／離開遊戲）
@@ -45,12 +53,9 @@ const ctx = canvas.getContext('2d');
 const canvasPos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 addEventListener('mousemove', e => { const p = canvasPos(e); Input.mx = p.x; Input.my = p.y; Input.mouseMoved = true; });  // mouseMoved：基地的船頭要不要朝滑鼠
 canvas.addEventListener('mousedown', e => {
-  if ((Game.state !== 'play' && !Hub.driving) || Input.touch) return;  // 戰鬥中，或基地（可以射著玩）
+  if (!Input.piloting() || Input.touch) return;  // 戰鬥中，或基地（可以射著玩）
   if (e.button === 0) Input.down = true;
-  if (e.button === 2) {
-    if (Game.state === 'play' && WEAPONS[Game.weapon.id].alt) Input.alt = true;  // 武器的右鍵（見 WEAPONS[id].alt）
-    else { Input.dash = true; Input.dashHeld = true; }
-  }
+  if (e.button === 2) Input.right();
 });
 addEventListener('mouseup', e => { if (e.button === 0) Input.down = false; if (e.button === 2) Input.dashHeld = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());

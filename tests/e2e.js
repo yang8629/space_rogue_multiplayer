@@ -62,7 +62,7 @@ ok(HA.Net.roomShips().some(o => o.slot === 2 && o.x === 333 && o.y === 444) && H
 HA.Net.setChapter(1); pump();
 HB.Net.ready('gate', 'railgun', 'amp'); pump();
 ok(HB.Game.state === 'pick' && HB.Net.meReady && HA.Net.peers[0].ready && HA.Game.state === 'pick', 'client ready, waits in the room');
-HA.Net.ready('bulwark', 'plasma', 'amp'); pump(); step(2);
+HA.Net.ready('bulwark', 'railgun', 'amp'); pump(); step(2);  // 兩邊都拿牽引鉤：勾隊友的同步（hookChecked）
 ok(HA.Game.state === 'map' && HB.Game.state === 'map', 'both on map after start');
 ok(JSON.stringify(HA.Net.packMap(HA.Game.map)) === JSON.stringify(HB.Net.packMap(HB.Game.map)), 'client received identical map');
 ok(HA.Net.peers[0].at === 'map' && HA.Net.voteEnd > 0, 'vote timer started when both on map');
@@ -96,7 +96,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 const both = f => { f(HA); f(HB); };
 let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
 let tractorChecked = false, beamChecked = false, nonFightChecked = false;  // nonFightChecked：補給站這類節點不倒數  // beamChecked：守門者的光束在隊友那邊轉得順  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
-let alertChecked = false;  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
+let alertChecked = false, hookChecked = false;  // hookChecked：牽引鉤勾隊友（被勾的人自己的電腦上被拉、衝刺掙脫、甩出去、倒下被拖）  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
   const G = H.Game;
@@ -204,6 +204,33 @@ while (!sector2 && guard++ < 40) {
       ok(pulling && pulled > 40 && tr.mode === 'stun' && tr.tgt === 0,
         `tractor: host's tractor pulls the client on the client's side (${pulling}, pulled ${Math.round(pulled)}), client dash breaks the beam (${tr.mode})`);
       tr.dead = true; GA.enemies = GA.enemies.filter(e => e !== tr); GA.objs = objs0;
+      // 牽引鉤勾隊友（10-23）：房主勾隊友 → 隊友自己的電腦上被拉到房主前方；隊友衝刺 → 兩邊都放開；房主右鍵 → 隊友照速度飛出去；
+      //   倒下的隊友被勾住 → 房主拖著走、隊友畫面上的位置跟著（隊友勾房主的邏輯在機制檢查）
+      {
+        const M = GA.mates[0], AI = HA.Input, aimAt = (q) => { const dx = q.x - P.x, dy = q.y - P.y, l = Math.hypot(dx, dy) || 1; Object.assign(AI, { touch: true, autoFire: false, aimStick: { bx: 0, by: 0, x: dx / l * 60, y: dy / l * 60 } }); };
+        const fire = () => { P.fireCd = 0; A.run('Game.player.fire()'); };
+        const CI = CL.T.Input, still = () => { Object.assign(CI, { down: false, dash: false, joy: null, aimStick: null, touch: false }); CI.keys.clear(); };  // 隊友不操作（前面的測試可能留著按鍵）
+        const objs1 = GA.objs; GA.objs = []; GA.eBullets = []; still(); step(2);  // 拿掉地圖物件：鉤爪打到小行星會停（spot 只避開牆）
+        const calm = () => { for (let k = 0; k < 240 && (Math.hypot(me.vx, me.vy) > 5 || me.dashCd > 0 || Math.hypot(M.x - me.x, M.y - me.y) > 2); k++) step(1); };  // 隊友停下、衝刺冷卻好、房主那邊的位置追上
+        const sp = spot(me, 250); [P.x, P.y] = sp; calm(); aimAt(M); step(1); fire(); step(30);
+        const front = () => Math.hypot(me.x - (P.x + Math.cos(P.aim) * 70), me.y - (P.y + Math.sin(P.aim) * 70));  // 隊友離「房主前方 70」多遠
+        const grab = P.hookShip === M && M.grabBy === 1 && me.grabBy === 1, near = front() < 40;
+        CL.T.Input.dash = true; step(8);
+        const broke = !P.hookShip && !M.grabBy && !me.grabBy;
+        me.dashT = 0; calm(); aimAt(M); step(1); fire(); step(30);
+        const regrab = P.hookShip === M;
+        A.run('WEAPON_PLAY.railgun.alt(Game.player)'); step(3);
+        const vFl = Math.hypot(me.vx, me.vy), flung = M.flingSeq >= 1 && me.kbT > 0 && vFl > 300;  // 甩出去當下的速度
+        step(60);
+        // 倒下的隊友：房主勾住拖著走
+        M.dead = true; M.hp = 0; [M.x, M.y] = spot(P, 250); step(3);  // 倒下的位置房主說了算：先搬遠，看得出有沒有被拖
+        const at0 = [me.x, me.y]; aimAt(M); step(1); fire(); step(40);
+        const dragged = P.hookShip === M && Math.hypot(me.x - at0[0], me.y - at0[1]) > 60 && Math.hypot(me.x - M.x, me.y - M.y) < 30;
+        if (P.hookShip) A.run('WEAPON_PLAY.railgun.freeShip(Game.player)');
+        M.dead = false; M.hp = M.maxHp; step(5);
+        Object.assign(AI, { touch: false, aimStick: null }); GA.objs = objs1;
+        ok(grab && near && broke && regrab && flung && dragged, `hook a teammate: client pulled on its side (${grab}, ${near}), dash breaks (${broke}), fling (${flung}, v ${Math.round(vFl)}), downed dragged (${dragged})`);
+      }
       // 很長的同步訊息（散彈＋環繞放開那一刻）：以前一則超過 PeerJS 的上限就送不出去、被當成斷線；現在切段送，隊友照樣收到
       const big0 = tooBig;
       A.run(`{ const M = Game.mates[0]; for (let i = 0; i < 600; i++) spawnShots([shot({ speed: 20, life: 3 })], M.x, M.y, i / 600 * TAU, 0, null); }`);

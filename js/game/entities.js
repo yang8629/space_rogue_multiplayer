@@ -91,7 +91,8 @@ class Player {
     }
     this.wasDash = dashing;
   }
-  onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：殘影、砲台
+  onDash() {  // 衝刺開始（房主執行；隊友的衝刺由房主在隊友的配裝下執行）：殘影、砲台；被隊友勾住 = 掙脫
+    if (this.grabBy) { const s = Game.allShips().find(q => q.hookShip === this); if (s) s.hookShip = null; this.grabBy = 0; this.grabFreeT = Game.time + 0.5; }  // grabFreeT：隊友那邊，房主的快照還沒更新前不再被拉回去
     if (Game.isClient()) return;
     if (this.ship.ability === 'decoy') Game.addDecoy(this, this.dashSX != null ? this.dashSX : this.x, this.dashSY != null ? this.dashSY : this.y);
     if (this.ship.ability === 'turret') Game.addTurret(this, this.dashSX != null ? this.dashSX : this.x, this.dashSY != null ? this.dashSY : this.y);
@@ -168,6 +169,7 @@ class Player {
       this.vy += (my / l * spd - this.vy) * k;
     }
     Game.beamPull(this, dt);  // 拖曳艦的牽引（之後照常撞牆）
+    Game.shipPull(this, dt);  // 被隊友的鉤爪勾住：拉到他前方（蓋掉自己的操控）
     const x0 = this.x, y0 = this.y, free0 = Objects.shipFree(this, x0, y0);
     if (Arena.rect) {
       this.x = clamp(this.x + this.vx * dt, this.r, CFG.WORLD_W - this.r);
@@ -293,11 +295,11 @@ class Bullet {
       }
       return;
     }
-    if (this.mode === 'park') {  // 停在場上（飛輪、重力井）：每 rehit 秒能再打同一隻；時間到消失
+    if (this.mode === 'park') {  // 停在場上（飛輪、重力井）：每 rehit 秒能再打同一隻；時間到照停住設定的 onExpire（飛輪飛回手上），沒有就消失
       this.parkT -= dt; this.speed = 0;
       if ((this.reHitT -= dt) <= 0) { this.reHitT = this.park.rehit; this.hitSet.clear(); }
       if (this.park.tick) this.park.tick(this, dt);
-      if (this.parkT <= 0) this.dead = true;
+      if (this.parkT <= 0) { if (this.park.onExpire) this.park.onExpire(this); else this.dead = true; }
       return;
     }
     if (this.mode === 'wait') {  // 地雷：停住，敵人靠近就朝牠衝出去；時間到還沒被觸發就消失
@@ -456,6 +458,11 @@ function hitPts(e) {
   return pts;
 }
 class Enemy {
+  // 控制抗性（CFG.CC）：照等級查這種控制的規則；ccDur = 這次能控制多久、ccImmune = 現在不能被控制、ccEnd = 控制結束（有規則就開始免疫，回傳 true）
+  ccRule(kind) { const R = CFG.CC[this.t.boss ? 'boss' : this.t.elite ? 'elite' : 'normal']; return (R && R[kind]) || null; }
+  ccDur(kind, base) { const r = this.ccRule(kind); return r && r.t != null ? r.t : base; }
+  ccImmune(kind) { return !!(this.ccFree && this.ccFree[kind] > Game.time); }
+  ccEnd(kind) { const r = this.ccRule(kind); if (!r || !r.immune) return false; (this.ccFree || (this.ccFree = {}))[kind] = Game.time + r.immune; return true; }
   brake(dt, f = this.t.brake || CFG.BRAKE) { const k = decay(f, dt); this.vx *= k; this.vy *= k; }  // 起手、蓄力時慢慢停下（f 見 CFG.BRAKE）
   constructor(type, x, y, hpScale) {
     const t = ENEMY_TYPES[type];

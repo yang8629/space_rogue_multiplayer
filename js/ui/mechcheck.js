@@ -42,8 +42,8 @@ const MechCheck = {
   },
   // 雙人（房主這邊）：加一個本機的隊友（不連線），擺在房主下方 300；回傳隊友的飛船（p.L 是它的配裝）
   //   隊友放進 Game 的寫法只在這裡，其他檢查都透過回傳值拿隊友
-  coop(mateWeapon = 'laser', mateChain = ['weapon', null, null, null]) {
-    this.setup('coop', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+  coop(mateWeapon = 'laser', mateChain = ['weapon', null, null, null], hostWeapon = 'laser') {
+    this.setup('coop', 'vanguard', hostWeapon, null, null, ['weapon', null, null, null]);
     const L = Net.makeLoadout({ ship: 'vanguard', weapon: mateWeapon, chip: null });
     const r = splitChain(mateChain.map(fullChip));
     while (r.chain.length < mateChain.length) { r.chain.push(null); r.socks.push([]); }
@@ -53,7 +53,7 @@ const MechCheck = {
     m.L = L; m.hp = m.maxHp = Game.maxHpOf(m.ship, L.passives, L.mech);
     m.x = Game.player.x; m.y = Game.player.y + 300; m.aim = 0; m.dashSeq = 0; m.wantFire = false;
     m.slot = 2; Game.mates = [m];
-    Game.state = 'play';
+    Game.state = 'play'; Game.inArena = true;  // 戰場裡（勾隊友這類只在戰鬥中生效的，以前靠前面的檢查剛好留著 true）
     return m;
   },
   // 在玩家前方擺靶（dx, dy 相對玩家）；frozen 的靶不會動也不會攻擊
@@ -163,18 +163,18 @@ const MechCheck = {
         got: `殺 5 隻 ${s5} 層，傷害 ×${(d5 / d0).toFixed(2)}（要 ×1.15）；再殺 20 隻 ${s20} 層（要 15）；護盾擋下 ${sSh} 層；被打中 ${sHit} 層（要 0）` };
     }],
     // ---- 武器原型（2026-10-21）：每把武器的左鍵、右鍵、代表性的升級 ----
-    ['武器原型', '能量刃：連段與彈反', `左鍵 ${COMBO.steps.map(s => s.name).join(' → ')} 循環、重斬傷害 ×${COMBO.steps[2].dmg}；右鍵彈反：格擋時間內碰到的敵彈反射回去、不扣血、冷卻歸零，下一刀 ×${PARRY.boost}`, M => {
+    ['武器原型', '能量刃：連段與彈反', `左鍵 ${COMBO.steps.map(s => s.name).join(' → ')} 循環、重斬傷害 ×${COMBO.steps[2].dmg}；右鍵彈反：格擋時間內碰到的敵彈反射回去、不扣血、擋到後冷卻剩 ${PARRY.hitCd} 秒，下一刀 ×${PARRY.boost}`, M => {
       M.setup('sandbox', 'vanguard', 'blade', null, null, ['weapon', null, null, null]); M.targets([]);
       const P = Game.player, names = [], dmg = [];
       for (let i = 0; i < 4; i++) { P.fireCd = 0; P.comboT = 1; const L = WEAPON_PLAY.blade.onFire(P, weaponShots()); names.push(P.comboName); dmg.push(L[0].damage); }
       const order = names.join(' → ') === [...COMBO.steps.map(s => s.name), COMBO.steps[0].name].join(' → ') && near1(dmg[2] / dmg[0], COMBO.steps[2].dmg);
-      Game.slashQ = []; P.altCd = 0; WEAPON_PLAY.blade.alt(P); P.iframe = 0; const hp0 = P.hp;
+      Game.slashQ = []; P.altCd = PARRY.cd; WEAPON_PLAY.blade.alt(P); P.iframe = 0; const hp0 = P.hp;  // 冷卻照 tickAlt：按下就是 PARRY.cd
       Game.eBullets = [{ x: P.x + 30, y: P.y, vx: -200, vy: 0, r: 5, dmg: 10, life: 3, from: 'mc' }];
       W_.step(3);
-      const refl = Game.bullets.some(b => b.shape === 'reflect'), safe = P.hp === hp0, up = P.edgeT > 0 && P.altCd === 0;
+      const refl = Game.bullets.some(b => b.shape === 'reflect'), safe = P.hp === hp0, up = P.edgeT > 0 && near1(P.altCd, PARRY.hitCd);
       const L = WEAPON_PLAY.blade.onFire(P, weaponShots());
       const boosted = near1(L[0].damage / dmg[0], PARRY.boost * COMBO.steps[2].dmg);  // 彈反成功：下一刀直接是強化的重斬
-      return { ok: order && refl && safe && up && boosted, got: `連段 ${names.join(' → ')}（重斬 ×${(dmg[2] / dmg[0]).toFixed(2)}）；彈反${refl ? '反射了' : '沒反射（錯）'}、${safe ? '不扣血' : '扣血（錯）'}、${up ? '冷卻歸零' : '冷卻沒歸零（錯）'}；下一刀 ×${(L[0].damage / dmg[0]).toFixed(2)}` };
+      return { ok: order && refl && safe && up && boosted, got: `連段 ${names.join(' → ')}（重斬 ×${(dmg[2] / dmg[0]).toFixed(2)}）；彈反${refl ? '反射了' : '沒反射（錯）'}、${safe ? '不扣血' : '扣血（錯）'}、${up ? `冷卻剩 ${P.altCd.toFixed(2)}` : `冷卻剩 ${P.altCd.toFixed(2)}（要 ${PARRY.hitCd}，錯）`}；下一刀 ×${(L[0].damage / dmg[0]).toFixed(2)}` };
     }],
     ['武器原型', '能量刃的升級', `無盡連段疊滿 ${ENDLESS.max} 層後每刀都是重斬、被打中歸零；旋風重斬 360°；血祭重斬扣血不低於 ${pct(BLOOD.floor)}；吸能刃回到 ${pct(LEECH.cap)} 為止`, M => {
       const P = () => Game.player, swing = () => { P().fireCd = 0; const L = WEAPON_PLAY.blade.onFire(P(), weaponShots()); Game.slashQ = []; return L; };
@@ -275,17 +275,17 @@ const MechCheck = {
       const free = shots(false), hooked = shots(true);
       return { ok: free.n > 0 && hooked.held && hooked.n === 0, got: `沒勾住開火 ${free.n} 發${free.n ? '' : '（對照組沒開火，檢查無效）'}；勾住${hooked.held ? '' : '（沒勾住，錯）'}開火 ${hooked.n} 發` };
     }],
-    ['武器連段', '光束：四快一慢', `連射第 ${BEAT.n} 發慢一拍（間隔 ×${BEAT.slow}）、傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}；停火 ${BEAT.reset} 秒從頭算`, M => {
+    ['武器連段', '光束：四快一慢', `連射第 ${BEAT.n} 發前後都慢一拍（間隔 ×${BEAT.slow}）、傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}；停火 ${BEAT.reset} 秒從頭算`, M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const seen = new Set(), shots = [];
       const watch = n => { for (let f = 0; f < n; f++) { W_.step(1, true); for (const b of Game.bullets) if (!seen.has(b.nid)) { seen.add(b.nid); shots.push({ t: Game.time, d: b.damage, r: b.r }); } } };
       watch(Math.ceil(60 * Game.stats.interval * 12));
       const d0 = shots[0].d, gap = i => shots[i].t - shots[i - 1].t, iv = gap(2);
       const beat = shots.slice(0, 10).every((s, i) => near1(s.d, d0 * (i % BEAT.n === BEAT.n - 1 ? BEAT.dmg : 1)));
-      const g4 = gap(4), slow = Math.abs(g4 - iv * BEAT.slow) < 0.04 && shots[4].r > shots[3].r * (BEAT.grow - 0.1);
+      const g4 = gap(4), g5 = gap(5), slow = Math.abs(g4 - iv * BEAT.slow) < 0.04 && Math.abs(g5 - iv * BEAT.slow) < 0.04 && shots[4].r > shots[3].r * (BEAT.grow - 0.1);
       W_.step(Math.ceil(60 * (BEAT.reset + Game.stats.interval * BEAT.slow)) + 2, false); shots.length = 0; watch(Math.ceil(60 * Game.stats.interval * 2));
       const reset = shots.length > 0 && near1(shots[0].d, d0);
-      return { ok: beat && slow && reset, got: `前 10 發傷害${beat ? '照四快一慢' : '不對（錯）'}；第 5 發前隔 ${g4.toFixed(2)} 秒（一般 ${iv.toFixed(2)}）${slow ? '、變大' : '（錯）'}；停火後${reset ? '從頭算' : '沒從頭算（錯）'}` };
+      return { ok: beat && slow && reset, got: `前 10 發傷害${beat ? '照四快一慢' : '不對（錯）'}；第 5 發前隔 ${g4.toFixed(2)}、後隔 ${g5.toFixed(2)} 秒（一般 ${iv.toFixed(2)}）${slow ? '、變大' : '（錯）'}；停火後${reset ? '從頭算' : '沒從頭算（錯）'}` };
     }],
     ['武器原型', '飛輪：停住旋轉傷害加倍', `停住的飛輪每 ${DISC.rehit} 秒打一次、每下傷害 ×${DISC.parkMul}（飛出去的照子彈傷害）`, M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', null, null, null]);
@@ -296,6 +296,31 @@ const MechCheck = {
       W_.step(Math.round(60 * DISC.rehit * 3)); e.hurt = o;
       const per = hits.length ? Math.max(...hits) : 0;
       return { ok: parked && hits.length >= 2 && per > d * 1.5 && near1(per, d * DISC.parkMul), got: `${parked ? '停住' : '沒停住（錯）'}；${hits.length} 下、每下 ${per.toFixed(1)}（子彈 ${d}，要 ${d * DISC.parkMul}）` };
+    }],
+    ['武器原型', '飛輪：時間到自己飛回', `停住 ${DISC.park} 秒後不消失、自己飛回手上；回程打到路上的敵人（傷害 ×1，召回才 ×${DISC.back}）；自己飛回不觸發武器線`, M => {
+      M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', null, null, null]);
+      const P = Game.player, R = WEAPONS.scatter.base.speed * WEAPONS.scatter.base.life, e = M.targets([[R + 400, 300]], 'brute', true, 999)[0], d = Game.wp.damage;
+      P.aim = 0; P.fire(); W_.step(Math.ceil(60 * WEAPONS.scatter.base.life) + 2);
+      const disc = Game.bullets.find(b => !b.dead && b.mode === 'park');
+      e.x = P.x + R / 2; e.y = P.y;  // 擺在回程的路上
+      let sig = 0; const o = Game.lineSig; Game.lineSig = function (...a) { sig++; return o.apply(this, a); };
+      const hits = [], oh = e.hurt; e.hurt = function (dmg, ...r) { hits.push(dmg); return oh.call(this, dmg, ...r); };
+      let back = false;
+      try { for (let f = 0; f < 60 * (DISC.park + 2) && !(disc && disc.dead); f++) { W_.step(1); if (disc && disc.mode === 'return') back = true; } } finally { Game.lineSig = o; e.hurt = oh; }
+      const caught = !!disc && disc.dead && WEAPON_PLAY.scatter.count(P) === 0;
+      return { ok: !!disc && back && caught && hits.length >= 1 && near1(hits[0], d) && sig === 0, got: `${back ? '時間到飛回來' : '沒飛回（錯）'}、${caught ? '接回手上' : '沒接回（錯）'}；回程打到 ${hits.length} 下、每下 ${hits.length ? Math.round(hits[0]) : 0}（要 ${d}）；觸發武器線 ${sig} 次（要 0）` };
+    }],
+    ['武器原型', '光束排熱冷卻、飛輪撿起來', `排熱冷卻 ${HEAT.cd} 秒（分段排熱：第一下後 ${VENT2.cd} 秒能排第二下、第二下後照正常冷卻）；停住的飛輪開過去碰到就收回手上`, M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      let P = Game.player; P.hHeat = 1; P.altQ = true; P.tickAlt(1 / 60); const cd = P.altCd;
+      M.setup('sandbox', 'vanguard', 'laser', 'B', 0, ['weapon', null, null, null]); M.targets([]);
+      P = Game.player; P.hHeat = 1; P.altQ = true; P.tickAlt(1 / 60); const c1 = P.altCd; P.altCd = 0; P.altQ = true; P.tickAlt(1 / 60); const c2 = P.altCd;
+      M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', null, null, null]); M.targets([]);
+      P = Game.player; P.aim = 0; P.fire(); W_.step(Math.ceil(60 * WEAPONS.scatter.base.life) + 2);
+      const disc = Game.bullets.find(b => !b.dead && b.mode === 'park'); P.x = disc.x - 5; P.y = disc.y; W_.step(1);
+      const picked = disc.dead && WEAPON_PLAY.scatter.count(P) === 0;
+      const ok = near1(cd, HEAT.cd) && near1(c1, VENT2.cd) && near1(c2, HEAT.cd) && picked;
+      return { ok, got: `排熱冷卻 ${cd.toFixed(2)}；分段排熱 第一下後 ${c1.toFixed(2)}、第二下後 ${c2.toFixed(2)}；飛輪${picked ? '撿起來了' : '沒撿起來（錯）'}` };
     }],
     ['武器連段', '飛輪：全接快擲', `丟滿 ${DISC.max} 個再召回、全部接回 → 下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}；沒丟滿召回不算`, M => {
       const run = n => {
@@ -319,6 +344,22 @@ const MechCheck = {
       WEAPON_PLAY.plasma.alt(P); Game.explode = o;
       const dmgOk = !!ex && near1(ex[3], WELL.dmg * WELL_STACK.dmg);
       return { ok: one && dmgOk, got: `射兩發同一點 → ${W.length} 個井${one ? '（疊 1 次）' : '（錯）'}；塌縮 ${ex ? Math.round(ex[3]) : '沒炸'}（要 ${Math.round(WELL.dmg * WELL_STACK.dmg)}）` };
+    }],
+    ['武器連段', '重力井：碰到才疊', '飛行中的重力彈碰到停著的井本體才併進去：停在旁邊沒碰到 → 另一個井；從井身上穿過去、會停在更遠 → 併進去', M => {
+      const R = WEAPONS.plasma.base.speed * WEAPONS.plasma.base.life, wells = () => Game.bullets.filter(b => !b.dead && b.park && b.park.kind === 'well' && b.mode === 'park');
+      const setup = () => { M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]); const P = Game.player; P.aim = 0; P.fire(); W_.step(60); return P; };
+      let P = setup(); P.y -= 40; P.fireCd = 0; P.fire(); W_.step(60);  // 平移 40：停在舊井旁邊（吸引範圍 ${WELL.r} 內）、沒碰到
+      const side = wells().length;
+      P = setup(); P.x += 100; P.fireCd = 0; P.fire(); W_.step(60);  // 往前 100 再射：飛行中穿過舊井、本來會停在舊井後面 100
+      const W = wells(), thru = W.length === 1 && W[0].stack === 1;
+      return { ok: side === 2 && thru, got: `停在旁邊沒碰到：${side} 個井（要 2）；穿過舊井：${W.length} 個井、疊 ${W.map(b => b.stack || 0).join('／')}（要 1 個、疊 1）` };
+    }],
+    ['武器連段', '重力井：連射疊井不會被擠掉', `朝同一點一直射：疊滿的井留著（上限 ${WELL.max} 只算停住的井，疊進去的不算新的），4.5 秒後 ${WELL.max} 個、前兩個疊滿 ${WELL_STACK.max} 層`, M => {
+      M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
+      const P = Game.player; P.aim = 0;
+      W_.step(Math.round(60 * 4.5), true);
+      const W = Game.bullets.filter(b => !b.dead && b.park && b.park.kind === 'well' && b.mode === 'park'), full = W.filter(b => (b.stack || 0) === WELL_STACK.max).length;
+      return { ok: W.length === WELL.max && full >= 2 && WEAPON_PLAY.plasma.count(P) === WELL.max, got: `${W.length} 個井（疊 ${W.map(b => b.stack || 0).join('／')}），左上角顯示 ${WEAPON_PLAY.plasma.count(P)}` };
     }],
     ['武器連段', '牽引鉤：扯、扯、重摔', `勾住時左鍵改成扯（不射新鉤爪）；第 ${YANK.n} 扯重摔：傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃`, M => {
       M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]);
@@ -397,6 +438,19 @@ const MechCheck = {
       const ok = base.hooked && base.blocked && near1(base.lost, 10) && near1(rs.lost, 10) && !base.ref && rs.blocked && near1(rs.ref, 10 * HOOK_UP.reflect) && rs.aimFar;
       return { ok, got: `勾住時子彈${base.blocked ? '被擋下' : '穿過去（錯）'}${base.ref ? '、卻反彈了（錯）' : ''}、盾牌扣血 ${Math.round(base.lost)}／${Math.round(rs.lost)}（要 10）；反射盾 反彈 ${rs.ref}（要 ${10 * HOOK_UP.reflect}）${rs.aimFar ? '、打向別隻' : '、方向不對（錯）'}` };
     }],
+    ['基地', '基地的右鍵是武器技能', '基地開著船按滑鼠右鍵 = 武器技能（跟戰鬥一樣），不是衝刺；不在開船時按沒反應', M => {
+      const st = Game.state, drv = Hub.driving, save = Hub.weaponId; Hub.weaponId = 'scatter';
+      try {
+        const T0 = HUB.targets[0]; Hub.build(T0.x - 250, T0.y, 0); Game.state = 'title'; Hub.driving = true;
+        const P = Game.player; P.fire(); for (let f = 0; f < 20; f++) Hub.update(1 / 60);
+        const out = WEAPON_PLAY.scatter.count(P);
+        Input.alt = Input.dash = false; Input.right(); const alt = Input.alt, dash = Input.dash;
+        for (let f = 0; f < 3; f++) Hub.update(1 / 60);
+        const recalled = WEAPON_PLAY.scatter.count(P) < out;
+        Hub.driving = false; Input.alt = Input.dash = false; Input.right(); const idle = !Input.alt && !Input.dash;
+        return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
+      } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
+    }],
     ['基地', '基地跑戰場那一套', '基地每幀呼叫 Game.step（跟戰鬥同一個函式：戰場加了東西基地就會有）；牽引鉤勾得走標靶機', M => {
       const save = Hub.weaponId; Hub.weaponId = 'railgun';
       try {
@@ -423,6 +477,93 @@ const MechCheck = {
       WEAPON_PLAY.drone.tick(P, 1 / 60);
       const blocked = Game.eBullets.filter(b => b.life <= 0).length;
       return { ok: leash && broke && back && blocked === DRONE.blockN, got: `最遠 ${Math.round(far)}${leash ? '' : '（錯）'}；打 ${DRONE.hp} 下${broke ? '壞了' : '沒壞（錯）'}、${back ? '重生' : '沒重生（錯）'}；收攏擋 ${blocked} 顆（要 ${DRONE.blockN}）` };
+    }],
+    ['控制', '控制抗性（共用架構）', 'CFG.CC[等級][控制種類]：一般／精英／旗艦各查各的；ccDur 照規則（沒規則照控制本身）、ccEnd 開始免疫、ccImmune 時間到解除', M => {
+      const save = CFG.CC; CFG.CC = { elite: { mc: { t: 1, immune: 2 } }, boss: { mc: { immune: 5 } } };
+      try {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
+        const [n, el, bo] = [M.targets([[200, 0]], 'brute')[0], M.targets([[200, 0]], 'elite')[0], M.targets([[200, 0]], 'boss')[0]];
+        const dur = [n, el, bo].map(e => e.ccDur('mc', 9)), ends = [n, el, bo].map(e => e.ccEnd('mc'));
+        const imm0 = [n, el, bo].map(e => e.ccImmune('mc'));
+        Game.time += 3; const imm3 = [n, el, bo].map(e => e.ccImmune('mc'));
+        Game.time += 3; const imm6 = [n, el, bo].map(e => e.ccImmune('mc'));
+        const other = el.ccImmune('hook');
+        const ok = dur.join() === '9,1,9' && ends.join() === 'false,true,true' && imm0.join() === 'false,true,true' && imm3.join() === 'false,false,true' && imm6.join() === 'false,false,false' && !other;
+        return { ok, got: `控制時間 一般／精英／旗艦 ${dur.join('／')}（要 9／1／9）；結束後免疫 ${imm0.join('／')} → 3 秒後 ${imm3.join('／')} → 6 秒後 ${imm6.join('／')}；別種控制${other ? '也被免疫（錯）' : '不受影響'}` };
+      } finally { CFG.CC = save; }
+    }],
+    ['武器原型', '牽引鉤：甩出去的也擋子彈', `右鍵甩出去、還在飛的敵人擋下碰到的敵彈、照子彈傷害扣血（飛行 ${HOOK.flyT} 秒內）`, M => {
+      M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]);
+      const P = Game.player, a = M.targets([[200, 0]], 'brute', true, 60)[0];
+      P.aim = 0; P.fire(); W_.step(45); WEAPON_PLAY.railgun.alt(P); W_.step(3);
+      const flying = (P.flung || []).some(f => f.e === a), h0 = a.hp;
+      const b = { x: a.x + 5, y: a.y, vx: 0, vy: 0, r: 5, dmg: 10, life: 3, from: 'mc' }; Game.eBullets = [b];
+      WEAPON_PLAY.railgun.tick(P, 1 / 60);
+      return { ok: flying && !(b.life > 0) && near1(h0 - a.hp, 10), got: `${flying ? '飛行中' : '沒在飛（錯）'}：子彈${b.life > 0 ? '穿過去（錯）' : '被擋下'}、牠扣 ${Math.round(h0 - a.hp)}（要 10）` };
+    }],
+    ['多人', '牽引鉤：勾隊友、衝刺掙脫、甩出去', `鉤爪打中隊友就勾住、他被拉到前方 ${HOOK.hold}；他衝刺就掙脫；被勾住的人不能勾隊友（不會互勾繞圈）；右鍵把隊友甩出去：飛行中無敵、撞到的敵人受 ${HOOK.dmg}`, M => {
+      const run = n => { for (let i = 0; i < n; i++) Game.update(1 / 60); };
+      // 1. 隊友勾房主：房主被拉到隊友前方
+      let m = M.coop('railgun'), P = Game.player; m.x = P.x; m.y = P.y + 300; m.aim = -Math.PI / 2;
+      Game.withLoadout(m.L, () => m.fire()); run(40);
+      const hooked1 = m.hookShip === P && P.grabBy === 2, pulled = Math.hypot(P.x - m.x, P.y - (m.y - HOOK.hold)) < 30;
+      // 2. 房主勾隊友；被勾住的隊友勾房主 → 勾不到（不會繞圈）；隊友衝刺 → 掙脫
+      m = M.coop('railgun', ['weapon', null, null, null], 'railgun'); P = Game.player; m.x = P.x; m.y = P.y + 300; P.aim = Math.PI / 2; m.aim = -Math.PI / 2;
+      P.fire(); run(25);
+      const hooked2 = P.hookShip === m && m.grabBy === 1;
+      Game.withLoadout(m.L, () => { m.fireCd = 0; m.fire(); }); run(20);
+      const noLoop = !m.hookShip && !P.grabBy;
+      m.dashT = CFG.DASH_TIME; run(2);
+      const broke = !P.hookShip && !m.grabBy;
+      // 3. 再勾一次、右鍵甩出去：隊友飛行中無敵，撞到路上的敵人
+      m.dashT = 0; m.x = P.x; m.y = P.y + 250; P.fireCd = 0; P.fire(); run(25);
+      const e = M.targets([[0, 260]], 'brute', true, 99)[0]; const h0 = e.hp;
+      Game.withLoadout(Game.L, () => WEAPON_PLAY.railgun.alt(P));
+      const flung = (m.flingSeq || 0) === 1 && m.iframe > 0 && !P.hookShip;
+      if (m.flingV) for (let i = 0; i < 20; i++) { m.x += m.flingV[0] / 60; m.y += m.flingV[1] / 60; run(1); }  // 隊友的船在他自己電腦上飛：這裡照速度推
+      const hit = near1(h0 - e.hp, HOOK.dmg);
+      const ok = hooked1 && pulled && hooked2 && noLoop && broke && flung && hit;
+      return { ok, got: `隊友勾房主${hooked1 ? '' : '（沒勾住，錯）'}、${pulled ? '拉到隊友前方' : '沒拉過去（錯）'}；房主勾隊友${hooked2 ? '' : '（沒勾住，錯）'}；被勾住的隊友反勾${noLoop ? '勾不到' : '勾到了（錯）'}；衝刺${broke ? '掙脫' : '沒掙脫（錯）'}；甩出去${flung ? '（無敵）' : '（錯）'}撞到敵人 ${Math.round(h0 - e.hp)}（要 ${HOOK.dmg}）` };
+    }],
+    ['武器原型', '牽引鉤：鉤索被牆擋住會放開', `鉤索把飛船拉向牆上的點；被擋住拉不過去（或拉超過 ${HOOK_UP.grapple.maxT} 秒）就放開，飛船能再自己移動（以前會被定住一整場）`, M => {
+      M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]); M.targets([]);
+      const P = Game.player; P.x = 40; P.grap = { x: -40, y: P.y, hit: new Set() };  // 目標在場地外：飛船最多到 x = 半徑，永遠差 ${HOOK_UP.grapple.stop} 以上
+      for (let f = 0; f < 120; f++) Game.update(1 / 60);  // 要跑飛船移動（撞到場地邊緣被推回來）：W_.step 只跑武器
+      const freed = !P.grap; P.vx = 200; const x0 = P.x; Game.update(1 / 60); const moves = P.x !== x0;
+      return { ok: freed && moves, got: `${freed ? '放開了' : '還拉著（錯）'}；之後飛船${moves ? '能移動' : '還是動不了（錯）'}` };
+    }],
+    ['武器原型', '牽引鉤：精英會掙脫', `精英勾 ${CFG.CC.elite.hook.t} 秒就掙脫（「勾」升級的 +${HOOK_UP.t} 秒照加），之後 ${CFG.CC.elite.hook.immune} 秒勾不住；一般敵人照樣勾 ${HOOK.t} 秒（控制抗性 CFG.CC）`, M => {
+      const held = (type, path) => {  // 勾住後幾秒放開；放開後馬上再射一發勾不勾得住
+        M.setup('sandbox', 'vanguard', 'railgun', path, null, ['weapon', null, null, null]);
+        const P = Game.player, e = M.targets([[200, 0]], type, true, 60)[0];
+        P.aim = 0; P.fire(); let f = 0; for (; f < 60 && P.hookE !== e; f++) W_.step(1);
+        let h = 0; for (; h < 600 && P.hookE === e; h++) W_.step(1);
+        P.fireCd = 0; P.fire(); for (let k = 0; k < 40 && P.hookE !== e; k++) W_.step(1);
+        return { t: h / 60, again: P.hookE === e };
+      };
+      const el = held('elite', null), up = held('elite', 'A'), br = held('brute', null);
+      const ok = Math.abs(el.t - CFG.CC.elite.hook.t) < 0.1 && !el.again && Math.abs(up.t - CFG.CC.elite.hook.t - HOOK_UP.t) < 0.1 && Math.abs(br.t - HOOK.t) < 0.1 && br.again;
+      return { ok, got: `精英勾 ${el.t.toFixed(1)} 秒、放開馬上再勾${el.again ? '勾到了（錯）' : '勾不住'}；升級後精英 ${up.t.toFixed(1)} 秒；刺殼勾 ${br.t.toFixed(1)} 秒、放開${br.again ? '能再勾' : '勾不住（錯）'}` };
+    }],
+    ['武器原型', '牽引鉤：甩出去砸到會受傷、跳數字', `右鍵甩出去的敵人撞到別隻：被砸的受 ${HOOK.dmg}、被甩的受 ${pct(HOOK.self)}，兩隻都跳傷害數字（武器直接傷害 wHit 都會跳）`, M => {
+      M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]);
+      const P = Game.player, [a, b] = M.targets([[200, 0], [HOOK.hold + 150, 0]], 'brute', true, 60);
+      P.aim = 0; P.fire(); W_.step(45);
+      const ha = a.hp, hb = b.hp, nums = [], em = Events.emit;
+      Events.emit = function (ev, d, ...r) { if (ev === 'floatText' && /^\d+$/.test(String(d.text))) nums.push(Math.hypot(d.x - a.x, d.y - a.y) < 80 ? 'a' : 'b'); return em.call(this, ev, d, ...r); };
+      try { WEAPON_PLAY.railgun.alt(P); W_.step(30); } finally { Events.emit = em; }
+      const da = ha - a.hp, db = hb - b.hp;
+      return { ok: near1(db, HOOK.dmg) && near1(da, HOOK.dmg * HOOK.self) && nums.length >= 2, got: `被砸的扣 ${Math.round(db)}（要 ${HOOK.dmg}）、被甩的扣 ${Math.round(da)}（要 ${Math.round(HOOK.dmg * HOOK.self)}）；跳了 ${nums.length} 個數字${nums.length >= 2 ? '' : '（要 2，錯）'}` };
+    }],
+    ['武器原型', '無人機：準星在飛船上、開火朝向', `游標放在飛船上（準星距離 0）按住射擊：無人機圍在飛船旁（不飛到前面 250）；開火的無人機機頭朝目標 ${DRONE.face} 秒`, M => {
+      M.setup('sandbox', 'vanguard', 'drone', null, null, ['weapon', null, null, null]);
+      const P = Game.player, e = M.targets([[150, 60]], 'brute', true, 999)[0];
+      P.aim = 0; P.aimD = 0;
+      for (let f = 0; f < 90; f++) { Game.time += 1 / 60; P.wantFire = true; WEAPON_PLAY.drone.tick(P, 1 / 60); }
+      const far = Math.max(...P.drones.map(d => Math.hypot(d.x - P.x, d.y - P.y))), near = far <= DRONE.spread + 10;
+      W_.step(20, true); P.y += 40; P.wantFire = true; WEAPON_PLAY.drone.tick(P, 1 / 60);  // 開火後飛船一動，無人機跟著飛：舊的寫法這一幀就轉回移動方向
+      const fired = P.drones.filter(d => d.faceT > 0), faced = fired.length > 0 && fired.every(d => Math.abs(angleDiff(d.a, Math.atan2(e.y - d.y, e.x - d.x))) < 0.35);
+      return { ok: near && faced, got: `準星在飛船上：無人機最遠離飛船 ${Math.round(far)}${near ? '' : `（要 ≤ ${DRONE.spread + 10}，錯）`}；開火的 ${fired.length} 架${faced ? '機頭朝目標' : '沒朝目標（錯）'}` };
     }],
     ['機體', '射速加成相加','疾風（移動中）+20%、急冷（散熱片 2 層）+30% 相加 = +50%（不是相乘的 +56%；散熱片本身不加射速，2026-10-10 改成能量容量）', M => {
       const count = () => {
@@ -644,7 +785,7 @@ const MechCheck = {
       return { ok: bm.hit === Math.ceil(1 / CHIPS.boomerang.coef) && st.hit === 1 && inf.hit === 0 && inf.kill === 1 && !bm.last && !inf.last,
         got: `迴旋：第 ${bm.hit} 下命中才傳；佈雷：第 ${st.hit} 下就傳；感染：命中${inf.hit ? '也傳（錯誤）' : '不傳'}、擊殺傳 ${inf.kill} 次；最後一格${bm.last || inf.last ? '還在傳（錯誤）' : '不再往下傳'}` };
     }],
-    ['線', '招牌動作觸發武器線', '一般命中照觸發係數累積；招牌動作（排熱、塌縮每個井、重斬第一下、收攏有擋到、召回每個飛輪回程第一下、甩擊第一次撞到）直接觸發武器線 1 次；武器線沒接晶片就不觸發', M => {
+    ['線', '招牌動作觸發武器線', '一般命中照觸發係數累積；招牌動作（排熱、塌縮每個井、重斬第一下、收攏有擋到、召回每個飛輪回程第一下（時間到自己飛回的不算）、甩擊第一次撞到）直接觸發武器線 1 次；武器線沒接晶片就不觸發', M => {
       const Q = () => Game.triggerQueue.length;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null]); M.targets([]);
       Game.player.hHeat = 0.6; Game.triggerQueue = []; WEAPON_PLAY.laser.alt(Game.player); const vent = Q();
@@ -657,8 +798,8 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'drone', null, null, ['weapon', 'boomerang', null]); M.targets([]);
       const P = Game.player; P.guardT = 0.01; P.blocked = 2; Game.triggerQueue = []; WEAPON_PLAY.drone.tick(P, 0.02); const guard = Q();
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', 'boomerang', null]); const [e2] = M.targets([[60, 0]]);
-      const disc = { mode: 'return', angle: 0 }; Game.triggerQueue = []; WEAPON_PLAY.scatter.onHit(Game.player, disc, e2); WEAPON_PLAY.scatter.onHit(Game.player, disc, e2);
-      WEAPON_PLAY.scatter.onHit(Game.player, { mode: 'park', angle: 0 }, e2); const recall = Q();
+      const disc = { mode: 'return', recall: true, angle: 0 }; Game.triggerQueue = []; WEAPON_PLAY.scatter.onHit(Game.player, disc, e2); WEAPON_PLAY.scatter.onHit(Game.player, disc, e2);
+      WEAPON_PLAY.scatter.onHit(Game.player, { mode: 'park', angle: 0 }, e2); WEAPON_PLAY.scatter.onHit(Game.player, { mode: 'return', angle: 0 }, e2); const recall = Q();  // 最後一顆：停住時間到自己飛回的，不算
       M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', 'boomerang', null]); const [a, c] = M.targets([[100, 0], [100, 0]]);
       a.vx = 300; Game.player.flung = [{ e: a, t: 1, hit: new Set(), bounce: 0 }]; Game.triggerQueue = []; WEAPON_PLAY.railgun.tick(Game.player, 1 / 60); const fling = Q();
       return { ok: vent === 1 && none === 0 && well === 1 && heavy === 1 && guard === 1 && recall === 1 && fling === 1,

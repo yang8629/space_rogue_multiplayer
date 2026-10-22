@@ -47,13 +47,13 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 ## 改完之後
 
 1. 測試：在 `tests/` 跑 `node release.js`（所有測試＋機制檢查＋名字檢查＋私人資訊掃描＋版號／README，只印摘要、每項幾秒；同時跑最多 4 個，約 20 秒；完整結果在 `tests/release_last.log`）。第一次要先在 `tests/` 跑 `npm install`。
-   - 名字檢查：`node undefcheck.js`（用了不存在的函式、變數；`--selftest` 測掃描本身）。個別：`smoke.js`、`range.js`、`e2e.js`（兩份遊戲互連）。
+   - 名字檢查：`node undefcheck.js`（用了不存在的函式、變數；`--selftest` 測掃描本身）。個別：`smoke.js`、`range.js`、`e2e.js`（兩份遊戲互連）、`roomhit.js`（多人房間的互射、抓人）。
    - 看某幾項機制檢查：`node mc.js 迴旋 黏著`（不給關鍵字 = 只印沒過的）；偶發失敗：`node mcloop.js 名稱 --n=200`。
    - 模擬（整局、價值表、晶片模擬表…）的指令和規則：`docs/模擬.md`。
 2. 規則改了就更新 `README.md`；還沒上傳的改動記在 `docs/版本紀錄.md` 的「（下一版）」那一行，版號先不動。
 3. 平常只在本機提交，**不主動上傳**。git 不在 PATH 時，`release.js` 會去找 Program Files 裡的 git。
    - 提交訊息不加 Claude 署名（`Co-Authored-By`、`Claude-Session`）：每台電腦在 `.claude/settings.local.json` 設 `"attribution": { "commit": "", "pr": "" }`（不上傳，寫進 `.git/info/exclude`）。`release.js` 會擋。
-4. 上傳：`node release.js --patch --push` 或 `--minor --push`（版號規則在 `docs/版號.md`：規則或內容有變加「次」，其餘加「修」）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。版號相關的兩項檢查只在換版號時跑，平常 `node release.js` 應該全綠。
+4. 上傳：`node release.js --patch --push`（版號規則在 `docs/版號.md`：原型期一律只加最後一碼；使用者說是大調整才用 `--minor`）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。版號相關的兩項檢查只在換版號時跑，平常 `node release.js` 應該全綠。
 5. 私人資訊掃描的額外字詞放本機 `tests/private_words.txt`（一行一個，不上傳）。
 
 ## 瀏覽器測試

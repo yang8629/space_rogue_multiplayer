@@ -9,8 +9,9 @@
 //   apply : 直接修改參數物件 p
 // =====================================================================
 // 能量刃的右鍵・彈反（原型）：按下開 win 秒格擋，身邊 r 內的敵彈反射回去打最近的敵人（傷害 ×reflect）；
-//   成功 → 冷卻立刻轉好、keep 秒內的下一刀傷害 ×boost、刃片 ×grow；沒擋到就要等 cd 秒
-const PARRY = { win: 0.25, cd: 0.9, r: 55, reflect: 3, keep: 1.5, boost: 2.5, grow: 1.5, stop: 0.18, stopScale: 0.05, shake: 7 };  // stop：成功時頓幀幾秒（遊戲速度 ×stopScale）
+//   成功 → 冷卻只剩 hitCd 秒、keep 秒內的下一刀傷害 ×boost、刃片 ×grow；沒擋到就要等 cd 秒
+const PARRY = { win: 0.25, cd: 2, hitCd: 0.5,  // cd：沒擋到的冷卻；hitCd：擋到後剩的冷卻（10-23 使用者：太快。以前 cd 0.9、擋到立刻轉好，子彈多時能一直按）
+  r: 55, reflect: 3, keep: 1.5, boost: 2.5, grow: 1.5, stop: 0.18, stopScale: 0.05, shake: 7 };  // stop：成功時頓幀幾秒（遊戲速度 ×stopScale）
 // 能量刃的左鍵・三段連段（原型）：同一次揮砍的刃片照角度依序在 sweepT 秒內放出（看起來是一刀揮過去）
 //   sweep = 揮的方向（-1 右往左、1 左往右、0 同時）；dmg、grow = 傷害、刃片大小；wide = 刃片排開的角度倍率；
 //   lunge = 往前突進的速度；cd = 這一刀之後的出手間隔倍率；reset 秒沒揮就回到第一段
@@ -21,9 +22,9 @@ const COMBO = { reset: 0.6, sweepT: 0.09, steps: [
 // ===== 武器（2026-10-21）：每把武器左鍵累積、右鍵兌現。這裡只放數值、說明、升級樹；行為在 game/weapon_play.js =====
 const pct = v => Math.round(v * 100) + '%';
 // 熱能光束（laser）：每發加熱 per，滿了過熱停火 lock 秒；沒開火每秒降 cool；右鍵排熱：熱度 min 以上才能用，熱度換成 n 道衝擊波（射程 r）
-const HEAT = { per: 0.03, cool: 0.4, lock: 1.5, min: 0.25, n: 18, dmg: 70, r: 170, cd: 0.8 };
+const HEAT = { per: 0.03, cool: 0.4, lock: 1.5, min: 0.25, n: 18, dmg: 70, r: 170, cd: 2.5 };  // cd：排熱冷卻（10-23 使用者：0.8 太短 → 2.5）
 // 連段（2026-10-22，使用者：其他武器也要有能量刃那種連段回饋）：每把照自己的玩法；收尾不額外觸發武器線
-//   光束「四快一慢」：連射第 n 發是重的那發，前面多等 slow 倍間隔、傷害 ×dmg、大小 ×grow；停火 reset 秒從頭算
+//   光束「四快一慢」：連射第 n 發是重的那發，前後都隔 slow 倍間隔、傷害 ×dmg、大小 ×grow；停火 reset 秒從頭算
 const BEAT = { n: 5, slow: 2, dmg: 3, grow: 2, reset: 0.6 };
 // 熱能光束的升級：高溫（熱度越高越痛）、散熱（右鍵）、低溫（擊殺降溫、保持涼的越強）
 const HOT = { mul: 0.6 };                  // 高溫：傷害 +（熱度 × 60%）
@@ -33,7 +34,7 @@ const VENT2 = { min: 0.1, range: 1.3, cd: 0.25, slow: 0.5, slowT: 2 };  // 散�
 const COOL = { kill: 0.1, streak: 2, zero: 0.2, zeroMul: 1.5 };          // 低溫：擊殺降溫 10%；連殺不停火 = 擊殺後 2 秒內開火不加熱；零度 = 熱度 20% 以下傷害 ×1.5
 
 // 迴旋飛輪（scatter）：飛到盡頭停住旋轉 park 秒（每 rehit 秒能再打同一隻），場上最多 max 個；右鍵召回：全部飛回來，回程傷害 ×back
-const DISC = { max: 3, park: 4, rehit: 0.25, back: 1.6, backSpeed: 950, cd: 0.4, parkMul: 2 };  // parkMul：停住旋轉時的傷害倍率（10-22：停住只佔 4% 傷害，等它磨不划算）
+const DISC = { max: 3, park: 4, rehit: 0.25, back: 1.6, backSpeed: 950, cd: 0.4, parkMul: 2 };  // cd：召回冷卻（短：丟、收是飛輪的玩法；10-23 試過 2 秒，使用者改回）  // parkMul：停住旋轉時的傷害倍率（10-22：停住只佔 4% 傷害，等它磨不划算）
 const DISC_FAST = { speed: 1.5, dmg: 2 };  // 飛輪「全接快擲」：丟滿後召回、全部接回手上 → 下一個擲出的速度 ×speed、傷害 ×dmg
 // 迴旋飛輪的升級：數量、召回、旋轉
 const DISC_UP = { max: 1, stackR: 40, stackMax: 3, stackGrow: 1.3, stackDmg: 1.6,  // 疊輪：停在另一個飛輪 40 內就疊上去（最多 3 級，每級大 ×1.3、傷害 ×1.6）
@@ -55,14 +56,14 @@ const HOOK = { hold: 70, t: 3, fling: 1500, flyT: 0.5, dmg: 45, self: 0.5, cd: 0
 const YANK = { n: 3, slam: 3, r: 60, every: 0.2 };  // 牽引鉤「扯」：勾住時左鍵改成扯（每 every 秒一下，不照射速：照射速 0.6 秒一扯，電腦勾到就甩反而比較強，10-22 整局 20% vs 0%），第 n 扯重摔在身前：傷害 ×slam、r 內的敵人一起吃
 // 牽引鉤的升級：勾、甩、拉
 const HOOK_UP = { t: 1.5, speed: 1.3, multi: 3,                                   // 勾：多勾 1.5 秒、鉤爪 ×1.3 快；群鉤最多 3 隻
-  grapple: { speed: 1100, stop: 30, dmg: 30 },                                     // 鉤索：每秒 1100 拉過去、停在 30 前，撞到的受 30
+  grapple: { speed: 1100, stop: 30, dmg: 30, maxT: 1.5 },                                     // 鉤索：每秒 1100 拉過去、停在 30 前，撞到的受 30
   fling: 1.5, boom: { r: 90, dmg: 40 }, bounceR: 300,                              // 甩：甩擊 ×1.5；爆裂甩落地炸半徑 90；彈跳甩找 300 內下一隻
   dps: 15, shock: { every: 0.3, r: 130, dmg: 12, n: 3 }, reflect: 1.5 };           // 拉：勾住每秒 15；電擊鉤每 0.3 秒電 130 內 3 隻；反射盾：擋下的敵彈彈回去 ×1.5
 
 // 無人機蜂群（drone）：按住射擊時飛到準星附近、各打 range 內最近的敵人，放開回到身邊；右鍵收攏：shield 秒內貼身轉成護盾、最多擋 blockN 顆、不攻擊
 //   牽繩：離飛船最多 leash；飛出去時被敵彈打 hp 下就壞，respawn 秒後在飛船旁重生（收攏擋子彈不扣）
 const DRONE = { n: 4, orbit: 46, speed: 560, spread: 50, range: 260, shield: 2.5, guard: 34, block: 14, blockN: 8, cd: 5,
-  leash: 300, hp: 3, hitR: 9, respawn: 4 };
+  leash: 300, hp: 3, hitR: 9, respawn: 4, face: 0.35 };  // face：開火後機頭朝目標幾秒（之後才照移動方向轉）
 // 無人機的升級：數量、火力、護衛
 const DRONE_UP = { n: 2, kami: { dmg: 60, r: 70, speed: 900, seek: 400 },       // 數量：+2 架；自爆撞 400 內最近的敵人
   dmg: 1.4, focus: { per: 0.1, max: 10 }, missile: { homing: 3, r: 40, ratio: 0.6, speed: 0.7 },  // 火力：×1.4；集火每次 +10%（最多 10 層）；飛彈追蹤＋小爆炸
@@ -77,7 +78,7 @@ const LEECH = { heal: 0.4, cap: 0.5 };     // 吸能刃：每次命中回 0.4，
 const BLOOD = { cost: 0.06, mul: 2, floor: 0.2 };  // 血祭重斬：重斬扣最大 HP 的 6%（不會低於 20%），傷害 ×2
 
 const WEAPONS = {
-  laser: { name: '熱能光束', short: '光束', color: '#5ef2ff', desc: `高射速光束，每發加熱 ${pct(HEAT.per)}，熱度滿了過熱停火 ${HEAT.lock} 秒；沒開火時慢慢降溫。右鍵<b>排熱</b>：熱度 ${pct(HEAT.min)} 以上才能用，把熱度一次噴成一圈衝擊波（熱度越高越痛）並清掉身邊的敵彈。連射是<b>四快一慢</b>：第 ${BEAT.n} 發慢一拍，傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}。`,
+  laser: { name: '熱能光束', short: '光束', color: '#5ef2ff', desc: `高射速光束，每發加熱 ${pct(HEAT.per)}，熱度滿了過熱停火 ${HEAT.lock} 秒；沒開火時慢慢降溫。右鍵<b>排熱</b>：熱度 ${pct(HEAT.min)} 以上才能用，把熱度一次噴成一圈衝擊波（熱度越高越痛）並清掉身邊的敵彈。連射是<b>四快一慢</b>：第 ${BEAT.n} 發前後各停一拍，傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}。`,
     // 射程 950 × 0.55 ≈ 520，留在畫面內（1280 寬時飛船到邊緣約 640）
     trig: 1 / 3,
     base: { interval: 0.16, count: 1, spread: 0, damage: 8, speed: 950, radius: 3, life: 0.55, shape: 'line', knock: 0.6 },
@@ -87,14 +88,14 @@ const WEAPONS = {
         next: [{ name: '熔芯', desc: `過熱不再停火：熱度滿時繼續開火，每秒扣 ${MELT.hp} HP（最低剩 1）。`, apply: p => { p.melt = true; } },
           { name: '臨界', desc: `熱度 ${pct(CRIT.at)} 以上射出的光束穿透 +${CRIT.pierce}。`, apply: p => { p.crit = true; } }] },
       B: { name: '散熱', desc: `排熱門檻 ${pct(HEAT.min)} → ${pct(VENT2.min)}，衝擊波射程 ×${VENT2.range}。`, apply: p => { p.ventMin = VENT2.min; p.ventRange = VENT2.range; },
-        next: [{ name: '分段排熱', desc: `每次排熱只用掉一半熱度，冷卻 ${VENT2.cd} 秒：可以連排兩次。`, apply: p => { p.ventSplit = true; } },
+        next: [{ name: '分段排熱', desc: `每次排熱只用掉一半熱度，排完第一下 ${VENT2.cd} 秒就能排第二下（之後照正常冷卻）。`, apply: p => { p.ventSplit = true; } },
           { name: '冷凍衝擊', desc: `排熱的衝擊波讓敵人減速 ${pct(VENT2.slow)}（${VENT2.slowT} 秒）。`, apply: p => { p.ventSlow = true; } }] },
       C: { name: '低溫', desc: `每擊殺一隻，熱度 −${pct(COOL.kill)}。`, apply: p => { p.killCool = COOL.kill; },
         next: [{ name: '連殺不停火', desc: `擊殺後 ${COOL.streak} 秒內開火不加熱。`, apply: p => { p.streak = true; } },
           { name: '零度', desc: `熱度低於 ${pct(COOL.zero)} 時傷害 ×${COOL.zeroMul}。`, apply: p => { p.zero = true; } }] },
     } },
 
-  scatter: { name: '迴旋飛輪', short: '飛輪', color: '#ffb347', desc: `擲出飛輪，飛到盡頭停在原地旋轉 ${DISC.park} 秒，碰到的敵人每 ${DISC.rehit} 秒受傷一次（傷害 ×${DISC.parkMul}）；場上最多 ${DISC.max} 個（滿了不能再擲）。右鍵<b>召回</b>：全部飛輪直線飛回手上，回程傷害 ×${DISC.back}、無限穿透：繞到怪群另一邊再召回。丟滿再召回、全部接回手上＝<b>全接</b>：下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}。`,
+  scatter: { name: '迴旋飛輪', short: '飛輪', color: '#ffb347', desc: `擲出飛輪，飛到盡頭停在原地旋轉 ${DISC.park} 秒，碰到的敵人每 ${DISC.rehit} 秒受傷一次（傷害 ×${DISC.parkMul}），時間到自己飛回手上（回程也打得到），也可以開過去撿起來；場上最多 ${DISC.max} 個（滿了不能再擲）。右鍵<b>召回</b>：全部飛輪直線飛回手上，回程傷害 ×${DISC.back}、無限穿透：繞到怪群另一邊再召回。丟滿再召回、全部接回手上＝<b>全接</b>：下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}。`,
     trig: 0.25,
     base: { interval: 0.35, count: 1, spread: 0, damage: 6, speed: 700, radius: 11, pierce: 99, life: 0.45, shape: 'orb', knock: 0.6, park: 'disc' },
     alt: { name: '召回', cd: DISC.cd },  // 右鍵（行為在 game/weapon_play.js）
@@ -110,7 +111,7 @@ const WEAPONS = {
           { name: '爆輪', desc: `飛輪回到手上時在身邊爆炸（半徑 ${DISC_UP.boom.r}、${DISC_UP.boom.dmg} 傷害）。`, apply: p => { p.discBoom = true; } }] },
     } },
 
-  plasma: { name: '重力井', short: '重力', color: '#c77dff', desc: `射出重力彈，飛到盡頭停住變成重力井 ${WELL.park} 秒，把 ${WELL.r} 內的敵人往中心吸（旗艦不受影響）；最多 ${WELL.max} 個，多的把最舊的擠掉。右鍵<b>塌縮</b>：所有重力井同時爆炸（半徑 ${WELL.boom}、${WELL.dmg} 傷害），範圍內每多 1 隻敵人傷害 +${pct(WELL.per)}（最多算 ${WELL.capN} 隻；旗艦照體型算，半徑每 ${CFG.HIT_PT.per} 算 1 隻）：先聚怪再引爆。新的井停在舊井範圍裡會<b>疊井</b>（最多疊 ${WELL_STACK.max} 次）：吸引範圍 ×${WELL_STACK.r}、塌縮傷害 ×${WELL_STACK.dmg}。`,
+  plasma: { name: '重力井', short: '重力', color: '#c77dff', desc: `射出重力彈，飛到盡頭停住變成重力井 ${WELL.park} 秒，把 ${WELL.r} 內的敵人往中心吸（旗艦不受影響）；最多 ${WELL.max} 個（停住的才算），多的把最舊的擠掉。右鍵<b>塌縮</b>：所有重力井同時爆炸（半徑 ${WELL.boom}、${WELL.dmg} 傷害），範圍內每多 1 隻敵人傷害 +${pct(WELL.per)}（最多算 ${WELL.capN} 隻；旗艦照體型算，半徑每 ${CFG.HIT_PT.per} 算 1 隻）：先聚怪再引爆。新的井停在舊井範圍裡會<b>疊井</b>（最多疊 ${WELL_STACK.max} 次）：吸引範圍 ×${WELL_STACK.r}、塌縮傷害 ×${WELL_STACK.dmg}。`,
     trig: 0.25,
     base: { interval: 0.55, count: 1, spread: 0, damage: 5, speed: 420, radius: 10, pierce: 99, life: 0.75, shape: 'orb', knock: 0.3, park: 'well' },
     alt: { name: '塌縮', cd: WELL.cd },  // 右鍵（行為在 game/weapon_play.js）
@@ -126,7 +127,7 @@ const WEAPONS = {
           { name: '漂移井', desc: `停住的重力井每秒朝準星飄 ${WELL_UP.drift}。`, apply: p => { p.drift = true; } }] },
     } },
 
-  railgun: { name: '牽引鉤', short: '鉤爪', color: '#ffd166', desc: `射出鉤爪，打中敵人就勾住，把牠拉到飛船前方（最多 ${HOOK.t} 秒）。右鍵<b>甩擊</b>：把勾住的敵人朝準星甩出去，撞到的敵人受到 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}：拿敵人當流星錘。旗艦勾不動：鉤爪釘在牠身上（最多 ${HOOK.t} 秒），每秒撕扯 ${HOOK.tear}；右鍵用力一扯，造成 ${HOOK.rip} 後收回。勾住的敵人會擋下碰到牠的敵彈（牠照樣扣血）。勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃。`,
+  railgun: { name: '牽引鉤', short: '鉤爪', color: '#ffd166', desc: `射出鉤爪，打中敵人就勾住，把牠拉到飛船前方（最多 ${HOOK.t} 秒）。右鍵<b>甩擊</b>：把勾住的敵人朝準星甩出去，撞到的敵人受到 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}：拿敵人當流星錘。旗艦勾不動：鉤爪釘在牠身上（最多 ${HOOK.t} 秒），每秒撕扯 ${HOOK.tear}；右鍵用力一扯，造成 ${HOOK.rip} 後收回。勾住的、甩出去還在飛的敵人會擋下碰到牠的敵彈（牠照樣扣血）。多人時也勾得到隊友（戰鬥和房間都行、倒下的也行）：他被拉到你前方、衝刺就掙脫，右鍵把他甩出去撞敵人（飛行中無敵）；被勾住的人不能勾隊友。精英勾 ${CFG.CC.elite.hook.t} 秒就掙脫，之後 ${CFG.CC.elite.hook.immune} 秒勾不住。勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃。`,
     trig: 1,
     base: { interval: 0.6, count: 1, spread: 0, damage: 8, speed: 1300, radius: 6, pierce: 0, life: 0.28, shape: 'rail', knock: 0.2, hook: true },
     alt: { name: '甩擊', cd: HOOK.cd },  // 右鍵（行為在 game/weapon_play.js）
@@ -142,7 +143,7 @@ const WEAPONS = {
           { name: '反射盾', desc: `勾住的敵人擋下的敵彈反彈回去，打最近的敵人（傷害 ×${HOOK_UP.reflect}）。`, apply: p => { p.hookReflect = true; } }] },  // 10-22：擋子彈改成基本玩法，原本的「肉盾」改成反彈
     } },
 
-  blade: { name: '能量刃', short: '能刃', color: '#ff8fd8', desc: `近戰三段連段：${COMBO.steps.map(s => s.name).join(' → ')}（第三刀傷害 ×${COMBO.steps[2].dmg}、往前突進，之後收刀比較久），${COMBO.reset} 秒沒揮就從頭開始；刃片無限穿透。右鍵<b>彈反</b>：${PARRY.win} 秒內碰到身邊的敵彈會反射回去（傷害 ×${PARRY.reflect}），成功後冷卻立刻轉好、${PARRY.keep} 秒內的下一刀傷害 ×${PARRY.boost}；沒擋到要等 ${PARRY.cd} 秒。`,
+  blade: { name: '能量刃', short: '能刃', color: '#ff8fd8', desc: `近戰三段連段：${COMBO.steps.map(s => s.name).join(' → ')}（第三刀傷害 ×${COMBO.steps[2].dmg}、往前突進，之後收刀比較久），${COMBO.reset} 秒沒揮就從頭開始；刃片無限穿透。右鍵<b>彈反</b>：${PARRY.win} 秒內碰到身邊的敵彈會反射回去（傷害 ×${PARRY.reflect}），擋到後只要等 ${PARRY.hitCd} 秒、${PARRY.keep} 秒內的下一刀傷害 ×${PARRY.boost}；沒擋到要等 ${PARRY.cd} 秒。`,
     // 4 片排成 1.1 弧度的扇形（連段一刀一刀揮過去）
     trig: 0.15,
     base: { interval: 0.3, count: 4, spread: 1.1, damage: 5, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },

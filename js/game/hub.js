@@ -160,6 +160,7 @@ const Hub = {
     if (this.seq) { this.updateLaunch(dt); return; }  // 出發動畫中：不能操作
     if (this.coop()) this.updateGhosts(dt);
     G.step(dt);  // 戰場那一套（跟戰鬥同一個函式）
+    if (this.coop()) this.roomHits();
     G.updateFx(dt);
     this.follow(dt);
     // 最近的互動點（自己開的那艘的停機坪、裝著的武器的架子也算：看數據，按 E 不會換）
@@ -188,6 +189,20 @@ const Hub = {
     }
     G.mates = list;
     for (const m of list) Net.hostUpdateMate(m, dt);
+  },
+  // 多人房間的互射（不扣血）：別人的子彈打到自己 → 自己的船往子彈方向推、閃白（CFG.ROOM_HIT）；自己的子彈打到別人 → 只畫火花（推他由他自己的電腦算）
+  //   鉤爪不算（勾人走 GrappleHook.hookShips）。b.owner：別人的子彈是他的配裝、自己的是 null
+  roomHits() {
+    const G = Game, P = G.player, R = CFG.ROOM_HIT;
+    for (const b of G.bullets) {
+      if (b.dead || b.hook || b.mode === 'park') continue;
+      const tgt = b.owner ? (P.dead ? null : P) : G.mates.find(m => dist2(m.x, m.y, b.x, b.y) < (m.r + b.r) ** 2);
+      if (!tgt || b.hitSet.has('ship' + G.slotOf(tgt)) || dist2(tgt.x, tgt.y, b.x, b.y) >= (tgt.r + b.r) ** 2) continue;
+      b.hitSet.add('ship' + G.slotOf(tgt));
+      if (tgt === P) { P.vx = Math.cos(b.angle) * R.push; P.vy = Math.sin(b.angle) * R.push; P.kbT = R.t; P.iframe = Math.max(P.iframe || 0, R.t); }
+      burst(b.x, b.y, b.color, 6, 140, 0.25, 2);
+      if (!(b.pierce > 0)) b.dead = true;
+    }
   },
   // 飛船（半徑 r）放在 (x, y) 可不可以：整個在某個房間或開口裡
   free(x, y, r) {

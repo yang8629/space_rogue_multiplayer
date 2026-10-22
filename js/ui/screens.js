@@ -506,7 +506,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     const pct = v => Math.round(v * 100);
     const slider = (k, label) => `<label class="set-row"><span>${label}</span><input type="range" min="0" max="100" step="5" value="${pct(Settings[k])}" data-set="${k}"><b data-setv="${k}">${pct(Settings[k])}%</b></label>`;
     const check = (k, label, note) => `<label class="set-row chk"><span>${label}</span><input type="checkbox" data-set="${k}"${Settings[k] ? ' checked' : ''}><span class="ty">${note}</span></label>`;
-    const keys = [['WASD／方向鍵', '移動'], ['滑鼠左鍵', '射擊'], ['Space／右鍵', '衝刺（無敵）'], ['Tab', '編輯電路（暫停）'], ['E／Enter', '基地：停機坪、門、發射台'],
+    const keys = [['WASD／方向鍵', '移動'], ['滑鼠左鍵', '射擊'], ['Space', '衝刺（無敵）'], ['滑鼠右鍵', '武器技能（排熱、召回、塌縮…）'], ['Tab', '編輯電路（暫停）'], ['E／Enter', '基地：停機坪、門、發射台'],
       ['Esc', '選單、返回'], ['Shift', '卡片切換完整說明'], ['M', '音效開／關']].map(([k, v]) => `<div class="st-row"><b class="key">${k}</b><span>${v}</span></div>`).join('');
     this.show(`<div class="scr base compact" id="setPage">
       <div class="between"><h2>⚙ 設定</h2><button data-act="setback" data-back>返回 (Esc)</button></div>

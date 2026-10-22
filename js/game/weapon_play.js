@@ -39,12 +39,18 @@ const DISC_PARK = { kind: 'disc', t: DISC.park, rehit: DISC.rehit, dmg: DISC.par
     b.r0 = b.r0 || b.r; b.age = (b.age || 0) + dt;
     b.r = b.r0 * Math.min(DISC_UP.grind.max, 1 + DISC_UP.grind.grow * b.age);
   },
+  onExpire(b) { discReturn(b, 1); },  // 停住時間到：自己飛回手上（回程照樣打人；不吃召回的回程倍率，以前直接消失，10-23）
   onCatch(b) {  // 飛輪飛回手上：全接快擲、爆輪、自動再擲
     const p = b.ownerP, w = Game.wp;
     if (b.recall && p.recallN && ++p.caught >= p.recallN) { p.fastThrow = true; p.recallN = 0; floatText(p.x, p.y - 26, '全接！', '#ffb347'); }
     if (w.discBoom) { wBoom(p.x, p.y, DISC_UP.boom.r, DISC_UP.boom.dmg, '#ffb347', b.att); Game.shake(3); }
     if (w.rethrow) p.rethrowN = (p.rethrowN || 0) + 1;
   } };
+// 飛輪飛回手上（右鍵召回、停住時間到共用）：無限穿透、回程速度，傷害 ×mul
+function discReturn(b, mul) {
+  const p = b.ownerP;
+  b.mode = 'return'; b.life = 4; b.hitSet.clear(); b.pierce = 99; b.speed = DISC.backSpeed; b.damage *= mul; b.angle = Math.atan2(p.y - b.y, p.x - b.x);
+}
 // 把 R 內的敵人往 (x, y) 拉（旗艦不拉）；重力井停住時、黑洞彈飛行中共用
 function pullEnemies(x, y, R, dt) {
   for (const e of Game.enemies) {
@@ -56,12 +62,10 @@ function pullEnemies(x, y, R, dt) {
 }
 const wellR = b => WELL.r * (Game.wp.wellR || 1) * (b.small ? WELL_UP.residue.r : 1) * WELL_STACK.r ** (b.stack || 0);  // 重力井的吸引範圍（升級、殘留小井、疊井）
 const WELL_PARK = { kind: 'well', t: WELL.park, rehit: WELL.rehit,
-  onPark(b) {  // 疊井：新射出的井停在舊井的吸引範圍裡就合併（漂移井飄過去碰到的不算：只在剛停住時看）
+  onPark(b) {  // 停住多了一個井：超過上限就擠掉最舊的（只算停住的；以前開火時連飛行中的也算，連射時疊好的井一停住新的就被擠掉，10-23）
     if (b.small) return;
-    const o = ownShots(b.ownerP, 'well').find(o => o !== b && o.mode === 'park' && !o.small && (o.stack || 0) < WELL_STACK.max && dist2(o.x, o.y, b.x, b.y) < wellR(o) ** 2);
-    if (!o) return;
-    o.stack = (o.stack || 0) + 1; o.r *= WELL_STACK.r; o.parkT = Math.max(o.parkT, b.parkT); o.eaten = (o.eaten || 0) + (b.eaten || 0);
-    b.dead = true; ringFx(o.x, o.y, wellR(o), '#c77dff'); floatText(o.x, o.y - 24, `疊井 ×${o.stack + 1}`, '#e0b3ff');
+    const W = ownShots(b.ownerP, 'well').filter(w => w.mode === 'park'), over = W.length - WEAPON_PLAY.plasma.max();
+    for (const w of W.filter(w => w !== b).slice(0, Math.max(0, over))) { w.dead = true; burst(w.x, w.y, '#c77dff', 6, 80, 0.3, 2); }
   },
   tick(b, dt) {
   const w = Game.wp, R = wellR(b);
@@ -72,10 +76,13 @@ const WELL_PARK = { kind: 'well', t: WELL.park, rehit: WELL.rehit,
     if (eb.life > 0 && dist2(eb.x, eb.y, b.x, b.y) < WELL_UP.eat.r ** 2) { eb.life = 0; b.eaten = (b.eaten || 0) + 1; burst(eb.x, eb.y, '#c77dff', 4, 80, 0.2, 2); }
   }
   if (w.drift) {  // 漂移井：慢慢飄向準星
-    const p = b.ownerP, tx = p.x + Math.cos(p.aim) * (p.aimD || 250), ty = p.y + Math.sin(p.aim) * (p.aimD || 250), l = Math.hypot(tx - b.x, ty - b.y);
+    const p = b.ownerP, [tx, ty] = aimAt(p), l = Math.hypot(tx - b.x, ty - b.y);
     if (l > 4) { const m = Math.min(l, WELL_UP.drift * dt); b.x += (tx - b.x) / l * m; b.y += (ty - b.y) / l * m; b.px = b.x; b.py = b.y; }
   }
 } };
+// 準星指向的點：飛船＋瞄準方向 × 準星距離（限制在 min～max）。沒有準星距離（電腦、舊存檔）用 250
+//   用 ?? 不用 ||：游標放在飛船上時距離是 0，以前被當成沒有、變成 250，無人機飛到前面亂跳（10-23）
+function aimAt(p, min = 0, max = Infinity) { const d = clamp(p.aimD ?? 250, min, max); return [p.x + Math.cos(p.aim) * d, p.y + Math.sin(p.aim) * d]; }
 // p 的飛輪／重力井（飛回來途中的不算）
 const ownShots = (p, kind) => Game.bullets.filter(b => !b.dead && b.ownerP === p && b.park && b.park.kind === kind && b.mode !== 'return');
 // 右鍵沒東西可用：灰色光圈往內收，冷卻只扣一點
@@ -89,6 +96,7 @@ const wFx = d => elemize([{ damage: d, att: WATT(), color: WEAPONS[Game.weapon.i
 function wHit(e, dmg, vx = 0, vy = 0, stun) {  // 一下的傷害（持續傷害只用 wDmg：每幀套元素會一直電）
   const d = wDmg(dmg);
   e.hurt(d, vx, vy, 'direct', WATT(), stun);
+  floatText(e.x, e.y - e.r, Math.round(d), ...dmgTextStyle(d, WEAPONS[Game.weapon.id].base.damage));  // 跟子彈命中一樣跳數字（以前沒有：甩擊撞到、扯、電擊鉤看起來像沒受傷，10-23）
   Game.hitFx(e, wFx(d), d, e.x, e.y);
 }
 const wBoom = (x, y, r, dmg, color, att = WATT()) => { const d = wDmg(dmg); Game.explode(x, y, wSize(r), d, color, null, att, wFx(d)); };
@@ -113,7 +121,7 @@ class HeatBeam extends WeaponPlay {
     if (!(p.beatT > 0)) p.beatI = 0;  // 四快一慢：停火 BEAT.reset 秒從頭算
     const i = p.beatI || 0, heavy = i === BEAT.n - 1;
     p.beatI = (i + 1) % BEAT.n; p.beatT = BEAT.reset + Game.stats.interval * BEAT.slow;
-    if (i === BEAT.n - 2) p.fireCd = Math.max(p.fireCd, 0) + Game.stats.interval * (BEAT.slow - 1);  // 重的那發慢一拍（tickFire 之後再加正常間隔）
+    if (i >= BEAT.n - 2) p.fireCd = Math.max(p.fireCd, 0) + Game.stats.interval * (BEAT.slow - 1);  // 重的那發前後都慢一拍（第 n−1 發之後、第 n 發之後；tickFire 之後再加正常間隔）
     if (heavy) { mul *= BEAT.dmg; for (const s of list) { s.radius *= BEAT.grow; s.color = '#ffffff'; } Game.shake(2); }  // 白色：收尾都用白色（能量刃強化刀、飛輪快擲）
     if (w.hot) mul *= 1 + HOT.mul * h;                    // 高溫
     if (w.zero && h < COOL.zero) mul *= COOL.zeroMul;     // 零度
@@ -147,7 +155,7 @@ class HeatBeam extends WeaponPlay {
     for (const b of Game.eBullets) if (dist2(b.x, b.y, p.x, p.y) < R * R) b.life = 0;
     ringFx(p.x, p.y, R, w.ventSlow ? '#9fe8ff' : '#ff9f1c'); Game.shake(3 + 4 * k);
     p.hHeat = h - k; p.hLock = 0;
-    if (w.ventSplit) p.altCd = VENT2.cd;
+    if (w.ventSplit && (p.ventHalf = !p.ventHalf)) p.altCd = VENT2.cd;  // 分段排熱：第一下之後只等 VENT2.cd（可以馬上排第二下），第二下之後照正常冷卻（以前每下都 0.25，等於沒有冷卻）
   }
 }
 // 迴旋飛輪：停在場上、召回
@@ -164,6 +172,7 @@ class Flywheel extends ParkWeapon {
   }
   tick(p, dt) {
     const w = Game.wp;
+    for (const b of this.shots(p)) if (b.mode === 'park' && dist2(b.x, b.y, p.x, p.y) < (p.r + b.r) ** 2) { b.dead = true; DISC_PARK.onCatch(b); }  // 走過去撿起來：跟接住一樣（爆輪、自動再擲；不算全接）（使用者 10-23）
     if (p.rethrowN > 0 && this.canFire(p)) { p.rethrowN--; p.fire(); }  // 自動再擲
     if (w.discArc && (p.arcT = (p.arcT || 0) - dt) <= 0) {  // 連鎖：停住的飛輪之間放電弧
       p.arcT = DISC_UP.arc.every;
@@ -176,15 +185,15 @@ class Flywheel extends ParkWeapon {
       }
     }
   }
-  onHit(p, b, e) {  // 召回：每個飛輪回程第一次打到敵人，觸發武器線（招牌動作）
-    if (b.mode === 'return' && !b.sigDone) { b.sigDone = true; Game.lineSig(p, e.x, e.y, b.angle, e.id); }
+  onHit(p, b, e) {  // 召回：每個飛輪回程第一次打到敵人，觸發武器線（招牌動作；時間到自己飛回的不算）
+    if (b.mode === 'return' && b.recall && !b.sigDone) { b.sigDone = true; Game.lineSig(p, e.x, e.y, b.angle, e.id); }
   }
   alt(p) {
     const D = this.shots(p), w = Game.wp;
     if (!D.length) return altMiss(p);
     p.recallN = D.length >= this.max() ? D.length : 0; p.caught = 0;  // 全接快擲：丟滿才算，這一批全部接回手上
     for (const b of D) {
-      b.recall = true; b.mode = 'return'; b.life = 4; b.hitSet.clear(); b.pierce = 99; b.speed = DISC.backSpeed; b.damage *= w.discBack || DISC.back; b.angle = Math.atan2(p.y - b.y, p.x - b.x);
+      b.recall = true; discReturn(b, w.discBack || DISC.back);
       if (w.discDetour) b.detour = nearestEnemy(b.x, b.y, DISC_UP.detourR, null);  // 回程追蹤：先繞去最近的敵人（見 Bullet 的 return）
     }
   }
@@ -194,14 +203,17 @@ class GravityWell extends ParkWeapon {
   constructor() { super('plasma', 'well'); }
   max() { return WELL.max + (Game.wp.wellMax || 0); }  // 場上最多幾個
   count(p) { return this.shots(p).filter(b => b.mode === 'park').length; }  // 停住的才算（飛行中的還沒變成井）
-  onFire(p, list) {
-    const W = this.shots(p), over = W.length + list.length - this.max();
-    for (const b of W.slice(0, Math.max(0, over))) { b.dead = true; burst(b.x, b.y, '#c77dff', 6, 80, 0.3, 2); }
-    return list;
-  }
   tick(p, dt) {
+    const S = this.shots(p);
+    for (const b of S) {  // 疊井：飛行中的重力彈碰到停著的井（井本體，不是吸引範圍；看這一幀飛過的線段）就併進去（以前看停下的位置在不在吸引範圍裡：沒碰到會合、穿過去的不合，10-23）
+      if (b.mode !== 'fly' || b.dead) continue;
+      const o = S.find(o => o.mode === 'park' && !o.small && !o.dead && (o.stack || 0) < WELL_STACK.max && segDist2(b.px, b.py, b.x, b.y, o.x, o.y) < (o.r + b.r) ** 2);
+      if (!o) continue;
+      o.stack = (o.stack || 0) + 1; o.r *= WELL_STACK.r; o.parkT = Math.max(o.parkT, WELL.park);  // 併進去：停留時間重新算滿 o.eaten = (o.eaten || 0) + (b.eaten || 0);
+      b.dead = true; ringFx(o.x, o.y, wellR(o), '#c77dff'); floatText(o.x, o.y - 24, `疊井 ×${o.stack + 1}`, '#e0b3ff');
+    }
     if (!Game.wp.flyPull) return;  // 黑洞彈：飛行中就吸路徑旁的敵人
-    for (const b of this.shots(p)) if (b.mode === 'fly') pullEnemies(b.x, b.y, wellR(b) * WELL_UP.flyR, dt);
+    for (const b of S) if (b.mode === 'fly' && !b.dead) pullEnemies(b.x, b.y, wellR(b) * WELL_UP.flyR, dt);
   }
   boomN(b) {  // 塌縮算幾隻：碰到爆炸的敵人算 1 隻；旗艦算罩到幾個命中點（至少 1）。電腦挑時機也用這個
     const R = wSize(WELL.boom);
@@ -216,7 +228,7 @@ class GravityWell extends ParkWeapon {
     let W = this.shots(p).filter(b => b.mode === 'park');
     if (!W.length) return altMiss(p);
     if (w.single) {  // 單點引爆：只炸離準星最近的那個
-      const tx = p.x + Math.cos(p.aim) * (p.aimD || 250), ty = p.y + Math.sin(p.aim) * (p.aimD || 250);
+      const [tx, ty] = aimAt(p);
       W = [W.reduce((a, b) => dist2(a.x, a.y, tx, ty) <= dist2(b.x, b.y, tx, ty) ? a : b)];
       p.altCd = WELL_UP.singleCd;
     }
@@ -239,7 +251,46 @@ class GravityWell extends ParkWeapon {
 // 牽引鉤：勾住、甩擊、釘住旗艦
 class GrappleHook extends WeaponPlay {
   constructor() { super('railgun'); }
-  holdT() { return HOOK.t + (Game.wp.hookT || 0); }  // 勾住（釘住）最多幾秒
+  holdT(e) { return (e ? e.ccDur('hook', HOOK.t) : HOOK.t) + (Game.wp.hookT || 0); }  // 勾住（釘住）e 最多幾秒：照控制抗性（CFG.CC，精英比較短），升級的勾住時間另外加
+  shield(list) {  // 這些敵人（勾住的、甩出去還在飛的）擋下碰到的敵彈、照子彈傷害扣血（算在射鉤爪的人身上）；反射盾：擋下的彈回去打最近的敵人（不打 list 裡的）
+    const skip = Game.wp.hookReflect ? new Set(list.map(o => o.id)) : null;
+    for (const o of list) for (const b of Game.eBullets) {
+      if (o.dead || !(b.life > 0) || b.mine || dist2(b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
+      o.hurt(b.dmg, 0, 0, 'direct', WATT()); floatText(o.x, o.y - o.r, Math.round(b.dmg), '#ffffff');
+      if (skip) reflectShot(b, HOOK_UP.reflect, '#ffd166', 0, skip); else b.life = 0;
+      burst(b.x, b.y, '#ffd166', 4, 100, 0.2, 2);
+    }
+  }
+  canFire(p) { return !p.hookShip; }  // 勾著隊友時不射新的鉤爪（右鍵把他甩出去）
+  // ---- 勾隊友（多人戰鬥）：p.hookShip = 勾住的船、那艘船的 grabBy = p 的號碼；被勾的船自己拉自己（Game.shipPull）----
+  //   不會繞圈：被勾住的人不能勾隊友（還能勾敵人）、已經被勾住的船別人勾不到（使用者 10-23：四個人互勾不能無限循環）
+  hookShips(p) {
+    if (!(Game.mode === 'coop' && Game.inArena) && !Hub.coop()) return;  // 多人戰鬥、多人房間（房間裡每台電腦各自判定：別人的鉤爪打中自己 → 自己被拉）
+    if (p.hookE || p.hookShip || p.grabBy) return;
+    const me = Game.slotOf(p);
+    for (const b of Game.bullets) {
+      if (b.dead || !b.hook || b.ownerP !== p || b.mode !== 'fly') continue;
+      const q = Game.allShips().find(s => s !== p && !s.gone && !s.grabBy && segDist2(b.px, b.py, b.x, b.y, s.x, s.y) < (s.r + b.r) ** 2);  // 看這一幀飛過的線段（一幀 21 > 飛船＋鉤爪的半徑，只看點會跳過去）
+      if (!q) continue;
+      b.dead = true; p.hookShip = q; q.grabBy = me; p.hookT = this.holdT();
+      floatText(q.x, q.y - 20, '勾住隊友！', '#ffd166');
+      return;
+    }
+  }
+  freeShip(p) { if (p.hookShip) p.hookShip.grabBy = 0; p.hookShip = null; }  // 放開勾住的隊友
+  flingShip(p) {  // 右鍵：把勾住的隊友朝準星甩出去（飛行中無敵、撞到的敵人受甩擊傷害；倒下的只放開）
+    const q = p.hookShip; this.freeShip(p);
+    if (q.dead) return;
+    q.flingSeq = (q.flingSeq || 0) + 1; q.flingV = [Math.cos(p.aim) * HOOK.fling, Math.sin(p.aim) * HOOK.fling];  // 隊友的船在他自己電腦上飛（快照 me）
+    if (q === Game.player) { q.vx = q.flingV[0]; q.vy = q.flingV[1]; q.kbT = HOOK.flyT; }  // 房主自己的船：直接飛（kbT：不吃操控）
+    q.iframe = Math.max(q.iframe || 0, HOOK.flyT);
+    (p.flungShips = p.flungShips || []).push({ q, t: HOOK.flyT, hit: new Set() });
+    burst(q.x, q.y, '#ffd166', 8, 180, 0.25, 2);
+  }
+  free(p, broke) {  // 放開勾住的：有抗性的開始免疫（CFG.CC）；broke = 時間到自己掙脫
+    for (const o of [p.hookE, ...(p.hookX || [])]) if (o && o.ccEnd('hook') && broke && !o.dead) floatText(o.x, o.y - 24, '掙脫！', '#ff8f8f', true);
+    p.hookE = null; p.hookX = [];
+  }
   onFire(p, list) {  // 勾住時左鍵改成「扯」：扯、扯、重摔（YANK），不射新的鉤爪
     const e = p.hookE;
     if (!e || e.dead) return list;
@@ -255,7 +306,18 @@ class GrappleHook extends WeaponPlay {
     const w = Game.wp, e = p.hookE;
     p.yankCd = (p.yankCd || 0) - dt;
     if (e && !e.dead) p.fireCd = Math.min(p.fireCd, Math.max(0, p.yankCd));  // 勾住時照 YANK.every 扯
-    if (e && (e.dead || (p.hookT -= dt) <= 0)) { p.hookE = null; p.hookX = []; }
+    this.hookShips(p);
+    const q = p.hookShip;
+    if (q && (q.gone || q.dashT > 0 || p.dead || (p.hookT -= dt) <= 0)) this.freeShip(p);  // 隊友衝刺 = 掙脫
+    if (p.flungShips) p.flungShips = p.flungShips.filter(f => {  // 甩出去的隊友：飛行中撞到的敵人受甩擊傷害（每隻一次）
+      if ((f.t -= dt) <= 0 || f.q.dead || f.q.gone) return false;
+      for (const o of Game.enemies) if (!o.dead && !f.hit.has(o.id) && dist2(o.x, o.y, f.q.x, f.q.y) < (o.r + f.q.r) ** 2) {
+        f.hit.add(o.id); wHit(o, HOOK.dmg * (Game.wp.flingMul || 1), 0, 0, 2); Game.shake(3);
+        if (!f.sig) { f.sig = true; Game.lineSig(p, o.x, o.y, p.aim, o.id); }  // 招牌動作：第一次撞到觸發武器線
+      }
+      return true;
+    });
+    if (e && (e.dead || (p.hookT -= dt) <= 0)) this.free(p, !e.dead);
     else if (e) {
       p.hookX = (p.hookX || []).filter(o => !o.dead);
       if (!e.t.boss) [e, ...p.hookX].forEach((o, i) => {  // 拉到飛船前方（群鉤的排在兩側）、暈住（stunT：不動、不攻擊）；走 move 才會被牆擋住（以前直接改位置，會被拉穿牆，10-22）
@@ -275,20 +337,15 @@ class GrappleHook extends WeaponPlay {
         const S = HOOK_UP.shock, near = Game.enemies.filter(o => !o.dead && o !== e && !p.hookX.includes(o) && dist2(o.x, o.y, e.x, e.y) < S.r * S.r).slice(0, S.n);
         for (const o of near) { zapFx(e.x, e.y, o.x, o.y, { c: '#ffd166' }); wHit(o, S.dmg); }
       }
-      if (!e.t.boss) {  // 勾住的敵人擋子彈（拉在身前當盾牌）；反射盾：擋下的彈回去打最近的敵人（不打勾住的）
-        const held = [e, ...p.hookX], skip = w.hookReflect ? new Set(held.map(o => o.id)) : null;
-        for (const o of held) for (const b of Game.eBullets) {
-          if (!(b.life > 0) || b.mine || dist2(b.x, b.y, o.x, o.y) >= (o.r + b.r) ** 2) continue;
-          o.hurt(b.dmg, 0, 0, 'direct', WATT());  // 當盾牌的照子彈傷害扣血（算在射鉤爪的人身上）
-          if (skip) reflectShot(b, HOOK_UP.reflect, '#ffd166', 0, skip); else b.life = 0;
-          burst(b.x, b.y, '#ffd166', 4, 100, 0.2, 2);
-        }
-      }
+      if (!e.t.boss) this.shield([e, ...p.hookX]);  // 勾住的敵人擋子彈（拉在身前當盾牌）
     }
     if (p.grap) {  // 鉤索：拉向鉤到的點，路上撞到的敵人受傷
       const G = p.grap, l = Math.hypot(G.x - p.x, G.y - p.y);
-      if (l <= HOOK_UP.grapple.stop) p.grap = null;
+      G.t = (G.t || 0) + dt;
+      // 到了、被擋住拉不過去（這一幀沒更靠近）、拉太久：放開。以前只看「到了」：鉤到牆角，牆擋著永遠差一點到不了，飛船整場被定住（整局模擬軌道第 7 局卡住，10-23）
+      if (l <= HOOK_UP.grapple.stop || (G.last != null && l > G.last - 0.5) || G.t > HOOK_UP.grapple.maxT) p.grap = null;
       else {
+        G.last = l;
         const m = Math.min(l - HOOK_UP.grapple.stop, HOOK_UP.grapple.speed * dt);
         p.x += (G.x - p.x) / l * m; p.y += (G.y - p.y) / l * m; p.vx = p.vy = 0;
         for (const o of Game.enemies) if (!o.dead && !G.hit.has(o.id) && dist2(o.x, o.y, p.x, p.y) < (o.r + p.r) ** 2) { G.hit.add(o.id); wHit(o, HOOK_UP.grapple.dmg, 0, 0, 2); burst(o.x, o.y, '#ffd166', 8, 180, 0.25, 2); }
@@ -304,7 +361,7 @@ class GrappleHook extends WeaponPlay {
         if (o === f.e || o.dead || f.hit.has(o.id) || dist2(o.x, o.y, f.e.x, f.e.y) > (o.r + f.e.r) ** 2) continue;
         f.hit.add(o.id);
         wHit(o, dmg, f.e.vx * 0.2, f.e.vy * 0.2, 2);
-        f.e.hurt(wDmg(dmg * HOOK.self), 0, 0, 'direct', WATT());
+        wHit(f.e, dmg * HOOK.self);  // 被甩的那隻也受傷
         if (!f.sig) { f.sig = true; Game.lineSig(p, o.x, o.y, Math.atan2(f.e.vy, f.e.vx), o.id); }  // 招牌動作：第一次撞到觸發武器線
         burst(o.x, o.y, '#ffd166', 10, 220, 0.3, 3); Game.shake(3);
         if (f.bounce > 0) {  // 彈跳甩：轉向下一隻
@@ -317,11 +374,12 @@ class GrappleHook extends WeaponPlay {
       }
     }
     p.flung = keep;
+    if (keep.length) this.shield(keep.map(f => f.e));  // 甩出去還在飛的也擋子彈
   }
   onHit(p, b, e) {
-    if (!b.hook || e.dead) return;
+    if (!b.hook || e.dead || e.ccImmune('hook')) return;  // 剛掙脫的（控制抗性）：只吃傷害、勾不住
     const w = Game.wp;
-    if (!p.hookE) { p.hookE = e; p.hookX = []; p.hookT = this.holdT(); p.yankI = 0; p.slammed = false; floatText(e.x, e.y - 20, e.t.boss ? '釘住！' : '勾住！', '#ffd166'); return; }
+    if (!p.hookE) { p.hookE = e; p.hookX = []; p.hookT = this.holdT(e); p.yankI = 0; p.slammed = false; floatText(e.x, e.y - 20, e.t.boss ? '釘住！' : '勾住！', '#ffd166'); return; }
     // 群鉤：同一發穿過去再勾住別隻（旗艦不算）
     if (w.multi && !e.t.boss && !p.hookE.t.boss && e !== p.hookE && !p.hookX.includes(e) && p.hookX.length < (w.hookMax || HOOK_UP.multi) - 1) p.hookX.push(e);  // hookMax：數量插件
   }
@@ -330,10 +388,11 @@ class GrappleHook extends WeaponPlay {
     p.grap = { x, y, hit: new Set() }; ringFx(x, y, 16, '#ffd166');
   }
   alt(p) {
+    if (p.hookShip) return this.flingShip(p);
     const e = p.hookE;
     if (!e) return altMiss(p);
     const X = p.hookX || [];
-    p.hookE = null; p.hookX = [];
+    this.free(p, false);
     if (e.t.boss) {  // 旗艦：用力一扯
       wHit(e, HOOK.rip);
       burst(e.x, e.y, '#ffd166', 16, 260, 0.4, 3); floatText(e.x, e.y - 30, '撕裂！', '#ffd166', true); Game.shake(5);
@@ -400,8 +459,8 @@ class DroneSwarm extends WeaponPlay {
     if (p.guardT > 0 || !p.drones) return [];
     let T = null;
     if (w.focusD) {  // 集火：全部打離準星最近的那隻，連續打同一隻越打越痛
-      const aimD = clamp(p.aimD || 250, 120, DRONE.leash);
-      T = nearestEnemy(p.x + Math.cos(p.aim) * aimD, p.y + Math.sin(p.aim) * aimD, DRONE.range + DRONE.leash, null);
+      const [ax, ay] = aimAt(p, 0, DRONE.leash);
+      T = nearestEnemy(ax, ay, DRONE.range + DRONE.leash, null);
       p.focN = T && T === p.focE ? Math.min(DRONE_UP.focus.max, (p.focN || 0) + 1) : 0; p.focE = T;
     }
     const M = DRONE_UP.missile, mul = 1 + (w.focusD ? DRONE_UP.focus.per * p.focN : 0);
@@ -412,6 +471,7 @@ class DroneSwarm extends WeaponPlay {
       if (!t) continue;
       spawnShots(list.map(s => ({ ...s, damage: s.damage * mul, ...(w.missile ? { homing: M.homing, explode: { r: M.r, ratio: M.ratio }, speed: s.speed * M.speed, shape: 'dart' } : {}) })),
         d.x, d.y, Math.atan2(t.y - d.y, t.x - d.x), 0, null);  // 飛彈無人機：追蹤＋小爆炸
+      d.a = Math.atan2(t.y - d.y, t.x - d.x); d.faceT = DRONE.face;  // 開火時機頭朝目標（一小段時間內不照移動方向轉）
       shot0 = true;
     }
     if (shot0) Events.emit('shoot', { p, weapon: 'drone' });
@@ -423,7 +483,7 @@ class DroneSwarm extends WeaponPlay {
     D.length = n;
     const g0 = p.guardT > 0;
     p.guardT = Math.max(0, (p.guardT || 0) - dt);
-    const guard = p.guardT > 0, aimD = clamp(p.aimD || 250, 120, DRONE.leash);
+    const guard = p.guardT > 0;
     if (guard && w.repair) p.hp = Math.min(p.maxHp, p.hp + DRONE_UP.repair * dt);  // 修復：收攏中回血
     if (g0 && !guard && p.blocked > 0) Game.lineSig(p, p.x, p.y, p.aim, null);  // 招牌動作：收攏有擋到東西，結束時觸發武器線
     if (g0 && !guard && w.counter && p.blocked > 0) {  // 反擊：收攏結束，每架衝向敵人，擋得越多越痛
@@ -434,7 +494,7 @@ class DroneSwarm extends WeaponPlay {
       }
       p.blocked = 0;
     }
-    const cx = p.x + Math.cos(p.aim) * aimD, cy = p.y + Math.sin(p.aim) * aimD, ph = Game.time * (guard ? 6 : 2);
+    const [cx, cy] = aimAt(p, 0, DRONE.leash), ph = Game.time * (guard ? 6 : 2);
     D.forEach((d, i) => {
       if (d.down > 0) { if ((d.down -= dt) <= 0) { d.x = p.x; d.y = p.y; d.hp = DRONE.hp; ringFx(p.x, p.y, 14, '#7cf5c8'); } return; }  // 壞掉的：時間到在飛船旁重生
       if (d.kami) {  // 自爆：衝向目標，碰到就炸，之後等重生
@@ -450,7 +510,8 @@ class DroneSwarm extends WeaponPlay {
       const a = ph + i / n * TAU, r = guard ? DRONE.guard : away ? DRONE.spread : DRONE.orbit;
       const dx = ox + Math.cos(a) * r - d.x, dy = oy + Math.sin(a) * r - d.y, l = Math.hypot(dx, dy), m = Math.min(l, DRONE.speed * (guard ? 3 : 1) * dt);
       if (l > 0) { d.x += dx / l * m; d.y += dy / l * m; }
-      if (l > 2) d.a = Math.atan2(dy, dx);  // 機身朝向（畫面用）
+      d.faceT = (d.faceT || 0) - dt;
+      if (l > 2 && !(d.faceT > 0)) d.a = Math.atan2(dy, dx);  // 機身朝向（畫面用）：平常朝移動方向，剛開火時朝目標
       if (!guard) for (const b of Game.eBullets) {  // 飛出去時會被敵彈打（收攏時由下面的護盾擋）
         if (b.life <= 0 || dist2(b.x, b.y, d.x, d.y) > (DRONE.hitR + b.r) ** 2) continue;
         b.life = 0; burst(d.x, d.y, '#7cf5c8', 4, 100, 0.2, 2);

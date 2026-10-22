@@ -353,7 +353,7 @@ const Game = {
   step(dt) {
     this.time += dt;
     if (this.runStats) this.runStats.time += dt;  // 只算實際戰鬥的時間（基地沒有 runStats）
-    if (!this.player.dead) this.player.update(dt);
+    if (!this.player.dead) this.player.update(dt); else this.dragDowned(this.player, dt);  // 倒下被隊友勾住：拖著走
     this.updateWaves(dt);
     this.updateEnemies(dt);
     for (const p of this.players()) this.withLoadout(p.L, () => this.tickMech(p, dt));

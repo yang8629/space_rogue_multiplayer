@@ -19,13 +19,14 @@ assert(sent.some(m => m.t === 'start' && m.ship === 'bulwark'), 'start message s
 // 隊友持續開火、衝刺，房主自己也開火；跑 90 秒遊戲時間
 Game.player.hp = Game.player.maxHp = 1e6; Game.mates[0].hp = Game.mates[0].maxHp = 1e6;
 T.Input = undefined;
-let frames = 0, maxBytes = 0, mateBullets = 0, railSnap = false;  // railSnap：整段期間有沒有同步過隊友的軌道砲子彈（最後一份可能已經打完、沒有子彈）
+let frames = 0, maxBytes = 0, mateBullets = 0, railSnap = false, grabbed = 0;  // grabbed：房主被隊友勾住幾次  // railSnap：整段期間有沒有同步過隊友的軌道砲子彈（最後一份可能已經打完、沒有子彈）
 // 雙人敵人數量 ×2.5 之後，150 秒有時第 1 波還打不完（偶爾失敗）：最多等 300 秒，打完第 1 波（且跑滿 60 秒）就停
 // 隊友瞄準：前 60 秒照轉圈掃（各方向都有子彈）；之後朝最近的敵人（彈幕艇會停在 420～520 外，只靠轉圈掃 240 秒偶爾一發都沒打中 → 第 1 波卡住；2026-10-20 100 次裡 1 次）
 const mateAim = i => { const m = Game.mates[0], e = i < 60 * 60 ? null : Game.enemies.filter(e => !e.dead).sort((a, b) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(b.x - m.x, b.y - m.y))[0]; return e ? Math.atan2(e.y - m.y, e.x - m.x) : i / 30; };
 for (let i = 0; i < 300 * 60 && !(Game.combat.wave >= 2 && i >= 60 * 60); i++) {
   Net.applyInput({ t: 'i', x: 1300 + Math.sin(i / 50) * 200, y: 800, vx: 0, vy: 0, a: mateAim(i), mv: 1, dT: 0, ds: Math.floor(i / 120), f: 1 }, q2);
   Game.update(1 / 60);
+  if (Game.player.grabBy) { Game.player.dashT = CFG.DASH_TIME; Game.player.onDash(); grabbed++; }  // 被隊友的鉤爪勾住（隊友轉圈掃會勾到）：像真人一樣衝刺掙脫
   frames++;
   mateBullets = Math.max(mateBullets, Game.bullets.filter(b => b.owner).length);
   for (const m of sent) if (m.t === 's') {

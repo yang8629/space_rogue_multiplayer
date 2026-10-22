@@ -61,7 +61,7 @@ Object.assign(Game, {
         if (perfect) for (const o of this.eBullets) if (o.life > 0 && dist2(o.x, o.y, p.x, p.y) < PERFECT.r * PERFECT.r) parryShoot(p, o);
       });
       if (perfect) { ringFx(p.x, p.y, PERFECT.r, '#ffffff'); floatText(p.x, p.y - 48, '完美！', '#ffffff', true); }
-      p.edgeT = PARRY.keep; p.altCd = 0; p.parryN = (p.parryN || 0) + 1; p.comboI = (L.wp.combo4 ? COMBO4 : COMBO.steps).length - 1; p.comboT = PARRY.keep;  // 彈反成功：下一刀直接是重斬（四段連段時是第 4 段）
+      p.edgeT = PARRY.keep; p.altCd = Math.min(p.altCd, PARRY.hitCd); p.parryN = (p.parryN || 0) + 1; p.comboI = (L.wp.combo4 ? COMBO4 : COMBO.steps).length - 1; p.comboT = PARRY.keep;  // 彈反成功：下一刀直接是重斬（四段連段時是第 4 段）
       if (this.mode !== 'coop') this.hitstopT = PARRY.stop;  // 頓幀（雙人不頓：兩台的時間要一致）
       burst(eb.x, eb.y, '#ff8fd8', 10, 200, 0.3, 3);
       ringFx(p.x, p.y, PARRY.r * 1.8, '#ffffff');
@@ -173,6 +173,22 @@ Object.assign(Game, {
       const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1, k = Math.min(T.speed * dt, d - (e.r + P.r + T.stop));
       if (k > 0) { P.x += dx / d * k; P.y += dy / d * k; }
     }
+  },
+  // 被隊友的鉤爪勾住（牽引鉤）：P.grabBy = 勾住它的人的號碼（房主設，快照 me 送給隊友）。被勾的船在自己的電腦上被拉到那艘船前方 HOOK.hold、不能自己移動；
+  //   衝刺中不拉（衝刺 = 掙脫，見 Player.onDash／GrappleHook.tick）。用速度拉（後面照常撞牆）；回傳有沒有在拉
+  shipPull(P, dt) {
+    if (!P.grabBy || P.dashT > 0) return false;
+    const s = this.allShips().find(q => q !== P && !q.gone && this.slotOf(q) === P.grabBy);
+    if (!s) return false;
+    const k = Math.min(1, dt * 12), tx = s.x + Math.cos(s.aim) * HOOK.hold, ty = s.y + Math.sin(s.aim) * HOOK.hold;
+    P.vx = (tx - P.x) * k / dt; P.vy = (ty - P.y) * k / dt;
+    return true;
+  },
+  // 倒下的船被勾住：自己不會更新（Player.update 不跑），由算它的那台電腦直接搬（房主搬隊友、把位置放進快照 me）
+  dragDowned(P, dt) {
+    if (!this.shipPull(P, dt)) return;
+    P.x += P.vx * dt; P.y += P.vy * dt; P.vx = P.vy = 0;
+    if (Arena.rect) { P.x = clamp(P.x, P.r, CFG.WORLD_W - P.r); P.y = clamp(P.y, P.r, CFG.WORLD_H - P.r); } else Arena.collide(P, P.r, null);
   },
   // 旗艦的光束：雙子獵艦兩艘中間的（兩艘都在隊形上才連著）、星環守門者的旋轉光束（cd 倒數：> rest 開著、< warn 預警）
   //   回傳 [{ x1, y1, x2, y2, w, dmg, from, warn }]；房主算傷害、畫面、模擬電腦都用這個，只讀欄位（隊友那邊的敵人是同步來的資料）；同一幀只算一次

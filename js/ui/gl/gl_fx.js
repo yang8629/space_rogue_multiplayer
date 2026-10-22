@@ -96,6 +96,8 @@ const GLFx = {
     }
     for (const p of ships) {
       if (p.hookE && !p.hookE.dead) { g.moveTo(p.x, p.y); g.lineTo(p.hookE.x, p.hookE.y); g.stroke({ width: 2.5, color: 0xffd166, alpha: 0.85 }); }
+      const hs = p.hookShip || (p.hookShipSlot && Game.allShips().find(s => Game.slotOf(s) === p.hookShipSlot));  // 勾住的隊友（房主有 hookShip，隊友那邊照同步的號碼找）
+      if (hs) { g.moveTo(p.x, p.y); g.lineTo(hs.x, hs.y); g.stroke({ width: 2.5, color: 0xffd166, alpha: 0.85 }); }
       for (const d of ((Net.role === 'client' || loadoutOf(p).weapon.id === 'drone') && p.drones) || []) {  // 隊友那邊：房主同步來的（換武器就是空的）
         if (d.down > 0) continue;  // 壞掉、等重生
         const h = this.spr(this.pP, tx.halo, d.x, d.y); h.scaleX = h.scaleY = 16 / R.dot; h.tint = p.guardT > 0 ? 0xffffff : 0x7cf5c8; h.alpha = 0.45;
