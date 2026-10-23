@@ -1184,7 +1184,7 @@ const MechCheck = {
       // 大地圖
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 });
-      const q = Game.player, g = Arena.gates[0], side = () => (q.x - g.x) * g.nx + (q.y - g.y) * g.ny;
+      let q = Game.player; const g = Arena.gates[0], side = () => (q.x - g.x) * g.nx + (q.y - g.y) * g.ny;
       const jump = (x, y, a, zone) => { q.x = x; q.y = y; q.zone = zone; q.dashA = a; Dash.phase(q, (x, y) => q.phaseFree(x, y)); q.dashT = 0; Arena.collide(q, q.r, Arena.shipPass(q)); Arena.updateZone(q); };
       const fwd = Math.atan2(g.ny, g.nx);
       g.open = false; jump(g.x - g.nx * 60, g.y - g.ny * 60, fwd, 0);
@@ -1193,13 +1193,16 @@ const MechCheck = {
       const opened = q.zone === 1 && side() > 0;
       jump(g.x + g.nx * 40, g.y + g.ny * 40, fwd + Math.PI, 1);
       const noBack = q.zone === 1 && side() > 0;
-      // 同一區的牆：找一個起點和方向，中間是牆、落點是同一區的空地（隨機地圖每張都找得到：試過 30 張）
+      // 同一區的牆：找一個起點和方向，中間是牆、落點是同一區的空地；隨機地圖偶爾一張都沒有（release 10-24 碰到一次、mcloop 100 次 0 次）→ 換一張地圖再找，最多 10 張
       let wall = null;
+      for (let m = 0; m < 10 && !wall; m++) {
+      if (m) { Game.startCombat({ level: 3, wavesTotal: 3, elites: 0 }); q = Game.player; }
       for (let y = 20; y < Arena.H && !wall; y += 20) for (let x = 20; x < Arena.W && !wall; x += 20) for (let k = 0; k < 16 && !wall; k++) {
         const a = k / 16 * TAU, c = Math.cos(a), s = Math.sin(a), ex = x + c * D, ey = y + s * D, z = Arena.zoneOf(x, y);
         if (Arena.zoneOf(ex, ey) !== z || !Objects.shipFree(q, x, y) || !Objects.shipFree(q, ex, ey) || Arena.f(ex, ey) < q.r + 6) continue;
         let solid = false; for (let d = 16; d < D - 16; d += 4) if (Arena.f(x + c * d, y + s * d) < 0) solid = true;
         if (solid) wall = [x, y, a, ex, ey, z];
+      }
       }
       let wallOk = false, otherZone = false;
       if (wall) {
