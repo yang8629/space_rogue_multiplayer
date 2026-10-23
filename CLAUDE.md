@@ -53,8 +53,9 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 2. 規則改了就更新 `README.md`；還沒上傳的改動記在 `docs/版本紀錄.md` 的「（下一版）」那一行，版號先不動。
 3. 平常只在本機提交，**不主動上傳**。git 不在 PATH 時，`release.js` 會去找 Program Files 裡的 git。
    - 提交訊息不加 Claude 署名（`Co-Authored-By`、`Claude-Session`）：每台電腦在 `.claude/settings.local.json` 設 `"attribution": { "commit": "", "pr": "" }`（不上傳，寫進 `.git/info/exclude`）。`release.js` 會擋。
-4. 上傳：`node release.js --patch --push`（版號規則在 `docs/版號.md`：原型期一律只加最後一碼；使用者說是大調整才用 `--minor`）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。版號相關的兩項檢查只在換版號時跑，平常 `node release.js` 應該全綠。
-5. 私人資訊掃描的額外字詞放本機 `tests/private_words.txt`（一行一個，不上傳）。
+4. 上傳前先交接（另一台電腦只看得到 repo）：這台電腦自己的筆記（Claude 記憶的交接檔等）裡，另一台需要知道的搬進 `docs/進度.md`；刪掉進度.md 裡上傳後就結束的條目（上傳待辦、「還沒上傳」）；「最後更新」改今天。交接好了才上傳。
+5. 上傳：`node release.js --patch --push`（版號規則在 `docs/版號.md`：原型期一律只加最後一碼；使用者說是大調整才用 `--minor`）：改 `VERSION`、把「（下一版）」改名，全部檢查通過才提交並推上 GitHub。版號相關的兩項檢查只在換版號時跑，平常 `node release.js` 應該全綠。
+6. 私人資訊掃描的額外字詞放本機 `tests/private_words.txt`（一行一個，不上傳）。
 
 ## 瀏覽器測試
 
@@ -67,5 +68,6 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 - 每幀的衰減（煞車、阻力）用 `v *= decay(f, dt)`（敵人起手停下用 `Enemy.brake`，快慢寫在 `ENEMY_TYPES` 的 `brake`／`CFG.BRAKE`），不要直接 `v *= f`：直接乘會跟著幀率變，120fps 時晶體飛的距離只剩 60fps 的一半多（機制檢查「高幀率不會改變動作」）。
 - 回傳「字串或物件」的地方，物件欄位不要用 `String.prototype` 有的名字（`big`、`link`、`small`…）：用 `r.big` 判斷時字串也有（事件的賭運氣結果踩過）。
 - 收到的 JSON 物件 key 是字串：拿來當號碼要 `Number(k)`（延遲廣播的號碼踩過，隊友全讀成 0 號）。
+- `release.js` 會 `git add -A`，只檢查（沒有 `--push`）時最後 `git reset` 清空暫存區：之前 `git add`／`git rm` 暫存的要跑完再暫存一次；`--push` 會把所有還沒提交的改動一起包進「版號更新」那個提交。
 - 測試裡讓星門號衝刺之後，`Game.portals` 會留一對星門，子彈穿過會被傳送：之後要量子彈打不打得到，先清掉（`tests/e2e.js` 勾隊友踩過）。
 - PixiJS `poly(pts, false)` 不封口的線會往多邊形一側偏：折線用 `moveTo`／`lineTo`（`gl_hub.js` 的導管）。
