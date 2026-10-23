@@ -62,7 +62,9 @@ const Arena = {
       let v = -Infinity;
       for (const R of rects) {
         const dx = Math.max(R.x - x, x - R.x - R.w), dy = Math.max(R.y - y, y - R.y - R.h);
-        v = Math.max(v, dx <= 0 && dy <= 0 ? -Math.max(dx, dy) : -Math.hypot(Math.max(dx, 0), Math.max(dy, 0)));
+        let d = dx <= 0 && dy <= 0 ? -Math.max(dx, dy) : -Math.hypot(Math.max(dx, 0), Math.max(dy, 0));
+        if (d > 0) for (const q of R.cuts || []) d = Math.min(d, ((x - q.x) * q.sx + (y - q.y) * q.sy - R.C) / Math.SQRT2);  // 切角（基地房間，hub.js）：離斜邊的距離
+        v = Math.max(v, d);
       }
       val[j * (NX + 1) + i] = v; owner[j * (NX + 1) + i] = v > 0 ? 0 : -1;
     }

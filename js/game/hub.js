@@ -18,10 +18,11 @@ const HUB = {
   RACK_GAP: 130, ARMORY_COLS: 5, RACK_ROW: 150, RACK_R: 46,      // 軍械庫：武器架間距、一排幾個、每排高度
   TOP_W: 440, TOP_H: 380,                 // 上面一排三個房間的大小
   DOOR_W: 170,                            // 牆上開口的寬
+  CHAMFER: 44,                            // 房間四個角斜切掉的大小（外觀不要太方正；旁邊有門的角、發射甲板不切）
   CONSOLE_R: 70, TERM_R: 70, LAUNCH_R: 72, LAUNCH_PAD: 62, RUNWAY_W: 84,
   TARGET_R: 24, DPS_WIN: 3,               // 軍械庫標靶機的半徑、每秒傷害算最近幾秒
 };
-// 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的操作台打開哪個面板
+// 房間：名字（地上的字）、顏色（地板色調、燈）；console = 房間裡的操作台打開哪個面板；uncut = 不切的角（上左、上右、下右、下左）
 const HUB_ROOMS = {
   hall: { label: '中央大廳', en: 'CENTRAL HALL', color: '#4cc9f0' },
   bay: { label: '發射甲板', en: 'LAUNCH DECK', color: '#4cc9f0' },
@@ -29,7 +30,7 @@ const HUB_ROOMS = {
   armory: { label: '軍械庫', en: 'ARMORY', color: '#ffb347', console: { id: 'armory', label: '⚔ 武器資料', tab: 'armory' } },
   lab: { label: '晶片實驗室', en: 'CHIP LAB', color: '#2ee6a6', console: { id: 'chips', label: '◈ 晶片庫', tab: 'chips' } },
   deck: { label: '觀景台', en: 'OBSERVATION', color: '#9fb4ff' },
-  records: { label: '戰績室', en: 'RECORDS', color: '#ffd166', console: { id: 'stats', label: '🏆 戰績', tab: 'stats' } },
+  records: { label: '戰績室', en: 'RECORDS', color: '#ffd166', console: { id: 'stats', label: '🏆 戰績', tab: 'stats' }, uncut: ['下右'] },  // uncut：不切的角（左右牆下段掛螢幕，一路到地板）
 };
 // 終端機：中央大廳的左右牆，左右輪流、同一邊往下排
 const HUB_TERMS = [
@@ -64,6 +65,15 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
     const r = R[k], x0 = Math.max(r.x, hall.x) + 20, x1 = Math.min(r.x + r.w, hall.x + hall.w) - 20, w = Math.min(D, x1 - x0);
     if (w >= 80) doors.push({ x: (x0 + x1) / 2 - w / 2, y: r.y + r.h - 30, w, h: WT + 60 });
   }
+  // 房間的切角：每個切掉的角 { x, y, sx, sy }（角的位置、往房間裡面的方向）；角落 C＋24 的範圍裡有門就不切（門口不能被切到）
+  //   碰撞（Arena.fromRects、hubFree）和畫面（GLHub）都照這份
+  const CH = C.CHAMFER, P = CH + 24;
+  for (const r of Object.values(rooms)) {
+    r.C = CH;
+    r.cuts = r.id === 'bay' ? [] : [[r.x, r.y, 1, 1], [r.x + r.w, r.y, -1, 1], [r.x + r.w, r.y + r.h, -1, -1], [r.x, r.y + r.h, 1, -1]]
+      .filter(([x, y, sx, sy]) => !(r.uncut || []).includes((sy > 0 ? '上' : '下') + (sx > 0 ? '左' : '右')) && !doors.some(d => d.x < Math.max(x, x + sx * P) && d.x + d.w > Math.min(x, x + sx * P) && d.y < Math.max(y, y + sy * P) && d.y + d.h > Math.min(y, y + sy * P)))
+      .map(([x, y, sx, sy]) => ({ x, y, sx, sy }));
+  }
   const zones = [];
   // 機庫：停機位沿大圓排一圈（從缺口下緣順時針），船頭朝中間；對著大廳開口（右邊）留缺口
   const hcx = R.hangar.x + R.hangar.w / 2, hcy = midY + midH / 2, step = (TAU - C.RING_GAP) / ns;
@@ -86,8 +96,10 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   return { W: R.armory.x + armoryW + M, H: R.bay.y + R.bay.h + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones, spawn: { x: cx, y: hall.y + hall.h / 2 }, targets };
 }
 Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
-// 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間或開口裡
-function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h); }
+// 配置 L 裡，半徑 r 的飛船放在 (x, y) 可不可以：整個在某個房間（扣掉切角）或開口裡
+function hubFree(L, x, y, r) { return L.walk.some(R => x - r >= R.x && x + r <= R.x + R.w && y - r >= R.y && y + r <= R.y + R.h && !hubInCut(R, x, y, r)); }
+// (x, y) 半徑 r 有沒有碰到 R 的切角（切角的斜邊：(x - 角x)·sx + (y - 角y)·sy = C；離斜邊 r 以內也算碰到）
+function hubInCut(R, x, y, r = 0) { return (R.cuts || []).some(q => (x - q.x) * q.sx + (y - q.y) * q.sy < R.C + r * Math.SQRT2); }
 
 const Hub = {
   driving: false,  // 基地的飛船現在能開（基地畫面、沒開面板）；畫面開關面板時用 setDriving 設

@@ -185,6 +185,8 @@ const GLHub = {
     // 2) 地板：每間房自己的樣子；開口的地板接起兩邊（蓋掉那一段牆），兩側各一條門框
     this.texKind = null;  // 地板用自己那張貼圖（floorTiles）
     for (const r of rooms) this.floor(g, r, HUB_FLOOR[r.id] || HUB_FLOOR.hall);
+    this.texKind = 'metal';
+    for (const r of rooms) for (const q of r.cuts) this.cornerCut(g, q, r.C, BV);
     this.texKind = 'metal';  // 之後的門框、擺設、停機位、武器架、操作台、發射台、終端機
     for (const d of HUB.doors) this.door(g, d);
     this.decorBuild(g);
@@ -198,6 +200,13 @@ const GLHub = {
       else if (z.kind === 'term') this.wallPanel(g, z.side ? R.hall.x + R.hall.w - 54 : R.hall.x, z.y, 120, z.side);
     }
     this.built = true;
+  },
+  // 房間的切角（q = { x, y, sx, sy }：角的位置、往房間裡的方向；c = 切掉多大，見 HUB.CHAMFER）：補成牆＋沿斜邊一條斜面（跟牆的內緣同一套明暗：光從左上，面朝左上亮、朝右下暗）＋邊線
+  cornerCut(g, q, c, bv) {
+    const ax = q.x + q.sx * c, ay = q.y, bx = q.x, by = q.y + q.sy * c, k = bv / Math.SQRT2;
+    g.poly([q.x, q.y, ax, ay, bx, by]).fill(HUB_WALL.inner);
+    g.poly([ax, ay, bx, by, bx - q.sx * k, by - q.sy * k, ax - q.sx * k, ay - q.sy * k]).fill(hubShade(HUB_WALL.inner, -0.12 * (q.sx + q.sy) - 0.08));  // 斜邊往角落平移 bv 的細長條
+    g.moveTo(ax, ay).lineTo(bx, by).stroke({ width: 2, color: HUB_INK });
   },
   // 掛在左右牆上的面板（大廳的終端機、戰績室的顯示螢幕共用）：x0 = 面板左緣、yc = 中心、h = 高（寬固定 54）、side = 1 掛右牆（背光那面暗一點）
   wallPanel(g, x0, yc, h, side) {
@@ -395,7 +404,7 @@ const GLHub = {
     const walls = r => [r.x - 3, r.x + r.w + 3];
     const free = (r, y) => walls(r).every(x => !onDoor(x, y) && !Z.some(z => z.kind === 'term' && Math.abs(z.y - y) < 90 && Math.abs(z.x - x) < 90)
       && !panels.some(s => Math.abs(s.wall - x) < 30 && Math.abs(s.yc - y) < s.h / 2 + 20));
-    const heights = r => [r.y + 40, r.y + r.h - 60, r.y + r.h / 2].filter(y => free(r, y));
+    const heights = r => [r.y + 40 + (r.cuts.some(q => q.y === r.y) ? r.C : 0), r.y + r.h - 60, r.y + r.h / 2].filter(y => free(r, y));  // 上面的角切掉了：上段往下移（不裝在斜邊上）
     for (const r of side.sort((a, b) => heights(a).length - heights(b).length)) {
       const sy = heights(r).find(y => walls(r).every(x => !D.lamps.some(([lx, ly]) => Math.abs(lx - x) < WT + 20 && Math.abs(ly - y) < 60)));
       if (sy != null) walls(r).forEach((x, i) => D.lamps.push([x, sy, i ? -1 : 1]));
@@ -445,8 +454,9 @@ const GLHub = {
     for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; g.moveTo(hx + Math.cos(a) * 34, hy + Math.sin(a) * 34).lineTo(hx + Math.cos(a) * 57, hy + Math.sin(a) * 57).stroke({ width: 1.5, color: HUB_INK, alpha: 0.6 }); }
     this.hexPad(g, hx, hy, 16, 0x2a3454);
     D.turntable = { x: hx, y: hy };
-    this.tank(g, hg.x + 50, hg.y + hg.h - 50, 30); this.tank(g, hg.x + 112, hg.y + hg.h - 40, 22);
-    this.crate(g, hg.x + 18, hg.y + 104, 62, 62, 0x5a4a32); this.crate(g, hg.x + hg.w - 80, hg.y + hg.h - 76, 62, 62, 0x3f5a46); this.crate(g, hg.x + hg.w - 80, hg.y + 14, 62, 62, 0x5a4a32);
+    // 靠角落的擺設離角落夠遠，不壓到切角（HUB.CHAMFER）
+    this.tank(g, hg.x + 60, hg.y + hg.h - 60, 30); this.tank(g, hg.x + 122, hg.y + hg.h - 46, 22);
+    this.crate(g, hg.x + 18, hg.y + 104, 62, 62, 0x5a4a32); this.crate(g, hg.x + hg.w - 92, hg.y + hg.h - 88, 62, 62, 0x3f5a46); this.crate(g, hg.x + hg.w - 92, hg.y + 26, 62, 62, 0x5a4a32);
     // 軍械庫：武器架後面的展示板（貼上牆）、下面角落的彈藥箱
     const racks = Z.filter(z => z.kind === 'rack');
     if (racks.length) {
@@ -455,8 +465,8 @@ const GLHub = {
       for (const z of racks) g.rect(z.x - 30, ar.y + 10, 60, 18).fill(0x2a2018).stroke({ width: 2, color: HUB_INK });
     }
     for (const T of HUB.targets) this.hexPad(g, T.x, T.y, T.r + 12, 0x3a4466);  // 靶場：標靶機的切面底座；標靶機本身是敵人（dummy），跟戰鬥一樣由 GLActors.enemies 畫（以前手畫在底座上不動：被鉤爪拉走時畫面沒動，10-22）
-    this.crate(g, ar.x + 20, ar.y + ar.h - 82, 64, 64, 0x5a3a2a); this.crate(g, ar.x + 92, ar.y + ar.h - 70, 52, 52, 0x5a4a32);
-    this.crate(g, ar.x + ar.w - 84, ar.y + ar.h - 82, 64, 64, 0x5a3a2a); this.barrel(g, ar.x + ar.w - 112, ar.y + ar.h - 30, 15, 0x7a3b33);
+    this.crate(g, ar.x + 30, ar.y + ar.h - 92, 64, 64, 0x5a3a2a); this.crate(g, ar.x + 102, ar.y + ar.h - 80, 52, 52, 0x5a4a32);
+    this.crate(g, ar.x + ar.w - 94, ar.y + ar.h - 92, 64, 64, 0x5a3a2a); this.barrel(g, ar.x + ar.w - 122, ar.y + ar.h - 40, 15, 0x7a3b33);
     // 晶片實驗室：上牆、左牆一排伺服器機櫃（燈每幀閃）
     for (let x = lab.x + 30; x < lab.x + lab.w - 60; x += 70) this.server(g, x, lab.y + 8, 56, 40, D);
     for (let y = lab.y + 90; y < lab.y + lab.h - 60; y += 70) this.server(g, lab.x + 8, y, 40, 56, D);

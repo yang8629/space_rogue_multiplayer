@@ -462,6 +462,17 @@ const MechCheck = {
         return { ok: steps === 60 && P.hookE === e && moved > 100, got: `60 幀呼叫 Game.step ${steps} 次；${P.hookE === e ? '勾住標靶機' : '沒勾住（錯）'}、拉離原位 ${Math.round(moved)}` };
       } finally { Hub.weaponId = save; }
     }],
+    ['基地', '房間的切角', `房間的角斜切掉 ${HUB.CHAMFER}（旁邊有門的角、發射甲板不切）：切掉的角算牆（Arena、hubFree），飛船往角落一直開也停在斜邊外`, M => {
+      const r = HUB.rooms.hangar, q = r.cuts.find(c => c.sx > 0 && c.sy > 0);
+      if (!q) return { ok: false, got: '機庫左上角沒有切（錯）' };
+      Hub.build(q.x + 120, q.y + 120, 0); const P = Game.player;  // build 會換一艘新的飛船：之後才拿
+      const inCut = [q.x + 12, q.y + 12], past = [q.x + 40, q.y + 40];  // 斜邊內（12＋12 < 44）、斜邊外（40＋40 > 44）
+      const wallOk = Arena.f(...inCut) < 0 && !hubFree(HUB, ...inCut, 0) && Arena.f(...past) > 0 && hubFree(HUB, ...past, 0);
+      const joy0 = Input.joy; Input.joy = { bx: 0, by: 0, x: -42, y: -42 };  // 朝左上角一直開
+      try { for (let f = 0; f < 120; f++) Hub.update(1 / 60); } finally { Input.joy = joy0; }
+      const gap = ((P.x - q.x) + (P.y - q.y) - r.C) / Math.SQRT2 - P.r;  // 飛船外緣離斜邊多遠（負的 = 壓進切角）
+      return { ok: wallOk && gap > -3, got: `切角${wallOk ? '算牆' : '沒算成牆（錯）'}；往角落開 2 秒後飛船外緣離斜邊 ${gap.toFixed(1)}${gap > -3 ? '' : '（壓進切角，錯）'}` };
+    }],
     ['武器原型', '無人機蜂群：牽繩、耐久、收攏', `無人機最遠離飛船 ${DRONE.leash}（加上圍繞半徑）；飛出去被打 ${DRONE.hp} 下壞、${DRONE.respawn} 秒後重生；收攏最多擋 ${DRONE.blockN} 顆`, M => {
       M.setup('sandbox', 'vanguard', 'drone', null, null, ['weapon', null, null, null]); M.targets([]);
       const P = Game.player; P.aimD = 2000;
