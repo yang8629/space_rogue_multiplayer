@@ -1,31 +1,29 @@
 // （2026-10-05）瀏覽器效能實測：三種配裝在沙盒打 40 隻標靶（＋每 1.5 秒一圈 32 發環形敵彈），按住射擊 15 秒
 //   每秒記錄 FPS、子彈數；每幀時間拆成：運算（再細分：子彈、敵彈與攔截、敵人、其他）／畫圖
-//   用法：node perf/bench4.mjs [storm|intercept|trig2|all]   （要先 npm i puppeteer-core；用電腦上的 Chrome，會開一個視窗）
-//   storm：迴旋風暴（QA 第 195 局）；intercept：以前攔截爆量那組；trig2：散彈 A＋消失［分裂］＋消失［分裂］
+//   用法：node perf/bench4.mjs [storm|swarm|echo|all]   （要先 npm i puppeteer-core；用電腦上的 Chrome，會開一個視窗）
+//   storm：飛輪＋迴旋、碎片、佈雷、漩渦（元素插滿）；swarm：飛輪＋7 格全滿（產物最多；蜂群在這支測試裡只打出約 6 顆子彈，壓不到）；echo：飛輪＋兩格回響（爆裂）；光束是一道光、不是子彈，壓不到
 import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const url = GAME + 'index.html';
-const which = process.argv[2] || 'all', builds = which === 'all' ? ['storm', 'intercept', 'trig2'] : [which];
-const NAME = { storm: '迴旋風暴', intercept: '爆量配裝（攔截）', trig2: '雙觸發器散彈' };
+const which = process.argv[2] || 'all', builds = which === 'all' ? ['storm', 'swarm', 'echo'] : [which];
+const NAME = { storm: '飛輪迴旋風暴', swarm: '飛輪滿線', echo: '雙回響飛輪' };
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: false,
   defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 for (const build of builds) {
   const page = await browser.newPage();
   page.on('pageerror', e => console.log('頁面錯誤', e.message));
   await page.goto(url);
-  await page.evaluate(m => { try { localStorage.setItem('renderer', m); } catch (e) {} }, process.env.RENDERER || 'gl');  // RENDERER=2d：舊畫面
+  await page.evaluate(m => { try { localStorage.setItem('renderer', m); } catch (e) {} }, 'gl');
   await page.reload();
   await new Promise(r => setTimeout(r, 2500));
   const rows = await page.evaluate(async build => {
     SFX.setMuted && SFX.setMuted(true);
     Game.newRun('sandbox', 'vanguard', 'scatter');
     const B = {
-      storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1), chipId('rear', 2), chipId('boomerang', 3), chipId('wallbounce', 1)],
-        socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []] },
-      intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2), chipId('accel', 2), chipId('orbit', 2), chipId('wallbounce', 1), chipId('quick', 1), chipId('intercept', 2), chipId('dashfire', 3)],
-        socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []] },
-      trig2: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1), chipId('trigend', 1)], socks: [[], ['split'], ['split']] },
-    }[build];
+    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('boomerang', 3), chipId('shard', 2), chipId('stasis', 2), chipId('vortex', 2)], socks: [['bigshot'], ['ignite'], ['blast', 'shock'], ['frost'], []] },
+    swarm: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('shard', 2), chipId('infect', 2), chipId('echo', 2), chipId('homing', 2), chipId('boomerang', 2), chipId('stasis', 2), chipId('vortex', 2)], socks: [['amp', 'bigshot'], ['shock'], ['ignite'], [], ['blast'], [], [], []] },
+    echo: { w: ['scatter', 'A', null], chain: ['weapon', chipId('echo', 1), chipId('echo', 1)], socks: [[], ['blast'], ['blast']] },
+  }[build];
     Game.weapon = { id: B.w[0], path: B.w[1], final: B.w[2] }; Game.refreshWeapon();
     Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; Game.recalc();
     const p = Game.player; p.hp = p.maxHp = 1e9;

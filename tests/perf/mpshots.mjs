@@ -1,11 +1,11 @@
 // 雙人新畫面實測：開兩個瀏覽器（房主、隊友），訊息由這個腳本轉送（假的 PeerJS），進一場戰鬥擺好場景，
 //   兩邊各截一張，拼成「房主看到的／隊友看到的」比較圖 → art_lab/screenshots/新畫面_雙人比較.png
-//   用法：node perf/mpshots.mjs [canvas]   （給 canvas = 用舊畫面截）
+//   用法：node perf/mpshots.mjs
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
-const MODE = process.argv[2] === 'canvas' ? 'canvas' : 'gl';
+const MODE = 'gl';  // 舊畫面（2D）10-09 拿掉了
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const open = async () => {
   const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 } });
@@ -33,7 +33,7 @@ for (const [X, role] of [[H, 'host'], [C, 'client']]) await X.p.evaluate(role =>
 await C.p.evaluate(() => Net.send({ t: 'hello', v: CFG.VERSION })); await wait(500);
 // 大廳 → 選配裝 → 航圖
 await H.p.evaluate(() => Net.setChapter(1)); await wait(500);  // 打完招呼就在共用的基地（房間），房主選章
-await C.p.evaluate(() => Net.ready('gate', 'railgun', 'split')); await wait(300);
+await C.p.evaluate(() => Net.ready('gate', 'railgun', 'boomerang')); await wait(300);
 await H.p.evaluate(() => Net.ready('wraith', 'plasma', 'amp'));
 for (let i = 0; i < 60 && !(await H.p.evaluate(() => Game.state === 'map') && await C.p.evaluate(() => Game.state === 'map')); i++) await wait(200);  // 出發動畫播完才到航圖
 console.log('狀態', await H.p.evaluate(() => Game.state), await C.p.evaluate(() => Game.state));
@@ -70,7 +70,7 @@ for (const [X, label] of [[H, '房主看到的'], [C, '隊友看到的']]) {
 }
 await H.p.setContent(`<body style="margin:0;background:#05070f;display:flex;gap:8px;padding:8px;font:18px sans-serif;color:#dde">${shots.map(([l, d]) => `<div style="text-align:center"><img src="data:image/png;base64,${d}" style="width:760px;height:560px;display:block"><div style="padding:4px">${l}</div></div>`).join('')}</body>`);
 await H.p.setViewport({ width: 16 + 2 * 768, height: 610 });
-await H.p.screenshot({ path: `${OUT}新畫面_雙人比較${MODE === 'canvas' ? '_舊畫面' : ''}.png` });
+await H.p.screenshot({ path: `${OUT}新畫面_雙人比較.png` });
 console.log('轉送訊息', sent);
 await H.b.close(); await C.b.close();
 console.log('done');

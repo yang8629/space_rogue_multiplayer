@@ -13,8 +13,8 @@ await p.evaluate(() => { const P = document.getElementById('library').closest('.
 await new Promise(r => setTimeout(r, 300));
 const vis = await p.evaluate(() => { const r = document.getElementById('chain').getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; });
 console.log('捲到晶片庫時電路的位置', JSON.stringify(vis), vis.bottom > 0 ? '（看得到）' : '（看不到）');
-// 點兩下：環繞（晶片）、分裂模組（組件）
-for (const id of ['orbit', 'split', 'pierce']) {
+// 點兩下：迴旋（晶片）、威力倍增器（插件）、碎片（晶片）
+for (const id of ['boomerang', 'amp', 'shard']) {
   const box = await p.evaluate(id => { const el = Editor.libChips[id]; const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, id);
   await p.mouse.click(box.x, box.y); await new Promise(r => setTimeout(r, 120)); await p.mouse.click(box.x, box.y);
   await new Promise(r => setTimeout(r, 200));

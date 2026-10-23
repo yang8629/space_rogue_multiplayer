@@ -7,7 +7,7 @@ const url = GAME + 'index.html';
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
-for (const [mode, name] of [['gl', '新畫面'], ['2d', '舊畫面']]) {
+for (const [mode, name] of [['gl', '新畫面']]) {  // 舊畫面（2D）10-09 拿掉了
   await p.goto(url);
   await p.evaluate(m => { try { localStorage.setItem('renderer', m); } catch (e) {} }, mode);
   await p.reload(); await new Promise(r => setTimeout(r, 2000));

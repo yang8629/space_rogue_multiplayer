@@ -5,12 +5,15 @@ const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defa
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 1500));
+// 包包裡放 7 種晶片（有插座的 Lv1），每種的說明框文字都印出來；截圖停在第一種（迴旋）
 const txt = await p.evaluate(() => {
   Game.newRun('run', 'vanguard', 'laser');
-  Game.inventory[0] = chipId('orbit', 2); Game.inventory[1] = chipId('orbit', 2); Game.recalc();
-  Game.toggleEditor(); Editor.showInfo(Game.inventory[0]);
-  Editor.infoEl.scrollIntoView({ block: 'center' });
-  return Editor.infoEl.innerText;
+  const ids = NORMAL_IDS.filter(id => CHIPS[id].type === 'chip');
+  ids.forEach((id, i) => { Game.inventory[i] = chipId(id, 2); }); Game.recalc();
+  Game.toggleEditor();
+  const out = ids.map((id, i) => { Editor.showInfo(Game.inventory[i]); return `── ${CHIPS[id].name}\n${Editor.infoEl.innerText}`; });
+  Editor.showInfo(Game.inventory[0]); Editor.infoEl.scrollIntoView({ block: 'center' });
+  return out.join('\n');
 });
 console.log(txt);
 await new Promise(r => setTimeout(r, 400));

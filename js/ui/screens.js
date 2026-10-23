@@ -68,7 +68,7 @@ function chipCard(id, footer = '') {
     <div class="ty" style="color:${m.color}">${m.icon} ${m.label}</div>
     <div class="ttl">${lvName(id)}</div>
     ${sockLine(id)}
-    <div class="ds brief">${chipBrief(id)}</div>${rare}
+    <div class="ds brief">${chipBrief(id)}</div>${chipPassLine(id) ? `<div class="ty" style="color:#9dff6b;opacity:1">${chipPassLine(id)}</div>` : ''}${rare}
     <div class="det"><div class="ds">${d.desc}</div>${lv}${ps}</div>${footer}</div>`;
 }
 // 三選一的標題（種類見 CFG.REWARDS）

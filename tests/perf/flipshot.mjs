@@ -8,7 +8,7 @@ await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 1500));
 await p.evaluate(() => {
   Game.newRun('run', 'vanguard', 'laser');
   Game.node = { type: 'combat', id: 'c', L: 1 }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 });
-  const orig = Game.rewardOptions; Game.rewardOptions = () => [chipId('boomerang', 1), 'split', chipId('orbit', 2, { k: 'aftershock', lv: 2 })];
+  const orig = Game.rewardOptions; Game.rewardOptions = () => [chipId('boomerang', 1), 'amp', chipId('vortex', 2, 1, true)];
   Game.combatWon(); Game.rewardOptions = orig;
 });
 for (const [ms, name] of [[150, '1剛出來'], [550, '2翻到一半'], [1300, '3稀有還蓋著'], [2600, '4全部翻開']]) {

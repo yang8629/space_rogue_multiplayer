@@ -50,13 +50,11 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   if (G.weapon.id === 'drone' && bossD && !tur && Math.hypot(bossD.x - p.x, bossD.y - p.y) < DRONE.leash + DRONE.range) {
     I.touch = false; I.mx = (bossD.x - G.cam.x) * ZOOM; I.my = (bossD.y - G.cam.y) * ZOOM; I.down = true;
   }
-  // 保持在射程七成的距離；散彈 close：四成（扇形的彈丸越遠打中越少）；
-  //   加速：射程 ×1.5、越遠越痛，站遠一點（最多 700，一般最多 360）
-  //   佈雷：站在地雷停住的距離（射程一半），地雷才會落在敵人附近
-  const wp = G.wp, R = wp.speed * wp.life * (hasChip('accel') ? 1.5 : 1);
-  let want = Math.max(70, Math.min(hasChip('accel') ? 700 : 360, R * 0.7));
+  // 保持在射程七成的距離（最多 360）；佈雷：站在地雷停住的距離（射程一半），地雷才會落在敵人附近
+  const wp = G.wp, R = wp.speed * wp.life;
+  let want = Math.max(70, Math.min(360, R * 0.7));
   if (hasChip('stasis')) want = Math.max(70, R * 0.5);
-  // 站的距離不超過自動攻擊的索敵距離（最多 560）：以前裝加速要站 700 外，自動攻擊鎖不到、六成時間沒開火（照玩家雷射＋加速配裝打王 183 秒、王每秒只掉 17）
+  // 站的距離不超過自動攻擊的索敵距離（最多 560）：以前裝加速（已拿掉的晶片）要站 700 外，自動攻擊鎖不到、六成時間沒開火
   want = Math.min(want, Math.min(R + 40, CFG.AUTO_RANGE) - 60);
   // 收尾：只剩 1～2 隻、而且都是會一直後退的遠程小兵（彈幕艇、噴吐者）時拉近到 150 內（退到角落，站在 400 外打不死）
   //   旗艦、精英不算（貼上去會被打死：試過一律拉近，雷射通關率 18% → 5%）
@@ -302,7 +300,7 @@ function goRevive(p) {
   I.joy = { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 };
 }
 function bot(p) {
-  if (!goExit(p)) { fightBot(p); standBot(p); flankShield(p); }
+  if (!goExit(p)) { fightBot(p); flankShield(p); }
   goRevive(p);
 }
 // 精英「護盾」：盾對著自己（±70°）、在 500 內 → 往側邊繞（加在原本的走位上，繞到背後再打）；有子彈要閃時不管
@@ -316,30 +314,6 @@ function flankShield(p) {
   const s = off >= 0 ? 1 : -1, tx = -Math.sin(a) * s, ty = Math.cos(a) * s, j = Input.joy || { x: 0, y: 0 };  // 往離盾中心遠的那一側繞
   const mx = j.x / 60 + tx * 1.5, my = j.y / 60 + ty * 1.5, l = Math.hypot(mx, my) || 1;
   Input.joy = { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 };
-}
-// 架設（站著不動射速越疊越高）：安全就停下來打，任何一項不成立就照原本的走位（層數歸零）
-//   安全 = 沒有要閃的子彈／衝撞（threat = 0）、350 內沒有朝自己飛來、會擦到 60 內的敵彈、
-//   180 內沒有敵人、450 內沒有高速衝過來的敵人；而且有敵人在射程內、不是在繞路或脫困
-//   （第一版只看 threat、100 內沒敵人：站著被打，4 局全死在第 1 星區，不停的 4 局都到第 2 星區）
-function standBot(p) {
-  if (!hasChip('stand') || threat > 0 || navOn || Input.dash) return;
-  // 久打不到（stalled）就不站：讓 baseBot 壓過去的移動生效（2026-10-16：停在黑洞旁邊架設，最後一隻蟲群繞著黑洞外圈打不到、子彈被黑洞吞掉，卡 278 秒）
-  if (stalled()) return;
-  const wp = G.wp, reach = Math.min(wp.speed * wp.life * (hasChip('accel') ? 1.5 : 1) + 40, CFG.AUTO_RANGE);
-  for (const b of G.eBullets) {
-    const rx = p.x - b.x, ry = p.y - b.y, d = Math.hypot(rx, ry), v = Math.hypot(b.vx, b.vy) || 1;
-    if (d < 350 && b.vx * rx + b.vy * ry > 0 && Math.abs(rx * b.vy - ry * b.vx) / v < p.r + b.r + 60) return;
-  }
-  let nd = Infinity;
-  for (const e of G.enemies) {
-    if (e.dead || e.spawnT > 0) continue;
-    const rx = p.x - e.x, ry = p.y - e.y, d = Math.hypot(rx, ry) - e.r;
-    if (d < 180) return;
-    if (d < 450 && Math.hypot(e.vx || 0, e.vy || 0) >= 170 && e.vx * rx + e.vy * ry > 0) return;
-    if (!(e.cloak > 0.5)) nd = Math.min(nd, d);
-  }
-  if (nd > reach) return;
-  Input.joy = null;
 }
 function fightBot(p) {
   baseBot(p);

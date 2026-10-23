@@ -15,7 +15,7 @@ async function trial(label, rare, act = 'win') {
     await new Promise(r => setTimeout(r, 1500));  // 戰鬥畫面畫一陣子
   }
   const res = await p.evaluate((rare, act) => new Promise(done => {
-    const opts = [chipId('boomerang', 1), 'split', rare ? chipId('orbit', 2, { k: 'aftershock', lv: 2 }) : chipId('orbit', 2)];
+    const opts = [chipId('boomerang', 1), 'amp', rare ? chipId('vortex', 2, 1, true) : chipId('vortex', 2)];
     const orig = Game.rewardOptions; Game.rewardOptions = () => opts.slice();
     const long = [], frames = [];
     const po = new PerformanceObserver(l => l.getEntries().forEach(e => long.push([Math.round(e.startTime - t0), Math.round(e.duration)])));

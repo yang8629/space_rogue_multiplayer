@@ -39,7 +39,7 @@ const SCENES = {
     Game.portals = [{ ax: p.x - 120, ay: p.y + 60, bx: p.x + 120, by: p.y + 60, t: 2, color: '#2ee6a6', owner: p }];`,
   bullets: `const p = sandbox('scatter'); for (let i = 0; i < 6; i++) put('dummy', p.x + 320, p.y - 250 + i * 100);
     Game.weapon = { id: 'scatter', path: 'A', final: null }; Game.refreshWeapon();
-    Game.chain = ['weapon', chipId('trigend', 1), chipId('trigend', 1)]; Game.socks = [[], ['split'], ['split']]; Game.recalc();
+    Game.chain = ['weapon', chipId('boomerang', 1), chipId('shard', 1)]; Game.socks = [[], ['blast'], ['ignite']]; Game.recalc();
     Input.down = true; Input.mx = (p.x + 320 - Game.cam.x) * ZOOM; Input.my = (p.y - Game.cam.y) * ZOOM;
     for (let i = 0; i < 24; i++) Game.eBullets.push({ x: p.x - 300 + i * 25, y: p.y - 280, vx: 0, vy: 40, r: 5, dmg: 0, life: 9, from: 't' });
     floatText(p.x - 100, p.y - 60, 1234, '#ffd166', true); floatText(p.x - 60, p.y - 40, 56, '#ffffff'); floatText(p.x - 140, p.y - 30, '獲得 迴旋', '#ff9f1c', true);`,

@@ -1,4 +1,4 @@
-// 小行星的視野陰影：飛船周圍放幾顆小行星，新畫面、舊畫面各截一張 → art_lab/screenshots/新畫面_視野陰影.png
+// 小行星的視野陰影：飛船周圍放幾顆小行星，截一張 → art_lab/screenshots/新畫面_視野陰影.png
 //   用法：node perf/shadowshot.mjs [belt|wall]（wall：第 1 星區大地圖、岩石洞壁）
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -10,7 +10,7 @@ const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message, String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' / ')));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const imgs = [];
-for (const mode of ['gl', 'canvas']) {
+for (const mode of ['gl']) {  // 舊畫面（2D）10-09 拿掉了
   await p.goto(url);
   await p.evaluate(m => { try { localStorage.setItem('renderer', m); } catch (e) {} }, mode);
   await p.reload(); await wait(2500);
@@ -33,7 +33,7 @@ for (const mode of ['gl', 'canvas']) {
   imgs.push([mode === 'gl' ? '新畫面' : '舊畫面', await p.screenshot({ encoding: 'base64' })]);
 }
 await p.setContent(`<body style="margin:0;background:#05070f;display:flex;flex-direction:column;gap:8px;padding:8px;font:16px sans-serif;color:#dde">${imgs.map(([l, d]) => `<div style="text-align:center"><img src="data:image/png;base64,${d}" style="width:960px;height:540px;display:block"><div style="padding:4px">${l}</div></div>`).join('')}</body>`);
-await p.setViewport({ width: 976, height: 8 + 2 * 580 });
+await p.setViewport({ width: 976, height: 8 + imgs.length * 580 });
 await p.screenshot({ path: `${OUT}新畫面_視野陰影.png` });
 await b.close();
 console.log('done');

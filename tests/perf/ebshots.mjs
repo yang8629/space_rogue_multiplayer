@@ -1,10 +1,10 @@
 // 敵彈出膛檢查：各種會射擊的敵人放在飛船周圍（不扣血），每隻在剛開火時截一張放大圖，拼成一張
-//   → art_lab/screenshots/新畫面_敵彈出膛.png   用法：node perf/ebshots.mjs [canvas]
+//   → art_lab/screenshots/新畫面_敵彈出膛.png   用法：node perf/ebshots.mjs
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const OUT = SHOTS;
 const url = GAME + 'index.html';
-const MODE = process.argv[2] === 'canvas' ? 'canvas' : 'gl';
+const MODE = 'gl';  // 舊畫面（2D）10-09 拿掉了
 const TYPES = ['spitter', 'gunboat', 'elite', 'boss2', 'boss', 'boss3'];
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 2 } });
 const p = await b.newPage();
@@ -32,6 +32,6 @@ for (const type of TYPES) {
 }
 await p.setContent(`<body style="margin:0;background:#05070f;display:flex;flex-wrap:wrap;gap:8px;padding:8px;font:16px sans-serif;color:#dde">${imgs.map(([l, d]) => `<div style="text-align:center"><img src="data:image/png;base64,${d}" style="width:240px;height:240px;display:block"><div style="padding:4px">${l}</div></div>`).join('')}</body>`);
 await p.setViewport({ width: 8 + 3 * 248, height: 8 + 2 * 280, deviceScaleFactor: 2 });
-await p.screenshot({ path: `${OUT}新畫面_敵彈出膛${MODE === 'canvas' ? '_舊畫面' : ''}.png` });
+await p.screenshot({ path: `${OUT}新畫面_敵彈出膛.png` });
 await b.close();
 console.log('done');

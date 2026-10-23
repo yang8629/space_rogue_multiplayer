@@ -15,26 +15,26 @@ const CHIPS = {
   weapon: { name: '飛船', short: '飛船', type: 'source', cost: 0, locked: true, hidden: true, desc: '' },
 
   // ---------- 晶片：被觸發就放出產物；產物照 pass 往下一格傳 ----------
-  boomerang: { name: '迴旋', short: '迴旋', type: 'chip', cost: 2, pass: 'hit', coef: 0.35, mul: 0.5,
-    desc: '朝觸發的方向丟出迴旋刃：飛出去再飛回飛船，去程、回程都會打中。每次命中往下一格傳 0.35 次。',
+  boomerang: { name: '迴旋', short: '迴旋', type: 'chip', cost: 2, pass: 'hit', coef: 0.35, mul: 0.5, when: '迴旋刃每打中一隻',
+    desc: '朝觸發的方向丟出迴旋刃：飛出去再飛回飛船，去程、回程都會打中。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
-  stasis: { name: '佈雷', short: '佈雷', type: 'chip', cost: 1, pass: 'hit', coef: 1, mul: 1.5,
-    desc: '在觸發的位置附近留一顆地雷：敵人靠近就衝過去爆炸（半徑 60）。停 4 秒沒被觸發就消失。每次爆炸往下一格傳 1 次。',
+  stasis: { name: '佈雷', short: '佈雷', type: 'chip', cost: 1, pass: 'hit', coef: 1, mul: 1.5, when: '地雷每次爆炸',
+    desc: '在觸發的位置附近留一顆地雷：敵人靠近就衝過去爆炸（半徑 60）。停 4 秒沒被觸發就消失。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
-  infect: { name: '感染', short: '感染', type: 'chip', cost: 2, pass: 'kill', coef: 1, mul: 0.4,
-    desc: '從觸發的位置往四周放出 3 顆孢子；被孢子打死的敵人再爆出 3 顆孢子（只傳一代）。每次擊殺往下一格傳 1 次。',
+  infect: { name: '感染', short: '感染', type: 'chip', cost: 2, pass: 'kill', coef: 1, mul: 0.4, when: '孢子每打死一隻',
+    desc: '從觸發的位置往四周放出 3 顆孢子；被孢子打死的敵人再爆出 3 顆孢子（只傳一代）。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
-  echo: { name: '回響', short: '回響', type: 'chip', cost: 1, pass: 'hit', mul: 0.5,
-    desc: '在觸發的位置用武器再打一次（傷害 50%，朝最近的敵人）。回響命中照武器的觸發係數往下一格傳。',
+  echo: { name: '回響', short: '回響', type: 'chip', cost: 1, pass: 'hit', mul: 0.5, when: '回響每打中一隻',
+    desc: '在觸發的位置用武器再打一次（傷害 50%，朝最近的敵人）。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
-  shard: { name: '碎片', short: '碎片', type: 'chip', cost: 1, pass: 'hit', coef: 0.2, mul: 0.25,
-    desc: '在觸發的位置往四周炸出 6 片短程碎片（射程約 100）。每片命中往下一格傳 0.2 次。',
+  shard: { name: '碎片', short: '碎片', type: 'chip', cost: 1, pass: 'hit', coef: 0.2, mul: 0.25, when: '每片碎片打中',
+    desc: '在觸發的位置往四周炸出 6 片短程碎片（射程約 100）。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
-  homing: { name: '追蹤彈', short: '追蹤', type: 'chip', cost: 2, pass: 'hit', coef: 1, mul: 1.2,
-    desc: '從觸發的位置放出一顆追蹤彈，轉向最近的敵人（飛 1.5 秒；附近沒有別隻時打觸發的那隻）。命中往下一格傳 1 次。',
+  homing: { name: '追蹤彈', short: '追蹤', type: 'chip', cost: 2, pass: 'hit', coef: 1, mul: 1.2, when: '追蹤彈打中',
+    desc: '從觸發的位置放出一顆追蹤彈，轉向最近的敵人（飛 1.5 秒；附近沒有別隻時打觸發的那隻）。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
-  vortex: { name: '漩渦', short: '漩渦', type: 'chip', cost: 2, pass: 'end', coef: 1, mul: 0.05,
-    desc: '在觸發的位置開一個漩渦（半徑 120），把附近的敵人吸到中心 1.5 秒（旗艦吸不動），幾乎不打傷害。漩渦結束時在中心往下一格傳 1 次（接佈雷、碎片打一整團）。',
+  vortex: { name: '漩渦', short: '漩渦', type: 'chip', cost: 2, pass: 'end', coef: 1, mul: 0.05, when: '漩渦結束時（在中心）',
+    desc: '在觸發的位置開一個漩渦（半徑 120），把附近的敵人吸到中心 1.5 秒（旗艦吸不動），幾乎不打傷害。',
     lvs: ['傷害 ×1', '傷害 ×1.5', '傷害 ×2.5'] },
 
   // ---------- 插件：插在晶片（含武器）上，傳給同一條線上它後面的所有晶片（同種加總） ----------
@@ -65,13 +65,13 @@ for (const [id, d] of Object.entries(CHIPS)) if (d.lvs) LV_INFO[id] = ['等級',
 
 // 卡片上的一行精簡說明（按住 Shift／Alt 才顯示完整說明）
 const CHIP_BRIEF = {
-  boomerang: '丟出迴旋刃，飛回飛船（命中往下傳）',
-  stasis: '留一顆地雷，敵人靠近就衝過去炸（爆炸往下傳）',
-  infect: '放出孢子，打死的敵人再爆孢子（擊殺往下傳）',
+  boomerang: '丟出迴旋刃，飛回飛船',
+  stasis: '留一顆地雷，敵人靠近就衝過去炸',
+  infect: '放出孢子，打死的敵人再爆孢子',
   echo: '用武器再打一次（50%）',
   shard: '往四周炸 6 片短程碎片',
-  homing: '放出一顆追蹤彈（命中往下傳）',
-  vortex: '把敵人吸成一團，結束時往下傳',
+  homing: '放出一顆追蹤彈，轉向最近的敵人',
+  vortex: '把附近的敵人吸成一團',
   amp: '物理傷害 +60%（會往後傳）',
   bigshot: '大小 +50%（會往後傳）',
   blast: '命中時爆炸（疊越多越痛）',
@@ -81,6 +81,14 @@ const CHIP_BRIEF = {
   shred: '命中的敵人受傷增加（疊越多越多）',
 };
 const chipBrief = id => CHIP_BRIEF[baseOf(id)] || String(CHIPS[id].desc).split(/[。；]/)[0];
+// 往下傳的時機（晶片的說明框、卡片都顯示；照 when、coef 產生）：回響照現在武器的觸發係數（WEAPONS[id].trig）
+const chipPassLine = id => {
+  const d = CHIPS[baseOf(id)];
+  if (!d || d.type !== 'chip') return '';
+  const W = Game.weapon && WEAPONS[Game.weapon.id], k = d.coef != null ? d.coef : W ? W.trig : null;
+  const how = k == null ? '照武器的觸發係數' : k >= 1 ? `觸發 ${+k.toFixed(2)} 次` : `累積 ${+k.toFixed(2)}（滿 1 觸發一次）`;
+  return `觸發下一格：${d.when}，${how}${d.coef == null && W ? `（照武器的觸發係數，${W.short}）` : ''}`;
+};
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => !CHIPS[id].hidden);
 const chipPrice = id => (30 + CHIPS[id].cost * 8 + 6 * socketsOf(id)) * lvOf(id) * (rareOf(id) ? CFG.RARE.price : 1);
 const isHead = id => id === 'weapon';  // 線頭：飛船晶片

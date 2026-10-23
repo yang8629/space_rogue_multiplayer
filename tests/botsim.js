@@ -12,7 +12,7 @@ G.simFast = true;  // 模擬：不等給人看的時間（區域肅清 1.6 秒�
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
 // --tweak="CHIPS.frost.cost=0"：先改數值再跑（試調整用，不改遊戲檔案；跟 runsim.js 一樣）
 if (arg('tweak')) require('vm').runInThisContext(process.argv.find(a => a.startsWith('--tweak=')).slice(8));
-const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃', drone: '蜂群' };
+const WN = Object.fromEntries(Object.entries(T_.WEAPONS).map(([id, w]) => [id, w.short]));  // 武器名稱照遊戲（以前寫死改版前的名字）
 const WPN = arg('w') ? arg('w').split(',') : Object.keys(WN);
 const PLAY = NORMAL_IDS.filter(id => CH[id].type === 'chip');  // 晶片（10-22：放在線上、會往下傳的那種）
 const CHIPS = arg('chips') ? arg('chips').split(',') : PLAY;
@@ -65,10 +65,10 @@ function bot(p) {
   I.touch = true; I.autoFire = !HOLD; I.aimStick = null;
   let near = null, nd = Infinity;
   for (const e of E) { const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < nd) { nd = d; near = e; } }
-  // 保持在射程七成的距離；照晶片的玩法站位：加速站遠（射程 ×1.5，最多 700）、佈雷站在地雷停住的距離（射程一半）
+  // 保持在射程七成的距離（最多 360）；佈雷站在地雷停住的距離（射程一半）
   const has = b => G.chain.some(id => id && String(id).split(/[#~]/)[0] === b);
-  const wp = G.wp, R = wp.speed * wp.life * (has('accel') ? 1.5 : 1);
-  let want = Math.max(70, Math.min(has('accel') ? 700 : 360, R * 0.7));
+  const wp = G.wp, R = wp.speed * wp.life;
+  let want = Math.max(70, Math.min(360, R * 0.7));
   if (has('stasis')) want = Math.max(70, R * 0.5);
   let mx = 0, my = 0;
   if (near) {

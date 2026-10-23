@@ -464,7 +464,7 @@ const Editor = {
     const price = !Game.freePlay() ? `　<span style="color:#6a79ad">回收 ◆${sellPrice(id)}</span>` : '';
     const lvT = hasLv(id) ? `　<span style="color:${lv >= CFG.MAX_CHIP_LV ? '#ffd166' : '#9dff6b'}">${LV_INFO[baseOf(id)][1][lv - 1]}${lv < CFG.MAX_CHIP_LV ? '（同種拖上來合成）' : '（滿級）'}</span>` : '';
     this.infoEl.innerHTML = `<b style="color:${m.color}">${m.icon} ${lvName(id)}</b>${sk}${lvT}${price}<br>` +
-      (id === 'weapon' ? `插件作用在：${PLUG_ON.weapon}` : chipBrief(id)) + (rareOf(id) ? `<br><b style="color:#ffd166">★ 稀有：${RARE_INFO[baseOf(id)]}</b>` : '') + (J && J.idle ? `<br><b style="color:#ff8a8a">✖ 這個插座沒有作用：${J.why}</b>` : '');
+      (id === 'weapon' ? `插件作用在：${PLUG_ON.weapon}` : chipBrief(id)) + (chipPassLine(id) ? `<br><span style="color:#9dff6b">${chipPassLine(id)}</span>` : '') + (rareOf(id) ? `<br><b style="color:#ffd166">★ 稀有：${RARE_INFO[baseOf(id)]}</b>` : '') + (J && J.idle ? `<br><b style="color:#ff8a8a">✖ 這個插座沒有作用：${J.why}</b>` : '');
   },
 
   // 每格狀態（見 compileLine）：role 線頭／晶片、idle 沒有作用（why 原因）

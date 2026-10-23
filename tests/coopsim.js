@@ -98,7 +98,7 @@ function oneRun(s) {
   return log;
 }
 
-const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃' };
+const WN = { laser: '光束', scatter: '飛輪', plasma: '重力', railgun: '鉤爪', blade: '能刃', drone: '蜂群' };  // 照 WEAPONS[id].short（這支程式的主範圍沒有載入遊戲）
 let won = 0, done = 0, stuck = 0, downs = 0, revives = 0, share = [];
 const dieAt = {};
 // --only=3,13：只跑這幾局（每局的亂數種子照局號固定，可以重現某一局）

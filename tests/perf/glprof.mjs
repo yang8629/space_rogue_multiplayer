@@ -1,8 +1,8 @@
 // 新畫面每幀時間拆解：照 bench4 的配裝跑 8 秒，量 GLWorld.draw、GLFx.draw、GLActors.draw、GLFx.drawTexts、app.render（送給顯示卡）各花多少
-//   用法：node perf/glprof.mjs [storm|intercept|trig2]
+//   用法：node perf/glprof.mjs [storm|swarm|echo]
 import { GAME, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
-const build = process.argv[2] || 'intercept';
+const build = process.argv[2] || 'swarm';
 const b = await puppeteer.launch({ executablePath: CHROME, headless: false, defaultViewport: { width: 1280, height: 720 }, args: ['--window-size=1300,820', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
@@ -12,9 +12,9 @@ const r = await p.evaluate(async build => {
   SFX.setMuted && SFX.setMuted(true);
   Game.newRun('sandbox', 'vanguard', 'scatter');
   const B = {
-    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1), chipId('rear', 2), chipId('boomerang', 3), chipId('wallbounce', 1)], socks: [['split'], ['ignite'], ['overclock', 'bigshot'], ['mirror'], []] },
-    intercept: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('rear', 2), chipId('accel', 2), chipId('orbit', 2), chipId('wallbounce', 1), chipId('quick', 1), chipId('intercept', 2), chipId('dashfire', 3)], socks: [['mirror', 'split'], ['shock'], ['ignite'], [], [], ['split'], [], []] },
-    trig2: { w: ['scatter', 'A', null], chain: ['weapon', chipId('trigend', 1), chipId('trigend', 1)], socks: [[], ['split'], ['split']] },
+    storm: { w: ['scatter', 'A', null], chain: ['weapon', chipId('boomerang', 3), chipId('shard', 2), chipId('stasis', 2), chipId('vortex', 2)], socks: [['bigshot'], ['ignite'], ['blast', 'shock'], ['frost'], []] },
+    swarm: { w: ['scatter', 'A', 0], chain: ['weapon', chipId('shard', 2), chipId('infect', 2), chipId('echo', 2), chipId('homing', 2), chipId('boomerang', 2), chipId('stasis', 2), chipId('vortex', 2)], socks: [['amp', 'bigshot'], ['shock'], ['ignite'], [], ['blast'], [], [], []] },
+    echo: { w: ['scatter', 'A', null], chain: ['weapon', chipId('echo', 1), chipId('echo', 1)], socks: [[], ['blast'], ['blast']] },
   }[build];
   Game.weapon = { id: B.w[0], path: B.w[1], final: B.w[2] }; Game.refreshWeapon();
   Game.chain = B.chain; Game.socks = B.socks; Game.wSock = 3; Game.recalc();

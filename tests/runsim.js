@@ -10,7 +10,7 @@ const T_ = require('./load_game').loadGame();
 const G = T_.Game, CH = T_.CHIPS;
 G.simFast = true;  // 模擬：不等給人看的時間（區域肅清 1.6 秒）
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
-const WN = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃', drone: '蜂群' };
+const WN = Object.fromEntries(Object.entries(T_.WEAPONS).map(([id, w]) => [id, w.short]));  // 武器名稱照遊戲（以前寫死改版前的名字）
 const WPN = arg('w') ? arg('w').split(',') : Object.keys(WN);
 const N = +(arg('n') || 20), dt = 1 / 60;
 const SHIP = arg('ship') || null;

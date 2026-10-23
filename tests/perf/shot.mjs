@@ -1,3 +1,4 @@
+// 任意網址整頁截圖：node perf/shot.mjs <網址> <輸出檔> [寬 1200] [高 1400]
 import puppeteer from 'puppeteer-core';
 import { CHROME } from './paths.mjs';
 const [url, out, w = '1200', h = '1400'] = process.argv.slice(2);
