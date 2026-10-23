@@ -1,5 +1,5 @@
-// 戰鬥中船頭的武器：每把武器開一場戰鬥，截飛船附近（放大）→ art_lab/screenshots/戰鬥武器_*.png
-//   用法：node perf/battleweapon.mjs
+// 戰鬥中船頭的武器：每把武器開一場戰鬥，截飛船附近（放大）→ art_lab/screenshots/戰鬥武器_<武器名>.png
+//   用法：node perf/battleweapon.mjs   （武器清單和名字照遊戲的 WEAPONS，加新武器不用改這裡）
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -7,8 +7,8 @@ const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defa
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await wait(1500);
-const names = { laser: '雷射', scatter: '散彈', plasma: '電漿', railgun: '軌道', blade: '相刃' };
-for (const [id, name] of Object.entries(names)) {
+const names = await p.evaluate(() => Object.entries(WEAPONS).map(([id, W]) => [id, W.name]));
+for (const [id, name] of names) {
   const box = await p.evaluate(id => {
     SFX.setMuted && SFX.setMuted(true);
     Game.newRun('run', 'vanguard', id);
