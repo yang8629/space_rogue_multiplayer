@@ -210,11 +210,15 @@ if (arg('replay')) {
 console.log(`整局模擬：${N} 局 × 每把武器（飛船隨機、起始晶片隨機）。電腦是熟練玩家`);
 const all = { runs: 0, won: 0, dieAt: {} };
 for (const w of WPN) {
-  let won = 0, stuck = 0; const dieAt = {}, killers = {}; const reach = []; const byPath = {}, byCode = {}, wonT = [];  // wonT：通關局的 [總戰鬥秒數, 每星區秒數]  // byPath：武器升級路線 → [通關, 局數, 升滿局數]；byCode 同樣、用代號（A0）存檔，多一格「死在第一星區的局數」
+  let won = 0, stuck = 0, doneN = 0; const dieAt = {}, killers = {}; const reach = []; const byPath = {}, byCode = {}, wonT = [];  // wonT：通關局的 [總戰鬥秒數, 每星區秒數]  // byPath：武器升級路線 → [通關, 局數, 升滿局數]；byCode 同樣、用代號（A0）存檔，多一格「死在第一星區的局數」
+  const tW = Date.now();
   for (let s = 0; s < N; s++) {
     if (GAME != null && s !== GAME) continue;
     if (s < FROM) continue;
     const r = oneRun(w, s);
+    // 進度（stderr：不混進結果）：每跑完一局一行（10-24 使用者：以前跑完才印，看不出跑到第幾局）
+    doneN++;
+    process.stderr.write(`${WN[w]} ${doneN}/${RUNS} 局（第 ${s} 局 ${r.stuck || r.timeout ? '卡住' : r.won ? '通關' : `死在 ${r.sector}-${r.layer}`}）　目前通關 ${won + (r.won && !(r.stuck || r.timeout) ? 1 : 0)}　累計 ${Math.round((Date.now() - tW) / 1000)} 秒\n`);
     if (PROBE) console.log(`  ${WN[w]} 第 ${s} 局 ${r.build ? r.build.route || '' : ''}${r.build && r.build.done ? '（升滿）' : '（沒升滿）'} ${r.won ? '通關' : '死在 ' + r.sector + '-' + r.layer}｜${PROBE.text()}`);
     if (BUILDS && r.build) { const b = r.build; console.log(`  第 ${s} 局 ${r.won ? '通關' : '死在 ' + r.sector + '-' + r.layer}｜${b.path}${b.final ? '→' + b.final : ''}｜${b.parts}｜${b.chain}`); }
     if (r.stuck || r.timeout) console.log(`  ${WN[w]} 第 ${s} 局卡住：${r.stuck || '戰鬥超過 300 秒、最近 60 秒沒打掉血（最多打到 900 秒）'}（星區 ${r.sector} 第 ${r.layer} 層）${r.cause ? '｜原因：' + r.cause : ''}${r.why ? '\n    ' + r.why : ''}`);
