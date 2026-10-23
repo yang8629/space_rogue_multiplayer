@@ -643,7 +643,7 @@ class Enemy {
     if (this.ledT > 0) { this.ledT -= dt; this.spdMul *= AFFIX.command.speed; }  // 精英「統帥」身邊的小兵
     if (this.enraged && this.has('rage')) this.spdMul *= AFFIX.rage.speed;       // 精英「狂暴」
     if (this.spawnT > 0) { this.spawnT -= dt; return; }
-    if (this.stunT > 0) {  // 撞牆暈眩（散彈升級）：不動、不攻擊，被撞開的速度慢慢減
+    if (this.stunT > 0) {  // 暈眩（牽引鉤拉在身前、甩出去飛行中）：不動、不攻擊，被甩開的速度慢慢減
       this.stunT -= dt; const f = Math.max(0, 1 - dt * 6); this.vx *= f; this.vy *= f; this.move(dt);
       return;
     }

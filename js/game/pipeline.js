@@ -123,9 +123,10 @@ const LINE_FX = {
     const list = weaponEmit(Game.wp, k0).map(b => ({ ...b, park: null, hook: false, radius: b.radius * (1 + PLUG.size * cell.plug.size), src: 'echo', cr: null, ln: { line: t.line, k: t.k }, prod: true }));
     lineSpawn(cell, t, list, t.x, t.y, ang, 1);  // depth 1：算回響（回響擊殺、傷害來源）
   },
-  shard(cell, t) {  // 碎片：往四周 6 片，射程約 100
-    const a0 = rand(0, TAU), grp = cell.rare ? new Map() : null;  // 稀有：6 片共用一個記錄（打中誰幾片，見 Game.linePass）
-    lineSpawn(cell, t, Array.from({ length: 6 }, (_, k) => lineShot(cell, t, { angle: a0 + k / 6 * TAU, speed: 520, life: 0.19, radius: 4, shape: 'dart', color: '#ffd6a0', knock: 0.5, grp })), t.x, t.y, 0, 0, t.ignore);
+  shard(cell, t) {  // 碎片：往四周 6 片，射程約 100；一般的不打觸發的那隻（清一群用）
+    //   稀有：6 片共用一個記錄（打中誰幾片，見 Game.linePass），也打得到觸發的那隻（打單隻精英、旗艦用；使用者 10-23 同意：以前單隻時 6 片永遠打不到同一隻）
+    const a0 = rand(0, TAU), grp = cell.rare ? new Map() : null;
+    lineSpawn(cell, t, Array.from({ length: 6 }, (_, k) => lineShot(cell, t, { angle: a0 + k / 6 * TAU, speed: 520, life: 0.19, radius: 4, shape: 'dart', color: '#ffd6a0', knock: 0.5, grp })), t.x, t.y, 0, 0, cell.rare ? null : t.ignore);
   },
   homing(cell, t) {  // 追蹤彈：轉向最近的敵人
     lineSpawn(cell, t, [lineShot(cell, t, { angle: 0, speed: 380, life: 1.5, radius: 6, homing: 6, shape: 'dart', color: '#ff9dbd', knock: 0.8 })], t.x, t.y, t.ang, 0, t.ignore);

@@ -878,6 +878,21 @@ const MechCheck = {
       return { ok: a.arcs.n === 1 && near1(a.arcs.dmg, one) && b.arcs.n === 3 && near1(b.arcs.dmg, three) && near1(c.arcs.dmg, three) && c.damage > b.damage * 2,
         got: `1 個電擊：${a.arcs.n} 道 ${a.arcs.dmg.toFixed(1)}；3 個：${b.arcs.n} 道 ${b.arcs.dmg.toFixed(1)}（要 ${three.toFixed(1)}）；再插 2 個傷害：電弧 ${c.arcs.dmg.toFixed(1)}（不變）、迴旋刃 ${b.damage.toFixed(1)} → ${c.damage.toFixed(1)}` };
     }],
+    ['線', '稀有碎片打單隻', '只有一隻敵人時觸發碎片（觸發的就是牠）：一般碎片不打牠（0 次往下傳）；稀有碎片 6 片都打回牠，照常傳 1 次＋6 片同一隻多傳 1 次', M => {
+      const run = rare => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', chipId('shard', 3, 1, rare), 'boomerang', null]);
+        const L0 = Game.stats.line, e = M.targets([[200, 0]], 'brute', true, 400)[0];
+        Game.bullets = []; Game.triggerQueue = [];
+        let n = 0; const o = Game.lineQueue.bind(Game); Game.lineQueue = (...a) => { n++; return o(...a); };
+        try {
+          Game.lineFire({ owner: null, line: L0, k: 0, x: e.x, y: e.y, ang: 0, ignore: e.id });  // 跟真的命中一樣：觸發位置在牠身上、ignore = 牠
+          for (let f = 0; f < 30; f++) { Game.time += 1 / 60; Game.updateBullets(1 / 60); }
+        } finally { Game.lineQueue = o; }
+        return n;
+      };
+      const plain = run(false), rare = run(true);
+      return { ok: plain === 0 && rare === 2, got: `一般碎片往下傳 ${plain} 次（要 0）；稀有碎片 ${rare} 次（要 2）` };
+    }],
     ['線', '新晶片：碎片、追蹤彈、漩渦', '碎片往四周 6 片短程；追蹤彈轉向敵人打中；漩渦把附近敵人吸到中心、結束時往下傳一次', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'shard', 'homing', 'vortex', 'boomerang', null]);
       const L0 = Game.stats.line, p = Game.player, at = (k, x, y) => Game.lineFire({ owner: null, line: L0, k, x, y, ang: 0, ignore: null });
