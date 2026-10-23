@@ -368,15 +368,32 @@ const GLHub = {
     const R = HUB.rooms, Z = HUB.zones, WT = HUB.WT, D = this.decor = { paths: [], lamps: [], beacons: [], drones: [], leds: [] };
     const hall = R.hall, hg = R.hangar, ar = R.armory, lab = R.lab, deck = R.deck, rec = R.records, bay = R.bay;
     const L = Z.find(z => z.kind === 'launch');
-    // 每間房上牆一排燈（燈座畫在牆邊，地板的光每幀畫）；戰績室的上牆掛獎盃，燈改到左右牆上段（門口上面）；信號燈放在大廳四角
+    // 每間房上牆一排燈（燈座裝在牆的內緣上，地板的光每幀畫）：照牆寬平均排、左右對稱；碰到門口、窗戶的那盞連同對稱的那盞一起拿掉
+    //   上牆放不下（門、窗、獎盃）的：燈改到左右牆；信號燈裝在大廳四個角的牆角（不佔地板、不碰門）
     //   燈：[x, y, 光往哪照（0 下、1 右、-1 左）]
-    const onDoor = (x, y) => HUB.doors.some(d => x > d.x - 20 && x < d.x + d.w + 20 && y > d.y - 10 && y < d.y + d.h + 10);  // 燈不要擺在開口上
+    // 戰績室左右牆下段的顯示螢幕（下面畫，燈要避開）：放在左牆門口（往觀景台）的下面，右牆對稱；[x, 上緣, 高]
+    const sy0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 14, screens = [rec.x + 6, rec.x + rec.w - 14].map(x => [x, sy0, rec.y + rec.h - 14 - sy0]);
+    const onDoor = (x, y) => HUB.doors.some(d => x > d.x - 24 && x < d.x + d.w + 24 && y > d.y - 12 && y < d.y + d.h + 12);
+    const side = [];
     for (const r of Object.values(R)) {
-      if (r.id === 'records') { for (const sd of [1, -1]) D.lamps.push([sd > 0 ? r.x + 4 : r.x + r.w - 4, r.y + 70, sd]); continue; }
-      for (let x = r.x + 110; x < r.x + r.w - 80; x += 220) if (!onDoor(x, r.y + 4)) D.lamps.push([x, r.y + 4, 0]);
+      const n = Math.max(1, Math.round(r.w / 220)), xs = Array.from({ length: n }, (_, i) => r.x + r.w * (i + 0.5) / n), y = r.y - 3;
+      const bad = xs.map(x => onDoor(x, y) || this.onWindow(x, y, 20)), top = r.id === 'records' ? [] : xs.filter((x, i) => !bad[i] && !bad[n - 1 - i]);
+      if (top.length) for (const x of top) D.lamps.push([x, y, 0]);
+      else if (r.id !== 'bay') side.push(r);  // 發射甲板太小，不放
     }
-    for (const [x, y, sd] of D.lamps) (sd ? g.rect(x - 6, y - 14, 8, 28) : g.rect(x - 14, y - 6, 28, 8)).fill(0xfff2c4).stroke({ width: 2, color: HUB_INK });
-    D.beacons = [[hall.x + 14, hall.y + 14], [hall.x + hall.w - 14, hall.y + 14], [hall.x + 14, hall.y + hall.h - 14], [hall.x + hall.w - 14, hall.y + hall.h - 14]];
+    // 左右牆的燈：照上段 → 下段 → 中間挑兩邊都不碰門、終端機、螢幕的高度；能挑的高度少的房間先挑
+    //   隔間牆另一面已經有燈的高度不用（觀景台、戰績室的燈背靠背裝在同一道牆上，看起來像一對）
+    const walls = r => [r.x - 3, r.x + r.w + 3];
+    const free = (r, y) => walls(r).every(x => !onDoor(x, y) && !Z.some(z => z.kind === 'term' && Math.abs(z.y - y) < 90 && Math.abs(z.x - x) < 90)
+      && !screens.some(([sx, y0, h]) => Math.abs(sx - x) < 30 && y > y0 - 20 && y < y0 + h + 20));
+    const heights = r => [r.y + 40, r.y + r.h - 60, r.y + r.h / 2].filter(y => free(r, y));
+    for (const r of side.sort((a, b) => heights(a).length - heights(b).length)) {
+      const sy = heights(r).find(y => walls(r).every(x => !D.lamps.some(([lx, ly]) => Math.abs(lx - x) < WT + 20 && Math.abs(ly - y) < 60)));
+      if (sy != null) walls(r).forEach((x, i) => D.lamps.push([x, sy, i ? -1 : 1]));
+    }
+    for (const [x, y, sd] of D.lamps) (sd ? g.rect(x - 4, y - 14, 8, 28) : g.rect(x - 14, y - 4, 28, 8)).fill(0xfff2c4).stroke({ width: 2, color: HUB_INK });
+    const bw = WT / 2;
+    D.beacons = [[hall.x - bw, hall.y - bw], [hall.x + hall.w + bw, hall.y - bw], [hall.x - bw, hall.y + hall.h + bw], [hall.x + hall.w + bw, hall.y + hall.h + bw]];
     for (const [x, y] of D.beacons) g.circle(x, y, 6).fill(0x2a3350).stroke({ width: 2, color: HUB_INK });
     // 大廳：能量導管從機庫、軍械庫的開口沿大廳下緣、穿過甲板的開口接到發射台（飛船、武器的能量送去發射）；跑道出口兩側警示條紋
     const [dH, dA] = HUB.doors, yLow = hall.y + hall.h - 60, xm = HUB.BAY_DOOR / 2 - 22;
@@ -446,8 +463,7 @@ const GLHub = {
     const bosses = Object.values(ENEMY_TYPES).filter(t => t.boss);
     const step = Math.min(100, (rec.w - 40) / bosses.length), pw = Math.min(60, step - 14);  // 旗艦多了就排密一點，整排留在房間裡（5 隻時 100 一個會超出牆）
     bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * step, y = rec.y + 30; g.rect(x - pw / 2, rec.y + 4, pw, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
-    const sy0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 14, sh = rec.y + rec.h - 14 - sy0;  // 螢幕放在左牆門口（往觀景台）的下面，右牆對稱（以前疊在門口上）
-    for (const sg of [0, 1]) { const x = sg ? rec.x + rec.w - 14 : rec.x + 6; g.rect(x, sy0, 8, sh).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: sy0 + sh / 2, col: 0xffd166, screen: true }); }
+    for (const [x, y0, h] of screens) { g.rect(x, y0, 8, h).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: y0 + h / 2, col: 0xffd166, screen: true }); }  // 螢幕的位置在上面燈那段算
     // 巡邏的維修無人機：大廳繞圈、機庫走道上下、實驗室繞圈
     D.drones = [
       { cx: hall.x + hall.w * 0.3, cy: hall.y + hall.h * 0.35, rx: 110, ry: 50, sp: 0.45, ph: 0 },
