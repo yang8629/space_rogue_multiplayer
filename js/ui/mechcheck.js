@@ -176,7 +176,7 @@ const MechCheck = {
       const boosted = near1(L[0].damage / dmg[0], PARRY.boost * COMBO.steps[2].dmg);  // 彈反成功：下一刀直接是強化的重斬
       return { ok: order && refl && safe && up && boosted, got: `連段 ${names.join(' → ')}（重斬 ×${(dmg[2] / dmg[0]).toFixed(2)}）；彈反${refl ? '反射了' : '沒反射（錯）'}、${safe ? '不扣血' : '扣血（錯）'}、${up ? `冷卻剩 ${P.altCd.toFixed(2)}` : `冷卻剩 ${P.altCd.toFixed(2)}（要 ${PARRY.hitCd}，錯）`}；下一刀 ×${(L[0].damage / dmg[0]).toFixed(2)}` };
     }],
-    ['武器原型', '能量刃的升級', `無盡連段疊滿 ${ENDLESS.max} 層後每刀都是重斬、被打中歸零；旋風重斬 360°；血祭重斬扣血不低於 ${pct(BLOOD.floor)}；吸能刃回到 ${pct(LEECH.cap)} 為止`, M => {
+    ['武器原型', '能量刃的升級', `無盡連段疊滿 ${ENDLESS.max} 層後每刀都是重斬、被打中歸零；旋風重斬 360°；血祭重斬扣血不低於 ${pct(BLOOD.floor)}、重斬打死的回 ${pct(BLOOD.kill)}（一般刀打死的不回）；吸能刃回到 ${pct(LEECH.cap)} 為止`, M => {
       const P = () => Game.player, swing = () => { P().fireCd = 0; const L = WEAPON_PLAY.blade.onFire(P(), weaponShots()); Game.slashQ = []; return L; };
       M.setup('sandbox', 'vanguard', 'blade', 'A', 0, ['weapon', null, null, null]);
       const seq = []; for (let i = 0; i < 14; i++) { swing(); seq.push(P().comboName); }
@@ -187,10 +187,12 @@ const MechCheck = {
       M.setup('sandbox', 'vanguard', 'blade', 'C', 1, ['weapon', null, null, null]); P().hp = P().maxHp;
       for (let i = 0; i < 40; i++) { P().comboI = COMBO.steps.length - 1; P().comboT = 1; swing(); }
       const bloodHp = P().hp, floor = near1(bloodHp, P().maxHp * BLOOD.floor);
+      const [eH, eN] = M.targets([[60, 0], [60, 40]]), kill = (b, e) => { const h0 = P().hp; WEAPON_PLAY.blade.onHit(P(), b, e); e.hurt(1e9); return P().hp - h0; };  // 重斬（帶 sig）打死、一般刀打死
+      const healH = kill({ sig: { done: true } }, eH), healN = kill({ sig: null }, eN), bloodKill = near1(healH, P().maxHp * BLOOD.kill) && healN === 0;
       M.setup('sandbox', 'vanguard', 'blade', 'C', 0, ['weapon', null, null, null]); P().hp = 1;
       for (let i = 0; i < 400; i++) WEAPON_PLAY.blade.onHit(P());
       const leech = near1(P().hp, P().maxHp * LEECH.cap);
-      return { ok: loop && reset && round && floor && leech, got: `無盡連段 ${seq.join(' ')}${loop ? '' : '（錯）'}、被打中${reset ? '歸零' : '沒歸零（錯）'}；旋風重斬 ${whirl.length} 片；血祭後 HP ${Math.round(bloodHp)}／吸能刃到 ${Math.round(P().hp)}` };
+      return { ok: loop && reset && round && floor && bloodKill && leech, got: `無盡連段 ${seq.join(' ')}${loop ? '' : '（錯）'}、被打中${reset ? '歸零' : '沒歸零（錯）'}；旋風重斬 ${whirl.length} 片；血祭後 HP ${Math.round(bloodHp)}、重斬打死回 ${Math.round(healH)}、一般刀打死回 ${Math.round(healN)}${bloodKill ? '' : '（錯）'}／吸能刃到 ${Math.round(P().hp)}` };
     }],
     ['武器原型', '熱能光束：過熱與排熱', `每發加熱 ${pct(HEAT.per)}，滿了過熱停火；右鍵排熱射出 ${HEAT.n} 道衝擊波、清掉 ${HEAT.r} 內的敵彈、熱度歸零；熔芯過熱不停火；分段排熱一次只排一半`, M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);

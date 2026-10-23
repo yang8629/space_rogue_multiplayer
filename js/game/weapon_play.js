@@ -444,9 +444,11 @@ class EnergyBlade extends WeaponPlay {
   }
   onHit(p, b, e) {  // 重斬第一下命中：招牌動作，觸發武器線；吸能刃：命中回血，最多回到上限
     if (b && b.sig && !b.sig.done) { b.sig.done = true; Game.lineSig(p, e.x, e.y, b.angle, e.id); }
+    if (e && Game.wp.blood) p.bloodE = b && b.sig ? e : p.bloodE === e ? null : p.bloodE;  // 血祭重斬：記住最後被重斬打到的那隻（命中在扣血之前，打死時 onKill 看）
     const L = Game.wp.leech && LEECH;
     if (L && p.hp < p.maxHp * L.cap) p.hp = Math.min(p.maxHp * L.cap, p.hp + L.heal);
   }
+  onKill(p, e) { if (Game.wp.blood && p.bloodE === e) { p.hp = Math.min(p.maxHp, p.hp + p.maxHp * BLOOD.kill); p.bloodE = null; } }  // 血祭重斬：重斬打死的回血
   onHurt(p) { p.endN = 0; }
   alt(p) { p.parryWin0 = p.parryWinT = PARRY.win + (Game.wp.parryWin || 0); p.parryN = 0; ringFx(p.x, p.y, PARRY.r, '#ff8fd8'); }
 }

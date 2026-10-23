@@ -43,7 +43,8 @@ const DISC_UP = { max: 1, stackR: 40, stackMax: 3, stackGrow: 1.3, stackDmg: 1.6
   park: 1.5, grind: { grow: 0.3, max: 2 }, boom: { r: 120, dmg: 40 } };              // 旋轉：停留 ×1.5；磨盤每秒大 30%、最多 2 倍；爆輪接住時炸半徑 120
 
 // 重力井（plasma）：飛到盡頭停住 park 秒，把 r 內的敵人往中心拉（旗艦不拉）；最多 max 個（多的擠掉最舊的）；右鍵塌縮：每個井炸半徑 boom，範圍內每多 1 隻 +per
-const WELL = { max: 3, park: 5, rehit: 0.5, r: 140, pull: 240, boom: 110, dmg: 30, per: 0.25, capN: 8, cd: 0.8 };  // capN：加傷最多算到多 8 隻（不然總傷害跟數量平方成長）
+const WELL = { max: 3, park: 3.5, rehit: 0.5, r: 140, pull: 240, boom: 110, dmg: 20, per: 0.25, capN: 8, cd: 0.8 };  // capN：加傷最多算到多 8 隻（不然總傷害跟數量平方成長）
+//   10-23 平衡（整局模擬各 100 局，目標 20%）：原本（park 5、dmg 30）40%；基本傷害 5 → 3.7 只到 35%、塌縮 dmg 30 → 15 只到 27%（強在控場不在傷害）；dmg 20＋park 3.5 = 23%
 const WELL_STACK = { max: 2, r: 1.3, dmg: 1.5 };  // 重力井「疊井」：新射出的井停在舊井的吸引範圍裡就合併（最多疊 max 次），每疊一次吸引範圍 ×r、塌縮傷害 ×dmg
 // 重力井的升級：引力、塌縮、布井
 const WELL_UP = { r: 1.4, slow: 0.5, eat: { per: 0.15, max: 10, r: 40 },          // 引力：範圍 ×1.4；事件視界減速 50%；吸彈：每吸 1 顆塌縮 +15%（最多 10 顆）
@@ -75,7 +76,7 @@ const ENDLESS = { per: 0.08, max: 10 };    // 無盡連段：每刀 +8%（最多
 const PERFECT = { early: 0.08, r: 200 };   // 完美彈反：按下後 0.08 秒內擋到 → 200 內的敵彈全部反彈
 const FURY = { per: 0.6 };                 // 狂戰：傷害 +（缺血比例 × 60%）：剩 20% 血 = +48%
 const LEECH = { heal: 0.4, cap: 0.5 };     // 吸能刃：每次命中回 0.4，最多回到最大 HP 的 50%
-const BLOOD = { cost: 0.06, mul: 2, floor: 0.2 };  // 血祭重斬：重斬扣最大 HP 的 6%（不會低於 20%），傷害 ×2
+const BLOOD = { cost: 0.06, mul: 2, floor: 0.2, kill: 0.03 };  // 血祭重斬：重斬扣最大 HP 的 6%（不會低於 20%），傷害 ×2；重斬打死敵人回 3%（付血換傷害、靠擊殺賺回來：10-23 整局 20 局只扣不回 0% 通關，同一段的吸能刃 45%）
 
 const WEAPONS = {
   laser: { name: '熱能光束', short: '光束', color: '#5ef2ff', desc: `高射速光束，每發加熱 ${pct(HEAT.per)}，熱度滿了過熱停火 ${HEAT.lock} 秒；沒開火時慢慢降溫。右鍵<b>排熱</b>：熱度 ${pct(HEAT.min)} 以上才能用，把熱度一次噴成一圈衝擊波（熱度越高越痛）並清掉身邊的敵彈。連射是<b>四快一慢</b>：第 ${BEAT.n} 發前後各停一拍，傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}。`,
@@ -146,7 +147,7 @@ const WEAPONS = {
   blade: { name: '能量刃', short: '能刃', color: '#ff8fd8', desc: `近戰三段連段：${COMBO.steps.map(s => s.name).join(' → ')}（第三刀傷害 ×${COMBO.steps[2].dmg}、往前突進，之後收刀比較久），${COMBO.reset} 秒沒揮就從頭開始；刃片無限穿透。右鍵<b>彈反</b>：${PARRY.win} 秒內碰到身邊的敵彈會反射回去（傷害 ×${PARRY.reflect}），擋到後只要等 ${PARRY.hitCd} 秒、${PARRY.keep} 秒內的下一刀傷害 ×${PARRY.boost}；沒擋到要等 ${PARRY.cd} 秒。`,
     // 4 片排成 1.1 弧度的扇形（連段一刀一刀揮過去）
     trig: 0.15,
-    base: { interval: 0.3, count: 4, spread: 1.1, damage: 5, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },
+    base: { interval: 0.3, count: 4, spread: 1.1, damage: 3.4, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },  // 傷害 5 → 3.4（10-23 整局模擬各 100 局：5 = 44%、3.8 = 35%、3.4 = 25%，目標 20%）
     alt: { name: '彈反', cd: PARRY.cd },  // 右鍵（行為在 game/weapon_play.js）
   // parryN：這次擋下幾顆（0 = 落空，見 Player.tickAlt）
   // 無盡連段：被打中歸零
@@ -159,12 +160,12 @@ const WEAPONS = {
           { name: '完美彈反', desc: `按下後 ${PERFECT.early} 秒內就擋到：身邊 ${PERFECT.r} 內的敵彈全部反彈。`, apply: p => { p.perfect = true; } }] },
       C: { name: '狂戰', desc: `血越少越痛：傷害 +（缺血比例 × ${pct(FURY.per)}），剩 20% 血時 +${pct(FURY.per * 0.8)}。`, apply: p => { p.fury = true; },
         next: [{ name: '吸能刃', desc: `每次命中回 ${LEECH.heal} HP，最多回到最大 HP 的 ${pct(LEECH.cap)}。`, apply: p => { p.leech = true; } },
-          { name: '血祭重斬', desc: `重斬扣最大 HP 的 ${pct(BLOOD.cost)}（不會低於 ${pct(BLOOD.floor)}），傷害 ×${BLOOD.mul}；到 ${pct(BLOOD.floor)} 後不再扣血、照樣 ×${BLOOD.mul}。`, apply: p => { p.blood = true; } }] },
+          { name: '血祭重斬', desc: `重斬扣最大 HP 的 ${pct(BLOOD.cost)}（不會低於 ${pct(BLOOD.floor)}），傷害 ×${BLOOD.mul}；到 ${pct(BLOOD.floor)} 後不再扣血、照樣 ×${BLOOD.mul}。重斬打死敵人回最大 HP 的 ${pct(BLOOD.kill)}。`, apply: p => { p.blood = true; } }] },
     } },
 
   drone: { name: '無人機蜂群', short: '蜂群', color: '#7cf5c8', desc: `${DRONE.n} 架無人機：按住射擊時飛到準星附近（離飛船最多 ${DRONE.leash}），各自打 ${DRONE.range} 內最近的敵人；放開就回到身邊。飛出去時被敵彈打 ${DRONE.hp} 下會壞，${DRONE.respawn} 秒後重生。右鍵<b>收攏</b>：${DRONE.shield} 秒內貼著飛船轉成一圈護盾，最多擋掉 ${DRONE.blockN} 顆敵彈，這段時間不攻擊。`,
     trig: 0.2,
-    base: { interval: 0.3, count: 1, spread: 0, damage: 6, speed: 800, radius: 3, life: 0.4, shape: 'dot', knock: 0.4, drones: DRONE.n },
+    base: { interval: 0.3, count: 1, spread: 0, damage: 4, speed: 800, radius: 3, life: 0.4, shape: 'dot', knock: 0.4, drones: DRONE.n },  // 傷害 6 → 4（10-23 整局模擬各 100 局：6 = 53%、4.5 = 38%、4 = 24%，目標 20%）
     alt: { name: '收攏', cd: DRONE.cd },  // 右鍵（行為在 game/weapon_play.js）
     paths: {
       A: { name: '數量', desc: `無人機 +${DRONE_UP.n} 架。`, apply: p => { p.drones += DRONE_UP.n; },
