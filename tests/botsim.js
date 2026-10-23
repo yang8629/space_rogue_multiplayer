@@ -179,6 +179,9 @@ if (process.argv.includes('--routeval')) {
   for (const w of WPN) {
     const file = (process.env.TABLE_DIR || __dirname) + '/routevalue_' + w + '.json';  // TABLE_DIR：試改版的表（見 bot/load.js）
     let out = {}; try { out = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) {}
+    // 舊表裡已經拿掉的晶片、零件丟掉（10-24：留著的話最後印表找不到名字會當掉）
+    const live = new Set(ITEMS_NONE);
+    for (const byL of Object.values(out)) for (const C of Object.values(byL)) for (const it of Object.keys(C)) if (!live.has(it)) delete C[it];
     const W = WEAPONS[w], routes = [['none', null, null, [1, 3, 6]], ...Object.keys(W.paths).map(p => [p, p, null, [6]]), ...Object.keys(W.paths).flatMap(p => [0, 1].map(fi => [p + fi, p, fi, [8]]))];
     const t0 = Date.now();
     for (const [rk, path, fi, tiers] of routes) {
