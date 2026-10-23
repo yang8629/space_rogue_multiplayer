@@ -655,12 +655,16 @@ const GLHub = {
     const bx = (rec.x + rec.w + ar.x + ar.w) / 2 + 40, by = (rec.y + ar.y) / 2;  // 鏡頭正對這一點時它就在這裡；鏡頭離開時只跟著移動 SKY_PAR
     const x = bx + (Hub.cam.x - (bx - VW / 2 / Hub.k)) * this.SKY_PAR, y = by + (Hub.cam.y - (by - VH / 2 / Hub.k)) * this.SKY_PAR;
     GLActors.glowAt(P, x, y, 420, 0x3a5cff, 0.16);  // 大片光暈
-    // 脈衝光束：兩道相反方向的細長光錐，每 18 秒轉一圈
-    const b = t * TAU / 18;
+    // 脈衝光束：兩道相反方向的細長光錐，每 18 秒轉一圈；分 N 段越往外越淡（10-24：以前整道一樣亮、到 L 整齊切掉，拉遠時看得到尾巴的直邊）
+    const b = t * TAU / 18, N = 8;
     for (const s of [0, Math.PI]) {
-      const a = b + s, L = 1100;
+      const a = b + s, L = 1600;
       for (const [w, al] of [[0.07, 0.07], [0.025, 0.16]]) {
-        g.poly([x, y, x + Math.cos(a - w) * L, y + Math.sin(a - w) * L, x + Math.cos(a + w) * L, y + Math.sin(a + w) * L]).fill({ color: 0x9fe8ff, alpha: al });
+        const cl = Math.cos(a - w), sl = Math.sin(a - w), cr = Math.cos(a + w), sr = Math.sin(a + w);
+        for (let k = 0; k < N; k++) {
+          const d0 = L * k / N, d1 = L * (k + 1) / N;
+          g.poly([x + cl * d0, y + sl * d0, x + cl * d1, y + sl * d1, x + cr * d1, y + sr * d1, x + cr * d0, y + sr * d0]).fill({ color: 0x9fe8ff, alpha: al * (1 - k / N) });
+        }
       }
     }
     // 吸積盤：傾斜的橢圓，外暖內熱（三圈）；亮點沿著盤繞

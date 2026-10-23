@@ -127,6 +127,7 @@ class HeatBeam extends WeaponPlay {
     if (w.zero && h < COOL.zero) mul *= COOL.zeroMul;     // 零度
     for (const s of list) { s.damage *= mul; if (w.crit && h >= CRIT.at) s.pierce += CRIT.pierce; }  // 臨界
     if (!(w.streak && p.streakT > 0)) p.hHeat = h + HEAT.per;  // 連殺不停火：擊殺後一段時間不加熱
+    p.hWait = HEAT.wait;  // 最後一發之後 HEAT.wait 秒才開始降溫（見 tick）
     if (p.hHeat >= 1) {
       p.hHeat = 1;
       if (w.melt) p.hp = Math.max(1, p.hp - MELT.hp / Game.stats.rps);  // 熔芯：不停火，改扣血（每秒 MELT.hp，照每秒發數分到每一發）
@@ -135,9 +136,9 @@ class HeatBeam extends WeaponPlay {
     return list;
   }
   tick(p, dt) {
-    p.streakT = (p.streakT || 0) - dt; p.beatT = (p.beatT || 0) - dt;
+    p.streakT = (p.streakT || 0) - dt; p.beatT = (p.beatT || 0) - dt; p.hWait = (p.hWait || 0) - dt;
     if (p.hLock > 0) { p.hLock -= dt; p.hHeat = Math.max(0, p.hHeat - dt / HEAT.lock); }
-    else if (!p.wantFire) p.hHeat = Math.max(0, (p.hHeat || 0) - HEAT.cool * dt);
+    else if (!p.wantFire && p.hWait <= 0) p.hHeat = Math.max(0, (p.hHeat || 0) - HEAT.cool * dt);
   }
   onKill(p) {  // 低溫：擊殺降溫；連殺不停火
     const w = Game.wp;

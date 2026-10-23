@@ -207,6 +207,15 @@ const MechCheck = {
       W.alt(Game.player); const half = near1(Game.player.hHeat, 0.4);
       return { ok: lock && vent && melt && half, got: `${n} 發過熱${lock ? '' : '（錯）'}；排熱 ${Game.bullets.length} 道${vent ? '、清彈、熱度歸零' : '（錯）'}；熔芯${melt ? '不停火' : '停火了（錯）'}；分段排熱 0.8 → ${Game.player.hHeat.toFixed(2)}` };
     }],
+    ['武器原型', '熱能光束：停火後才降溫', `最後一發之後 ${HEAT.wait} 秒內熱度不掉，之後每秒降 ${pct(HEAT.cool)}`, M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const P = Game.player, W = WEAPON_PLAY.laser, dt = 1 / 60;
+      P.hHeat = 0.5; W.onFire(P, weaponShots()); P.wantFire = false;
+      const h0 = P.hHeat, run = s => { for (let f = 0; f < Math.round(s * 60); f++) W.tick(P, dt); return P.hHeat; };
+      const early = run(HEAT.wait - 0.1), late = run(1.1);  // 等待時間到之前、之後 1 秒（多 0.1 秒是剛好到的那一下）
+      const want = h0 - HEAT.cool * 1;
+      return { ok: near1(early, h0) && Math.abs(late - want) < 0.03, got: `開一發後熱度 ${h0.toFixed(2)}；${(HEAT.wait - 0.1).toFixed(1)} 秒後 ${early.toFixed(2)}（要不變）；再 1.1 秒後 ${late.toFixed(2)}（要約 ${want.toFixed(2)}）` };
+    }],
     ['武器原型', '迴旋飛輪：停住與召回', `飛輪飛到盡頭停住、最多 ${DISC.max} 個（滿了不能擲）；召回全部飛回手上、回程 ×${DISC.back}；疊輪：同一處的疊成一個`, M => {
       M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', null, null, null]); M.targets([]);
       const P = Game.player, W = WEAPON_PLAY.scatter;

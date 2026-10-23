@@ -22,7 +22,7 @@ const COMBO = { reset: 0.6, sweepT: 0.09, steps: [
 // ===== 武器（2026-10-21）：每把武器左鍵累積、右鍵兌現。這裡只放數值、說明、升級樹；行為在 game/weapon_play.js =====
 const pct = v => Math.round(v * 100) + '%';
 // 熱能光束（laser）：每發加熱 per，滿了過熱停火 lock 秒；沒開火每秒降 cool；右鍵排熱：熱度 min 以上才能用，熱度換成 n 道衝擊波（射程 r）
-const HEAT = { per: 0.03, cool: 0.4, lock: 1.5, min: 0.25, n: 18, dmg: 70, r: 170, cd: 2.5 };  // cd：排熱冷卻（10-23 使用者：0.8 太短 → 2.5）
+const HEAT = { per: 0.03, cool: 0.4, wait: 1, lock: 1.5, min: 0.25, n: 18, dmg: 70, r: 170, cd: 2.5 };  // cd：排熱冷卻（10-23 使用者：0.8 太短 → 2.5）；wait：最後一發之後幾秒才開始降溫（10-24 使用者：熱度掉太快）
 // 連段（2026-10-22，使用者：其他武器也要有能量刃那種連段回饋）：每把照自己的玩法；收尾不額外觸發武器線
 //   光束「四快一慢」：連射第 n 發是重的那發，前後都隔 slow 倍間隔、傷害 ×dmg、大小 ×grow；停火 reset 秒從頭算
 const BEAT = { n: 5, slow: 2, dmg: 3, grow: 2, reset: 0.6 };
@@ -81,7 +81,7 @@ const BLOOD = { cost: 0.06, mul: 2, floor: 0.2, kill: 0.03 };  // 血祭重斬�
 const WEAPONS = {
   laser: { name: '熱能光束', short: '光束', color: '#5ef2ff', desc: [
       `高射速光束，每發加熱 ${pct(HEAT.per)}`,
-      `<b>過熱</b>：熱度滿了停火 ${HEAT.lock} 秒；沒開火時慢慢降溫`,
+      `<b>過熱</b>：熱度滿了停火 ${HEAT.lock} 秒；停火 ${HEAT.wait} 秒後慢慢降溫`,
       `<b>四快一慢</b>：第 ${BEAT.n} 發前後各停一拍，傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}`,
       `右鍵<b>排熱</b>（熱度 ${pct(HEAT.min)} 以上）：熱度噴成一圈衝擊波（熱度越高越痛），清掉身邊的敵彈`,
     ],
