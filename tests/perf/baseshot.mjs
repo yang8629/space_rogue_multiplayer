@@ -25,8 +25,11 @@ await at('pad:wraith', 30); await shot('停機坪');
 await at('pad:gate', 30); await shot('停機坪_鎖住');
 await at('rack:scatter', 20); await shot('武器架');
 await p.keyboard.press('q'); await shot('武器架_升級路線');  // 武器架按 Q：電路總覽的武器頁捲到這把
-console.log('按 Q：總覽', await p.evaluate(() => Codex.isOpen ? `開著、${Codex.tab}、捲到 ${Codex.body.scrollTop}` : '沒打開'));
+// 最上面那段是哪把武器（每次按 Q 都要是靠近的那把；10-24 第二次起捲錯）
+const topWpn = () => p.evaluate(() => { const B = Codex.body.getBoundingClientRect().top; return Codex.isOpen ? [...Codex.body.querySelectorAll('[data-wpn]')].find(s => s.getBoundingClientRect().bottom > B + 40).dataset.wpn : '沒打開'; });
+console.log('按 Q（迴旋飛輪）：最上面', await topWpn());
 await p.keyboard.press('Escape');
+for (const w of ['blade', 'laser', 'drone', 'plasma']) { await at('rack:' + w, 20); await p.keyboard.press('q'); await wait(200); console.log(`再按 Q（${w}）：最上面`, await topWpn()); await p.keyboard.press('Escape'); }
 await at('rack:blade', 20); await shot('武器架_鎖住');
 await at('armory', 30); await shot('操作台');
 await at('chips', 60); await shot('晶片實驗室');

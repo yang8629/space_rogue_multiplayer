@@ -26,8 +26,10 @@ const Codex = {
     this.tab = tab === 'current' && !this.hasRun() ? 'rules' : tab;
     this.render();
     this.el.classList.remove('hidden');
+    this.body.scrollTop = 0;  // 先回到最上面再量：上次捲到的位置會留著（第二次按 Q 以前捲錯武器）
     const sec = weapon && this.body.querySelector(`[data-wpn="${weapon}"]`);
-    this.body.scrollTop = sec ? sec.getBoundingClientRect().top - this.body.getBoundingClientRect().top - 12 : 0;  // 剛打開時 scrollTop 是 0：兩個框的距離就是要捲的量
+    if (sec) this.body.insertAdjacentHTML('beforeend', '<div style="height:70vh"></div>');  // 底下留白：最後一把（蜂群）也捲得到最上面（切分頁重畫就沒了）
+    if (sec) this.body.scrollTop = sec.getBoundingClientRect().top - this.body.getBoundingClientRect().top - 12;
   },
   close() { this.el.classList.add('hidden'); },
 
@@ -211,7 +213,7 @@ const Codex = {
     const savedWp = Game.wp, savedInv = Game.inventory;
     const f2 = v => (+v.toFixed(2)).toString();
 
-    // 武器升級的估算 DPS 在「武器」分頁（2026-10-13 從這裡拿掉，重複）
+    // 武器升級的估算 DPS 不放（10-13 從這裡拿掉；10-24 「武器」分頁的也拿掉：算不到召回、上限這類效果）
 
     // 4. 敵人數量、血量（每星區 7 層；單人／雙人）—— 公式跟 Game.startWave、spawnEnemy 一樣
     const pts = [];
@@ -387,15 +389,14 @@ const Codex = {
     return table + Object.entries(WEAPONS).map(([id, W]) => {
       const p = weaponParams({ id, path: null, final: null });
       const cur = this.hasRun() && Game.weapon.id === id ? '　<span class="pill">目前使用</span>' : '';
-      const t = weaponDpsTree(id);
-      const dps = v => `<span style="color:#8fa3d9">估算 DPS <b style="color:#fff">${Math.round(v)}</b>（${pctUp(v, t.base)}）</span>`;
+      // 每個升級的估算 DPS 10-24 拿掉：只算單發傷害和射速，召回、上限這類效果算不到，大多顯示 ±0% 看起來像升級沒用
       const cols = Object.entries(W.paths).map(([k, P]) => `<div>
         <div class="wt-stage">第一段</div>
-        <b style="color:${W.color}">${P.name}</b>　${dps(t.paths[k].dps)}<br>${P.desc}
+        <b style="color:${W.color}">${P.name}</b><br>${P.desc}
         <div class="wt-stage">第二段：二選一</div>
-        ${P.next.map((n, i) => `<div class="leaf"><b>${n.name}</b>　${dps(t.paths[k].next[i])}<br>${n.desc}</div>`).join('')}</div>`).join('');
+        ${P.next.map(n => `<div class="leaf"><b>${n.name}</b><br>${n.desc}</div>`).join('')}</div>`).join('');
       return `<div class="codex-sec" data-wpn="${id}"><h3 style="color:${W.color}">${W.name}${cur}</h3>
-        <div class="sub" style="margin:0">${descList(W.desc)}單發 ${p.damage} × ${p.count}，每秒 ${(1 / p.interval).toFixed(1)} 次，擊退 ${p.knock}，基礎型估算 DPS ${Math.round(t.base)}</div>
+        <div class="sub" style="margin:0">${descList(W.desc)}單發 ${p.damage} × ${p.count}，每秒 ${(1 / p.interval).toFixed(1)} 次，擊退 ${p.knock}</div>
         <div class="tree">${cols}</div></div>`;
     }).join('');
   },
@@ -426,15 +427,6 @@ const Codex = {
 };
 
 
-// 一把武器所有型態的估算 DPS（電路只有武器時），照升級樹的形狀回傳
-function weaponDpsTree(id) {
-  const W = WEAPONS[id];
-  const dps = (path, final) => { const p = weaponParams({ id, path, final }); return weaponEmit(p, 1).reduce((a, b) => a + b.damage, 0) / Math.max(CFG.MIN_INTERVAL, p.interval * p.rate); };
-  const tree = { base: dps(null, null), paths: {} };
-  for (const k of Object.keys(W.paths)) tree.paths[k] = { dps: dps(k, null), next: W.paths[k].next.map((_, i) => dps(k, i)) };
-  return tree;
-}
-const pctUp = (v, base) => { const p = Math.round((v / base - 1) * 100); return p === 0 ? '±0%' : (p > 0 ? '+' : '') + p + '%'; };
 
 function niceStep(raw) {  // 圖表刻度：取 1 / 2 / 2.5 / 5 × 10^n
   const p = Math.pow(10, Math.floor(Math.log10(raw || 1))), n = raw / p;
