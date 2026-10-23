@@ -44,6 +44,12 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
     if (td < CFG.AUTO_RANGE) I.aimStick = { bx: 0, by: 0, x: (tre.x - p.x) / td * 60, y: (tre.y - p.y) / td * 60 };
     near = tre; nd = td;
   }
+  // 蜂群打旗艦（使用者 10-23：無人機打附近的，玩家要自己把無人機擺到王旁邊）：旗艦在無人機飛得到的距離內（牽繩＋射程）、沒有要先拆的砲塔
+  //   → 準星放在旗艦上（滑鼠模式才指得到距離；自動攻擊的準星距離 = 最近的敵人，無人機會飛去打身邊的護衛）
+  const bossD = E.find(e => e.t.boss);
+  if (G.weapon.id === 'drone' && bossD && !tur && Math.hypot(bossD.x - p.x, bossD.y - p.y) < DRONE.leash + DRONE.range) {
+    I.touch = false; I.mx = (bossD.x - G.cam.x) * ZOOM; I.my = (bossD.y - G.cam.y) * ZOOM; I.down = true;
+  }
   // 保持在射程七成的距離；散彈 close：四成（扇形的彈丸越遠打中越少）；
   //   加速：射程 ×1.5、越遠越痛，站遠一點（最多 700，一般最多 360）
   //   佈雷：站在地雷停住的距離（射程一半），地雷才會落在敵人附近
