@@ -455,6 +455,7 @@ class DroneSwarm extends WeaponPlay {
   constructor() { super('drone'); }
   blockMax() { return DRONE.blockN + (Game.wp.blockN || 0); }  // 收攏一次最多擋幾顆
   // 這架無人機要打哪隻（開火、平常機頭朝向共用）：集火 = T（離準星最近的那隻，射程 1.5 倍內）；沒集火 = 自己射程內最近的
+  //   不優先打王：要打王，玩家自己把無人機擺到王旁邊（使用者 10-23 定，這是蜂群的玩法）
   target(d, T) { return T && !T.dead && dist2(T.x, T.y, d.x, d.y) < (DRONE.range * 1.5) ** 2 ? T : !Game.wp.focusD ? nearestEnemy(d.x, d.y, DRONE.range, null) : null; }
   onFire(p, list) {  // 電路的子彈改從每架無人機射出；收攏中不攻擊
     const w = Game.wp;
