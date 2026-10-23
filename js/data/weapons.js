@@ -79,9 +79,14 @@ const LEECH = { heal: 0.4, cap: 0.5 };     // 吸能刃：每次命中回 0.4，
 const BLOOD = { cost: 0.06, mul: 2, floor: 0.2, kill: 0.03 };  // 血祭重斬：重斬扣最大 HP 的 6%（不會低於 20%），傷害 ×2；重斬打死敵人回 3%（付血換傷害、靠擊殺賺回來：10-23 整局 20 局只扣不回 0% 通關，同一段的吸能刃 45%）
 
 const WEAPONS = {
-  laser: { name: '熱能光束', short: '光束', color: '#5ef2ff', desc: `高射速光束，每發加熱 ${pct(HEAT.per)}，熱度滿了過熱停火 ${HEAT.lock} 秒；沒開火時慢慢降溫。右鍵<b>排熱</b>：熱度 ${pct(HEAT.min)} 以上才能用，把熱度一次噴成一圈衝擊波（熱度越高越痛）並清掉身邊的敵彈。連射是<b>四快一慢</b>：第 ${BEAT.n} 發前後各停一拍，傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}。`,
+  laser: { name: '熱能光束', short: '光束', color: '#5ef2ff', desc: [
+      `高射速光束，每發加熱 ${pct(HEAT.per)}`,
+      `<b>過熱</b>：熱度滿了停火 ${HEAT.lock} 秒；沒開火時慢慢降溫`,
+      `<b>四快一慢</b>：第 ${BEAT.n} 發前後各停一拍，傷害 ×${BEAT.dmg}、大小 ×${BEAT.grow}`,
+      `右鍵<b>排熱</b>（熱度 ${pct(HEAT.min)} 以上）：熱度噴成一圈衝擊波（熱度越高越痛），清掉身邊的敵彈`,
+    ],
     // 射程 950 × 0.55 ≈ 520，留在畫面內（1280 寬時飛船到邊緣約 640）
-    trig: 1 / 3,
+    trig: 0.5,  // 10-24 1/3 → 0.5：接線表（chiplink --weapons）第一格每秒觸發只有飛輪、蜂群的一半（0.7 比 1.4）
     base: { interval: 0.16, count: 1, spread: 0, damage: 8, speed: 950, radius: 3, life: 0.55, shape: 'line', knock: 0.6 },
     alt: { name: '排熱', cd: HEAT.cd },  // 右鍵（行為在 game/weapon_play.js）
     paths: {
@@ -96,7 +101,13 @@ const WEAPONS = {
           { name: '零度', desc: `熱度低於 ${pct(COOL.zero)} 時傷害 ×${COOL.zeroMul}。`, apply: p => { p.zero = true; } }] },
     } },
 
-  scatter: { name: '迴旋飛輪', short: '飛輪', color: '#ffb347', desc: `擲出飛輪，飛到盡頭停在原地旋轉 ${DISC.park} 秒，碰到的敵人每 ${DISC.rehit} 秒受傷一次（傷害 ×${DISC.parkMul}），時間到自己飛回手上（回程也打得到），也可以開過去撿起來；場上最多 ${DISC.max} 個（滿了不能再擲）。右鍵<b>召回</b>：全部飛輪直線飛回手上，回程傷害 ×${DISC.back}、無限穿透：繞到怪群另一邊再召回。丟滿再召回、全部接回手上＝<b>全接</b>：下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}。`,
+  scatter: { name: '迴旋飛輪', short: '飛輪', color: '#ffb347', desc: [
+      `擲出飛輪，飛到盡頭停在原地旋轉 ${DISC.park} 秒，碰到的敵人每 ${DISC.rehit} 秒受傷一次（傷害 ×${DISC.parkMul}）`,
+      `時間到自己飛回手上（回程也打得到），也可以開過去撿起來`,
+      `場上最多 ${DISC.max} 個，滿了不能再擲`,
+      `右鍵<b>召回</b>：全部直線飛回手上，回程傷害 ×${DISC.back}、無限穿透`,
+      `<b>全接</b>：丟滿再召回、全部接回手上 → 下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}`,
+    ],
     trig: 0.25,
     base: { interval: 0.35, count: 1, spread: 0, damage: 6, speed: 700, radius: 11, pierce: 99, life: 0.45, shape: 'orb', knock: 0.6, park: 'disc' },
     alt: { name: '召回', cd: DISC.cd },  // 右鍵（行為在 game/weapon_play.js）
@@ -112,7 +123,13 @@ const WEAPONS = {
           { name: '爆輪', desc: `飛輪回到手上時在身邊爆炸（半徑 ${DISC_UP.boom.r}、${DISC_UP.boom.dmg} 傷害）。`, apply: p => { p.discBoom = true; } }] },
     } },
 
-  plasma: { name: '重力井', short: '重力', color: '#c77dff', desc: `射出重力彈，飛到盡頭停住變成重力井 ${WELL.park} 秒，把 ${WELL.r} 內的敵人往中心吸（旗艦不受影響）；最多 ${WELL.max} 個（停住的才算），多的把最舊的擠掉。右鍵<b>塌縮</b>：所有重力井同時爆炸（半徑 ${WELL.boom}、${WELL.dmg} 傷害），範圍內每多 1 隻敵人傷害 +${pct(WELL.per)}（最多算 ${WELL.capN} 隻；旗艦照體型算，半徑每 ${CFG.HIT_PT.per} 算 1 隻）：先聚怪再引爆。新的井停在舊井範圍裡會<b>疊井</b>（最多疊 ${WELL_STACK.max} 次）：吸引範圍 ×${WELL_STACK.r}、塌縮傷害 ×${WELL_STACK.dmg}。`,
+  plasma: { name: '重力井', short: '重力', color: '#c77dff', desc: [
+      `射出重力彈，飛到盡頭變成重力井 ${WELL.park} 秒，把 ${WELL.r} 內的敵人往中心吸（旗艦不受影響）`,
+      `最多 ${WELL.max} 個（停住的才算），多的擠掉最舊的`,
+      `<b>疊井</b>：新的井停在舊井範圍裡（最多疊 ${WELL_STACK.max} 次）→ 吸引範圍 ×${WELL_STACK.r}、塌縮傷害 ×${WELL_STACK.dmg}`,
+      `右鍵<b>塌縮</b>：所有井同時爆炸（半徑 ${WELL.boom}、${WELL.dmg} 傷害）`,
+      `範圍內每多 1 隻敵人，塌縮傷害 +${pct(WELL.per)}（最多算 ${WELL.capN} 隻；旗艦半徑每 ${CFG.HIT_PT.per} 算 1 隻）`,
+    ],
     trig: 0.25,
     base: { interval: 0.55, count: 1, spread: 0, damage: 5, speed: 420, radius: 10, pierce: 99, life: 0.75, shape: 'orb', knock: 0.3, park: 'well' },
     alt: { name: '塌縮', cd: WELL.cd },  // 右鍵（行為在 game/weapon_play.js）
@@ -121,14 +138,22 @@ const WEAPONS = {
         next: [{ name: '事件視界', desc: `被吸住的敵人減速 ${pct(WELL_UP.slow)}。`, apply: p => { p.horizon = true; } },
           { name: '吸彈', desc: `重力井吸收靠近的敵彈；塌縮時每吸過 1 顆傷害 +${pct(WELL_UP.eat.per)}（最多 ${WELL_UP.eat.max} 顆）。`, apply: p => { p.eat = true; } }] },
       B: { name: '塌縮', desc: `範圍內每多 1 隻敵人，傷害 +${pct(WELL.per)} → +${pct(WELL_UP.per)}。`, apply: p => { p.wellPer = WELL_UP.per; },
-        next: [{ name: '單點引爆', desc: `右鍵只引爆離準星最近的重力井，冷卻 ${WELL_UP.singleCd} 秒：一個一個炸。`, apply: p => { p.single = true; } },
+        next: [{ name: '單點引爆', desc: `右鍵只引爆離準星最近的重力井，冷卻 ${WELL_UP.singleCd} 秒。`, apply: p => { p.single = true; } },
           { name: '殘留', desc: `塌縮後原地留一個小重力井（${WELL_UP.residue.t} 秒、範圍 ×${WELL_UP.residue.r}）。`, apply: p => { p.residue = true; } }] },
       C: { name: '布井', desc: `重力井上限 +${WELL_UP.max}。`, apply: p => { p.wellMax = WELL_UP.max; },
         next: [{ name: '黑洞彈', desc: `重力彈飛行中就會吸引路徑旁的敵人（範圍 ×${WELL_UP.flyR}）。`, apply: p => { p.flyPull = true; } },
           { name: '漂移井', desc: `停住的重力井每秒朝準星飄 ${WELL_UP.drift}。`, apply: p => { p.drift = true; } }] },
     } },
 
-  railgun: { name: '牽引鉤', short: '鉤爪', color: '#ffd166', desc: `射出鉤爪，打中敵人就勾住，把牠拉到飛船前方（最多 ${HOOK.t} 秒）。右鍵<b>甩擊</b>：把勾住的敵人朝準星甩出去，撞到的敵人受到 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}：拿敵人當流星錘。旗艦勾不動：鉤爪釘在牠身上（最多 ${HOOK.t} 秒），每秒撕扯 ${HOOK.tear}；右鍵用力一扯，造成 ${HOOK.rip} 後收回。勾住的、甩出去還在飛的敵人會擋下碰到牠的敵彈（牠照樣扣血）。多人時也勾得到隊友（戰鬥和房間都行、倒下的也行）：他被拉到你前方、衝刺就掙脫，右鍵把他甩出去撞敵人（飛行中無敵）；被勾住的人不能勾隊友。精英勾 ${CFG.CC.elite.hook.t} 秒就掙脫，之後 ${CFG.CC.elite.hook.immune} 秒勾不住。勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃。`,
+  railgun: { name: '牽引鉤', short: '鉤爪', color: '#ffd166', desc: [
+      `射出鉤爪，勾住敵人拉到飛船前方（最多 ${HOOK.t} 秒）`,
+      `勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃`,
+      `右鍵<b>甩擊</b>：朝準星甩出去，撞到的受 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}`,
+      `勾住的、甩出去還在飛的敵人會擋下碰到牠的敵彈（牠照樣扣血）`,
+      `<b>旗艦</b>勾不動：鉤爪釘在牠身上（最多 ${HOOK.t} 秒）每秒撕扯 ${HOOK.tear}，右鍵用力一扯造成 ${HOOK.rip} 後收回`,
+      `<b>精英</b>勾 ${CFG.CC.elite.hook.t} 秒就掙脫，之後 ${CFG.CC.elite.hook.immune} 秒勾不住`,
+      `<b>多人</b>：勾得到隊友（戰鬥、房間都行，倒下的也行），拉到你前方、他衝刺就掙脫；右鍵把他甩去撞敵人（飛行中無敵）；被勾住的人不能勾隊友`,
+    ],
     trig: 1,
     base: { interval: 0.6, count: 1, spread: 0, damage: 8, speed: 1300, radius: 6, pierce: 0, life: 0.28, shape: 'rail', knock: 0.2, hook: true },
     alt: { name: '甩擊', cd: HOOK.cd },  // 右鍵（行為在 game/weapon_play.js）
@@ -144,9 +169,14 @@ const WEAPONS = {
           { name: '反射盾', desc: `勾住的敵人擋下的敵彈反彈回去，打最近的敵人（傷害 ×${HOOK_UP.reflect}）。`, apply: p => { p.hookReflect = true; } }] },  // 10-22：擋子彈改成基本玩法，原本的「肉盾」改成反彈
     } },
 
-  blade: { name: '能量刃', short: '能刃', color: '#ff8fd8', desc: `近戰三段連段：${COMBO.steps.map(s => s.name).join(' → ')}（第三刀傷害 ×${COMBO.steps[2].dmg}、往前突進，之後收刀比較久），${COMBO.reset} 秒沒揮就從頭開始；刃片無限穿透。右鍵<b>彈反</b>：${PARRY.win} 秒內碰到身邊的敵彈會反射回去（傷害 ×${PARRY.reflect}），擋到後只要等 ${PARRY.hitCd} 秒、${PARRY.keep} 秒內的下一刀傷害 ×${PARRY.boost}；沒擋到要等 ${PARRY.cd} 秒。`,
+  blade: { name: '能量刃', short: '能刃', color: '#ff8fd8', desc: [
+      `近戰三段連段：${COMBO.steps.map(s => s.name).join(' → ')}，刃片無限穿透`,
+      `第三刀傷害 ×${COMBO.steps[2].dmg}、往前突進，之後收刀比較久；${COMBO.reset} 秒沒揮就從頭開始`,
+      `右鍵<b>彈反</b>：${PARRY.win} 秒內碰到身邊的敵彈就反射回去（傷害 ×${PARRY.reflect}）`,
+      `擋到：${PARRY.hitCd} 秒就能再用，${PARRY.keep} 秒內的下一刀傷害 ×${PARRY.boost}；沒擋到要等 ${PARRY.cd} 秒`,
+    ],
     // 4 片排成 1.1 弧度的扇形（連段一刀一刀揮過去）
-    trig: 0.15,
+    trig: 0.25,  // 10-24 0.15 → 0.25：同光束（第一格每秒觸發 0.7）
     base: { interval: 0.3, count: 4, spread: 1.1, damage: 3, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },  // 傷害 5 → 3（10-23 整局模擬各 100 局：5 = 44%、3.5 = 27%、3 = 18%，目標 20%；數值只用整數或 .5）
     alt: { name: '彈反', cd: PARRY.cd },  // 右鍵（行為在 game/weapon_play.js）
   // parryN：這次擋下幾顆（0 = 落空，見 Player.tickAlt）
@@ -163,7 +193,11 @@ const WEAPONS = {
           { name: '血祭重斬', desc: `重斬扣最大 HP 的 ${pct(BLOOD.cost)}（不會低於 ${pct(BLOOD.floor)}），傷害 ×${BLOOD.mul}；到 ${pct(BLOOD.floor)} 後不再扣血、照樣 ×${BLOOD.mul}。重斬打死敵人回最大 HP 的 ${pct(BLOOD.kill)}。`, apply: p => { p.blood = true; } }] },
     } },
 
-  drone: { name: '無人機蜂群', short: '蜂群', color: '#7cf5c8', desc: `${DRONE.n} 架無人機：按住射擊時飛到準星附近（離飛船最多 ${DRONE.leash}），各自打 ${DRONE.range} 內最近的敵人；放開就回到身邊。飛出去時被敵彈打 ${DRONE.hp} 下會壞，${DRONE.respawn} 秒後重生。右鍵<b>收攏</b>：${DRONE.shield} 秒內貼著飛船轉成一圈護盾，最多擋掉 ${DRONE.blockN} 顆敵彈，這段時間不攻擊。`,
+  drone: { name: '無人機蜂群', short: '蜂群', color: '#7cf5c8', desc: [
+      `${DRONE.n} 架無人機：按住射擊時飛到準星附近（離飛船最多 ${DRONE.leash}），各自打 ${DRONE.range} 內最近的敵人；放開就回到身邊`,
+      `飛出去時被敵彈打 ${DRONE.hp} 下會壞，${DRONE.respawn} 秒後重生`,
+      `右鍵<b>收攏</b>：${DRONE.shield} 秒內貼著飛船轉成一圈護盾，最多擋 ${DRONE.blockN} 顆敵彈，這段時間不攻擊`,
+    ],
     trig: 0.2,
     base: { interval: 0.3, count: 1, spread: 0, damage: 4, speed: 800, radius: 3, life: 0.4, shape: 'dot', knock: 0.4, drones: DRONE.n },  // 傷害 6 → 4（10-23 整局模擬各 100 局：6 = 53%、4.5 = 38%、4 = 24%，目標 20%）
     alt: { name: '收攏', cd: DRONE.cd },  // 右鍵（行為在 game/weapon_play.js）

@@ -38,6 +38,7 @@ addEventListener('keydown', e => {
     if (back) { Screen.act(back); return; }
   }
   if ((k === 'e' || k === 'enter') && Hub.driving && !e.repeat) Hub.interact();  // 基地：對靠近的停機坪、門、發射台做事
+  if (k === 'q' && Hub.driving && !e.repeat) Hub.paths();  // 基地：靠近武器架看升級路線
   else if (k === 'enter' && Game.state === 'title' && Screen.el.querySelector('[data-act="depart"]')) Screen.depart();  // 發射台的面板：Enter = 出發
   if (k === 'enter' && Game.state === 'lobby' && document.activeElement && document.activeElement.id === 'netCode') Net.join(document.activeElement.value);
   if (k === 'r' && Game.state === 'dead' && Game.mode !== 'coop') Screen.restart();

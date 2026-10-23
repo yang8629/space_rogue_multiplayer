@@ -17,6 +17,8 @@ const PASSIVE_LABEL = {
   magnet: v => `拾取範圍 +${Math.round(v * 100)}%`,
   greed:  v => `晶體獲得 +${Math.round(v * 100)}%`,
 };
+// 條列說明（武器、飛船的 desc 是一串句子）：每句一條；畫面和電路第 1 格的說明（Game.refreshWeapon）共用
+const descList = items => `<ul class="dlist">${items.map(s => `<li>${s}</li>`).join('')}</ul>`;
 
 function shot(o) {
   return Object.assign({ angle: 0, speed: 600, damage: 10, radius: 4, pierce: 0, bounce: 0,

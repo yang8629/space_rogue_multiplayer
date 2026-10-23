@@ -22,10 +22,9 @@ const lvLine = (base, cur) => {
 const lvHave = base => Math.max(0, ...[...(Game.chain || []), ...(Game.inventory || [])].filter(x => x && baseOf(x) === base && lvOf(x) < CFG.MAX_CHIP_LV).map(lvOf));
 // 飛船：開局零件每種幾層＋總效果（沒有零件 = 空）
 const shipPartsHtml = S => Object.entries(S.parts).map(([id, n]) => `<div class="fxl"><b>${PARTS[id].name} ${n} 層</b>${partLine(id, n)}</div>`).join('');
-// 飛船：專屬能力（有 skillDesc 的再加上開局零件開啟的特性）
+// 飛船：專屬能力（條列）＋開局零件開啟的特性（疊到 2、4 層的）
 function shipAbilityHtml(S) {
-  const head = `<div class="trl"><b style="color:${S.color}">${S.abilityName}</b>${S.skillDesc ? S.skillDesc() : S.abilityDesc}</div>`;
-  if (!S.skillDesc) return head;
+  const head = `<div class="trl on"><b style="color:${S.color}">${S.abilityName}</b>${descList(S.abilityDesc)}</div>`;
   return head + Object.entries(S.parts).flatMap(([id, n]) => [n >= 2 && PARTS[id].t2, n >= 4 && PARTS[id].t4].filter(Boolean))
     .map(t => `<div class="trl"><b style="color:#9dff6b">開啟${t.name}</b>${t.desc}</div>`).join('');
 }
@@ -53,8 +52,8 @@ function weaponCardBody(id) {
   const paths = Object.values(W.paths).map(P =>
     `<div><b style="color:${W.color}">${P.name}</b>：${P.desc}<br><span style="color:#6a79ad">→ ${P.next.map(n => n.name).join(' ／ ')}</span></div>`).join('');
   return `<div class="ttl" style="color:${W.color}">${W.name}</div>
-    <div class="ds brief">${WEAPON_BRIEF[id] || W.desc}</div>
-    <div class="det"><div class="ds">${W.desc}</div>
+    <div class="ds brief">${WEAPON_BRIEF[id]}</div>
+    <div class="det"><div class="ds">${descList(W.desc)}</div>
     <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次　·　基礎 DPS 約 ${Math.round(dps)}　·　擊退 ${p.knock}</div>
     <div class="ds" style="font-size:11px;display:grid;gap:6px">${paths}</div></div>`;
 }
@@ -506,7 +505,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
     const pct = v => Math.round(v * 100);
     const slider = (k, label) => `<label class="set-row"><span>${label}</span><input type="range" min="0" max="100" step="5" value="${pct(Settings[k])}" data-set="${k}"><b data-setv="${k}">${pct(Settings[k])}%</b></label>`;
     const check = (k, label, note) => `<label class="set-row chk"><span>${label}</span><input type="checkbox" data-set="${k}"${Settings[k] ? ' checked' : ''}><span class="ty">${note}</span></label>`;
-    const keys = [['WASD／方向鍵', '移動'], ['滑鼠左鍵', '射擊'], ['Space', '衝刺（無敵）'], ['滑鼠右鍵', '武器技能（排熱、召回、塌縮…）'], ['Tab', '編輯電路（暫停）'], ['E／Enter', '基地：停機坪、門、發射台'],
+    const keys = [['WASD／方向鍵', '移動'], ['滑鼠左鍵', '射擊'], ['Space', '衝刺（無敵）'], ['滑鼠右鍵', '武器技能（排熱、召回、塌縮…）'], ['Tab', '編輯電路（暫停）'], ['E／Enter', '基地：停機坪、門、發射台'], ['Q', '基地：看武器架那把的升級路線'],
       ['Esc', '選單、返回'], ['Shift', '卡片切換完整說明'], ['M', '音效開／關']].map(([k, v]) => `<div class="st-row"><b class="key">${k}</b><span>${v}</span></div>`).join('');
     this.show(`<div class="scr base compact" id="setPage">
       <div class="between"><h2>⚙ 設定</h2><button data-act="setback" data-back>返回 (Esc)</button></div>

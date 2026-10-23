@@ -292,6 +292,13 @@ const Hub = {
     this.ACT[z.kind](z);
     return true;
   },
+  // 按 Q：靠近武器架（鎖住的也行）→ 打開電路總覽的武器頁、捲到這把的升級路線（ui/listeners.js）
+  paths() {
+    const z = this.near;
+    if (!z || z.kind !== 'rack' || this.seq) return false;
+    Events.emit('hubPaths', z.weapon);
+    return true;
+  },
   ACT: {
     pad: z => Hub.pick(z.ship),
     rack: z => Hub.equip(z.weapon),

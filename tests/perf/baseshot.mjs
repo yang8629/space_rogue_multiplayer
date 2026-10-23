@@ -24,6 +24,9 @@ await shot('全景');
 await at('pad:wraith', 30); await shot('停機坪');
 await at('pad:gate', 30); await shot('停機坪_鎖住');
 await at('rack:scatter', 20); await shot('武器架');
+await p.keyboard.press('q'); await shot('武器架_升級路線');  // 武器架按 Q：電路總覽的武器頁捲到這把
+console.log('按 Q：總覽', await p.evaluate(() => Codex.isOpen ? `開著、${Codex.tab}、捲到 ${Codex.body.scrollTop}` : '沒打開'));
+await p.keyboard.press('Escape');
 await at('rack:blade', 20); await shot('武器架_鎖住');
 await at('armory', 30); await shot('操作台');
 await at('chips', 60); await shot('晶片實驗室');

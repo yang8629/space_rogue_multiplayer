@@ -21,10 +21,13 @@ const Codex = {
   },
   get isOpen() { return !this.el.classList.contains('hidden'); },
   hasRun() { return !!Game.player && Game.state !== 'title'; },
-  open(tab) {
+  // weapon：武器頁捲到這把武器（基地武器架按 Q）
+  open(tab, weapon = null) {
     this.tab = tab === 'current' && !this.hasRun() ? 'rules' : tab;
     this.render();
     this.el.classList.remove('hidden');
+    const sec = weapon && this.body.querySelector(`[data-wpn="${weapon}"]`);
+    this.body.scrollTop = sec ? sec.getBoundingClientRect().top - this.body.getBoundingClientRect().top - 12 : 0;  // 剛打開時 scrollTop 是 0：兩個框的距離就是要捲的量
   },
   close() { this.el.classList.add('hidden'); },
 
@@ -391,8 +394,8 @@ const Codex = {
         <b style="color:${W.color}">${P.name}</b>　${dps(t.paths[k].dps)}<br>${P.desc}
         <div class="wt-stage">第二段：二選一</div>
         ${P.next.map((n, i) => `<div class="leaf"><b>${n.name}</b>　${dps(t.paths[k].next[i])}<br>${n.desc}</div>`).join('')}</div>`).join('');
-      return `<div class="codex-sec"><h3 style="color:${W.color}">${W.name}${cur}</h3>
-        <div class="sub" style="margin:0">${W.desc}　單發 ${p.damage} × ${p.count}，每秒 ${(1 / p.interval).toFixed(1)} 次，擊退 ${p.knock}，基礎型估算 DPS ${Math.round(t.base)}</div>
+      return `<div class="codex-sec" data-wpn="${id}"><h3 style="color:${W.color}">${W.name}${cur}</h3>
+        <div class="sub" style="margin:0">${descList(W.desc)}單發 ${p.damage} × ${p.count}，每秒 ${(1 / p.interval).toFixed(1)} 次，擊退 ${p.knock}，基礎型估算 DPS ${Math.round(t.base)}</div>
         <div class="tree">${cols}</div></div>`;
     }).join('');
   },

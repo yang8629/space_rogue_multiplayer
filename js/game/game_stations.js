@@ -150,7 +150,7 @@ Object.assign(Game, {
     this.wp = weaponParams(st);
     c.name = sh ? `${sh.name}・${W.short}` : weaponTitle(st);
     c.short = W.short;
-    const lines = [W.desc];
+    const lines = [descList(W.desc)];
     if (st.path) lines.push(`第一段・${W.paths[st.path].name}：${W.paths[st.path].desc}`);
     if (st.final != null) { const n = W.paths[st.path].next[st.final]; lines.push(`第二段・${n.name}：${n.desc}`); }
     c.desc = lines.join('<br>') + (this.mode === 'range' ? '<br><span style="color:#6a79ad">武器固定在電路第 1 格；靶場可在「🚀 機體・武器」分頁更換。</span>'

@@ -464,6 +464,17 @@ const MechCheck = {
         return { ok: steps === 60 && P.hookE === e && moved > 100, got: `60 幀呼叫 Game.step ${steps} 次；${P.hookE === e ? '勾住標靶機' : '沒勾住（錯）'}、拉離原位 ${Math.round(moved)}` };
       } finally { Hub.weaponId = save; }
     }],
+    ['基地', '武器架按 Q 看升級路線', '靠近武器架（鎖住的也行）按 Q：發出 hubPaths（畫面打開電路總覽的武器頁、捲到那把）；武器頁每把武器那段都標了 data-wpn；靠近別的東西按 Q 沒反應', M => {
+      const near = Hub.near, emit = Events.emit, got = [];
+      Events.emit = function (k, d) { if (k === 'hubPaths') { got.push(d); return; } return emit.apply(this, arguments); };  // 只記下來，不真的打開總覽
+      try {
+        Hub.near = HUB.zones.find(z => z.kind === 'rack' && z.weapon === 'blade'); Hub.paths();
+        Hub.near = HUB.zones.find(z => z.kind === 'pad'); Hub.paths();
+      } finally { Events.emit = emit; Hub.near = near; }
+      const html = Codex.weapons(), miss = Object.keys(WEAPONS).filter(id => !html.includes(`data-wpn="${id}"`));
+      return { ok: got.join() === 'blade' && !miss.length,
+        got: `武器架（能量刃）、停機位各按一次 Q：發出 ${got.length ? got.join('、') : '沒有'}（要只有 blade）；武器頁${miss.length ? `少了 ${miss.join('、')}（錯）` : '每把都有標記'}` };
+    }],
     ['基地', '房間的切角', `房間的角斜切掉 ${HUB.CHAMFER}（旁邊有門的角、發射甲板不切）：切掉的角算牆（Arena、hubFree），飛船往角落一直開也停在斜邊外`, M => {
       const r = HUB.rooms.hangar, q = r.cuts.find(c => c.sx > 0 && c.sy > 0);
       if (!q) return { ok: false, got: '機庫左上角沒有切（錯）' };
@@ -773,7 +784,7 @@ const MechCheck = {
       const va = Math.hypot(a.vx, a.vy), vb = Math.hypot(b.vx, b.vy);
       return { ok: Math.abs(va - 300) < 1 && Math.abs(vb - 300) < 1, got: `25 發後速度 ${Math.round(va)}（要 300）；單發 ${Math.round(vb)}（要 300）` };
     }],
-    ['線', '武器線：照觸發係數觸發', '武器命中照武器的觸發係數累積，滿 1 觸發下一格一次（熱能光束 1/3：第 3 下觸發）；多的留著；武器線後面沒有晶片時武器的子彈不帶線', M => {
+    ['線', '武器線：照觸發係數觸發', `武器命中照武器的觸發係數累積，滿 1 觸發下一格一次（熱能光束 ${WEAPONS.laser.trig}：第 ${Math.ceil(1 / WEAPONS.laser.trig - 1e-9)} 下觸發）；多的留著；武器線後面沒有晶片時武器的子彈不帶線`, M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null]);
       const L0 = Game.stats.line, e = M.targets([[200, 0]])[0], b = { ln: { line: L0, k: -1 }, owner: null, angle: 0 };
       const n = []; for (let i = 0; i < 6; i++) { Game.linePass(b, 'hit', e); n.push(Game.triggerQueue.length); }

@@ -202,7 +202,7 @@ const Editor = {
     const rows = [stat('hp', Game.player.maxHp), SH && stat('speed', Math.round(SH.speed * M.speed), M.speed), SH && stat('dashCd', `${+(SH.dashCd * M.dashCd).toFixed(2)} 秒`, M.dashCd),
       ...[['taken', M.taken], ['rate', M.rate * M.rateMul], ['bspeed', M.bspeed]].filter(([, m]) => Math.round((m - 1) * 100)).map(([id, m]) => stat(id, '', m))].filter(Boolean);
     const on2 = [...traits.map(t => `<b style="color:#9dff6b" title="${t.desc}">${t.name}</b>`)];
-    const ability = SH ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>：${SH.skillDesc ? SH.skillDesc() : SH.abilityDesc}</div>` : '';  // 飛船專屬能力（相位跳躍、灰血、殘影、傳送門）
+    const ability = SH ? `<div class="sub"><b style="color:${SH.color}">${SH.abilityName}</b>${descList(SH.abilityDesc)}</div>` : '';  // 飛船專屬能力（相位跳躍、灰血、殘影、傳送門）
     const mech = `<h3 class="between" style="margin-top:4px"><span style="color:${SH ? SH.color : '#8fa3d9'}">${SH ? SH.name : ''}</span><span>零件 ${partsUsed(Game.parts)} / ${Game.partSlots}${free ? '（靶場不受格數限制）' : ''}</span></h3>
       <div class="statl big">${rows.join('')}</div>${ability}
       <div class="sub">已開啟：${on2.length ? on2.join(' · ') : '無'}</div>
@@ -218,13 +218,13 @@ const Editor = {
       return `<div class="card" style="border-color:${W.color};${on(Game.weapon.id === id, W.color)}">
         <div class="ttl" style="color:${W.color}">${W.name}</div>
         <div class="ty">單發 ${p.damage} × ${p.count}　·　每秒 ${(1 / p.interval).toFixed(1)} 次</div>
-        <div class="ds">${W.desc}</div>
+        <div class="ds">${descList(W.desc)}</div>
         <button data-pick="weapon:${id}">${Game.weapon.id === id ? '使用中' : '換成' + W.name}</button></div>`;
     }).join('');
     const W = WEAPONS[Game.weapon.id], st = Game.weapon;
     const up = (key, label, cur, desc) => `<button data-pick="up:${key}" title="${desc.replace(/<[^>]+>/g, '')}"
       style="${cur ? `border-color:${W.color};color:${W.color}` : ''}">${label}</button>`;
-    let ups = up('', '基礎型', !st.path, W.desc);
+    let ups = up('', '基礎型', !st.path, W.desc.join('；'));
     for (const [k, P] of Object.entries(W.paths)) {
       ups += up(k, P.name, st.path === k && st.final == null, P.desc);
       P.next.forEach((n, i) => ups += up(`${k}.${i}`, `${P.name}→${n.name}`, st.path === k && st.final === i, n.desc));

@@ -63,14 +63,14 @@ Object.assign(Screen, {
     let body = '';
     if (z && z.kind === 'rack' && isUnlocked('weapon', z.weapon)) unlockMarkSeen([unlockEntry('weapon', z.weapon)].filter(Boolean));  // 靠近解鎖的武器 = 看過
     if (z.kind === 'rack') {
-      const W = WEAPONS[z.weapon], u = unlockEntry('weapon', z.weapon);
-      if (z.weapon === Hub.weaponId) body = `<div class="hg-desc">${weaponCardBody(z.weapon)}</div><div class="hub-press">裝備中</div>`;
-      else if (Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${W.color}">${W.name}</div><div class="hub-press">已準備，不能換武器</div>`;
-      else if (isUnlocked('weapon', z.weapon)) body = `<div class="hg-desc">${weaponCardBody(z.weapon)}</div><div class="hub-press"><b>E</b> 裝備${W.name}</div>`;
+      const W = WEAPONS[z.weapon], u = unlockEntry('weapon', z.weapon), Q = '　<b>Q</b> 升級路線';  // 按 Q 看升級路線（Hub.paths）：鎖住的也能看
+      if (z.weapon === Hub.weaponId) body = `<div class="hg-desc">${weaponCardBody(z.weapon)}</div><div class="hub-press">裝備中${Q}</div>`;
+      else if (Hub.coop() && Net.meReady) body = `<div class="ttl" style="color:${W.color}">${W.name}</div><div class="hub-press">已準備，不能換武器${Q}</div>`;
+      else if (isUnlocked('weapon', z.weapon)) body = `<div class="hg-desc">${weaponCardBody(z.weapon)}</div><div class="hub-press"><b>E</b> 裝備${W.name}${Q}</div>`;
       else {
         const st = unlockState(u);
         body = `<div class="ttl" style="color:${W.color}">🔒 ${W.name}</div><div class="ds">${unlockNeed(u)}</div>
-          <div class="ulk-bar"><div style="width:${Math.round(st.cur / st.max * 100)}%"></div></div><div class="ty">${Math.floor(st.cur)} / ${st.max}</div>`;
+          <div class="ulk-bar"><div style="width:${Math.round(st.cur / st.max * 100)}%"></div></div><div class="ty">${Math.floor(st.cur)} / ${st.max}</div><div class="hub-press">${Q.trim()}</div>`;
       }
     } else if (z.kind === 'pad') {
       const S = SHIPS[z.ship], u = unlockEntry('ship', z.ship);

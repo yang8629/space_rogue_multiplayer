@@ -16,8 +16,8 @@ function weaponFp(w, src = fs.readFileSync(FILE, 'utf8')) {
   let end = lines.findIndex((l, i) => i > start && (/^  [a-z]+: \{/.test(l) || /^\};/.test(l)));
   if (end < 0) end = lines.length;
   const block = lines.slice(start, end).filter(l => !/^\s*\/\//.test(l)).join('\n');
-  // 說明文字（desc）不算：只改說明不用重量（2026-10-13）
-  const body = block.replace(/desc: (`(?:[^`\\]|\\.)*`|'(?:[^'\\]|\\.)*')/g, 'desc: _');
+  // 說明文字（desc）不算：只改說明不用重量（2026-10-13）；武器本身的說明是一串字（條列，10-24），一起拿掉
+  const body = block.replace(/desc: (`(?:[^`\\]|\\.)*`|'(?:[^'\\]|\\.)*'|\[\s*(?:(?:`(?:[^`\\]|\\.)*`|'(?:[^'\\]|\\.)*')\s*,?\s*)*\])/g, 'desc: _');
   const used = Object.keys(consts).filter(k => k !== 'WEAPONS' && new RegExp(`\\b${k}\\b`).test(body)).sort();
   const text = body + '\n' + used.map(k => `${k} = ${consts[k]}`).join('\n');
   return crypto.createHash('sha1').update(text).digest('hex').slice(0, 10);

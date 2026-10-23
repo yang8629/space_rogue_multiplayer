@@ -23,6 +23,7 @@
   Events.on('combatWon', () => { Screen.clickLock = performance.now() + 600; });  // 戰鬥中連點射擊：勝利／三選一畫面剛出現 0.6 秒內不接受點擊（免得直接按到按鈕）
   Events.on('hubNear', z => Screen.hubInfo(z));  // 基地：靠近的東西換了 → 換說明卡
   Events.on('hubPanel', tab => Screen.basePanel(tab));  // 基地：按 E 打開面板（操作台、發射台）
+  Events.on('hubPaths', id => { SFX.play('click'); Codex.open('weapons', id); });  // 基地：武器架按 Q 看這把的升級路線
   Events.on('hubSwap', () => { SFX.play('click'); Screen.hubInfo(Hub.near); });
   Events.on('hubLaunch', () => { if (!Hub.driving) Screen.hubView(); });  // 出發動畫：蓋著的面板（起始晶片、發射台）收起來
   Events.on('editor', d => { if (d.open) Editor.open(); else Editor.close(); });
