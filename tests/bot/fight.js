@@ -308,7 +308,8 @@ function bot(p) {
 // 精英「護盾」：盾對著自己（±70°）、在 500 內 → 往側邊繞（加在原本的走位上，繞到背後再打）；有子彈要閃時不管
 function flankShield(p) {
   if (threat > 0 || Input.dash) return;
-  const e = G.enemies.find(o => !o.dead && !(o.spawnT > 0) && o.t.elite && o.shieldA != null && Math.hypot(o.x - p.x, o.y - p.y) < 500);
+  // 有盾的敵人（盾衛、精英的護盾詞綴）：繞到盾的側面打。10-23 以前只繞精英：普通盾衛（盾固定不轉，真人很好繞）正面硬砍，近戰的刃片被反彈回來（血祭重斬壓在 20% 血時 20 局 8 局被盾衛反彈打死）
+  const e = G.enemies.filter(o => !o.dead && !(o.spawnT > 0) && o.shieldA != null && Math.hypot(o.x - p.x, o.y - p.y) < 500).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
   if (!e) return;
   const a = Math.atan2(p.y - e.y, p.x - e.x), off = angleDiff(e.shieldA, a);
   if (Math.abs(off) > 1.22) return;
