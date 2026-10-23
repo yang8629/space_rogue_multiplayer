@@ -906,6 +906,18 @@ const MechCheck = {
       const plain = run(false), rare = run(true);
       return { ok: plain === 0 && rare === 2, got: `一般碎片往下傳 ${plain} 次（要 0）；稀有碎片 ${rare} 次（要 2）` };
     }],
+    ['線', '追蹤彈打單隻', '觸發追蹤彈的那隻附近（450 內）沒有別隻：追蹤彈打牠；有別隻：打別隻、不打牠', M => {
+      const run = more => {
+        M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'homing', null]);
+        const es = M.targets(more ? [[200, 0], [380, 20]] : [[200, 0]], 'brute', true, 400), e = es[0], hp = es.map(x => x.hp);
+        Game.bullets = []; Game.triggerQueue = [];
+        Game.lineFire({ owner: null, line: Game.stats.line, k: 0, x: e.x, y: e.y, ang: 0, ignore: e.id });  // 跟真的命中一樣：觸發位置在牠身上、ignore = 牠
+        for (let f = 0; f < 90; f++) { Game.time += 1 / 60; Game.updateBullets(1 / 60); }
+        return es.map((x, i) => Math.round(hp[i] - x.hp));
+      };
+      const one = run(false), two = run(true);
+      return { ok: one[0] > 0 && two[0] === 0 && two[1] > 0, got: `只有一隻：打牠 ${one[0]}（要 > 0）；旁邊有別隻：打牠 ${two[0]}（要 0）、打別隻 ${two[1]}（要 > 0）` };
+    }],
     ['線', '新晶片：碎片、追蹤彈、漩渦', '碎片往四周 6 片短程；追蹤彈轉向敵人打中；漩渦把附近敵人吸到中心、結束時往下傳一次', M => {
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', 'shard', 'homing', 'vortex', 'boomerang', null]);
       const L0 = Game.stats.line, p = Game.player, at = (k, x, y) => Game.lineFire({ owner: null, line: L0, k, x, y, ang: 0, ignore: null });

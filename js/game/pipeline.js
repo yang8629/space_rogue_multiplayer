@@ -128,8 +128,9 @@ const LINE_FX = {
     const a0 = rand(0, TAU), grp = cell.rare ? new Map() : null;
     lineSpawn(cell, t, Array.from({ length: 6 }, (_, k) => lineShot(cell, t, { angle: a0 + k / 6 * TAU, speed: 520, life: 0.19, radius: 4, shape: 'dart', color: '#ffd6a0', knock: 0.5, grp })), t.x, t.y, 0, 0, cell.rare ? null : t.ignore);
   },
-  homing(cell, t) {  // 追蹤彈：轉向最近的敵人
-    lineSpawn(cell, t, [lineShot(cell, t, { angle: 0, speed: 380, life: 1.5, radius: 6, homing: 6, shape: 'dart', color: '#ff9dbd', knock: 0.8 })], t.x, t.y, t.ang, 0, t.ignore);
+  homing(cell, t) {  // 追蹤彈：轉向最近的敵人；不打觸發的那隻，但追蹤範圍（450）裡沒有別隻時打牠（使用者 10-24：以前單隻精英、旗艦時傷害 0、也不往下傳）
+    const other = t.ignore != null && nearestEnemy(t.x, t.y, 450, new Set([t.ignore]), true);
+    lineSpawn(cell, t, [lineShot(cell, t, { angle: 0, speed: 380, life: 1.5, radius: 6, homing: 6, shape: 'dart', color: '#ff9dbd', knock: 0.8 })], t.x, t.y, t.ang, 0, other ? t.ignore : null);
   },
   vortex(cell, t) {  // 漩渦：停在原地 1.5 秒把敵人吸到中心，結束時往下傳（Bullet 的 vortex）
     lineSpawn(cell, t, [lineShot(cell, t, { angle: 0, speed: 0, life: 1.5, radius: 10, vortex: 120 * (1 + PLUG.size * cell.plug.size), pierce: 99, shape: 'orb', color: '#b388ff', knock: 0 })], t.x, t.y, 0);
