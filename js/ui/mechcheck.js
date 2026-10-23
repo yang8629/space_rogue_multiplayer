@@ -555,15 +555,17 @@ const MechCheck = {
       const da = ha - a.hp, db = hb - b.hp;
       return { ok: near1(db, HOOK.dmg) && near1(da, HOOK.dmg * HOOK.self) && nums.length >= 2, got: `被砸的扣 ${Math.round(db)}（要 ${HOOK.dmg}）、被甩的扣 ${Math.round(da)}（要 ${Math.round(HOOK.dmg * HOOK.self)}）；跳了 ${nums.length} 個數字${nums.length >= 2 ? '' : '（要 2，錯）'}` };
     }],
-    ['武器原型', '無人機：準星在飛船上、開火朝向', `游標放在飛船上（準星距離 0）按住射擊：無人機圍在飛船旁（不飛到前面 250）；開火的無人機機頭朝目標 ${DRONE.face} 秒`, M => {
+    ['武器原型', '無人機：準星在飛船上、一直瞄著目標', `游標放在飛船上（準星距離 0）按住射擊：無人機圍在飛船旁（不飛到前面 250）；機頭一直朝要打的目標，轉向是慢慢轉（每秒最多 ${DRONE.turn} 弧度，不瞬間轉過去）`, M => {
       M.setup('sandbox', 'vanguard', 'drone', null, null, ['weapon', null, null, null]);
       const P = Game.player, e = M.targets([[150, 60]], 'brute', true, 999)[0];
       P.aim = 0; P.aimD = 0;
       for (let f = 0; f < 90; f++) { Game.time += 1 / 60; P.wantFire = true; WEAPON_PLAY.drone.tick(P, 1 / 60); }
       const far = Math.max(...P.drones.map(d => Math.hypot(d.x - P.x, d.y - P.y))), near = far <= DRONE.spread + 10;
-      W_.step(20, true); P.y += 40; P.wantFire = true; WEAPON_PLAY.drone.tick(P, 1 / 60);  // 開火後飛船一動，無人機跟著飛：舊的寫法這一幀就轉回移動方向
-      const fired = P.drones.filter(d => d.faceT > 0), faced = fired.length > 0 && fired.every(d => Math.abs(angleDiff(d.a, Math.atan2(e.y - d.y, e.x - d.x))) < 0.35);
-      return { ok: near && faced, got: `準星在飛船上：無人機最遠離飛船 ${Math.round(far)}${near ? '' : `（要 ≤ ${DRONE.spread + 10}，錯）`}；開火的 ${fired.length} 架${faced ? '機頭朝目標' : '沒朝目標（錯）'}` };
+      W_.step(20, true); P.y += 40; P.wantFire = true; WEAPON_PLAY.drone.tick(P, 1 / 60);  // 飛船一動，無人機跟著飛：機頭還是朝目標（以前只有開火後一小段時間朝目標）
+      const up = P.drones.filter(d => !(d.down > 0)), faced = up.length > 0 && up.every(d => Math.abs(angleDiff(d.a, Math.atan2(e.y - d.y, e.x - d.x))) < 0.35);
+      const d0 = up[0], a0 = Math.atan2(e.y - d0.y, e.x - d0.x) + Math.PI; d0.a = a0; P.wantFire = false; WEAPON_PLAY.drone.tick(P, 1 / 60);  // 機頭轉到背對目標：下一幀只能轉一點點（以前開火那一下直接轉過去）
+      const turned = Math.abs(angleDiff(a0, d0.a)), smooth = turned > 0 && turned <= DRONE.turn / 60 + 1e-6;
+      return { ok: near && faced && smooth, got: `準星在飛船上：無人機最遠離飛船 ${Math.round(far)}${near ? '' : `（要 ≤ ${DRONE.spread + 10}，錯）`}；${up.length} 架${faced ? '機頭都朝目標' : '有的沒朝目標（錯）'}；背對目標時一幀轉 ${turned.toFixed(3)} 弧度${smooth ? '' : `（要 0～${(DRONE.turn / 60).toFixed(3)}，錯）`}` };
     }],
     ['機體', '射速加成相加','疾風（移動中）+20%、急冷（散熱片 2 層）+30% 相加 = +50%（不是相乘的 +56%；散熱片本身不加射速，2026-10-10 改成能量容量）', M => {
       const count = () => {

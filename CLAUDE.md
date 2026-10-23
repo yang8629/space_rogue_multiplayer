@@ -67,4 +67,5 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 - 每幀的衰減（煞車、阻力）用 `v *= decay(f, dt)`（敵人起手停下用 `Enemy.brake`，快慢寫在 `ENEMY_TYPES` 的 `brake`／`CFG.BRAKE`），不要直接 `v *= f`：直接乘會跟著幀率變，120fps 時晶體飛的距離只剩 60fps 的一半多（機制檢查「高幀率不會改變動作」）。
 - 回傳「字串或物件」的地方，物件欄位不要用 `String.prototype` 有的名字（`big`、`link`、`small`…）：用 `r.big` 判斷時字串也有（事件的賭運氣結果踩過）。
 - 收到的 JSON 物件 key 是字串：拿來當號碼要 `Number(k)`（延遲廣播的號碼踩過，隊友全讀成 0 號）。
+- 測試裡讓星門號衝刺之後，`Game.portals` 會留一對星門，子彈穿過會被傳送：之後要量子彈打不打得到，先清掉（`tests/e2e.js` 勾隊友踩過）。
 - PixiJS `poly(pts, false)` 不封口的線會往多邊形一側偏：折線用 `moveTo`／`lineTo`（`gl_hub.js` 的導管）。

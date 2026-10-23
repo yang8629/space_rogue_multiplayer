@@ -63,7 +63,7 @@ const HOOK_UP = { t: 1.5, speed: 1.3, multi: 3,                                 
 // 無人機蜂群（drone）：按住射擊時飛到準星附近、各打 range 內最近的敵人，放開回到身邊；右鍵收攏：shield 秒內貼身轉成護盾、最多擋 blockN 顆、不攻擊
 //   牽繩：離飛船最多 leash；飛出去時被敵彈打 hp 下就壞，respawn 秒後在飛船旁重生（收攏擋子彈不扣）
 const DRONE = { n: 4, orbit: 46, speed: 560, spread: 50, range: 260, shield: 2.5, guard: 34, block: 14, blockN: 8, cd: 5,
-  leash: 300, hp: 3, hitR: 9, respawn: 4, face: 0.35 };  // face：開火後機頭朝目標幾秒（之後才照移動方向轉）
+  leash: 300, hp: 3, hitR: 9, respawn: 4, turn: 10 };  // turn：機頭轉向的速度（弧度／秒；有目標朝目標，沒有朝移動方向）
 // 無人機的升級：數量、火力、護衛
 const DRONE_UP = { n: 2, kami: { dmg: 60, r: 70, speed: 900, seek: 400 },       // 數量：+2 架；自爆撞 400 內最近的敵人
   dmg: 1.4, focus: { per: 0.1, max: 10 }, missile: { homing: 3, r: 40, ratio: 0.6, speed: 0.7 },  // 火力：×1.4；集火每次 +10%（最多 10 層）；飛彈追蹤＋小爆炸

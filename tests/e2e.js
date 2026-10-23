@@ -211,8 +211,9 @@ while (!sector2 && guard++ < 40) {
         const fire = () => { P.fireCd = 0; A.run('Game.player.fire()'); };
         const CI = CL.T.Input, still = () => { Object.assign(CI, { down: false, dash: false, joy: null, aimStick: null, touch: false }); CI.keys.clear(); };  // 隊友不操作（前面的測試可能留著按鍵）
         const objs1 = GA.objs; GA.objs = []; GA.eBullets = []; still(); step(2);  // 拿掉地圖物件：鉤爪打到小行星會停（spot 只避開牆）
-        const calm = () => { for (let k = 0; k < 240 && (Math.hypot(me.vx, me.vy) > 5 || me.dashCd > 0 || Math.hypot(M.x - me.x, M.y - me.y) > 2); k++) step(1); };  // 隊友停下、衝刺冷卻好、房主那邊的位置追上
-        const sp = spot(me, 250); [P.x, P.y] = sp; calm(); aimAt(M); step(1); fire(); step(30);
+        const calm = () => { for (let k = 0; k < 240 && (Math.hypot(me.vx, me.vy) > 5 || me.dashCd > 0 || Math.hypot(M.x - me.x, M.y - me.y) > 2); k++) step(1);  // 隊友停下、衝刺冷卻好、房主那邊的位置追上
+          GA.portals = []; CB.portals = []; };  // 清掉隊友衝刺開的星門（隊友是星門號）：鉤爪的路線穿過星門會被傳送走、勾不到（14 次 3 次）
+        calm(); [P.x, P.y] = spot(me, 250); aimAt(M); step(1); fire(); step(30);  // 先等隊友停下再擺位置（隊友還在滑時先擺，停下後可能離 320，鉤爪只飛到約 260：8 次落空 3 次）
         const front = () => Math.hypot(me.x - (P.x + Math.cos(P.aim) * 70), me.y - (P.y + Math.sin(P.aim) * 70));  // 隊友離「房主前方 70」多遠
         const grab = P.hookShip === M && M.grabBy === 1 && me.grabBy === 1, near = front() < 40;
         CL.T.Input.dash = true; step(8);

@@ -195,14 +195,22 @@ const GLHub = {
       else if (z.kind === 'rack') this.rackPlate(g, z.x, z.y);
       else if (z.kind === 'console') { this.hexPad(g, z.x, z.y + 8, 40, 0x2b3654, 8); g.circle(z.x, z.y + 8, 18).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); }
       else if (z.kind === 'launch') { const bay = R.bay; this.launchPad(g, z, bay.y + bay.h); }  // 跑道穿過下牆的開口在畫牆時挖穿（看得到外面的太空）
-      else if (z.kind === 'term') {
-        const x0 = z.side ? R.hall.x + R.hall.w - 54 : R.hall.x;
-        g.rect(x0, z.y - 60, 54, 120).fill(hubShade(0x3a4870, z.side ? -0.2 : 0)).stroke({ width: 3, color: HUB_INK });
-        g.rect(x0 + 10, z.y - 44, 34, 60).fill(0x060a18).stroke({ width: 2, color: HUB_INK });
-        g.rect(x0 + 8, z.y + 26, 38, 12).fill(0x55658f).stroke({ width: 2, color: HUB_INK });
-      }
+      else if (z.kind === 'term') this.wallPanel(g, z.side ? R.hall.x + R.hall.w - 54 : R.hall.x, z.y, 120, z.side);
     }
     this.built = true;
+  },
+  // 掛在左右牆上的面板（大廳的終端機、戰績室的顯示螢幕共用）：x0 = 面板左緣、yc = 中心、h = 高（寬固定 54）、side = 1 掛右牆（背光那面暗一點）
+  wallPanel(g, x0, yc, h, side) {
+    g.rect(x0, yc - h / 2, 54, h).fill(hubShade(0x3a4870, side ? -0.2 : 0)).stroke({ width: 3, color: HUB_INK });
+    g.rect(x0 + 10, yc - h / 2 + 16, 34, h - 60).fill(0x060a18).stroke({ width: 2, color: HUB_INK });
+    g.rect(x0 + 8, yc + h / 2 - 34, 38, 12).fill(0x55658f).stroke({ width: 2, color: HUB_INK });
+  },
+  // 面板的螢幕（每幀）：底光一明一暗＋往下捲的字（螢幕多高就放幾行）；gr、ga = 光暈半徑、強度
+  wallPanelScreen(g, x0, yc, h, col, t, gr, ga) {
+    const y0 = yc - h / 2 + 16, sh = h - 60;
+    g.rect(x0 + 10, y0, 34, sh).fill({ color: col, alpha: 0.35 + 0.15 * Math.sin(t * 5 + yc) });
+    for (let i = 0; i < Math.floor((sh - 12) / 16); i++) g.rect(x0 + 14, y0 + 6 + i * 16 + ((t * 20) % 16), 26, 3).fill({ color: col, alpha: 0.8 });
+    this.glow(x0 + 27, y0 + sh / 2, gr, col, ga);
   },
   // 一個開口＝隔艙門：開口在牆中間收窄的斜切門框、地上分節的板子、門框上兩盞小燈（發光的用 { color, alpha }：不會被換成金屬貼圖）
   //   門的座標用 (u, v)：u 沿著開口寬（0～L）、v 穿過牆（0～T；開口兩邊各伸進房間 30，牆在 v = W0～W1）
@@ -371,8 +379,9 @@ const GLHub = {
     // 每間房上牆一排燈（燈座裝在牆的內緣上，地板的光每幀畫）：照牆寬平均排、左右對稱；碰到門口、窗戶的那盞連同對稱的那盞一起拿掉
     //   上牆放不下（門、窗、獎盃）的：燈改到左右牆；信號燈裝在大廳四個角的牆角（不佔地板、不碰門）
     //   燈：[x, y, 光往哪照（0 下、1 右、-1 左）]
-    // 戰績室左右牆下段的顯示螢幕（下面畫，燈要避開）：放在左牆門口（往觀景台）的下面，右牆對稱；[x, 上緣, 高]
-    const sy0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 14, screens = [rec.x + 6, rec.x + rec.w - 14].map(x => [x, sy0, rec.y + rec.h - 14 - sy0]);
+    // 戰績室左右牆下段的顯示螢幕（跟大廳終端機同一種掛牆面板；下面畫，燈要避開）：放在左牆門口（往觀景台）和地板下緣之間，右牆對稱
+    const py0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 10, py1 = rec.y + rec.h - 6, ph = Math.min(104, py1 - py0);
+    const panels = [0, 1].map(side => ({ x0: side ? rec.x + rec.w - 54 : rec.x, yc: (py0 + py1) / 2, h: ph, side, wall: side ? rec.x + rec.w : rec.x }));
     const onDoor = (x, y) => HUB.doors.some(d => x > d.x - 24 && x < d.x + d.w + 24 && y > d.y - 12 && y < d.y + d.h + 12);
     const side = [];
     for (const r of Object.values(R)) {
@@ -385,7 +394,7 @@ const GLHub = {
     //   隔間牆另一面已經有燈的高度不用（觀景台、戰績室的燈背靠背裝在同一道牆上，看起來像一對）
     const walls = r => [r.x - 3, r.x + r.w + 3];
     const free = (r, y) => walls(r).every(x => !onDoor(x, y) && !Z.some(z => z.kind === 'term' && Math.abs(z.y - y) < 90 && Math.abs(z.x - x) < 90)
-      && !screens.some(([sx, y0, h]) => Math.abs(sx - x) < 30 && y > y0 - 20 && y < y0 + h + 20));
+      && !panels.some(s => Math.abs(s.wall - x) < 30 && Math.abs(s.yc - y) < s.h / 2 + 20));
     const heights = r => [r.y + 40, r.y + r.h - 60, r.y + r.h / 2].filter(y => free(r, y));
     for (const r of side.sort((a, b) => heights(a).length - heights(b).length)) {
       const sy = heights(r).find(y => walls(r).every(x => !D.lamps.some(([lx, ly]) => Math.abs(lx - x) < WT + 20 && Math.abs(ly - y) < 60)));
@@ -463,7 +472,7 @@ const GLHub = {
     const bosses = Object.values(ENEMY_TYPES).filter(t => t.boss);
     const step = Math.min(100, (rec.w - 40) / bosses.length), pw = Math.min(60, step - 14);  // 旗艦多了就排密一點，整排留在房間裡（5 隻時 100 一個會超出牆）
     bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * step, y = rec.y + 30; g.rect(x - pw / 2, rec.y + 4, pw, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
-    for (const [x, y0, h] of screens) { g.rect(x, y0, 8, h).fill(0x0a0f22).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x: x + 4, y: y0 + h / 2, col: 0xffd166, screen: true }); }  // 螢幕的位置在上面燈那段算
+    for (const s of panels) { this.wallPanel(g, s.x0, s.yc, s.h, s.side); D.leds.push({ ...s, col: 0xffd166, panel: true }); }  // 位置在上面燈那段算
     // 巡邏的維修無人機：大廳繞圈、機庫走道上下、實驗室繞圈
     D.drones = [
       { cx: hall.x + hall.w * 0.3, cy: hall.y + hall.h * 0.35, rx: 110, ry: 50, sp: 0.45, ph: 0 },
@@ -543,7 +552,7 @@ const GLHub = {
     for (const [i, [x, y]] of D.beacons.entries()) { const on = Math.sin(t * 2.4 + i * Math.PI / 2) > 0.6; g.circle(x, y, 3.5).fill(on ? 0xff4d6d : 0x5a1f2e); if (on) this.glow(x, y, 26, 0xff4d6d, 0.5); }
     for (const e of D.leds) {
       if (e.trophy) { CONSOLE_ICON.stats(g, e.x, e.y, e.col, 0.95); this.glow(e.x, e.y, 30, e.col, 0.3); }
-      else if (e.screen) g.rect(e.x - 3, e.y - 50, 6, 100).fill({ color: e.col, alpha: 0.25 + 0.15 * Math.sin(t * 2 + e.x) });
+      else if (e.panel) this.wallPanelScreen(g, e.x0, e.yc, e.h, e.col, t, 50, 0.22);
       else { const on = Math.sin(t * 3 + e.k) > 0; g.circle(e.x, e.y, 2.5).fill(on ? e.col : 0x1a3a30); if (on) this.glow(e.x, e.y, 10, e.col, 0.5); }
     }
     for (const Rd of D.drones) {  // 無人機：影子、四支螺旋臂、機身（左上亮）、一閃一閃的燈
@@ -602,10 +611,7 @@ const GLHub = {
         this.glow(z.x, ye + HUB.WT / 2, 90 + 50 * h, 0x4cc9f0, 0.4 + 0.1 * Math.sin(t * 2) + 0.4 * h);  // 發射口的力場
         g.rect(z.x - RW / 2 - 8, ye + HUB.WT / 2 - 2, RW + 16, 4).fill({ color: 0x9fe8ff, alpha: 0.8 });
       } else if (z.kind === 'term') {
-        const x0 = z.side ? HUB.rooms.hall.x + HUB.rooms.hall.w - 54 : HUB.rooms.hall.x;
-        g.rect(x0 + 10, z.y - 44, 34, 60).fill({ color: col, alpha: 0.35 + 0.15 * Math.sin(t * 5 + z.y) });  // 螢幕
-        for (let i = 0; i < 3; i++) g.rect(x0 + 14, z.y - 38 + i * 16 + ((t * 20) % 16), 26, 3).fill({ color: col, alpha: 0.8 });  // 捲動的字
-        this.glow(x0 + 27, z.y - 14, near ? 90 : 60, col, near ? 0.5 : 0.28);
+        this.wallPanelScreen(g, z.side ? HUB.rooms.hall.x + HUB.rooms.hall.w - 54 : HUB.rooms.hall.x, z.y, 120, col, t, near ? 90 : 60, near ? 0.5 : 0.28);
       }
     }
     if (Hub.coop()) {  // 多人房間：船底號碼色的光；出發動畫中其他人的船照同一套動畫畫（Hub.mateLaunch，不用同步來的位置），平常是 Game.mates（GLActors.ships 畫）

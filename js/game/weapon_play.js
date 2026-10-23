@@ -454,6 +454,8 @@ class EnergyBlade extends WeaponPlay {
 class DroneSwarm extends WeaponPlay {
   constructor() { super('drone'); }
   blockMax() { return DRONE.blockN + (Game.wp.blockN || 0); }  // 收攏一次最多擋幾顆
+  // 這架無人機要打哪隻（開火、平常機頭朝向共用）：集火 = T（離準星最近的那隻，射程 1.5 倍內）；沒集火 = 自己射程內最近的
+  target(d, T) { return T && !T.dead && dist2(T.x, T.y, d.x, d.y) < (DRONE.range * 1.5) ** 2 ? T : !Game.wp.focusD ? nearestEnemy(d.x, d.y, DRONE.range, null) : null; }
   onFire(p, list) {  // 電路的子彈改從每架無人機射出；收攏中不攻擊
     const w = Game.wp;
     if (p.guardT > 0 || !p.drones) return [];
@@ -467,11 +469,10 @@ class DroneSwarm extends WeaponPlay {
     let shot0 = false;
     for (const d of p.drones) {
       if (d.down > 0 || d.kami) continue;
-      const t = T && dist2(T.x, T.y, d.x, d.y) < (DRONE.range * 1.5) ** 2 ? T : !w.focusD ? nearestEnemy(d.x, d.y, DRONE.range, null) : null;
+      const t = this.target(d, T);
       if (!t) continue;
       spawnShots(list.map(s => ({ ...s, damage: s.damage * mul, ...(w.missile ? { homing: M.homing, explode: { r: M.r, ratio: M.ratio }, speed: s.speed * M.speed, shape: 'dart' } : {}) })),
         d.x, d.y, Math.atan2(t.y - d.y, t.x - d.x), 0, null);  // 飛彈無人機：追蹤＋小爆炸
-      d.a = Math.atan2(t.y - d.y, t.x - d.x); d.faceT = DRONE.face;  // 開火時機頭朝目標（一小段時間內不照移動方向轉）
       shot0 = true;
     }
     if (shot0) Events.emit('shoot', { p, weapon: 'drone' });
@@ -510,8 +511,9 @@ class DroneSwarm extends WeaponPlay {
       const a = ph + i / n * TAU, r = guard ? DRONE.guard : away ? DRONE.spread : DRONE.orbit;
       const dx = ox + Math.cos(a) * r - d.x, dy = oy + Math.sin(a) * r - d.y, l = Math.hypot(dx, dy), m = Math.min(l, DRONE.speed * (guard ? 3 : 1) * dt);
       if (l > 0) { d.x += dx / l * m; d.y += dy / l * m; }
-      d.faceT = (d.faceT || 0) - dt;
-      if (l > 2 && !(d.faceT > 0)) d.a = Math.atan2(dy, dx);  // 機身朝向（畫面用）：平常朝移動方向，剛開火時朝目標
+      const t = guard ? null : this.target(d, w.focusD ? p.focE : null);  // 機頭一直瞄著要打的那隻（沒開火也是），沒有目標就朝移動方向；照 DRONE.turn 慢慢轉
+      const want = t ? Math.atan2(t.y - d.y, t.x - d.x) : l > 2 ? Math.atan2(dy, dx) : null;
+      if (want != null) d.a = d.a == null ? want : d.a + clamp(angleDiff(d.a, want), -DRONE.turn * dt, DRONE.turn * dt);
       if (!guard) for (const b of Game.eBullets) {  // 飛出去時會被敵彈打（收攏時由下面的護盾擋）
         if (b.life <= 0 || dist2(b.x, b.y, d.x, d.y) > (DRONE.hitR + b.r) ** 2) continue;
         b.life = 0; burst(d.x, d.y, '#7cf5c8', 4, 100, 0.2, 2);
