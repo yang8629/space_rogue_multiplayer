@@ -1,5 +1,6 @@
 // 基地房間截圖：飛船停在指定房間，拍一張 → art_lab/screenshots/基地_<房間>.png
-//   用法：node perf/hubroomshot.mjs [機庫中間|戰績室|觀景台|中央大廳|軍械庫|晶片實驗室|發射甲板]（不給 = 全部）
+//   用法：node perf/hubroomshot.mjs [機庫中間|戰績室|觀景台|中央大廳|軍械庫|晶片實驗室|發射甲板|全景]（不給 = 全部）
+//   全景：整個基地一張（看燈、門、窗的整體配置）：視窗開到放得下整個基地（Hub.follow 的縮放上限 1.3，視窗 = 基地大小 × 1.3）
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defaultViewport: { width: 1280, height: 720 } });
@@ -16,8 +17,16 @@ const SPOTS = {
   晶片實驗室: 'const r = HUB.rooms.lab; return [r.x + r.w / 2, r.y + r.h - 60];',
   發射甲板: 'const r = HUB.rooms.bay; return [r.x + r.w / 2, r.y + r.h / 2];',
 };
-const want = process.argv[2] ? [process.argv[2]] : Object.keys(SPOTS);
+const want = process.argv[2] ? [process.argv[2]] : [...Object.keys(SPOTS), '全景'];
 for (const name of want) {
+  if (name === '全景') {
+    const [w, h] = await p.evaluate(() => [Math.ceil(HUB.W * 1.3), Math.ceil((HUB.H + HUB.TOP) * 1.3)]);
+    await p.setViewport({ width: w, height: h }); await new Promise(r => setTimeout(r, 1500));
+    await p.evaluate(() => Hub.follow()); await new Promise(r => setTimeout(r, 400));
+    await p.screenshot({ path: SHOTS + '基地_全景.png' });
+    await p.setViewport({ width: 1280, height: 720 });
+    console.log('拍好 全景', w, 'x', h); continue;
+  }
   const ok = await p.evaluate(code => {
     const [x, y] = new Function(code)(), s = Hub.ship;
     if (!isFinite(x)) return false;
