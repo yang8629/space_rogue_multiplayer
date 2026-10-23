@@ -6,7 +6,7 @@
 //   node chiplink.js                第一步：晶片接晶片（7 × 7 種接法，武器自動射最近的敵人，3 種戰況各 20 秒）
 //   node chiplink.js --weapons      第二步：武器接第一格（熟練玩家打一般戰：第一格每秒被觸發幾次、多少是招牌動作）
 //   node chiplink.js --plugs        第三步：插件插在每種晶片上（效果有沒有套到那格的產物）
-//   篩選：--w=laser（第一、三步的武器；第二步 = 只跑這幾把）  --sc=群  --chips=vortex,boomerang  --n=3（第二步每格幾場）
+//   篩選：--w=laser（第一、三步的武器；第二步 = 只跑這幾把）  --sc=群  --chips=vortex,boomerang  --n=3（第二步每格幾場）  --lv=10（敵人難度，預設 3）
 //   --save 存成基準 chiplink_base.json；--diff 只印跟基準差 10% 以上的格子
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -18,7 +18,7 @@ G.simFast = true;
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
 const has = k => process.argv.includes(`--${k}`);
 const BASE = path.join(__dirname, 'chiplink_base.json');
-const dt = 1 / 60, SEC = 20, LV = 3;  // 每場 20 秒（10 秒時 A 只觸發約 14 次，太少）；敵人血量照難度 3（第 1 星區後段）
+const dt = 1 / 60, SEC = 20, LV = +(arg('lv') || 3);  // 每場 20 秒（10 秒時 A 只觸發約 14 次，太少）；敵人難度預設 3（第 1 星區後段）
 const DECAY = vm.runInThisContext('LINE_DECAY'), HPM = vm.runInThisContext('enemyHpMul')(LV);
 const WN = Object.fromEntries(Object.entries(T_.WEAPONS).map(([id, w]) => [id, w.short || w.name]));
 const ALLCH = Object.keys(CH).filter(id => CH[id].type === 'chip'), PLUGS = Object.keys(CH).filter(id => CH[id].type === 'comp');
@@ -79,7 +79,7 @@ if (has('weapons')) {
   G.lineSig = function (...a) { const Q = this.triggerQueue, before = Q.length; sig.apply(this, a); for (let i = before; i < Q.length; i++) Q[i].sig = true; };  // 招牌動作排進去的觸發做記號
   G.hurtPlayer = () => {};  // 飛船不會死（量的是觸發，不是掉血）
   console.log(`第二步：武器接第一格。熟練玩家打一般戰（難度 ${LV}、3 波），飛船不會死；每格 ${N} 場`);
-  console.log('數字 = 第一格每秒被觸發幾次（括號 = 其中招牌動作佔幾成）；設計方向：命中頻率不同的武器觸發次數差不多');
+  console.log('數字 = 第一格每秒被觸發幾次（括號 = 其中招牌動作佔多少）；設計方向：命中頻率不同的武器觸發次數差不多');
   console.log('第一格'.padEnd(6) + WPN.map(w => pad(WN[w], 14)).join(''));
   const avg = Object.fromEntries(WPN.map(w => [w, []]));
   for (const c of CHIPS) {
@@ -93,7 +93,7 @@ if (has('weapons')) {
         t += tt;
       }
       const ps = (n.hit + n.sig) / t; avg[w].push(ps);
-      return pad(`${r1(ps)}（${Math.round(n.sig / Math.max(1, n.hit + n.sig) * 10)}成）`, 14);
+      return pad(`${r1(ps)}（${Math.round(n.sig / Math.max(1, n.hit + n.sig) * 100)}%）`, 14);  // 百分比：用「成」時蜂群的 1% 會印成 0 成，看起來像沒觸發
     });
     console.log(pad(nm(c), 6) + '  ' + cells.join(''));
   }
