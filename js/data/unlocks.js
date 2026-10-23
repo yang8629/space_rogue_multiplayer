@@ -33,7 +33,7 @@ function unlockIds(kind) {
 function unlockName(kind, id) { return kind === 'ship' ? SHIPS[id].name : kind === 'weapon' ? WEAPONS[id].name : CHIPS[id].name; }
 
 // 一局的成績 r = { sector, bossIds, weapon, kills, elites, echoK, play } 怎麼加進進度：一種成績一項
-//   以後新的解鎖條件要記新的成績：在這裡加一項。舊的進度沒記過這一項（P.stats 裡沒有）→ 第一次讀進度時用遊玩紀錄補（unlockUpgrade）
+//   以後新的解鎖條件要記新的成績：在這裡加一項。舊的進度沒記過這一項（P.stats 裡沒有）→ 第一次讀進度時用遊玩紀錄補（system/save.js 的 unlockUpgrade）
 const UNLOCK_STATS = {
   runs: P => { P.runs++; },
   kills: (P, r) => { P.kills += r.kills || 0; },
@@ -47,14 +47,8 @@ const UNLOCK_STATS = {
 const UNLOCK_STATS_2200 = ['runs', 'kills', 'elites', 'echoK', 'sector', 'boss', 'bossW', 'play'];  // 2.20.0 開始記進度時就有的成績
 
 function unlockLoad() {
-  let p = {};
-  p = Save.load('unlocks', {});
-  const P = unlockParse(p);
-  if (!P.mig || Object.keys(UNLOCK_STATS).some(k => !P.stats.includes(k))) {
-    const { recs, ch } = unlockUpgrade(P, unlockRecords());
-    Save.save('records', recs); if (ch) Save.save('chapters', { cleared: ch });
-    unlockSave(P);
-  }
+  const P = unlockParse(Save.load('unlocks', {}));
+  unlockMigrate(P);  // 舊的進度：升級一次、存回去（system/save.js）
   return P;
 }
 // 存檔 → 進度（欄位壞掉的當 0）；stats = 已經在記的成績（2.20.0 的存檔沒有這欄 = 那時就有的全部）
@@ -66,40 +60,6 @@ function unlockParse(p) {
 }
 function unlockSave(P) { Save.save('unlocks', P); }
 function unlockRecords() { const r = Save.load('records', []); return Array.isArray(r) ? r.filter(x => x && typeof x === 'object') : []; }
-// 2.20.0 以前的遊玩紀錄（沒有版號的是更早的）
-const UNLOCK_SINCE = [2, 20, 0];
-function recordBefore(build) {
-  const m = String(build || '').match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!m) return true;
-  const v = m.slice(1).map(Number), i = v.findIndex((x, k) => x !== UNLOCK_SINCE[k]);
-  return i >= 0 && v[i] < UNLOCK_SINCE[i];
-}
-// 遊玩紀錄 → 那一局的成績：紀錄有存 ulk 就用它；2.20.0 的紀錄還沒存，從紀錄的欄位換回來（精英、回響擊殺換不回來，當 0）
-function recordRun(rec) {
-  if (rec.ulk && typeof rec.ulk === 'object') return rec.ulk;
-  const bossId = name => Object.keys(ENEMY_TYPES).find(k => ENEMY_TYPES[k].boss && ENEMY_TYPES[k].name === name);
-  const chipByName = name => Object.keys(CHIPS).find(k => CHIPS[k].name === name);
-  const play = {};
-  for (const [name, v] of Object.entries((rec.mech && rec.mech.playKills) || {})) { const id = chipByName(name); if (id) play[id] = +v || 0; }
-  return { sector: +rec.sector || 0, bossIds: (Array.isArray(rec.bosses) ? rec.bosses : []).map(bossId).filter(Boolean),
-    weapon: Object.keys(WEAPONS).find(k => String(rec.weapon || '').split('・')[0] === WEAPONS[k].name) || null, kills: +rec.kills || 0, elites: 0, echoK: 0, play };
-}
-// 存檔升級（P 直接改；回傳要留下的遊玩紀錄、重來的章節進度）
-//   mig 1（只做一次）：2.20.0 以前的遊玩紀錄刪掉；章節進度重來，只照留下的紀錄裡通關（或打到無盡）的章
-//   沒記過的成績：用留下的紀錄（都是 2.20.0 以後的）補
-function unlockUpgrade(P, recs) {
-  let ch = null;
-  if (!P.mig) {
-    recs = recs.filter(r => !recordBefore(r.build));
-    ch = [...new Set(recs.filter(r => r.result === 'cleared' || r.endless).map(r => r.chapter))].filter(id => CHAPTERS.some(c => c.id === id)).sort((a, b) => a - b);
-    P.ch = ch; P.mig = 1;
-  }
-  for (const k of Object.keys(UNLOCK_STATS).filter(k => !P.stats.includes(k))) {
-    for (const r of recs) UNLOCK_STATS[k](P, recordRun(r));
-    P.stats.push(k);
-  }
-  return { recs, ch };
-}
 // 這一項的進度：{ cur, max, done }（cur 不超過 max）
 function unlockState(u, P = unlockLoad()) { const [c, m] = u.prog(P); return { cur: Math.min(c, m), max: m, done: c >= m }; }
 // 已達成的項目：存檔沒變就沿用（三選一、商店每次抽都要查十幾項，不要每次都重讀存檔）
