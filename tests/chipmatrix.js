@@ -64,10 +64,10 @@ if (has('save')) {
 } else if (has('diff')) {
   if (!fs.existsSync(BASE)) { console.log('沒有基準，先跑 --save'); process.exit(1); }
   const old = JSON.parse(fs.readFileSync(BASE, 'utf8'));
-  let n = 0;
+  let n = 0, miss = 0;
   for (const sc in res) for (const c in res[sc]) for (const w in res[sc][c]) {
     const v = res[sc][c][w], o = old[sc] && old[sc][c] && old[sc][c][w];
-    if (o == null) continue;
+    if (o == null) { miss++; continue; }  // 基準裡沒有（新晶片、新武器）：沒得比，最後印出來（以前直接跳過，印「跟基準一樣」）
     const moved = isKill(sc) ? Math.abs(v - o) >= 2 : Math.abs(v - o) > Math.max(5, o * 0.1);
     if (!moved) continue;
     const ob = old[sc]['-'][w], nb = res[sc]['-'][w];
@@ -76,6 +76,7 @@ if (has('save')) {
     n++;
   }
   console.log(n ? `${n} 格有變化` : '跟基準一樣');
+  if (miss) console.log(`另外 ${miss} 格基準裡沒有（新晶片或新武器，沒得比；確認數字對了再 --save）`);
 } else {
   for (const sc of SCS) {
     console.log(`== ${sc}`);

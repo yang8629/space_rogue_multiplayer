@@ -5,7 +5,7 @@
 const { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const T_ = require('./load_game').loadGame();
 const arg = k => (process.argv.find(a => a.startsWith(`--${k}=`)) || '').split('=')[1];
-const WPN = arg('w') ? arg('w').split(',') : ['laser', 'scatter', 'plasma', 'railgun', 'blade'];
+const WPN = arg('w') ? arg('w').split(',') : Object.keys(T_.WEAPONS);  // 照遊戲的武器表（以前寫死改版前的 5 把，少了蜂群）
 const CHIPS = arg('chips') ? arg('chips').split(',') : T_.NORMAL_IDS.filter(id => !T_.CHIPS[id].locked && true);  // 跟 botsim --value 一樣（觸發器 2026-10-03 起一起量）
 const GROUPS = +(arg('groups') || 4), PAIRS = process.argv.includes('--pairs');
 const pass = process.argv.slice(2).filter(a => !/^--(w|chips|groups|jobs|save|update|json)=?/.test(a));
