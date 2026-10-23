@@ -90,9 +90,9 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   for (const r of Object.values(rooms)) if (r.console) zones.push({ ...r.console, kind: 'console', room: r.id, color: r.color, x: r.x + r.w / 2, y: r.id === 'armory' ? r.y + r.h - 120 : r.y + r.h / 2 + 10, r: C.CONSOLE_R });
   // 發射台：發射甲板上，跑道穿過甲板的下牆到太空
   zones.push({ id: 'launch', kind: 'launch', x: cx, y: R.bay.y + 140, r: C.LAUNCH_R, label: '🚀 發射台', color: '#4cc9f0' });
-  // 終端機：大廳左右牆，左右輪流、同一邊往下排
+  // 終端機：大廳左右牆，左右輪流、同一邊往下排；第一台從 y + 180 開始（再上面是左上角地上的房名「中央大廳 CENTRAL HALL」，130 時終端機蓋住英文字）
   terms.forEach((t, i) => { const side = i % 2, k = Math.floor(i / 2);
-    zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: hall.y + 130 + k * 170, r: C.TERM_R }); });
+    zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: hall.y + 180 + k * 170, r: C.TERM_R }); });
   return { W: R.armory.x + armoryW + M, H: R.bay.y + R.bay.h + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones, spawn: { x: cx, y: hall.y + hall.h / 2 }, targets };
 }
 Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
