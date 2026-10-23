@@ -147,7 +147,7 @@ const WEAPONS = {
   blade: { name: '能量刃', short: '能刃', color: '#ff8fd8', desc: `近戰三段連段：${COMBO.steps.map(s => s.name).join(' → ')}（第三刀傷害 ×${COMBO.steps[2].dmg}、往前突進，之後收刀比較久），${COMBO.reset} 秒沒揮就從頭開始；刃片無限穿透。右鍵<b>彈反</b>：${PARRY.win} 秒內碰到身邊的敵彈會反射回去（傷害 ×${PARRY.reflect}），擋到後只要等 ${PARRY.hitCd} 秒、${PARRY.keep} 秒內的下一刀傷害 ×${PARRY.boost}；沒擋到要等 ${PARRY.cd} 秒。`,
     // 4 片排成 1.1 弧度的扇形（連段一刀一刀揮過去）
     trig: 0.15,
-    base: { interval: 0.3, count: 4, spread: 1.1, damage: 3.4, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },  // 傷害 5 → 3.4（10-23 整局模擬各 100 局：5 = 44%、3.8 = 35%、3.4 = 25%，目標 20%）
+    base: { interval: 0.3, count: 4, spread: 1.1, damage: 3, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },  // 傷害 5 → 3（10-23 整局模擬各 100 局：5 = 44%、3.5 = 27%、3 = 18%，目標 20%；數值只用整數或 .5）
     alt: { name: '彈反', cd: PARRY.cd },  // 右鍵（行為在 game/weapon_play.js）
   // parryN：這次擋下幾顆（0 = 落空，見 Player.tickAlt）
   // 無盡連段：被打中歸零
