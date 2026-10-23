@@ -75,7 +75,8 @@ if (newVer) {
 // ---- 2. 測試、機制檢查、名字檢查、升級健檢：同時跑（runpar.js，最多 4 個）；結果照固定順序印 ----
 //   航圖測試最慢（3000 張，一張約 17ms：要重抽到符合保底規則）→ 拆成 3 份各 1000 張（張數不變）
 //   2a. 名字檢查（undefcheck.js：照 index.html 順序解析遊戲、模擬電腦，跑到那一行才會當掉的錯先抓出來）
-//   2b. 升級健檢（只提醒，不算沒通過）：武器升級價值表過期、第一段太弱、終極偏離、很少升滿（upcheck.js）
+//   2b. 接線檢查（chiplink.js --check：晶片接晶片、插件插晶片每一格都有作用）
+//   2c. 升級健檢（只提醒，不算沒通過）：武器升級價值表過期、第一段太弱、終極偏離、很少升滿（upcheck.js）
 const MAP_PARTS = 3;
 const JOBS = [
   ...Array.from({ length: MAP_PARTS }, (_, i) => [`maptest.js#${i + 1}`, ['maptest.js', `--n=${3000 / MAP_PARTS}`]]),
@@ -83,6 +84,7 @@ const JOBS = [
   ['機制檢查', ['-e', "const T=require('./load_game').loadGame();const r=T.MechCheck.runAll();const f=r.list.filter(x=>!x.ok);" +
     "console.log(f.length+'/'+r.list.length);f.forEach(x=>console.log(JSON.stringify(x)))"]],
   ['名字檢查', ['undefcheck.js']],
+  ['接線檢查', ['chiplink.js', '--check']],
   ['升級健檢', ['upcheck.js', '--brief']],
 ];
 const par = spawnSync(process.execPath, ['runpar.js', JSON.stringify(JOBS)], { cwd: __dirname, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
@@ -107,6 +109,10 @@ for (const t of TESTS) {
 {
   const r = got('名字檢查'), out = r.out.trim();
   ok(r.status === 0, `名字檢查（${out.split('\n')[0]}）`, out);
+}
+{  // 接線檢查（chiplink.js --check）：每種晶片接每種晶片都傳得到、每種插件插在每種晶片上都有效果
+  const r = got('接線檢查'), out = r.out.trim();
+  ok(r.status === 0 && /^0\//.test(out), `接線檢查 ${out.split('\n')[0]}${secOf(r)}`, out);
 }
 {
   const r = got('升級健檢'), out = r.out.trim();

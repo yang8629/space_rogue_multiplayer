@@ -1,8 +1,7 @@
 // 載入整局模擬的電腦（bot/fight.js 戰鬥操作、bot/value.js 整套配裝評分、bot/pick.js 做選擇）到一份遊戲的全域範圍
 //   loadBot(run, { tables })：run = 執行程式碼的函式（vm.runInThisContext，或 coopsim 的 code => vm.runInContext(code, ctx)）
 //   tables：把價值表一起放進那份遊戲（另一個 vm context 用；同一個 context 直接放進 globalThis）
-//     晶片價值表 chipvalue_base.json／chipvalue_pairs.json（botsim --value）、武器升級價值表 upgradevalue_<武器>.json（botsim --upval）、
-//     路線價值表 routevalue_<武器>.json（botsim --routeval）
+//     武器升級價值表 upgradevalue_<武器>.json（botsim --upval）、路線價值表 routevalue_<武器>.json（botsim --routeval）
 //   回傳電腦的函式（包在一個函式範圍裡，名稱不會跟遊戲的全域撞到）
 //   環境變數 TABLE_DIR：價值表改讀這個資料夾（試改版用另一份表，不蓋掉正式的；botsim 的 --routeval／--upval、runsim 的路線結果也存到這裡）
 'use strict';
@@ -21,8 +20,8 @@ function routeTable() {
   for (const f of fs.readdirSync(DIR)) { const m = f.match(/^routevalue_(\w+)\.json$/); if (m) { const t = json(f); if (t) out[m[1]] = t; } }
   return out;
 }
-// 兩兩組合表（chipvalue_pairs.json）10-09 拿掉：過時（回響減半前、10 萬血量），組合的效果雜訊太大量不準；電腦挑晶片只用路線價值表，組件插哪裡照 pick.js 的 BIG 名單
-const tables = () => ({ __CV: json('chipvalue_base.json'), __CP: null, __UPV: upgradeTable(), __RV: routeTable() });
+// 晶片價值表（chipvalue_base.json／chipvalue_pairs.json）10-24 拿掉：量的是改版前的武器和晶片；電腦挑晶片用路線價值表，沒有就試裝（pick.js chipScore）
+const tables = () => ({ __UPV: upgradeTable(), __RV: routeTable() });
 
 function botSource(withTables) {
   const T = withTables ? tables() : null;

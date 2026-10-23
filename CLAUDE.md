@@ -27,7 +27,7 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 ## 跟使用者合作
 
 - 跑模擬、判斷強弱之前先讀 `docs/模擬.md`；改玩法、設計新東西之前先讀 `docs/設計方向.md`（表格內容只有使用者能改；寫「未定」的先問）。
-- 一律用繁體中文；腳本用中文稱呼（chipmatrix → 晶片模擬表、runsim → 整局模擬、coopsim → 多人整局模擬、botsim --build → 自動對戰模擬）；遊戲叫「多人版」。
+- 一律用繁體中文；腳本用中文稱呼（chiplink → 接線表、runsim → 整局模擬、coopsim → 多人整局模擬、botsim --build → 自動對戰模擬）；遊戲叫「多人版」。
 - 直接做，做完回報（選了哪些數字）；只有需要使用者決定的才先問（沒看過的新核心機制、改變遊戲感覺的取捨、拿掉功能、上傳）。一句話定的大機制先複述確認。
 - 問問題時每個名稱都要說明（效果、在哪、跟什麼比）；只列自己推薦的選項。文字精簡，舉例用程式裡找得到的名字。
 - 說「誤差範圍」，不說雜訊。比較表要寫每組幾局、數字是什麼。
@@ -46,10 +46,10 @@ GitHub Pages 發佈。測試與模擬在 `tests/`。文件在 `docs/`：`設計�
 
 ## 改完之後
 
-1. 測試：在 `tests/` 跑 `node release.js`（所有測試＋機制檢查＋名字檢查＋私人資訊掃描＋版號／README，只印摘要、每項幾秒；同時跑最多 4 個，約 20 秒；完整結果在 `tests/release_last.log`）。第一次要先在 `tests/` 跑 `npm install`。
+1. 測試：在 `tests/` 跑 `node release.js`（所有測試＋機制檢查＋名字檢查＋接線檢查＋私人資訊掃描＋版號／README，只印摘要、每項幾秒；同時跑最多 4 個，約 20 秒；完整結果在 `tests/release_last.log`）。第一次要先在 `tests/` 跑 `npm install`。
    - 名字檢查：`node undefcheck.js`（用了不存在的函式、變數；`--selftest` 測掃描本身）。個別：`smoke.js`、`range.js`、`e2e.js`（兩份遊戲互連）、`roomhit.js`（多人房間的互射、抓人）。
    - 看某幾項機制檢查：`node mc.js 迴旋 黏著`（不給關鍵字 = 只印沒過的）；偶發失敗：`node mcloop.js 名稱 --n=200`。
-   - 模擬（整局、價值表、晶片模擬表…）的指令和規則：`docs/模擬.md`。
+   - 模擬（整局、價值表、接線表…）的指令和規則：`docs/模擬.md`。
 2. 規則改了就更新 `README.md`；還沒上傳的改動記在 `docs/版本紀錄.md` 的「（下一版）」那一行，版號先不動。
 3. 平常只在本機提交，**不主動上傳**。git 不在 PATH 時，`release.js` 會去找 Program Files 裡的 git。
    - 提交訊息不加 Claude 署名（`Co-Authored-By`、`Claude-Session`）：每台電腦在 `.claude/settings.local.json` 設 `"attribution": { "commit": "", "pr": "" }`（不上傳，寫進 `.git/info/exclude`）。`release.js` 會擋。

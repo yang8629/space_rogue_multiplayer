@@ -3,8 +3,8 @@
 //   用到遊戲的全域：Game（= G）、CHIPS（= CH）、CFG、Input、Arena、Objects、PARTS、WEAPONS、EVENTS、socketsOf、chipId、hasLv、mergedChip、pick、randInt
 
 // 倉庫裡的晶片填進電路的空格（中等玩家：有空格就裝上）
-// 晶片分數：晶片價值表（botsim --value：chipvalue_base.json）裡這把武器、最接近現在難度的「速度 ÷ √掉血」
-//   （兩兩組合表 chipvalue_pairs.json 10-09 拿掉了，見 load.js；下面用到 P 的地方沒有表就跳過）
+// 晶片分數：路線價值表（botsim --routeval）有就用；沒有就試裝（bot/value.js）
+//   （舊的晶片價值表 chipvalue_base.json 10-24 拿掉：量的是改版前的武器和晶片；晶片接起來的效果改用接線表 chiplink.js 看）
 const SCORE_FIX = { trigger: 1.0, scrap: 0 };
 const nearKey = (obj, L) => Object.keys(obj).map(Number).reduce((a, b) => Math.abs(b - L) < Math.abs(a - L) ? b : a);
 // 換電路格：拿這層零件多出來的電路格價值
@@ -24,35 +24,15 @@ function chipScore(id) {
     const part = String(id).startsWith('part:') && PARTS[String(id).slice(5)];  // 三選一的零件代號是 part:零件
     return part ? partScore(String(id).slice(5)) + slotGain() : 1.05;
   }
-  const b = bOf(id), t = CH[id].type, V = globalThis.__CV, P = globalThis.__CP, w = G.weapon.id;
-  const L = (G.sector - 1) * 7 + (G.node ? G.node.L : 0);
-  let v;
+  const b = bOf(id), t = CH[id].type;
   const rv = rvItem(b);  // 路線價值表（有就優先用；botsim --routeval）
-  if (rv != null) v = rv;
-  else if (V && V[b] && V[b][w]) { const x = V[b][w][nearKey(V[b][w], L)]; v = x.speed / Math.sqrt(Math.max(0.2, x.dmg)); }
-  else v = SCORE_FIX[b] != null ? SCORE_FIX[b] : (t === 'singularity' || t === 'composite' ? 1.3 : chipTrialGain(id));  // 價值表沒有的（新晶片）：試裝（bot/value.js）
-  if (P) for (const o of new Set(G.chain.slice(1).filter(x => x && CH[x] && bOf(x) !== b).map(bOf))) {  // 加乘：跟電路上每個不同的晶片
-    const pk = k => P[k] && P[k][nearKey(P[k], L)], sv = y => y ? y.s[w] / (1 + Math.max(-0.5, y.d[w] - 1) * 0.5) : 0;
-    const cands = [`${b}+${o}`, `${o}+${b}`, `${b}+${o}@h`, `${o}+${b}@h`].filter(k => P[k]);  // 插武器、插晶片：取比較好的
-    const q = cands.length ? P[cands.reduce((x, y) => sv(pk(y)) > sv(pk(x)) ? y : x)] : null;
-    if (q) { const y = q[nearKey(q, L)]; v *= Math.max(0.7, Math.min(1.4, y.s[w] / (1 + Math.max(-0.5, y.d[w] - 1) * 0.5))); }  // 單格場數少：夾在 0.7～1.4
-  }
+  let v = rv != null ? rv : SCORE_FIX[b] != null ? SCORE_FIX[b] : (t === 'singularity' || t === 'composite' ? 1.3 : chipTrialGain(id));  // 路線價值表沒有的：試裝（bot/value.js）
   {  // 熟練玩家：玩法晶片疊在同一批子彈上（每顆子彈同時養好幾個晶片、效果一起觸發）
     const play = new Set(G.chain.slice(1).filter(x => x && CH[x] && hasLv(x) && bOf(x) !== b).map(bOf)).size;
     if (hasLv(b)) v *= Math.min(1.5, 1 + 0.1 * play);  // 每多一個玩法晶片 +10%，最多 +50%
   }
-  // 插座的價值（2026-10-03）：每個插座 ≈ 組件插在這個晶片上的平均好處（組件本身的價值 × 插在這個晶片上的加乘，兩兩組合表的「插晶片」）；沒量過當 6%
-  const sk = typeof socketsOf === 'function' ? socketsOf(id) : 0;
-  let g = 0.06;
-  if (sk && P) {
-    const gs = ['amp', 'bigshot'].map(c => {
-      const q = P[`${b}+${c}@h`] || P[`${c}+${b}@h`], cv = V && V[c] && V[c][w], rc = rvItem(c);
-      if (!q || (!cv && rc == null)) return null;
-      const y = q[nearKey(q, L)], cval = rc != null ? rc : (x => x.speed / Math.sqrt(Math.max(0.2, x.dmg)))(cv[nearKey(cv, L)]);
-      return Math.max(0, cval * y.s[w] - 1);
-    }).filter(x => x != null);
-    if (gs.length) g = Math.min(0.3, 0.5 * gs.reduce((a, x) => a + x, 0) / gs.length);
-  }
+  // 插座的價值：每個插座當 6%（以前用兩兩組合表算，10-09 那張表拿掉後一直是 6%）
+  const sk = typeof socketsOf === 'function' ? socketsOf(id) : 0, g = 0.06;
   // 組件：電路上（武器或晶片）沒有空插座的話，拿了也插不上
   const freeSock = CH[id].comp && typeof socketsOf === 'function' ? G.chain.some((c, i) => c && ((G.socks || [])[i] || []).length < socketsOf(c)) : true;
   return v * (1 + g * sk) * (freeSock ? 1 : 0.3);
