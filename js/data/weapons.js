@@ -156,7 +156,8 @@ const WEAPONS = {
       `<b>多人</b>：勾得到隊友（戰鬥、房間都行，倒下的也行），拉到你前方、他衝刺就掙脫；右鍵把他甩去撞敵人（飛行中無敵）；被勾住的人不能勾隊友`,
     ],
     trig: 1,
-    base: { interval: 0.6, count: 1, spread: 0, damage: 8, speed: 1300, radius: 6, pierce: 0, life: 0.28, shape: 'rail', knock: 0.2, hook: true },
+    // 傷害 8 → 5（10-25 王加了新招之後整局模擬各 100 局：8 = 32%、6 = 31%、5 = 22%／18%（兩批亂數），目標 20%）
+    base: { interval: 0.6, count: 1, spread: 0, damage: 5, speed: 1300, radius: 6, pierce: 0, life: 0.28, shape: 'rail', knock: 0.2, hook: true },
     alt: { name: '甩擊', cd: HOOK.cd },  // 右鍵（行為在 game/weapon_play.js）
     paths: {
       A: { name: '勾', desc: `勾住多 ${HOOK_UP.t} 秒，鉤爪速度 ×${HOOK_UP.speed}。`, apply: p => { p.hookT = HOOK_UP.t; p.speed *= HOOK_UP.speed; },
@@ -201,7 +202,8 @@ const WEAPONS = {
       `右鍵<b>收攏</b>：${DRONE.shield} 秒內貼著飛船轉成一圈護盾，最多擋 ${DRONE.blockN} 顆敵彈，這段時間不攻擊`,
     ],
     trig: 0.2,
-    base: { interval: 0.3, count: 1, spread: 0, damage: 4, speed: 800, radius: 3, life: 0.4, shape: 'dot', knock: 0.4, drones: DRONE.n },  // 傷害 6 → 4（10-23 整局模擬各 100 局：6 = 53%、4.5 = 38%、4 = 24%，目標 20%）
+    base: { interval: 0.3, count: 1, spread: 0, damage: 3, speed: 800, radius: 3, life: 0.4, shape: 'dot', knock: 0.4, drones: DRONE.n },  // 傷害 6 → 4（10-23 整局模擬各 100 局：6 = 53%、4.5 = 38%、4 = 24%，目標 20%）
+    //   4 → 3（10-25：王的招式表變長、終焉核心叫護衛變少後 4 = 49%／39%（兩批亂數）；3 = 23%／19%、2.5 = 17%）
     alt: { name: '收攏', cd: DRONE.cd },  // 右鍵（行為在 game/weapon_play.js）
     paths: {
       A: { name: '數量', desc: `無人機 +${DRONE_UP.n} 架。`, apply: p => { p.drones += DRONE_UP.n; },
