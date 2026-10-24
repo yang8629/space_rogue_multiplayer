@@ -918,7 +918,7 @@ class Enemy {
     this.skillCd -= dt * endlessAtk();
     if (this.share || this.skillCd > 0 || this.mode !== 'chase') return;  // 雙子獵艦：出招由主艦決定（twinSkill 分給兩艘）
     this.skill = this.pickSkill(d);
-    if (CFG.MARK.kinds[this.skill]) { this.markCast(this.skill); this.skillCd = rage ? 2.2 : 2.8; return; }  // 標記圈：每隻王都有（雙子獵艦由主艦放）
+    if (this.skill === 'mark') { this.markCast(pick(Object.keys(CFG.MARK.kinds))); this.skillCd = rage ? 2.2 : 2.8; return; }  // 標記圈：每隻王都有（雙子獵艦由主艦放）
     if (this.pair) { this.twinSkill(this.skill, rage); return; }
     switch (this.skill) {
       // 星噬母艦

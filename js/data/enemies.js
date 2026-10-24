@@ -39,20 +39,20 @@ const ENEMY_TYPES = {
   dummy:   { name: '標靶', hp: 5000, speed: 0, radius: 18, dmg: 0, color: '#9fb4ff', credits: 0, shape: 8, dummy: true },
   // 三隻旗艦：第 1～3 關依序出現，無盡模式隨機抽
   boss:    { name: '星噬母艦', hp: 2000, speed: 45, radius: 50, dmg: 35, color: '#ff4d6d', credits: 40, shape: 8, boss: true,
-    knockResist: 1.5, shotMul: 0.85, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring', 'gather', 'share'],
+    knockResist: 1.5, shotMul: 0.85, rage: '母艦核心暴走', skills: ['spiral', 'fan', 'summon', 'ring', 'mark'],
     desc: '螺旋彈幕、扇形齊射、召喚蟲群、環形彈。' },
   boss2:   { name: '裂界獵艦', hp: 2800, speed: 80, radius: 42, dmg: 35, color: '#b388ff', credits: 40, shape: 3, boss: true, face: true,
-    knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy', 'gather', 'share'], shotMul: 0.85,
+    knockResist: 2.5, rage: '獵艦推進器過載', skills: ['charge', 'cross', 'snipe', 'charge', 'deploy', 'mark'], shotMul: 0.85,
     desc: '高速衝鋒（有預警線，衝鋒時往兩側灑彈）、旋轉十字彈流、三連狙擊、部署噴吐者。' },
   boss3:   { name: '終焉核心', hp: 3000, speed: 35, radius: 56, dmg: 40, color: '#2ee6a6', credits: 40, shape: 6, boss: true,
-    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'bomb', 'wall', 'guard', 'gather', 'share'], shotMul: 1.15,
+    knockResist: 3.5, rage: '核心臨界', skills: ['nova', 'twin', 'bomb', 'wall', 'guard', 'mark'], shotMul: 1.15,
     desc: '連續缺口環形波、雙向螺旋、落點轟炸、慢速彈牆、召喚刺殼護衛。' },
   // 章節專屬的王：twin = 一次出兩艘、共用一條血（CFG.TWIN）；beams = 旋轉光束、turrets = 身邊的砲塔（CFG.WARDEN）；center = 出現在場地正中間
   boss4:   { name: '雙子獵艦', hp: 3000, speed: 80, radius: 34, dmg: 30, color: '#7c9cff', credits: 40, shape: 3, boss: true, face: true, twin: true,
-    knockResist: 2.5, rage: '雙子同步過載', skills: ['charge', 'fan', 'snipe', 'deploy', 'gather', 'share'], shotMul: 1.6,  // 子彈 ×1.6：10-20 整局模擬（第二章 3-7，66 場）加強光束、出招後陣亡 14%（終焉核心 26%），扣血主要來自子彈；×1.2 → 17%、×1.6 → 21%
+    knockResist: 2.5, rage: '雙子同步過載', skills: ['charge', 'fan', 'snipe', 'deploy', 'mark'], shotMul: 1.6,  // 子彈 ×1.6：10-20 整局模擬（第二章 3-7，66 場）加強光束、出招後陣亡 14%（終焉核心 26%），扣血主要來自子彈；×1.2 → 17%、×1.6 → 21%
     desc: `兩艘共用一條血，繞著同一個中心轉，中間連著光束（碰到受傷；一艘衝鋒時光束斷掉）；輪流衝鋒、兩艘一起扇形齊射、狙擊、部署噴吐者。` },
   boss5:   { name: '星環守門者', hp: 3200, speed: 0, radius: 54, dmg: 40, color: '#ffb86b', credits: 40, shape: 8, boss: true, anchored: true, center: true, beams: true,
-    syncCd: true, knockResist: 99, rage: '守門者全開', skills: ['pulse', 'gather', 'share'], shotMul: 1, turrets: ['wt_aim', 'wt_ring', 'wt_bomb', 'wt_call'],
+    syncCd: true, knockResist: 99, rage: '守門者全開', skills: ['pulse', 'mark'], shotMul: 1, turrets: ['wt_aim', 'wt_ring', 'wt_bomb', 'wt_call'],
     desc: `待在場地正中間不動：旋轉光束掃過全場（開之前有細的預警線；暴走後 3 條），核心定時放環形彈；身邊 4 座砲塔各管一招（瞄準射擊、環形彈、轟炸、召喚蟲群），打掉一座那招就沒了。` },
   // 星環守門者的砲塔：跟著核心轉（anchored，不吃擊退）；turret = 出招間隔 cd 秒（出什麼招在 game/enemy_ai.js 的 TURRET_FIRE）
   wt_aim:  { name: '瞄準砲塔', hp: 450, speed: 0, radius: 20, dmg: 20, color: '#ff8a5c', credits: 0, shape: 6, anchored: true,

@@ -15,7 +15,7 @@ const CFG = {
   BOSS_LOCK: { t: 8 },      // 多人時的王：鎖定一個人打，每 t 秒換一次（換成這段時間打王最痛的人；Game.bossLockTick）
   // 標記圈（使用者 10-24）：紅圈套在一個人身上跟著跑 follow 秒，再定在原地 hold 秒後爆發（Enemy.markCast、Game.updateZones 的 ZONE_HIT）
   //   gather 集合圈：圈外的人受傷（大家擠進圈裡）；share 分攤圈：總傷害由圈裡的人平分（被標的人不管在哪都算一份）
-  //   王的招式（ENEMY_TYPES 的 skills 裡的 gather／share）
+  //   王的招式：招式表（ENEMY_TYPES 的 skills）裡的 mark，放的時候隨機一種（兩種合佔一格：使用者 10-24 說各佔一格太常出現）
   MARK: { follow: 0.5, hold: 0.5, r: 110, kinds: { gather: { name: '集合圈', dmg: 20 }, share: { name: '分攤圈', dmg: 40 } } },
   BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
   START_SLOTS: 3, MAX_SLOTS: 8, INV_SLOTS: 6,  // START_SLOTS 含武器格：開局 2 格晶片
