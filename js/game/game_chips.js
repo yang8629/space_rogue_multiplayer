@@ -34,10 +34,15 @@ Object.assign(Game, {
     const rareBoom = src && src.rare && src.key === 'boomerang';  // 稀有迴旋：只有回程打中才傳，每次 1
     if (rareBoom && b.mode !== 'return') return;
     const L = b.owner || this.L, A = L.lnAcc || (L.lnAcc = new Map());
-    const v = (A.get(next) || 0) + (echo ? WEAPONS[L.weapon.id].trig : rareBoom ? 1 : CHIPS[src.key].coef);
+    const v = (A.get(next) || 0) + (echo ? WEAPONS[L.weapon.id].trig * (b.trigMul || 1) : rareBoom ? 1 : CHIPS[src.key].coef);  // trigMul：不是子彈的打中（lineTouch）
     if (v < 1) { A.set(next, v); return; }
     A.set(next, v - 1);
     this.lineQueue(b.owner, line, k + 1, e.x, e.y, b.angle, e.id);
+  },
+  // 武器不是用子彈打中的那一下（牽引鉤的扯）：跟子彈命中往下傳同一套累積，每下累積 武器觸發係數 × mul
+  lineTouch(p, e, mul) {
+    const L = loadoutOf(p), line = L.stats && L.stats.line;
+    if (line && line.cells.length) this.linePass({ ln: { line, k: -1 }, owner: L === this.L ? null : L, angle: p.aim, trigMul: mul }, 'hit', e);
   },
   // 武器的招牌動作（排熱、召回、塌縮、甩擊、重斬、收攏）：武器線直接觸發第 1 格一次（不用累積），位置在 (x, y)
   lineSig(p, x, y, ang, ignore) {

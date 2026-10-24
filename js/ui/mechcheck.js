@@ -333,18 +333,17 @@ const MechCheck = {
       const ok = near1(cd, HEAT.cd) && near1(c1, VENT2.cd) && near1(c2, HEAT.cd) && picked;
       return { ok, got: `排熱冷卻 ${cd.toFixed(2)}；分段排熱 第一下後 ${c1.toFixed(2)}、第二下後 ${c2.toFixed(2)}；飛輪${picked ? '撿起來了' : '沒撿起來（錯）'}` };
     }],
-    ['武器連段', '飛輪：全接快擲', `丟滿 ${DISC.max} 個再召回、全部接回 → 下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}；沒丟滿召回不算`, M => {
-      const run = n => {
-        M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', null, null, null]); M.targets([]);
-        const P = Game.player, base = Game.wp.damage;
-        for (let i = 0; i < n; i++) { P.fire(); W_.step(30); }
-        WEAPON_PLAY.scatter.alt(P); W_.step(90);
-        P.fire(); const b = Game.bullets[Game.bullets.length - 1];
-        return { k: b.damage / base, v: b.speed / Game.wp.speed };
-      };
-      const full = run(DISC.max), part = run(DISC.max - 1);
-      const ok = full.k > part.k + 0.5 && near1(full.k, DISC_FAST.dmg) && near1(full.v, DISC_FAST.speed) && near1(part.k, 1);  // 第一項：期望值不照 DISC_FAST 算（關掉快擲時也要抓得到）
-      return { ok, got: `丟滿召回後下一擲 傷害 ×${full.k.toFixed(2)}、速度 ×${full.v.toFixed(2)}；沒丟滿 ×${part.k.toFixed(2)}` };
+    ['武器連段', '飛輪：全接快擲', `丟滿 ${DISC.max} 個再召回、全部接回 → 接回的每一個再擲出去時速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}；之後個別收回的普通飛輪排在強化的後面；沒丟滿召回不算`, M => {
+      const P = () => Game.player, last = () => Game.bullets[Game.bullets.length - 1];
+      const throwN = n => { const ks = []; for (let i = 0; i < n; i++) { P().fire(); ks.push(last().damage / Game.wp.damage); W_.step(30); } return ks; };
+      const recall = () => { WEAPON_PLAY.scatter.alt(P()); W_.step(90); };
+      const start = () => { M.setup('sandbox', 'vanguard', 'scatter', null, null, ['weapon', null, null, null]); M.targets([]); };
+      start(); throwN(DISC.max); recall(); const v = (P().fire(), last().speed / Game.wp.speed); W_.step(30);
+      const full = [v > 1 ? DISC_FAST.dmg : 1, ...throwN(DISC.max - 1)].map(k => +k.toFixed(2));  // 全接後連擲 3 個
+      start(); throwN(DISC.max); recall(); const t1 = throwN(1); recall(); const order = [...t1, ...throwN(DISC.max)].map(k => +k.toFixed(2));  // 全接 → 擲 1 收 1 → 再擲 3 個
+      start(); throwN(DISC.max - 1); recall(); const part = throwN(1).map(k => +k.toFixed(2));
+      const B = DISC_FAST.dmg, ok = full.every(k => near1(k, B)) && near1(v, DISC_FAST.speed) && order.length === 4 && near1(order[0], B) && near1(order[1], B) && near1(order[2], B) && near1(order[3], 1) && near1(part[0], 1);
+      return { ok, got: `全接後連擲 3 個 傷害 ×${full.join('、')}（速度 ×${v.toFixed(2)}）；擲 1 收 1 之後 ×${order.join('、')}；沒丟滿召回 ×${part[0]}` };
     }],
     ['武器連段', '重力井：疊井', `新的井停在舊井範圍裡合併（最多 ${WELL_STACK.max} 次）：吸引範圍 ×${WELL_STACK.r}、塌縮傷害 ×${WELL_STACK.dmg}`, M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
@@ -401,6 +400,17 @@ const MechCheck = {
       const a = fly(60), b = fly(120), c = brake(60), d = brake(120);
       const ok = Math.abs(a - b) / a < 0.05 && Math.abs(c - d) < Math.max(1, c * 0.1);
       return { ok, got: `晶體 1 秒飛 ${Math.round(a)}／${Math.round(b)}（60／120fps）；彈幕艇起手 0.5 秒後速度 ${c.toFixed(1)}／${d.toFixed(1)}` };
+    }],
+    ['武器連段', '牽引鉤：扯會觸發晶片', `勾住時每扯一下算一次武器打中，累積 觸發係數 × ${YANK.trig}，滿 1 觸發電路第 1 格`, M => {
+      M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', 'boomerang', null, null]);
+      const P = Game.player, e = M.targets([[60, 0]], 'brute', true, 999)[0];
+      P.hookE = e; P.hookX = [];
+      let n = 0; const o = Game.lineQueue; Game.lineQueue = function (...a) { n++; return o.apply(this, a); };
+      const need = Math.ceil(1 / (WEAPONS.railgun.trig * YANK.trig) - 1e-9);
+      for (let i = 0; i < need - 1; i++) WEAPON_PLAY.railgun.onFire(P, []);
+      const before = n; WEAPON_PLAY.railgun.onFire(P, []);
+      Game.lineQueue = o; P.hookE = null;
+      return { ok: before === 0 && n === 1, got: `扯 ${need - 1} 下觸發 ${before} 次、第 ${need} 下觸發 ${n - before} 次` };
     }],
     ['武器連段', '牽引鉤：扯有音效、拉人不穿牆', '扯不射子彈，自己發打中事件（音效）；勾住的敵人被牆擋住就過不來（走 Enemy.move，不直接改位置）', M => {
       M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]);

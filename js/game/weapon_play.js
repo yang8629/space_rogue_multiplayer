@@ -42,7 +42,7 @@ const DISC_PARK = { kind: 'disc', t: DISC.park, rehit: DISC.rehit, dmg: DISC.par
   onExpire(b) { discReturn(b, 1); },  // 停住時間到：自己飛回手上（回程照樣打人；不吃召回的回程倍率，以前直接消失，10-23）
   onCatch(b) {  // 飛輪飛回手上：全接快擲、爆輪、自動再擲
     const p = b.ownerP, w = Game.wp;
-    if (b.recall && p.recallN && ++p.caught >= p.recallN) { p.fastThrow = true; p.recallN = 0; floatText(p.x, p.y - 26, '全接！', '#ffb347'); }
+    if (b.recall && p.recallN && ++p.caught >= p.recallN) { p.fastN = p.recallN; p.recallN = 0; floatText(p.x, p.y - 26, '全接！', '#ffb347'); }  // fastN：手上還有幾個強化的（排在前面）
     if (w.discBoom) { wBoom(p.x, p.y, DISC_UP.boom.r, DISC_UP.boom.dmg, '#ffb347', b.att); Game.shake(3); }
     if (w.rethrow) p.rethrowN = (p.rethrowN || 0) + 1;
   } };
@@ -164,10 +164,9 @@ class Flywheel extends ParkWeapon {
   constructor() { super('scatter', 'disc'); }
   max() { return DISC.max + (Game.wp.discMax || 0); }  // 場上最多幾個
   canFire(p) { return this.shots(p).length < this.max(); }
-  onFire(p, list) {  // 全接快擲：這一擲飛得快、比較痛（停的距離不變）
-    if (!p.fastThrow) return list;
-    p.fastThrow = false;
-    for (const s of list) { s.speed *= DISC_FAST.speed; s.life /= DISC_FAST.speed; s.damage *= DISC_FAST.dmg; s.color = '#ffffff'; }
+  onFire(p, list) {  // 全接快擲：手上強化的飛輪先擲出去（飛得快、比較痛，停的距離不變），一個用掉一次
+    if (!(p.fastN > 0)) return list;
+    for (const s of list) { if (!(p.fastN > 0)) break; p.fastN--; s.speed *= DISC_FAST.speed; s.life /= DISC_FAST.speed; s.damage *= DISC_FAST.dmg; s.color = '#ffffff'; }
     Game.shake(2);
     return list;
   }
@@ -301,6 +300,7 @@ class GrappleHook extends WeaponPlay {
     Events.emit('hit', { e, dmg: d });  // 扯不射子彈（Player.fire 拿到空清單就不發 shoot）：自己發打中的音效
     if (i === YANK.n - 1) { wBoom(e.x, e.y, YANK.r, d * YANK.slam, '#ffd166'); p.slammed = true; Game.shake(4); floatText(e.x, e.y - 24, '重摔！', '#ffd166', true); }
     else for (const o of [e, ...(p.hookX || [])]) { wHit(o, d); burst(o.x, o.y, '#ffd166', 4, 120, 0.2, 2); }
+    Game.lineTouch(p, e, YANK.trig);  // 扯也算武器打中：照 YANK.trig 累積觸發電路（10-25 使用者：扯要能觸發晶片）
     return [];
   }
   tick(p, dt) {

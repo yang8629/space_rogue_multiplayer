@@ -35,7 +35,7 @@ const COOL = { kill: 0.1, streak: 2, zero: 0.2, zeroMul: 1.5 };          // 低�
 
 // 迴旋飛輪（scatter）：飛到盡頭停住旋轉 park 秒（每 rehit 秒能再打同一隻），場上最多 max 個；右鍵召回：全部飛回來，回程傷害 ×back
 const DISC = { max: 3, park: 4, rehit: 0.25, back: 1.6, backSpeed: 950, cd: 0.4, parkMul: 2 };  // cd：召回冷卻（短：丟、收是飛輪的玩法；10-23 試過 2 秒，使用者改回）  // parkMul：停住旋轉時的傷害倍率（10-22：停住只佔 4% 傷害，等它磨不划算）
-const DISC_FAST = { speed: 1.5, dmg: 2 };  // 飛輪「全接快擲」：丟滿後召回、全部接回手上 → 下一個擲出的速度 ×speed、傷害 ×dmg
+const DISC_FAST = { speed: 1.5, dmg: 2 };  // 飛輪「全接快擲」：丟滿後召回、全部接回手上 → 接回幾個就有幾個強化（接下來擲出的那幾個速度 ×speed、傷害 ×dmg；之後才收回來的普通飛輪排在後面，10-25 使用者）
 // 迴旋飛輪的升級：數量、召回、旋轉
 const DISC_UP = { max: 1, stackR: 40, stackMax: 3, stackGrow: 1.3, stackDmg: 1.6,  // 疊輪：停在另一個飛輪 40 內就疊上去（最多 3 級，每級大 ×1.3、傷害 ×1.6）
   arc: { every: 0.25, dmg: 8, w: 16, len: 320 },                                    // 連鎖：停住的飛輪之間每 0.25 秒放電弧（320 內才連）
@@ -54,7 +54,8 @@ const WELL_UP = { r: 1.4, slow: 0.5, eat: { per: 0.15, max: 10, r: 40 },        
 // 牽引鉤（railgun）：鉤爪打中就勾住，拉到飛船前方 hold 處（最多 t 秒）；右鍵甩擊：朝準星甩出去（速度 fling、飛 flyT 秒），撞到的受 dmg、被甩的受 self 倍
 //   旗艦勾不動：鉤爪釘住 t 秒、每秒撕扯 tear；右鍵用力一扯 rip 後收回。持續傷害每 tick 秒結算一次（不要每幀跳數字）
 const HOOK = { hold: 70, t: 3, fling: 1500, flyT: 0.5, dmg: 45, self: 0.5, cd: 0.5, tear: 20, rip: 80, tick: 0.25 };
-const YANK = { n: 3, slam: 3, r: 60, every: 0.2 };  // 牽引鉤「扯」：勾住時左鍵改成扯（每 every 秒一下，不照射速：照射速 0.6 秒一扯，電腦勾到就甩反而比較強，10-22 整局 20% vs 0%），第 n 扯重摔在身前：傷害 ×slam、r 內的敵人一起吃
+const YANK = { n: 3, slam: 2, r: 60, every: 0.2, trig: 0.25 };  // slam 3 → 2（10-25：扯是主要傷害，降這個不降武器傷害）；trig：每扯一下累積多少觸發（每秒 5 扯 ≈ 每秒觸發 1.25 次，跟其他武器差不多）
+//   牽引鉤「扯」：勾住時左鍵改成扯（每 every 秒一下，不照射速：照射速 0.6 秒一扯，電腦勾到就甩反而比較強，10-22 整局 20% vs 0%），第 n 扯重摔在身前：傷害 ×slam、r 內的敵人一起吃
 // 牽引鉤的升級：勾、甩、拉
 const HOOK_UP = { t: 1.5, speed: 1.3, multi: 3,                                   // 勾：多勾 1.5 秒、鉤爪 ×1.3 快；群鉤最多 3 隻
   grapple: { speed: 1100, stop: 30, dmg: 30, maxT: 1.5 },                                     // 鉤索：每秒 1100 拉過去、停在 30 前，撞到的受 30
@@ -107,7 +108,7 @@ const WEAPONS = {
       `時間到自己飛回手上（回程也打得到），也可以開過去撿起來`,
       `場上最多 ${DISC.max} 個，滿了不能再擲`,
       `右鍵<b>召回</b>：全部直線飛回手上，回程傷害 ×${DISC.back}、無限穿透`,
-      `<b>全接</b>：丟滿再召回、全部接回手上 → 下一擲速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}`,
+      `<b>全接</b>：丟滿再召回、全部接回手上 → 接回的每一個再擲出去時速度 ×${DISC_FAST.speed}、傷害 ×${DISC_FAST.dmg}`,
     ],
     trig: 0.25,
     base: { interval: 0.35, count: 1, spread: 0, damage: 6, speed: 700, radius: 11, pierce: 99, life: 0.45, shape: 'orb', knock: 0.6, park: 'disc' },
@@ -148,7 +149,7 @@ const WEAPONS = {
 
   railgun: { name: '牽引鉤', short: '鉤爪', color: '#ffd166', desc: [
       `射出鉤爪，勾住敵人拉到飛船前方（最多 ${HOOK.t} 秒）`,
-      `勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃`,
+      `勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃；每一扯都算打中（觸發電路）`,
       `右鍵<b>甩擊</b>：朝準星甩出去，撞到的受 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}`,
       `勾住的、甩出去還在飛的敵人會擋下碰到牠的敵彈（牠照樣扣血）`,
       `<b>旗艦</b>勾不動：鉤爪釘在牠身上（最多 ${HOOK.t} 秒）每秒撕扯 ${HOOK.tear}，右鍵用力一扯造成 ${HOOK.rip} 後收回`,
@@ -156,8 +157,8 @@ const WEAPONS = {
       `<b>多人</b>：勾得到隊友（戰鬥、房間都行，倒下的也行），拉到你前方、他衝刺就掙脫；右鍵把他甩去撞敵人（飛行中無敵）；被勾住的人不能勾隊友`,
     ],
     trig: 1,
-    // 傷害 8 → 5（10-25 王加了新招之後整局模擬各 100 局：8 = 32%、6 = 31%、5 = 22%／18%（兩批亂數），目標 20%）
-    base: { interval: 0.6, count: 1, spread: 0, damage: 5, speed: 1300, radius: 6, pierce: 0, life: 0.28, shape: 'rail', knock: 0.2, hook: true },
+    // 傷害 8：10-25 試過 8 → 5（32% → 22%／18%），但扯（勾住時左鍵）的傷害就是武器傷害，等於砍扯；改成降重摔倍率（YANK.slam）
+    base: { interval: 0.6, count: 1, spread: 0, damage: 8, speed: 1300, radius: 6, pierce: 0, life: 0.28, shape: 'rail', knock: 0.2, hook: true },
     alt: { name: '甩擊', cd: HOOK.cd },  // 右鍵（行為在 game/weapon_play.js）
     paths: {
       A: { name: '勾', desc: `勾住多 ${HOOK_UP.t} 秒，鉤爪速度 ×${HOOK_UP.speed}。`, apply: p => { p.hookT = HOOK_UP.t; p.speed *= HOOK_UP.speed; },
