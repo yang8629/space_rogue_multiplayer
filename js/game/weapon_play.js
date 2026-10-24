@@ -288,7 +288,11 @@ class GrappleHook extends WeaponPlay {
     burst(q.x, q.y, '#ffd166', 8, 180, 0.25, 2);
   }
   free(p, broke) {  // 放開勾住的：有抗性的開始免疫（CFG.CC）；broke = 時間到自己掙脫
-    for (const o of [p.hookE, ...(p.hookX || [])]) if (o && o.ccEnd('hook') && broke && !o.dead) floatText(o.x, o.y - 24, '掙脫！', '#ff8f8f', true);
+    for (const o of [p.hookE, ...(p.hookX || [])]) {
+      if (!o) continue;
+      o.graceBy = p; o.graceT = Game.time + HOOK.grace;  // 放開後一下子不撞勾的人（Game.updateEnemies）
+      if (o.ccEnd('hook') && broke && !o.dead) floatText(o.x, o.y - 24, '掙脫！', '#ff8f8f', true);
+    }
     p.hookE = null; p.hookX = [];
   }
   onFire(p, list) {  // 勾住時左鍵改成「扯」：扯、扯、重摔（YANK），不射新的鉤爪
@@ -322,7 +326,7 @@ class GrappleHook extends WeaponPlay {
     else if (e) {
       p.hookX = (p.hookX || []).filter(o => !o.dead);
       if (!e.t.boss) [e, ...p.hookX].forEach((o, i) => {  // 拉到飛船前方（群鉤的排在兩側）、暈住（stunT：不動、不攻擊）；走 move 才會被牆擋住（以前直接改位置，會被拉穿牆，10-22）
-        const hold = Math.max(HOOK.hold, p.r + o.r + (o.shieldA != null ? SHIELD_OUT : 0) + 12);  // 大隻的、帶盾的拉在遠一點（不貼在船上）
+        const hold = Math.max(HOOK.hold, p.r + o.r + (o.shieldA != null ? SHIELD_OUT : 0) + 30);  // 大隻的、帶盾的拉在遠一點：全速往前飛時拉過來的會落後約 18（10-25 量），+30 才不會貼到船（以前一律 70，帶盾的精英移動時盾貼著船、掙脫時直接撞上）
         const side = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 32, tx = p.x + Math.cos(p.aim) * hold - Math.sin(p.aim) * side, ty = p.y + Math.sin(p.aim) * hold + Math.cos(p.aim) * side, k = Math.min(1, dt * 12);
         const n = Math.max(1, Math.ceil(Math.hypot(tx - o.x, ty - o.y) * k / (o.r * 0.5)));  // 分小步走：一步超過牆厚會穿過去（碰撞是移動後才檢查）
         o.vx = (tx - o.x) * k / dt; o.vy = (ty - o.y) * k / dt;

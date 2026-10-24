@@ -422,7 +422,7 @@ const Game = {
       if (e.t.boss && !this.isClient()) this.bossLockTick(e, dt);
       e.update(dt, this.enemyTarget(e));  // 追最近的玩家（附近有殘影就追殘影；多人時的王追鎖定的人）
       if (e.spawnT <= 0) for (const p of this.players()) {
-        const held = e.stunT > 0 && !e.t.boss;  // 被牽引鉤勾住、甩出去飛行中（暈住）：盾和本體都只推開、不扣血（10-25 使用者：勾帶盾的大隻精英，盾碰到勾的人被撞死）
+        const held = !e.t.boss && (e === p.hookE || (p.hookX && p.hookX.includes(e)) || (e.graceBy === p && this.time < e.graceT));  // 自己勾住、拉在身前的（和剛放開 HOOK.grace 秒內）：盾和本體碰到勾的人都不算（別人碰到、甩出去的撞人照樣扣血）
         if (e.shieldA != null && this.shieldBlock(e, p) && !this.mechOf(p).traits.ram && !held) this.hurtPlayer(e.t.dmg, e.t.name + '（盾）', p, e.x, e.y);
         const rr = e.r + p.r;
         if (dist2(e.x, e.y, p.x, p.y) >= rr * rr) continue;
@@ -437,7 +437,7 @@ const Game = {
           continue;
         }
         if (!e.t.dmg) continue;  // 沒有撞擊傷害的（寶藏無人機、標靶）：碰到不算被打
-        if (held) continue;  // 勾住、拉在身前的（暈住）：碰到不算被撞（以前只豁免勾的那個人、也不含盾）（以前飛船往前走就撞上，牽引鉤扯的時候一直掉血，2026-10-22）
+        if (held) continue;  // 自己勾住、拉在身前的：碰到不算被撞（以前飛船往前走就撞上，牽引鉤扯的時候一直扣血）（以前飛船往前走就撞上，牽引鉤扯的時候一直掉血，2026-10-22）
         this.hurtPlayer(e.t.dmg, e.t.name + '（撞擊）', p, e.x, e.y);
       }
     }

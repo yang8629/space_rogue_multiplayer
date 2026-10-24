@@ -394,18 +394,20 @@ const MechCheck = {
       const noRam = held && P.hp === hp0;
       return { ok: fast && noRam, got: `${hooked ? '勾住' : '沒勾住（錯）'}；${(YANK.every * YANK.n).toFixed(1)} 秒內${P.slammed ? '重摔了' : '還沒重摔（錯）'}；勾住的貼到飛船${P.hp === hp0 ? '沒掉血' : `掉了 ${Math.round(hp0 - P.hp)}（錯）`}` };
     }],
-    ['多人', '牽引鉤：勾住的大隻精英、帶盾的不傷人', '被勾住、甩出去飛行中（暈住）的敵人：盾和本體碰到任何人（勾的人、隊友）都不扣血；大隻、帶盾的拉在比較遠（不貼在船上）', M => {
+    ['多人', '牽引鉤：勾住的大隻精英、帶盾的不撞勾的人', `拉在身前的距離照敵人大小（大隻、帶盾的拉遠，不貼在船上）；自己勾住的（和放開後 ${HOOK.grace} 秒內）盾、本體碰到勾的人不扣血，碰到隊友照樣扣`, M => {
       const m = M.coop('laser', ['weapon', null, null, null], 'railgun'), P = Game.player;
       const e = M.targets([[200, 0]], 'elite', false, 60)[0]; e.affixes = ['shield']; e.shieldA = 0; e.alert = true;  // 盾先背對（不然鉤爪打到盾被彈開），勾住之後再轉過來
       P.aim = 0; P.fire(); W_.step(45);
-      const hooked = P.hookE === e, gap = Math.hypot(e.x - P.x, e.y - P.y), want = P.r + e.r + SHIELD_OUT + 12;
+      const hooked = P.hookE === e, gap = Math.hypot(e.x - P.x, e.y - P.y), want = P.r + e.r + SHIELD_OUT + 30;
       e.x = P.x + P.r + e.r + 6; e.y = P.y; e.shieldA = Math.PI;  // 盾正對著勾的人、貼在船上
       m.x = e.x; m.y = e.y + e.r + m.r - 4;  // 隊友貼著本體
       P.iframe = m.iframe = 0; const h1 = P.hp, h2 = m.hp;
       Game.update(1 / 60);
-      const safe = P.hp === h1 && m.hp === h2;
+      const d1 = h1 - P.hp, d2 = h2 - m.hp, safe = d1 === 0 && d2 > 0;
+      WEAPON_PLAY.railgun.free(P, true); m.x = P.x - 300; P.iframe = 0; const h3 = P.hp; Game.update(1 / 60); const grace = P.hp === h3;  // 剛放開：還不撞勾的人
+      Game.time += HOOK.grace; e.x = P.x + P.r + e.r - 4; e.y = P.y; P.iframe = 0; const h4 = P.hp; Game.update(1 / 60); const after = P.hp < h4;  // 過了就照常撞
       Game.mates = [];
-      return { ok: hooked && gap >= want - 2 && safe, got: `${hooked ? '勾住' : '沒勾住（錯）'}；拉在 ${Math.round(gap)}（要 ≥ ${Math.round(want)}）；盾貼著勾的人扣 ${Math.round(h1 - P.hp)}、本體貼著隊友扣 ${Math.round(h2 - m.hp)}` };
+      return { ok: hooked && gap >= want - 2 && safe && grace && after, got: `${hooked ? '勾住' : '沒勾住（錯）'}；拉在 ${Math.round(gap)}（要 ≥ ${Math.round(want)}）；盾貼著勾的人扣 ${Math.round(d1)}（要 0）、本體貼著隊友扣 ${Math.round(d2)}（要 > 0）；剛放開${grace ? '不撞' : '就撞（錯）'}、${HOOK.grace} 秒後${after ? '照常撞' : '還不撞（錯）'}` };
     }],
     ['幀率', '高幀率不會改變動作', '同樣 1 秒：60fps 和 120fps 的晶體飛行距離、敵人起手煞車後的速度要一樣（每幀衰減照時間換算，見 decay）', M => {
       const fly = fps => { const c = { x: 0, y: 0, vx: 0, vy: 0, vacuum: true }, p = { x: 500, y: 0 }; for (let i = 0; i < fps; i++) stepPickup(c, p, 0, dist2(c.x, c.y, p.x, p.y), 1 / fps); return c.x; };
