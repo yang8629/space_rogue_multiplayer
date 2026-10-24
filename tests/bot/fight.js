@@ -300,20 +300,39 @@ function goRevive(p) {
   I.joy = { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 };
 }
 function bot(p) {
-  if (!goExit(p)) { fightBot(p); flankShield(p); }
+  if (!goExit(p)) { fightBot(p); flankShield(p); shieldHold(p); }
   goRevive(p);
 }
-// 精英「護盾」：盾對著自己（±70°）、在 500 內 → 往側邊繞（加在原本的走位上，繞到背後再打）；有子彈要閃時不管
-function flankShield(p) {
+const shieldOff = (e, p) => angleDiff(e.shieldA, Math.atan2(p.y - e.y, p.x - e.x));  // 自己在盾中心的哪一側（0 = 正對盾）
+// 往離盾中心遠的那一側繞（加在原本的走位上，繞到盾外再打）；有子彈要閃、正在衝刺時不管
+function sidestep(p, e) {
   if (threat > 0 || Input.dash) return;
-  // 只繞精英的護盾詞綴。10-23 試過連普通盾衛也繞（照最近的那隻）：能量刃整局 100 局 44% → 33%、被盾衛反彈打死 17 → 33 局（繞的時候刃片更常掃到盾），撤回
-  const e = G.enemies.find(o => !o.dead && !(o.spawnT > 0) && o.t.elite && o.shieldA != null && Math.hypot(o.x - p.x, o.y - p.y) < 500);
-  if (!e) return;
-  const a = Math.atan2(p.y - e.y, p.x - e.x), off = angleDiff(e.shieldA, a);
-  if (Math.abs(off) > 1.22) return;
-  const s = off >= 0 ? 1 : -1, tx = -Math.sin(a) * s, ty = Math.cos(a) * s, j = Input.joy || { x: 0, y: 0 };  // 往離盾中心遠的那一側繞
+  const a = Math.atan2(p.y - e.y, p.x - e.x), s = shieldOff(e, p) >= 0 ? 1 : -1, tx = -Math.sin(a) * s, ty = Math.cos(a) * s, j = Input.joy || { x: 0, y: 0 };
   const mx = j.x / 60 + tx * 1.5, my = j.y / 60 + ty * 1.5, l = Math.hypot(mx, my) || 1;
   Input.joy = { bx: 0, by: 0, x: mx / l * 60, y: my / l * 60 };
+}
+// 精英「護盾」：盾對著自己（±70°）、在 500 內 → 往側邊繞
+function flankShield(p) {
+  // 只繞精英的護盾詞綴。10-23 試過連普通盾衛也繞（照最近的那隻）：能量刃整局 100 局 44% → 33%、被盾衛反彈打死 17 → 33 局（繞的時候刃片更常掃到盾），撤回
+  //   普通盾衛改成近戰才管、繞的時候停火（shieldHold）
+  const e = G.enemies.find(o => !o.dead && !(o.spawnT > 0) && o.t.elite && o.shieldA != null && Math.hypot(o.x - p.x, o.y - p.y) < 500);
+  if (e && Math.abs(shieldOff(e, p)) <= 1.22) sidestep(p, e);
+}
+// 近戰（射程 250 內，能量刃）遇到盾對著自己（±70°）的盾衛：不往盾上砍（刃片打到盾反彈回來，近距離閃不掉；10-24 能量刃陣亡 64 局有 26 局是這個）
+//   別隻打得到、方向離開盾衛夠遠（刃片扇形一半＋0.3，不會順便掃到盾）→ 改打那隻；沒有 → 停火、往側邊繞到盾外
+//   久打不到（stalled，20 秒沒掉血）就不管（精英的盾會跟著轉，一直繞不到）
+function shieldHold(p) {
+  const wp = G.wp, R = wp.speed * wp.life;
+  if (R >= 250 || Input.aimStick || stalled()) return;
+  const reach = clamp(R + 40, 140, CFG.AUTO_RANGE), E = G.enemies.filter(e => !e.dead && !(e.spawnT > 0) && !(e.cloak > 0.5));
+  const dist = e => Math.hypot(e.x - p.x, e.y - p.y) - e.r;
+  const bad = E.filter(e => e.shieldA != null && dist(e) < reach && Math.abs(shieldOff(e, p)) <= 1.22);
+  if (!bad.length) return;
+  const dir = e => Math.atan2(e.y - p.y, e.x - p.x), gap = wp.spread / 2 + 0.3;
+  const ok = E.filter(e => !bad.includes(e) && dist(e) < reach && bad.every(b => Math.abs(angleDiff(dir(b), dir(e))) > gap)).sort((a, b) => dist(a) - dist(b))[0];
+  if (ok) { const a = dir(ok); Input.aimStick = { bx: 0, by: 0, x: Math.cos(a) * 60, y: Math.sin(a) * 60 }; return; }
+  Input.autoFire = false;
+  sidestep(p, bad.sort((a, b) => dist(a) - dist(b))[0]);
 }
 function fightBot(p) {
   baseBot(p);

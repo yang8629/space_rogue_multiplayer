@@ -20,6 +20,8 @@ module.exports = function installProbe(G) {
   wrap('evChoose', (o, i) => { const V = G.ev, E = V && vm.runInThisContext('EVENTS')[V.id]; const r = o(i); if (E && (G.ev !== V || V.res)) inc(  /* 選成功才算（選不了的會原封不動） */'事件' + E.name + '：' + E.opts[i].lab); return r; });
   wrap('mineBlast', (o, b) => { inc('地雷爆炸'); return o(b); });
   wrap('onEnemyKilled', (o, e) => { if (e.t.elite) inc('精英擊殺'); return o(e); });
+  // 盾衛把子彈彈回來（2026-10-24，看能量刃的電腦有沒有少砍到盾）
+  wrap('reflectShot', (o, ...a) => { inc('盾反彈'); return o(...a); });
   return {
     reset() { C = {}; },
     text() { return Object.entries(C).map(([k, v]) => `${k} ${v}`).join('、') || '（沒有數到）'; },
