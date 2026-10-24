@@ -91,8 +91,8 @@ function placeLine(id) {
 function sockLine(id) {
   if (isComp(id)) return '<div class="ty sockln">◆ 插件：拖進武器或晶片的插座（不佔電路格）</div>';
   if (!isHost(id) || id === 'weapon') return '';
-  const n = socketsOf(id), P = CHIPS[baseOf(id)];
-  return `<div class="ty sockln${n ? '' : ' det'}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}<br>往下傳：${P.pass === 'kill' ? '擊殺時' : P.pass === 'end' ? '結束時' : '命中時'}</div>`;
+  const n = socketsOf(id);
+  return `<div class="ty sockln${n ? '' : ' det'}">${n ? '◇'.repeat(n) + ` 插座 ${n} 個` : '插座數：掉落時決定（1～3）'}</div>`;  // 以前多一行「往下傳：命中時」：跟觸發模式（chipPassLine）重複，10-25 拿掉
 }
 
 // 零件卡片：名稱＋層數（圓點，4 層開滿）、每層效果（圖示）、2／4 層特性（已開啟的亮起來）

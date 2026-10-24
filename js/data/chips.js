@@ -81,13 +81,13 @@ const CHIP_BRIEF = {
   shred: '命中的敵人受傷增加（疊越多越多）',
 };
 const chipBrief = id => CHIP_BRIEF[baseOf(id)] || String(CHIPS[id].desc).split(/[。；]/)[0];
-// 往下傳的時機（晶片的說明框、卡片都顯示；照 when、coef 產生）：回響照現在武器的觸發係數（WEAPONS[id].trig）
+// 觸發模式：什麼時候觸發電路的下一格（晶片的說明框、卡片都顯示；照 when、coef 產生；10-25 使用者改名，以前叫「觸發下一格」）：回響照現在武器的觸發係數（WEAPONS[id].trig）
 const chipPassLine = id => {
   const d = CHIPS[baseOf(id)];
   if (!d || d.type !== 'chip') return '';
   const W = Game.weapon && WEAPONS[Game.weapon.id], k = d.coef != null ? d.coef : W ? W.trig : null;
   const how = k == null ? '照武器的觸發係數' : k >= 1 ? `觸發 ${+k.toFixed(2)} 次` : `累積 ${+k.toFixed(2)}（滿 1 觸發一次）`;
-  return `觸發下一格：${d.when}，${how}${d.coef == null && W ? `（照武器的觸發係數，${W.short}）` : ''}`;
+  return `觸發模式：${d.when}，${how}${d.coef == null && W ? `（照武器的觸發係數，${W.short}）` : ''}`;
 };
 const NORMAL_IDS = Object.keys(CHIPS).filter(id => !CHIPS[id].hidden);
 const chipPrice = id => (30 + CHIPS[id].cost * 8 + 6 * socketsOf(id)) * lvOf(id) * (rareOf(id) ? CFG.RARE.price : 1);
