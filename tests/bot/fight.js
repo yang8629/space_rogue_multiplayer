@@ -121,6 +121,12 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   if (dodge) { mx = dodge.x; my = dodge.y; threat += dodge.w; }
   // 落點紅圈（終焉核心的轟炸、砲艦的砲擊，2026-10-19 加）：在圈裡（含飛船半徑＋20）就往圈外走，越快爆越急
   //   以前完全不躲：砲艦精英每 3 秒 3 個圈，電腦站著吃
+  // 王的專屬新招（2026-10-24）：過載脈衝蓄力中 → 往外跑出範圍；封鎖環 → 待在牆內（往王靠）
+  for (const e of all) {
+    const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+    if (e.mode === 'overload' && d < CFG.BOSS_SKILL.overload.r + 60) { mx -= dx / d * 4; my -= dy / d * 4; threat += 4; }
+    if (e.mode === 'cage' && d > cageR(e) - 80) { mx += dx / d * 4; my += dy / d * 4; threat += 4; }
+  }
   // 集合圈（王的招式，2026-10-24；圈外受傷）→ 往圈中心靠；追蹤紅圈照落點轟炸躲（下面）
   for (const z of G.zones) {
     if (z.kind !== 'gather') continue;
