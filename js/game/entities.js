@@ -592,6 +592,8 @@ class Enemy {
     if (this.mode !== 'chase') this.mode = 'chase';  // 瞬移打斷招式（衝鋒、砲擊蓄力、牽引）：不然從新位置照舊方向衝
     burst(x, y, this.t.color, 20, 220, 0.4, 2);
   }
+  // 這一幀有沒有撞到牆（方形場地：貼著邊界；大地圖：move 撞牆時記下的 wallN）
+  atWall() { return Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN; }
   move(dt) {
     if (Arena.rect) {
       const nx = this.x + this.vx * dt, ny = this.y + this.vy * dt;
@@ -873,7 +875,7 @@ class Enemy {
         this.shootAt(this.chargeA - Math.PI / 2, 110, 5, 12);
       }
       trail(this.x, this.y, t.color, 0.35, 8);
-      const wall = Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN;  // 大地圖：撞牆（move 記下的 wallN）
+      const wall = this.atWall();  // 大地圖：撞牆（move 記下的 wallN）
       if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx = this.vy = 0; this.scarOn = false; }  // 衝完停住（不滑出預警線）
     } else if (BOSS_MOVE[this.type]) BOSS_MOVE[this.type].call(this, dt, rage);
     else {

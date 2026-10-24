@@ -657,6 +657,16 @@ const MechCheck = {
       const da = ha - a.hp, db = hb - b.hp;
       return { ok: near1(db, HOOK.dmg) && near1(da, HOOK.dmg * HOOK.self) && nums.length >= 2, got: `被砸的扣 ${Math.round(db)}（要 ${HOOK.dmg}）、被甩的扣 ${Math.round(da)}（要 ${Math.round(HOOK.dmg * HOOK.self)}）；跳了 ${nums.length} 個數字${nums.length >= 2 ? '' : '（要 2，錯）'}` };
     }],
+    ['武器原型', '牽引鉤：甩到牆會受傷', `右鍵甩出去的敵人撞到牆：受 ${HOOK.dmg * HOOK.wall}、停在牆邊`, M => {
+      M.setup('sandbox', 'vanguard', 'railgun', null, null, ['weapon', null, null, null]);
+      const P = Game.player; P.x = CFG.WORLD_W - 300;  // 甩出去的在暈眩中很快慢下來（每秒 ×e^-6），總共只飛約 250：放在牆前 230
+      const a = M.targets([[200, 0]], 'brute', true, 60)[0];
+      P.aim = 0; P.fire(); W_.step(45);
+      const hooked = P.hookE === a, h0 = a.hp;
+      WEAPON_PLAY.railgun.alt(P); W_.step(40);
+      const d = h0 - a.hp, wall = CFG.WORLD_W - a.x - a.r;
+      return { ok: Arena.rect && hooked && near1(d, HOOK.dmg * HOOK.wall) && wall < 5, got: `${Arena.rect ? '' : '（不是方形場地，錯）'}${hooked ? '勾住' : '沒勾住（錯）'}；往右牆甩：扣 ${Math.round(d)}（要 ${HOOK.dmg * HOOK.wall}）、離牆 ${Math.round(wall)}` };
+    }],
     ['武器原型', '無人機：準星在飛船上、一直瞄著目標', `游標放在飛船上（準星距離 0）按住射擊：無人機圍在飛船旁（不飛到前面 250）；機頭一直朝要打的目標，轉向是慢慢轉（每秒最多 ${DRONE.turn} 弧度，不瞬間轉過去）`, M => {
       M.setup('sandbox', 'vanguard', 'drone', null, null, ['weapon', null, null, null]);
       const P = Game.player, e = M.targets([[150, 60]], 'brute', true, 999)[0];

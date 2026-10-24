@@ -352,10 +352,15 @@ class GrappleHook extends WeaponPlay {
         for (const o of Game.enemies) if (!o.dead && !G.hit.has(o.id) && dist2(o.x, o.y, p.x, p.y) < (o.r + p.r) ** 2) { G.hit.add(o.id); wHit(o, HOOK_UP.grapple.dmg, 0, 0, 2); burst(o.x, o.y, '#ffd166', 8, 180, 0.25, 2); }
       }
     }
-    // 被甩出去的敵人：飛行中撞到別隻 → 兩隻都受傷（每隻只撞一次）；彈跳甩撞到後轉向下一隻；爆裂甩飛完爆炸
+    // 被甩出去的敵人：飛行中撞到別隻 → 兩隻都受傷（每隻只撞一次）；撞到牆 → 受傷、停在牆邊（爆裂甩照樣炸）；彈跳甩撞到後轉向下一隻；爆裂甩飛完爆炸
     const dmg = HOOK.dmg * (w.flingMul || 1), keep = [];
     for (const f of p.flung || []) {
       if (f.e.dead) continue;
+      if (f.t < HOOK.flyT - 0.03 && f.e.atWall()) {  // 撞牆（剛甩出去那一下不算：被勾在牆邊往外甩時還貼著牆）
+        wHit(f.e, dmg * HOOK.wall); f.e.vx = f.e.vy = 0; f.t = 0;
+        burst(f.e.x, f.e.y, '#ffd166', 14, 240, 0.35, 3); Game.shake(4); floatText(f.e.x, f.e.y - 24, '撞牆！', '#ffd166', true);
+        if (!f.sig) { f.sig = true; Game.lineSig(p, f.e.x, f.e.y, 0, null); }  // 招牌動作：沒撞到別隻、先撞牆也觸發武器線
+      }
       if ((f.t -= dt) <= 0) { if (w.flingBoom) { wBoom(f.e.x, f.e.y, HOOK_UP.boom.r, HOOK_UP.boom.dmg, '#ffd166'); Game.shake(3); } continue; }
       keep.push(f);
       for (const o of Game.enemies) {

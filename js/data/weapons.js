@@ -53,7 +53,7 @@ const WELL_UP = { r: 1.4, slow: 0.5, eat: { per: 0.15, max: 10, r: 40 },        
 
 // 牽引鉤（railgun）：鉤爪打中就勾住，拉到飛船前方 hold 處（最多 t 秒）；右鍵甩擊：朝準星甩出去（速度 fling、飛 flyT 秒），撞到的受 dmg、被甩的受 self 倍
 //   旗艦勾不動：鉤爪釘住 t 秒、每秒撕扯 tear；右鍵用力一扯 rip 後收回。持續傷害每 tick 秒結算一次（不要每幀跳數字）
-const HOOK = { hold: 70, t: 3, fling: 1500, flyT: 0.5, dmg: 45, self: 0.5, cd: 0.5, tear: 20, rip: 80, tick: 0.25 };
+const HOOK = { hold: 70, t: 3, fling: 1500, flyT: 0.5, dmg: 45, self: 0.5, wall: 1, cd: 0.5, tear: 20, rip: 80, tick: 0.25 };  // wall：甩出去撞到牆（場地邊界）受 dmg × wall，停在牆邊（10-25 使用者）
 const YANK = { n: 3, slam: 2, r: 60, every: 0.2, trig: 0.25 };  // slam 3 → 2（10-25：扯是主要傷害，降這個不降武器傷害）；trig：每扯一下累積多少觸發（每秒 5 扯 ≈ 每秒觸發 1.25 次，跟其他武器差不多）
 //   牽引鉤「扯」：勾住時左鍵改成扯（每 every 秒一下，不照射速：照射速 0.6 秒一扯，電腦勾到就甩反而比較強，10-22 整局 20% vs 0%），第 n 扯重摔在身前：傷害 ×slam、r 內的敵人一起吃
 // 牽引鉤的升級：勾、甩、拉
@@ -150,7 +150,7 @@ const WEAPONS = {
   railgun: { name: '牽引鉤', short: '鉤爪', color: '#ffd166', desc: [
       `射出鉤爪，勾住敵人拉到飛船前方（最多 ${HOOK.t} 秒）`,
       `勾住時左鍵改成<b>扯</b>：第 ${YANK.n} 扯重摔，傷害 ×${YANK.slam}、${YANK.r} 內的敵人一起吃；每一扯都算打中（觸發電路）`,
-      `右鍵<b>甩擊</b>：朝準星甩出去，撞到的受 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}`,
+      `右鍵<b>甩擊</b>：朝準星甩出去，撞到的受 ${HOOK.dmg} 傷害，被甩的那隻也受 ${pct(HOOK.self)}；撞到牆受 ${HOOK.dmg * HOOK.wall}`,
       `勾住的、甩出去還在飛的敵人會擋下碰到牠的敵彈（牠照樣扣血）`,
       `<b>旗艦</b>勾不動：鉤爪釘在牠身上（最多 ${HOOK.t} 秒）每秒撕扯 ${HOOK.tear}，右鍵用力一扯造成 ${HOOK.rip} 後收回`,
       `<b>精英</b>勾 ${CFG.CC.elite.hook.t} 秒就掙脫，之後 ${CFG.CC.elite.hook.immune} 秒勾不住`,
