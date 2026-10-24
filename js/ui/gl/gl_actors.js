@@ -2,39 +2,86 @@
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
-// 武器模型（從上往下看、槍口朝 +x、長約 80）：每把武器幾塊零件 [點, 材質]，材質 metal 金屬、dark 深色金屬、accent 武器色的能量部件、light 白色核心
-//   畫法：零件填色＋上半塊疊一層亮的（光從上來）＋描邊；accent 的零件另外加光暈；基地（武器架、船頭）和戰鬥（船頭）共用
+// 武器模型（從上往下看、槍口朝 +x、長約 85、寬不超過 ±17：放得進武器架的展示框）：每把武器幾塊零件 [點, 材質, 什麼時候畫]
+//   材質 metal 金屬、dark 深色金屬、accent 武器色的能量部件、light 白色核心、core 黑色奇點、heat 散熱鰭（照熱度從金屬色燒到橘紅）
+//   什麼時候畫：照武器狀態 st（WEAPON_STATE）決定，看外觀就知道武器現在的狀態（飛輪架上剩幾個、鉤爪在不在、無人機停了幾架…）
+//   畫法：零件填色＋上半塊亮、下半塊暗（光從上來）＋深色描邊；glow 是加法發光的位置 [x, y, r, 強度(st), 'hot' = 燒紅的橘色（不給 = 武器色）]；基地（武器架、船頭）和戰鬥（船頭）共用
 const R4 = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+const wRing = (cx, cy, r, n = 16) => Array.from({ length: n }, (_, i) => [cx + Math.cos(i / n * TAU) * r, cy + Math.sin(i / n * TAU) * r]);  // 圓（多邊形近似）
+const wGear = (cx, cy, r) => Array.from({ length: 16 }, (_, i) => { const q = i % 2 ? r * 0.72 : r, u = i / 16 * TAU + 0.2; return [cx + Math.cos(u) * q, cy + Math.sin(u) * q]; });  // 鋸齒圓輪
+const W_DISC = [[22, 0], [5, 0], [-12, 0]];       // 飛輪架上三個飛輪的位置（最前面的先丟出去）
+const W_DOCK = [[-10, -11], [4, -11], [-10, 11], [4, 11]];  // 無人機的四個停靠位
 const WEAPON_MODEL = {
-  laser: { parts: [[[[-40, -6], [-28, -8], [-28, 8], [-40, 6]], 'dark'], [[[-28, -7], [10, -7], [14, -4], [14, 4], [10, 7], [-28, 7]], 'metal'],
-    [R4(14, -3, 38, 3), 'dark'], [R4(-22, -2, 8, 2), 'accent']], glow: [[40, 0, 4]] },  // 熱能光束：長槍管＋發光槍口
-  scatter: { parts: [[R4(-34, -6, -26, 6), 'dark'], [[[-26, -12], [12, -12], [16, -8], [16, 8], [12, 12], [-26, 12]], 'metal'],
-    ...[-8, -3, 3, 8].map(y => [R4(16, y - 2, 30, y + 2), 'dark']), [R4(-6, -12, 0, 12), 'accent']], glow: [[31, -5, 3], [31, 5, 3]] },  // 迴旋飛輪：短粗＋4 個槍口
-  plasma: { parts: [[[[-30, -10], [8, -10], [12, -6], [12, 6], [8, 10], [-30, 10]], 'metal'], [[[12, -6], [32, -5], [32, 5], [12, 6]], 'dark'], [R4(24, -7, 28, 7), 'accent']],
-    orb: [-8, 0, 9], glow: [[-8, 0, 9]] },  // 重力井：中間一顆發光的能量艙
-  railgun: { parts: [[R4(-38, -10, -24, 10), 'metal'], [R4(-24, -9, 44, -5), 'metal'], [R4(-24, 5, 44, 9), 'metal'],
-    [R4(-6, -9, -1, 9), 'dark'], [R4(20, -9, 25, 9), 'dark'], [[[-18, -2], [30, -2], [36, 0], [30, 2], [-18, 2]], 'accent']], glow: [[36, 0, 4]] },  // 牽引鉤：兩條導軌夾著穿甲彈
-  drone: { parts: [[R4(-22, -5, 8, 5), 'metal'], [R4(-16, -15, -6, -8), 'dark'], [R4(-16, 8, -6, 15), 'dark'], [R4(2, -14, 14, -7), 'accent'], [R4(2, 7, 14, 14), 'accent']],
-    glow: [[8, -10, 4], [8, 10, 4]] },  // 無人機蜂群：機身＋兩側的無人機
-  blade: { parts: [[R4(-34, -4, -12, 4), 'dark'], [R4(-12, -11, -6, 11), 'metal'], [[[-6, -6], [30, -4], [44, 0], [30, 4], [-6, 6]], 'accent'],
-    [[[-4, -2], [34, 0], [-4, 2]], 'light']], glow: [[20, 0, 8]] },  // 能量刃：刀柄＋護手＋能量刃
+  laser: { parts: [  // 熱能光束：長砲管、兩側一排散熱鰭片（越熱越紅）
+    [[[-40, -7], [-28, -9], [-28, 9], [-40, 7]], 'dark'], [[[-28, -8], [14, -8], [18, -5], [18, 5], [14, 8], [-28, 8]], 'metal'],
+    ...[-22, -13, -4, 5].flatMap(x => [[[[x, -8], [x + 6, -8], [x + 4, -15], [x - 1, -15]], 'heat'], [[[x, 8], [x + 6, 8], [x + 4, 15], [x - 1, 15]], 'heat']]),
+    [R4(18, -3.5, 44, 3.5), 'dark'], [R4(36, -5.5, 40, 5.5), 'metal'], [R4(-24, -2, 12, 2), 'accent']],
+    glow: [[44, 0, 4, () => 1], ...[-19, -10, -1, 8].flatMap(x => [[x, -12, 4, st => st.heat, 'hot'], [x, 12, 4, st => st.heat, 'hot']])] },
+  scatter: { parts: [  // 迴旋飛輪：托架上掛著三個鋸齒圓輪，丟出去幾個架上就少幾個
+    [[[-40, -6], [-24, -8], [-24, 8], [-40, 6]], 'dark'], [R4(-24, -5, 30, 5), 'metal'], [R4(-22, -14, 30, -10), 'dark'], [R4(-22, 10, 30, 14), 'dark'],
+    ...W_DISC.flatMap(([x, y], i) => [[wGear(x, y, 9.5), 'accent', st => st.n > i], [wRing(x, y, 3.5, 8), 'dark', st => st.n > i]])],
+    glow: W_DISC.map(([x, y], i) => [x, y, 4, st => st.n > i ? 0.7 : 0]) },
+  plasma: { parts: [  // 重力井：環形發生器包著黑色奇點（發射出去的井越多越暗，冷卻好了再亮）、前面兩根導引爪
+    [[[-38, -7], [-14, -12], [14, -12], [18, -8], [18, 8], [14, 12], [-14, 12], [-38, 7]], 'metal'],
+    [[[18, -10], [36, -8], [36, -4], [18, -3]], 'metal'], [[[18, 3], [36, 4], [36, 8], [18, 10]], 'metal'], [R4(32, -8, 36, -4), 'accent'], [R4(32, 4, 36, 8), 'accent'],
+    [wRing(0, 0, 11.5), 'dark'], [wRing(0, 0, 8), 'accent'], [wRing(0, 0, 5.5), 'core']],
+    glow: [[0, 0, 7, st => 0.3 + 0.7 * st.charge], [34, -6, 2.5, () => 0.6], [34, 6, 2.5, () => 0.6]] },
+  railgun: { parts: [  // 牽引鉤：後面一個絞盤、纜繩、前面的鉤爪頭（鉤出去時發射座空著）
+    [wRing(-28, 0, 10), 'metal'], [wRing(-28, 0, 6), 'dark'], [R4(-20, -6, 22, 6), 'metal'], [R4(-12, -10, 6, -6), 'dark'], [R4(-12, 6, 6, 10), 'dark'],
+    [R4(-28, -1.2, 24, 1.2), 'accent'],
+    [[[22, -5], [30, -5], [33, 0], [30, 5], [22, 5]], 'dark', st => !st.out],
+    [[[28, -4], [40, -12], [44, -8], [34, -1]], 'metal', st => !st.out], [[[28, 4], [40, 12], [44, 8], [34, 1]], 'metal', st => !st.out],
+    [R4(22, -3, 26, 3), 'core', st => st.out]],
+    glow: [[32, 0, 3, st => st.out ? 0 : 0.8], [-28, 0, 3, () => 0.4]] },
+  blade: { parts: [  // 能量刃：刀柄、護手、發射口，刃身是能量光（彈反成功後的加傷時間裡刃身更亮更寬）
+    [R4(-38, -4, -16, 4), 'dark'], ...[-33, -27, -21].map(x => [R4(x, -4.5, x + 2, 4.5), 'metal']),
+    [[[-16, -13], [-9, -13], [-6, -5], [-6, 5], [-9, 13], [-16, 13]], 'metal'], [R4(-6, -5, 0, 5), 'metal'],
+    [[[0, -6], [34, -4], [47, 0], [34, 4], [0, 6]], 'accent'], [[[2, -2], [38, 0], [2, 2]], 'light'],
+    [[[0, -9], [34, -6], [50, 0], [34, 6], [0, 9]], 'accent', st => st.edge], [[[2, -4], [40, 0], [2, 4]], 'light', st => st.edge]],
+    glow: [[22, 0, 8, st => st.edge ? 1.6 : 0.8]] },
+  drone: { parts: [  // 無人機蜂群：小型機庫架，四個停靠位（無人機飛出去時停靠位空著）
+    [R4(-34, -5, 14, 5), 'metal'], [[[14, -5], [24, 0], [14, 5]], 'metal'], [R4(-18, -17, 12, -6), 'dark'], [R4(-18, 6, 12, 17), 'dark'],
+    ...W_DOCK.map(([x, y]) => [R4(x - 5, y - 4, x + 5, y + 4), 'core']),
+    ...W_DOCK.flatMap(([x, y], i) => [[[[x - 5, y - 4], [x + 6, y], [x - 5, y + 4], [x - 3, y]], 'accent', st => st.n > i]])],
+    glow: W_DOCK.map(([x, y], i) => [x, y, 3, st => st.n > i ? 0.6 : 0]) },
 };
+// 武器的狀態（外觀跟著變）。只算自己的船：停在場上的飛輪、井、鉤爪要查子彈；隊友的資料是同步來的，不呼叫方法
+//   其他人、武器架 = 待命（WEAPON_IDLE）
+const WEAPON_IDLE = { heat: 0, n: 4, charge: 1, out: false, edge: false };
+const WEAPON_STATE = {
+  laser: p => ({ heat: p.hHeat || 0 }),
+  scatter: p => ({ n: WEAPON_PLAY.scatter.max() - WEAPON_PLAY.scatter.count(p) }),
+  plasma: p => ({ charge: 1 - WEAPON_PLAY.plasma.count(p) / WEAPON_PLAY.plasma.max() }),
+  railgun: p => ({ out: !!p.hookE || Game.bullets.some(b => !b.dead && b.hook && b.ownerP === p) }),
+  blade: p => ({ edge: p.edgeT > 0 }),
+  drone: p => ({ n: (p.drones || []).filter(d => d.down > 0 || Math.hypot(d.x - p.x, d.y - p.y) < 24).length }),  // 壞掉的回機庫重建
+};
+const weaponState = (id, p) => ({ ...WEAPON_IDLE, ...(p && WEAPON_STATE[id] ? WEAPON_STATE[id](p) : {}) });
+const W_METAL = 0x6a7699, W_HOT = 0xff6a2a;
+const wMix = (c0, c1, k) => { const ch = s => Math.round(((c0 >> s) & 255) * (1 - k) + ((c1 >> s) & 255) * k); return (ch(16) << 16) | (ch(8) << 8) | ch(0); };
 // 畫一把武器：(x, y) 中心、rot 朝向、k 大小、col 武器色；mode：'' 正常、'ghost' 很淡的輪廓（裝走了）、'dark' 暗色剪影（沒解鎖）；a = 透明度（無敵時間閃爍）
-function glWeapon(g, id, x, y, rot, k, col, mode = '', glowFn = null, a = 1) {
+//   st：武器狀態（weaponState；不給 = 待命）
+function glWeapon(g, id, x, y, rot, k, col, mode = '', glowFn = null, a = 1, st = WEAPON_IDLE) {
   const M = WEAPON_MODEL[id];
   if (!M) return;
   const c = Math.cos(rot), s = Math.sin(rot), T = ([lx, ly]) => [x + (lx * c - ly * s) * k, y + (lx * s + ly * c) * k];
-  const fillOf = { metal: 0x6a7699, dark: 0x3a4566, accent: col, light: 0xffffff };
-  for (const [pts, mat] of M.parts) {
+  const fillOf = { metal: W_METAL, dark: 0x3a4566, accent: col, light: 0xffffff, core: 0x07040f, heat: wMix(W_METAL, W_HOT, Math.min(1, st.heat)) };
+  for (const [pts, mat, show] of M.parts) {
+    if (show && !show(st)) continue;
     const flat = pts.map(T).flat();
     if (mode === 'ghost') { g.poly(flat).stroke({ width: 1.5, color: col, alpha: 0.25 }); continue; }
     if (mode === 'dark') { g.poly(flat).fill({ color: 0x0a0d18, alpha: 0.9 }).stroke({ width: 1.5, color: 0x5a6a9e, alpha: 0.5 }); continue; }
     g.poly(flat).fill({ color: fillOf[mat], alpha: a });
-    if (mat === 'metal' || mat === 'dark') g.poly(pts.map(([lx, ly]) => T([lx, Math.min(ly, 0)])).flat()).fill({ color: 0xffffff, alpha: 0.18 * a });  // 上半塊亮（光從上來）
-    g.poly(flat).stroke({ width: 1.5, color: 0x03050c, alpha: a });
+    if (mat !== 'light' && mat !== 'core') {  // 上半塊亮、下半塊暗（光從上來）
+      g.poly(pts.map(([lx, ly]) => T([lx, Math.min(ly, 0)])).flat()).fill({ color: 0xffffff, alpha: (mat === 'accent' ? 0.25 : 0.2) * a });
+      g.poly(pts.map(([lx, ly]) => T([lx, Math.max(ly, 0)])).flat()).fill({ color: 0x000000, alpha: 0.2 * a });
+    }
+    g.poly(flat).stroke({ width: 1.8, color: 0x03050c, alpha: a });
   }
-  if (M.orb && !mode) { const [ox, oy, r] = M.orb, [px, py] = T([ox, oy]); g.circle(px, py, r * k).fill({ color: col, alpha: a }).stroke({ width: 1.5, color: 0x03050c, alpha: a }); g.circle(px - 2 * k, py - 2 * k, r * 0.4 * k).fill({ color: 0xffffff, alpha: 0.8 * a }); }
-  if (glowFn && !mode) for (const [gx, gy, r] of M.glow) { const [px, py] = T([gx, gy]); glowFn(px, py, r * 4 * k, col, 0.45 * a); }
+  if (glowFn && !mode) for (const [gx, gy, r, f, hot] of M.glow) {
+    const w = f(st); if (!(w > 0)) continue;
+    const [px, py] = T([gx, gy]); glowFn(px, py, r * 4 * k, hot ? W_HOT : col, 0.45 * a * Math.min(1.6, w));
+  }
 }
 
 const GLActors = {
@@ -328,7 +375,7 @@ const GLActors = {
     if (A.id === 'gate') sprL(GLR.T('s/gate_ring'), -9, 0, 1 / 4, t * 2);  // 星門號：船尾旋轉的傳送環
     // 裝上的武器：船頭底下（槍管從船頭伸出去）；自己的看 Game.weapon、有配裝的看配裝（房主那邊的隊友、基地裡其他人），其他（停機位、隊友那邊的其他人）看飛船物件的 weaponId
     const wid = own ? G.weapon.id : p.L ? p.L.weapon.id : p.weaponId, W = WEAPONS[wid];
-    if (W) glWeapon(g, wid, p.x + ca * 14, p.y + sa * 14, a, 0.62, glColor(W.color), '', (x, y, r, c, al) => this.glowAt(P, x, y, r, c, al), fade);
+    if (W) glWeapon(g, wid, p.x + ca * 14, p.y + sa * 14, a, 0.62, glColor(W.color), '', (x, y, r, c, al) => this.glowAt(P, x, y, r, c, al), fade, own ? weaponState(wid, p) : WEAPON_IDLE);
     // 船身（重裝甲層數決定哪一張）
     sprL(GLR.T(`s/${A.id}/${Math.min(4, n('armor'))}`), 0, 0, 1 / 4);
     if (p.frostT > 0) {  // 被彗星凍住：船身蓋一層淡藍的霜＋冷光
