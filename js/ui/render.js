@@ -358,6 +358,7 @@ function drawTreasureMarks() {
     ctx.globalAlpha = 1;
   }
 }
+const HUD_ROW = 14;  // 左上角狀態每一列的高度（11px 字＋行距）
 function drawHUD() {
   const p = Game.player, s = Game.stats, C = Game.combat, T = Input.touch;
   drawTreasureMarks();
@@ -375,31 +376,36 @@ function drawHUD() {
   }
   ctx.textAlign = 'left';
   hudText(`HP ${Math.ceil(p.hp)} / ${p.maxHp}`, 28, 33, '#fff', 'bold 12px Segoe UI');
-  // 衝刺冷卻
+  // 血條下面一列一列往下排（每列 HUD_ROW 高：左邊一條進度條、右邊文字）：衝刺、武器右鍵、武器狀態；以前三列擠在 14 像素裡，字疊在一起（使用者 10-24）
+  let row = 42;
+  const line = (k, col, text, tcol, h = 5) => { hudBar(22, row + 1, 106, h, k, col); hudText(text, 136, row + 9, tcol, '11px Microsoft JhengHei'); row += HUD_ROW; };
   const dashMax = p.ship.dashCd * (1 - Game.passives.dashCd) * Game.mech.dashCd, dr = 1 - clamp(p.dashCd / dashMax, 0, 1);
-  hudBar(22, 44, 106, 5, dr, dr >= 1 ? '#bdf0ff' : '#4a6aa8');
   const A = WEAPONS[Game.weapon.id].alt;  // 武器有右鍵：右鍵不再是衝刺
-  hudText(T ? '衝刺' : A ? '衝刺 [Space]' : '衝刺 [Space/右鍵]', 136, 50, '#8fa3d9', '10px Microsoft JhengHei');
+  const dashRow = row;
+  line(dr, dr >= 1 ? '#bdf0ff' : '#4a6aa8', T ? '衝刺' : A ? '衝刺 [Space]' : '衝刺 [Space/右鍵]', '#8fa3d9');
   const WH = WEAPON_HUD[Game.weapon.id], hb = WH && WH(p);  // 武器的狀態：熱度、飛輪數、重力井數、鉤住、收攏
-  if (A) {  // 武器右鍵的冷卻（強化下一刀的期間整條變白）；下面一條細的是武器狀態，文字接在右鍵後面
+  if (A) {  // 武器右鍵的冷卻（強化下一刀的期間整條變白）
     const ar = 1 - clamp((p.altCd || 0) / A.cd, 0, 1), up = p.edgeT > 0;
-    hudBar(22, 52, 106, 4, up ? 1 : ar, up ? '#ffffff' : ar >= 1 ? '#ff8fd8' : '#7a4a6a');
-    if (hb) hudBar(22, 58, 106, 3, hb.k, hb.color);
-    hudText(`${A.name}${T ? '' : ' [右鍵]'}${up ? '　下一刀強化！' : ''}`, 136, 58, up ? '#ffffff' : '#ff8fd8', '10px Microsoft JhengHei');
-    if (hb) hudText(hb.label, 136 + 12 + ctx.measureText(`${A.name}${T ? '' : ' [右鍵]'}${up ? '　下一刀強化！' : ''}`).width, 58, hb.color, '10px Microsoft JhengHei');
+    line(up ? 1 : ar, up ? '#ffffff' : ar >= 1 ? '#ff8fd8' : '#7a4a6a', `${A.name}${T ? '' : ' [右鍵]'}${up ? '　下一刀強化！' : ''}`, up ? '#ffffff' : '#ff8fd8');
   }
-  let bx = T ? 180 : 250;  // 小條由左往右排（文字長短不一）
+  if (hb) line(hb.k, hb.color, hb.label, hb.color, 4);
+  let bx = T ? 180 : 250;  // 衝刺那一列右邊的小條：由左往右排（文字長短不一）
+  ctx.font = '11px Microsoft JhengHei';
+  bx = Math.max(bx, 136 + 12 + ctx.measureText(T ? '衝刺' : A ? '衝刺 [Space]' : '衝刺 [Space/右鍵]').width);
   const bar = (label, k, col) => {
-    hudBar(bx + 2, 44, 66, 5, k, col);
-    hudText(label, bx + 74, 50, col, '10px Microsoft JhengHei');
+    hudBar(bx + 2, dashRow + 1, 66, 5, k, col);
+    hudText(label, bx + 74, dashRow + 9, col, '11px Microsoft JhengHei');
     bx += 84 + ctx.measureText(label).width;
   };
   // 輕裝甲 4 層（隊友：房主同步過來）
   if (Game.mech.traits.streak) { const n = p.streak || 0; bar(`無傷連殺 傷害 +${Math.round(n * STREAK.per * 100)}%`, n / STREAK.max, n >= STREAK.max ? '#ffffff' : '#9fe8ff'); }
-  hudText(`◆ ${Game.credits}`, 20, 72, '#9ff0ff', 'bold 14px Segoe UI');  // 晶體的顏色（跟戰場上的晶體一樣）
-  hudText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 72, 72, p.ship.color, 'bold 12px Microsoft JhengHei');  // 護盾層數
+  row += 6;
+  hudText(`◆ ${Game.credits}`, 20, row + 12, '#9ff0ff', 'bold 14px Segoe UI');  // 晶體的顏色（跟戰場上的晶體一樣）
+  ctx.font = 'bold 14px Segoe UI';
+  hudText(p.ship.name + (p.shield ? ' ' + '⛨'.repeat(p.shield) : ''), 20 + ctx.measureText(`◆ ${Game.credits}`).width + 14, row + 12, p.ship.color, 'bold 12px Microsoft JhengHei');  // 護盾層數；接在晶體數後面（以前固定 x，晶體四位數會疊到船名）
+  row += 20;
   Game.mates.forEach((m, i) => {  // 雙人：隊友血條（一人一行）
-    const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = 82 + i * 14;
+    const mw = Math.min(160, VW * 0.3), tag = Game.tagOf(m), y = row + i * HUD_ROW;
     hudBar(22, y + 2, mw, 8, Math.max(0, m.hp) / m.maxHp, m.dead ? '#555555' : Game.colorOf(m));
     const line = m.gone ? `${tag} 隊友離線　·　房號 ${Net.code} 可以重新加入`
       : `${tag} ${m.ship.name}${m.dead ? '　已被擊墜' : `　HP ${Math.ceil(m.hp)}`}${!m.dead && Game.wardOf(m) > 0 ? '　⛨' : ''}`;  // ⛨：還有終焉護殼
@@ -419,7 +425,7 @@ function drawHUD() {
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);
   }
   // 大地圖：小地圖（電腦在右上角；手機的右邊有按鈕，放在左上角 HP 下面）
-  if (T) drawMinimap(20, 96, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
+  if (T) drawMinimap(20, row + Game.mates.length * HUD_ROW + 8, Math.min(150, VW * 0.22), Math.min(100, VH * 0.2), true);
   else drawMinimap(VW - 20, 88, Math.min(170, VW * 0.24), Math.min(120, VH * 0.22));
 
   // 電路縮圖（觸控時移到上方，避開拇指）
