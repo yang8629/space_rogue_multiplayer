@@ -71,20 +71,20 @@ function chipCard(id, footer = '') {
     <div class="ds brief">${chipBrief(id)}</div>${chipPassLine(id) ? `<div class="ty" style="color:#9dff6b;opacity:1">${chipPassLine(id)}</div>` : ''}${rare}
     <div class="det"><div class="ds">${d.desc}</div>${lv}${ps}</div>${footer}</div>`;
 }
-// 三選一的標題（種類見 CFG.REWARDS）
+// 三選一的標題（種類見 CFG.REWARDS）：只寫是哪一種，不加說明的括號（10-25 使用者：沒必要的備註拿掉）
 const REWARD_TITLE = {
   start: () => `🚀 出發準備：三選一（還有 ${Game.bonusPicks} 次）`,
-  combat: () => '⚔ 戰鬥勝利：三選一（晶片或零件）',
-  elite: () => '☠ 精英擊破：三選一（或電路擴充）',
-  boss: () => '♛ 旗艦擊沉：三選一（選完再領旗艦獎勵）',
-  event: () => '? 事件：三選一（晶片或零件）',
+  combat: () => '⚔ 戰鬥勝利：三選一',
+  elite: () => '☠ 精英擊破：三選一',
+  boss: () => '♛ 旗艦擊沉：三選一',
+  event: () => '? 事件：三選一',
   eventPart: () => '⚖ 黑市：零件三選一',
 };
 const FLIP_BEAT_MS = 300;  // 三選一：畫面出來後等這麼久才開始翻卡片
 // 三選一卡片：拿了會裝在哪；進倉庫時改成紅字
 function placeLine(id) {
   const P = Game.autoPlace(id), line = (t, bad) => `<div class="ty placeln" style="color:${bad ? '#ff8a8a' : '#9dff6b'}">→ ${t}</div>`;
-  if (!P) return line(isComp(id) ? '沒有空插座，先放倉庫' : '電路已滿，先放倉庫（要自己換）', true);
+  if (!P) return line(isComp(id) ? '沒有空插座，先放倉庫' : '電路已滿，先放倉庫', true);
   return line(P.sock != null ? `插在${CHIPS[Game.chain[P.sock]].name}上` : '接在電路最後');
 }
 // 插座說明：晶片顯示插座數；插件顯示怎麼插
