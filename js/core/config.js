@@ -12,6 +12,11 @@ const CFG = {
   COMET_SHARD_DMG: 10,      // 彗星打爆後的碎片打到飛船的傷害（每片）
   // 攔截回射：第一顆擋下的位置開一個集氣池，win 秒內 join 以內擋下的都合進去，時間到回射一次（每多 1 顆傷害 +per，最多 ×max）；離所有集結點太遠就另開一個池
   COUNTER: { win: 0.2, per: 0.3, max: 4, join: 300 },
+  BOSS_LOCK: { t: 8 },      // 多人時的王：鎖定一個人打，每 t 秒換一次（換成這段時間打王最痛的人；Game.bossLockTick）
+  // 標記圈（使用者 10-24）：紅圈套在一個人身上跟著跑 follow 秒，再定在原地 hold 秒後爆發（Enemy.markCast、Game.updateZones 的 ZONE_HIT）
+  //   gather 集合圈：圈外的人受傷（大家擠進圈裡）；share 分攤圈：總傷害由圈裡的人平分（被標的人不管在哪都算一份）
+  //   王的招式（ENEMY_TYPES 的 skills 裡的 gather／share）
+  MARK: { follow: 0.5, hold: 0.5, r: 110, kinds: { gather: { name: '集合圈', dmg: 20 }, share: { name: '分攤圈', dmg: 40 } } },
   BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
   START_SLOTS: 3, MAX_SLOTS: 8, INV_SLOTS: 6,  // START_SLOTS 含武器格：開局 2 格晶片
   MECH_SLOT_EVERY: 0,       // 機體強化（零件每 1 層）每拿幾個，電路格 +1（0 = 關閉；10-08 關掉：旗艦改成電路插槽／零件格二選一，零件不再間接給電路格）

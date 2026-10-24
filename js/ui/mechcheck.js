@@ -428,6 +428,32 @@ const MechCheck = {
       } finally { Hub.weaponId = save; }
       return { ok: hits === 1 && wall && d === 0, got: `扯一下發打中事件 ${hits} 次；${wall ? `牆的另一邊拉 40 幀，標靶機穿牆 ${d} 次` : '找不到測試位置（錯）'}` };
     }],
+    ['多人', '王鎖定輪替、轟炸分給每個人', `多人時旗艦鎖定一個人追（就算別人比較近），每 ${CFG.BOSS_LOCK.t} 秒換成這段時間打它最痛的人、沒人打就輪到下一個、鎖定的人倒下馬上換；落點轟炸的紅圈分給每個人；單人不鎖`, M => {
+      const m = M.coop(), p = Game.player, B = M.targets([[400, 0]], 'boss3', true, 1)[0], T = CFG.BOSS_LOCK.t, tick = s => Game.bossLockTick(B, s);
+      tick(0); const first = B.lock;
+      B.hurt(50, 0, 0, 'direct', { owner: m }); tick(T + 0.1);
+      const toMate = B.lock === 2 && Game.enemyTarget(B) === m;  // 隊友比較遠（房主在王旁邊 400、隊友 500）也追他
+      tick(T + 0.1); const rotate = B.lock === 1;  // 沒人打：輪到下一個
+      B.hurt(50, 0, 0, 'direct', { owner: m }); tick(T + 0.1); m.dead = true; tick(0.01); const swap = Game.enemyTarget(B) === p; m.dead = false;  // 兩人剩一個 = 不鎖、追活著的那個
+      Game.zones = []; B.lockT = 99; B.mode = 'chase'; B.skillCd = 0; B.pickSkill = () => 'bomb'; B.update(1 / 60, Game.enemyTarget(B));
+      const near = q => Game.zones.filter(z => Math.hypot(z.x - q.x, z.y - q.y) < 300).length, split = near(p) > 0 && near(m) > 0;
+      Game.mates = []; Game.bossLockTick(B, T + 0.1); const solo = B.lock === 0 && Game.enemyTarget(B) === p;
+      return { ok: first === 1 && toMate && rotate && swap && split && solo,
+        got: `一開始鎖 ${first}P；隊友打王後鎖${toMate ? '隊友' : '（錯）'}；沒人打${rotate ? '輪到房主' : '沒輪換（錯）'}；鎖定的人倒下${swap ? '馬上換' : '沒換（錯）'}；紅圈 房主 ${near(p)}、隊友 ${near(m)}；單人${solo ? '不鎖' : '有鎖（錯）'}` };
+    }],
+    ['敵人', '王的標記圈：集合圈、分攤圈', `紅圈套在一個人身上跟著跑 ${CFG.MARK.follow} 秒、定住 ${CFG.MARK.hold} 秒後爆發；集合圈：圈外的人受傷；分攤圈：圈裡的人（＋被標的人）平分傷害，一個人就吃全部`, M => {
+      const m = M.coop(), p = Game.player, B = M.targets([[400, 0]], 'boss3', true, 1)[0], MK = CFG.MARK, T = MK.follow + MK.hold;
+      const run = s => { for (let i = 0; i < Math.round(s * 60); i++) Game.updateZones(1 / 60); };
+      const reset = () => { for (const q of [p, m]) { q.hp = q.maxHp; q.iframe = 0; q.dashT = 0; } Game.zones = []; }, lost = q => q.maxHp - q.hp;
+      reset(); B.lock = 1; B.markCast('gather'); const z = Game.zones[0];
+      p.x += 60; run(MK.follow / 2); const follow = Math.hypot(z.x - p.x, z.y - p.y) < 1;
+      run(MK.follow / 2 + 0.05); const x0 = z.x; p.x += 60; run(0.1); const held = Math.abs(z.x - x0) < 1;
+      p.x = z.x; p.y = z.y; run(T); const gHost = lost(p), gMate = lost(m);  // 房主回到圈裡、隊友在 300 外
+      reset(); m.x = p.x + 20; m.y = p.y; B.markCast('share'); run(T + 0.05); const sHost = lost(p), sMate = lost(m);
+      reset(); m.x = p.x; m.y = p.y + 600; B.markCast('share'); run(T + 0.05); const solo = lost(p), soloMate = lost(m);
+      const ok = follow && held && gHost === 0 && gMate > 0 && sHost > 0 && Math.abs(sHost - sMate) < 0.5 && solo > sHost * 1.5 && soloMate === 0;
+      return { ok, got: `${follow ? '先跟著跑' : '沒跟著跑（錯）'}、${held ? '再定住' : '沒定住（錯）'}；集合圈：圈裡的房主扣 ${gHost}、圈外的隊友扣 ${gMate}；分攤圈：兩人都在圈裡各扣 ${+sHost.toFixed(1)}／${+sMate.toFixed(1)}，隊友不在圈裡：房主扣 ${+solo.toFixed(1)}、隊友扣 ${soloMate}` };
+    }],
     ['多人', '子彈變大會重送給隊友', '疊井、疊輪、磨盤讓停住的子彈變大：位置沒變也要重送（Net.bulletRows 只送預測會錯的）', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);
       Game.player.fire(); W_.step(70);
@@ -1469,7 +1495,7 @@ const MechCheck = {
       const b = M.targets([[400, 0]], 'boss', false, 1)[0];
       const roll = d => { const n = {}; let rep = 0, last = null; for (let i = 0; i < 400; i++) { const k = b.pickSkill(d); if (k === last) rep++; b.skill = last = k; n[k] = (n[k] || 0) + 1; } return { n, rep }; };
       const far = roll(600), near = roll(200);
-      return { ok: far.rep === 0 && near.rep === 0 && Object.keys(far.n).length === 4 && far.n.fan > near.n.fan && near.n.spiral + near.n.ring > far.n.spiral + far.n.ring,
+      return { ok: far.rep === 0 && near.rep === 0 && Object.keys(far.n).length === new Set(b.t.skills).size && far.n.fan > near.n.fan && near.n.spiral + near.n.ring > far.n.spiral + far.n.ring,
         got: `連續同一招 ${far.rep + near.rep} 次；遠（600）扇形 ${far.n.fan}、螺旋＋環形 ${far.n.spiral + far.n.ring}；近（200）扇形 ${near.n.fan}、螺旋＋環形 ${near.n.spiral + near.n.ring}（各 400 次）` };
     }],
     ['敵人', '終焉核心：缺口環形波與護衛', '環形波留有缺口，會召喚刺殼', M => {

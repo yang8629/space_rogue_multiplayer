@@ -1,7 +1,30 @@
 // 星環電路 多人版 · gl/gl_world.js：WebGL 繪圖層：背景星空、網格、大地圖的牆（6 種風格：牆面貼磚＋邊緣裝飾＋發光的邊）、閘門、
-//   地圖物件（行星、黑洞、小行星、彗星、星門、視野陰影）、出口、王的落點轟炸、晶體
+//   地圖物件（行星、黑洞、小行星、彗星、星門、視野陰影）、出口、紅圈（王的落點轟炸、標記圈）、晶體
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
+
+// 紅圈的畫法（Game.zones，種類見 game_chips.js 的 ZONE_HIT）：(g, 圈, k = 倒數走了幾成, a = 外圈閃爍的亮度)
+//   標記圈：跟著人跑的時候外圈細、定住後（剩 hold 秒）外圈變粗
+const ZONE_LOOK = {
+  bomb(g, z, k, a) {  // 落點轟炸：紅圈，裡面的實心圓越長越大
+    g.circle(z.x, z.y, z.r).stroke({ width: 3, color: 0xff2a2a, alpha: a });
+    g.circle(z.x, z.y, z.r * k).fill({ color: 0xff2a2a, alpha: 0.18 + 0.2 * k });
+  },
+  gather(g, z, k, a) {  // 集合圈（圈外受傷）：圈裡淡淡的安全色，外圈四組往內指的箭頭一直往圈裡收
+    const held = z.t <= z.hold, T = Game.time;
+    g.circle(z.x, z.y, z.r).fill({ color: 0xff2a2a, alpha: 0.06 }).stroke({ width: held ? 5 : 2.5, color: 0xff2a2a, alpha: a });
+    for (let i = 0; i < 8; i++) {
+      const u = i * TAU / 8 + T * 0.4, q = (T * 1.5 + i * 0.5) % 1, d = z.r + 34 - 26 * q, c = Math.cos(u), s = Math.sin(u), w = 9;
+      g.poly([z.x + c * (d - 10), z.y + s * (d - 10), z.x + c * d - s * w, z.y + s * d + c * w, z.x + c * d + s * w, z.y + s * d - c * w]).fill({ color: 0xff4d6d, alpha: 0.9 * (1 - q * 0.6) });
+    }
+  },
+  share(g, z, k, a) {  // 分攤圈（圈裡的人平分）：實心紅圈越來越紅，圈裡站幾個人就切成幾塊（一個人 = 不切）
+    const held = z.t <= z.hold, n = Game.players().filter(p => dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2).length;
+    g.circle(z.x, z.y, z.r).fill({ color: 0xff2a2a, alpha: 0.16 + 0.24 * k }).stroke({ width: held ? 5 : 2.5, color: 0xff2a2a, alpha: a });
+    for (let i = 0; n > 1 && i < n; i++) { const u = i * TAU / n - Math.PI / 2; g.moveTo(z.x, z.y).lineTo(z.x + Math.cos(u) * z.r, z.y + Math.sin(u) * z.r).stroke({ width: 3, color: 0xffd0d6, alpha: 0.8 }); }
+    g.circle(z.x, z.y, 7).fill({ color: 0xffd0d6, alpha: 0.9 });
+  },
+};
 
 const GLWorld = {
   init() {
@@ -43,11 +66,7 @@ const GLWorld = {
     else { this.buildWalls(); this.wall.visible = true; this.wallAnim(); this.gates(viewer); }
     this.objects(viewer);
     this.exit();
-    for (const z of G.zones) {  // 王的落點轟炸：紅圈，裡面的實心圓越長越大
-      const k = 1 - Math.max(0, z.t) / z.max;
-      this.gObj.circle(z.x, z.y, z.r).stroke({ width: 3, color: 0xff2a2a, alpha: 0.5 + 0.4 * Math.sin(G.time * 20) ** 2 });
-      this.gObj.circle(z.x, z.y, z.r * k).fill({ color: 0xff2a2a, alpha: 0.18 + 0.2 * k });
-    }
+    for (const z of G.zones) ZONE_LOOK[z.kind || 'bomb'](this.gObj, z, 1 - Math.max(0, z.t) / z.max, 0.5 + 0.4 * Math.sin(G.time * 20) ** 2);
     // 晶體：青白色光暈（呼吸）＋冰晶（輕輕上下浮）＋不定時閃一下白光；每顆照 id 錯開（冷色：敵人大多是暖色，分裂體、碎裂體是橘金色）
     const pt = GLR.T('pickup'), pr = GLR.res('pickup'), gt = GLR.T('glow'), gr = GLR.res('glow'), st = GLR.T('pickup_spark'), sr = GLR.res('pickup_spark'), t = G.time;
     const put = (tex, x, y, sc, blend, alpha, tint = 0xffffff, rot = 0) => { const s = GLR.sprite(this.pPick, tex); s.position.set(x, y); s.scale.set(sc); s.blendMode = blend; s.alpha = alpha; s.tint = tint; s.rotation = rot; };

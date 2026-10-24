@@ -87,7 +87,8 @@ const WEAPONS = {
     ],
     // 射程 950 × 0.55 ≈ 520，留在畫面內（1280 寬時飛船到邊緣約 640）
     trig: 0.5,  // 10-24 1/3 → 0.5：接線表（chiplink --weapons）第一格每秒觸發只有飛輪、蜂群的一半（0.7 比 1.4）
-    base: { interval: 0.16, count: 1, spread: 0, damage: 8, speed: 950, radius: 3, life: 0.55, shape: 'line', knock: 0.6 },
+    // 傷害 8 → 5（10-24 觸發係數改 0.5 後整局模擬各 100 局：8 = 31%、7 = 28%、6 = 29%、5 = 16%、4 = 19%，目標 20%）
+    base: { interval: 0.16, count: 1, spread: 0, damage: 5, speed: 950, radius: 3, life: 0.55, shape: 'line', knock: 0.6 },
     alt: { name: '排熱', cd: HEAT.cd },  // 右鍵（行為在 game/weapon_play.js）
     paths: {
       A: { name: '高溫', desc: `熱度越高越痛：傷害 +（熱度 × ${pct(HOT.mul)}）。`, apply: p => { p.hot = true; },
@@ -177,7 +178,8 @@ const WEAPONS = {
     ],
     // 4 片排成 1.1 弧度的扇形（連段一刀一刀揮過去）
     trig: 0.25,  // 10-24 0.15 → 0.25：同光束（第一格每秒觸發 0.7）
-    base: { interval: 0.3, count: 4, spread: 1.1, damage: 3, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },  // 傷害 5 → 3（10-23 整局模擬各 100 局：5 = 44%、3.5 = 27%、3 = 18%，目標 20%；數值只用整數或 .5）
+    base: { interval: 0.3, count: 4, spread: 1.1, damage: 2, speed: 650, radius: 8, pierce: 99, life: 0.2, shape: 'blade', knock: 0.8 },  // 傷害 5 → 3（10-23 整局模擬各 100 局：5 = 44%、3.5 = 27%、3 = 18%，目標 20%；數值只用整數或 .5）
+    //   3 → 2（10-24 觸發係數改 0.25、電腦會躲盾衛之後：3 = 38%、2.5 = 31%、2 = 26%／22%（兩批亂數）、1.5 = 18%）
     alt: { name: '彈反', cd: PARRY.cd },  // 右鍵（行為在 game/weapon_play.js）
   // parryN：這次擋下幾顆（0 = 落空，見 Player.tickAlt）
   // 無盡連段：被打中歸零

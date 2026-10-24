@@ -59,7 +59,23 @@ const Game = {
   enemyTarget(e) {
     let best = null, bd = CFG.DECOY.r * CFG.DECOY.r;
     for (const d of this.decoys) { const q = dist2(e.x, e.y, d.x, d.y); if (q < bd) { bd = q; best = d; } }
-    return best || this.nearestPlayer(e.x, e.y);
+    return best || this.lockFoe(e);
+  },
+  // 多人時的王鎖定的那個人（沒鎖、倒下、離線 = 最近的玩家）
+  lockFoe(e) { const L = e.lock && this.shipBySlot(e.lock); return L && !L.dead && !L.gone ? L : this.nearestPlayer(e.x, e.y); },
+  // 多人時的王（使用者 10-24：多人時王只會朝一個人打，要有變化）：鎖定一個人（e.lock = 號碼，畫面標出來），每 CFG.BOSS_LOCK.t 秒換一次，
+  //   換成這段時間打王最痛的人（e.aggro，hurt 記）；沒人打到 = 輪到下一個。鎖定的人倒下馬上換。單人不鎖（e.lock = 0，照舊追最近的）
+  //   雙子獵艦：主艦鎖第一名，另一艘（share）鎖第二名，兩艘追不同的人
+  bossLockTick(e, dt) {
+    if (e.share) { e.lock = e.share.lock2 || e.share.lock || 0; return; }
+    const P = this.players().filter(p => !p.dead && !p.gone), slot = p => this.slotOf(p);
+    if (P.length < 2) { e.lock = e.lock2 = 0; return; }
+    const cur = e.lock && this.shipBySlot(e.lock);
+    if (cur && !cur.dead && !cur.gone && (e.lockT -= dt) > 0) return;
+    const agg = e.aggro || {};
+    let order = P.slice().sort((a, b) => (agg[slot(b)] || 0) - (agg[slot(a)] || 0));
+    if (!(agg[slot(order[0])] > 0)) { const i = P.findIndex(p => slot(p) === e.lock); order = [...P.slice(i + 1), ...P.slice(0, i + 1)]; }
+    e.lock = slot(order[0]); e.lock2 = slot(order[1]); e.lockT = CFG.BOSS_LOCK.t; e.aggro = {};
   },
   // 幻影號・殘影：衝刺起點留下一個假目標（打不壞），CFG.DECOY.t 秒後消失；同一個人同時只有一個
   addDecoy(p, x, y) {
@@ -403,7 +419,8 @@ const Game = {
     const E = this.enemies;
     for (const e of E) {
       if (e.dead) continue;
-      e.update(dt, this.enemyTarget(e));  // 追最近的玩家（附近有殘影就追殘影）
+      if (e.t.boss && !this.isClient()) this.bossLockTick(e, dt);
+      e.update(dt, this.enemyTarget(e));  // 追最近的玩家（附近有殘影就追殘影；多人時的王追鎖定的人）
       if (e.spawnT <= 0) for (const p of this.players()) {
         if (e.shieldA != null && this.shieldBlock(e, p) && !this.mechOf(p).traits.ram) this.hurtPlayer(e.t.dmg, e.t.name + '（盾）', p, e.x, e.y);
         const rr = e.r + p.r;

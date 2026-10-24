@@ -120,6 +120,14 @@ const GLActors = {
     this.enemies();
     for (const e of G.enemies) this.telegraph(e);
     this.bossBeams();
+    // 多人時的王鎖定的人（Game.bossLockTick）：船外一圈紅色的瞄準角（往內收、一閃一閃）＋從王拉一條淡淡的紅線，大家都看得到王現在追誰
+    for (const e of G.enemies) {
+      const q = !e.dead && e.lock && G.shipBySlot(e.lock);
+      if (!q || q.dead) continue;
+      const [qx, qy] = q === G.player || !(q.ex || q.ey) ? [q.x, q.y] : Net.drawPos(q), k = 0.5 + 0.5 * Math.sin(G.time * 8) ** 2, r = q.r + 14 - 4 * k;
+      g.moveTo(e.x, e.y).lineTo(qx, qy).stroke({ width: 1.5, color: 0xff4d6d, alpha: 0.18 });
+      for (let i = 0; i < 4; i++) { const a = i * TAU / 4 + TAU / 8; glArc(g, qx, qy, r, a - 0.35, a + 0.35); g.stroke({ width: 3, color: 0xff4d6d, alpha: 0.6 + 0.4 * k }); }
+    }
     const tg = G.player.target;
     if (Input.touch && tg && !tg.dead) {  // 自動攻擊的鎖定框
       const r = tg.r + 10, s = G.time * 3;

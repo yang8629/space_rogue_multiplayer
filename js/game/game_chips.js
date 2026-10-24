@@ -3,6 +3,13 @@
 //   往 game.js 的 Game 加方法（外面照樣呼叫 Game.xxx）
 'use strict';
 
+// 紅圈爆炸時誰受傷：回傳 [[飛船, 傷害]]（P = 活著的玩家、inside = 在圈裡）
+const ZONE_HIT = {
+  bomb: (z, P, inside) => P.filter(inside).map(p => [p, z.dmg]),                 // 落點轟炸、砲擊：圈裡的
+  gather: (z, P, inside) => P.filter(p => !inside(p)).map(p => [p, z.dmg]),     // 集合圈：圈外的
+  share: (z, P, inside) => { const S = P.filter(p => inside(p) || p === z.tgt); return S.map(p => [p, z.dmg / S.length]); },  // 分攤圈：圈裡的人（＋被標的人）平分
+};
+const ZONE_KINDS = Object.keys(ZONE_HIT);  // 同步用的種類號碼
 Object.assign(Game, {
   // ---------- 線（見 chips.js 開頭、pipeline.js）：房主執行 ----------
   // 觸發一格：先排進 triggerQueue（updateBullets 跑完才放產物：不在子彈迴圈裡加子彈），一幀最多 MAX_TRIGGERS_PER_FRAME 個
@@ -216,11 +223,13 @@ Object.assign(Game, {
       for (const p of this.players()) if (segDist2(B.x1, B.y1, B.x2, B.y2, p.x, p.y) < (p.r + B.w / 2) ** 2) this.hurtPlayer(B.dmg, B.from, p, p.x, p.y);
     }
   },
-  // 王的落點轟炸：時間到就爆炸，圈裡的飛船受傷
+  // 紅圈（王的落點轟炸、標記圈）：標記圈先跟著被標的人跑、剩 hold 秒時定住；時間到就爆炸，照種類（ZONE_HIT）決定誰受傷、受多少
   updateZones(dt) {
     for (const z of this.zones) {
+      if (z.tgt && z.t > z.hold && !z.tgt.dead) { z.x = z.tgt.x; z.y = z.tgt.y; }
       if ((z.t -= dt) > 0) continue;
-      for (const p of this.players()) if (dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2) this.hurtPlayer(z.dmg, z.from, p, z.x, z.y);
+      const P = this.players(), inside = p => dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2;
+      for (const [p, dmg] of ZONE_HIT[z.kind || 'bomb'](z, P, inside)) this.hurtPlayer(dmg, z.from, p, z.x, z.y);
       burst(z.x, z.y, '#ff4d6d', 24, 260, 0.5, 3);
       ringFx(z.x, z.y, z.r, '#ff4d6d');
       this.shake(4); Events.emit('explode', z);

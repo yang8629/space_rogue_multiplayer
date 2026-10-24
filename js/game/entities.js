@@ -822,6 +822,12 @@ class Enemy {
   // 出招（以前固定順序輪流，背得起來）：加權隨機、不連續用同一招，再看情況調整
   //   玩家離得遠（450 外）：瞄準型（扇形、狙擊、彈牆、衝鋒）多一點；玩家貼近（350 內）：範圍型（螺旋、環形、新星、十字、雙螺旋）多一點
   //   叫出來的小怪還有 6 隻以上：少召喚；技能清單裡寫兩次的招式（獵艦的衝鋒）機率加倍；forceSkill：指定下一招（機制檢查用）
+  // 標記圈（CFG.MARK，王的招式）：套在鎖定的人（多人時）或最近的玩家身上；mul = 傷害倍率
+  markCast(kind, mul = 1) {
+    const M = CFG.MARK, q = Game.lockFoe(this), T = M.follow + M.hold;
+    Game.zones.push({ x: q.x, y: q.y, r: M.r, t: T, max: T, hold: M.hold, kind, tgt: q, slot: Game.slotOf(q), dmg: M.kinds[kind].dmg * mul, from: `${this.t.name}（${M.kinds[kind].name}）` });
+    Events.emit('bossSkill', this);
+  }
   pickSkill(d) {
     if (this.forceSkill) { const s = this.forceSkill; this.forceSkill = null; return s; }
     const AIM = ['fan', 'snipe', 'wall', 'charge'], AREA = ['spiral', 'ring', 'nova', 'cross', 'twin'], CALL = ['summon', 'deploy', 'guard'];
@@ -912,6 +918,7 @@ class Enemy {
     this.skillCd -= dt * endlessAtk();
     if (this.share || this.skillCd > 0 || this.mode !== 'chase') return;  // 雙子獵艦：出招由主艦決定（twinSkill 分給兩艘）
     this.skill = this.pickSkill(d);
+    if (CFG.MARK.kinds[this.skill]) { this.markCast(this.skill); this.skillCd = rage ? 2.2 : 2.8; return; }  // 標記圈：每隻王都有（雙子獵艦由主艦放）
     if (this.pair) { this.twinSkill(this.skill, rage); return; }
     switch (this.skill) {
       // 星噬母艦
@@ -943,10 +950,11 @@ class Enemy {
         this.stream = { t: 3.2, every: rage ? 0.07 : 0.1, arms: 2, turn: 0.22, spd: 170, r: 6, dmg: 13, twin: true };
         this.fireAcc = 0; this.skillCd = rage ? 3.8 : 4.4; break;
       case 'wall': this.volley = { kind: 'wall', n: rage ? 3 : 2, T: 0, every: 0.6 }; this.skillCd = rage ? 2.6 : 3.2; break;
-      case 'bomb': {  // 落點轟炸：在最近的玩家身邊標幾個紅圈，一段時間後爆炸（牆、柱子擋不住）
-        const B = CFG.BOSS_BOMB, q = Game.nearestPlayer(this.x, this.y) || Game.player;
-        for (let i = 0, n = rage ? B.nRage : B.n; i < n; i++) {
-          const a = rand(0, TAU), d = i === 0 ? rand(0, 40) : rand(90, 260);
+      case 'bomb': {  // 落點轟炸：在玩家身邊標幾個紅圈，一段時間後爆炸（牆、柱子擋不住）
+        //   多人：紅圈輪流分給每個人（總數不變，人比圈多時每人至少一個），每個人的第一個圈落在腳下
+        const B = CFG.BOSS_BOMB, foes = Game.players().filter(p => !p.dead && !p.gone), Q = foes.length > 1 ? foes : [Game.nearestPlayer(this.x, this.y)];
+        for (let i = 0, n = Math.max(rage ? B.nRage : B.n, Q.length); i < n; i++) {
+          const q = Q[i % Q.length], a = rand(0, TAU), d = i < Q.length ? rand(0, 40) : rand(90, 260);
           const [x, y] = Arena.clampIn(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20);
           Game.zones.push({ x, y, r: B.r, t: B.delay, max: B.delay, dmg: B.dmg, from: t.name + '（轟炸）' });
         }
@@ -970,7 +978,7 @@ class Enemy {
     const P = this.pair, ships = P.members.filter(s => !s.dead);
     switch (skill) {
       case 'charge': {
-        const s = ships[P.k++ % ships.length], q = Game.nearestPlayer(s.x, s.y) || Game.player;
+        const s = ships[P.k++ % ships.length], q = Game.lockFoe(s);  // 多人：兩艘各鎖不同的人（Game.bossLockTick）
         s.mode = 'windup'; s.modeT = rage ? 0.55 : 0.8; s.chargeA = Math.atan2(q.y - s.y, q.x - s.x);
         this.skillCd = rage ? 2.1 : 2.6; break;
       }
@@ -1003,6 +1011,7 @@ class Enemy {
     }
     if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
+    if (this.t.boss) { const o = (att && att.owner) || Game.shooter; if (o) { const k = Game.slotOf(o); (this.aggro = this.aggro || {})[k] = (this.aggro[k] || 0) + dmg; } }  // 多人時的王：誰打得痛（Game.bossLockTick）
     this.lastSrc = source;  // 最後一下的傷害方式（回響 echo 擊殺算進解鎖進度）
     if (!this.alert) Game.wakeEnemy(this);  // 待機中被打到：醒來，叫醒身邊的同伴
     if (this.t.alarm && this.ringT == null) this.ringT = CFG.ALARM.delay;  // 警報艇：開始響（倒數完開始叫人，見 THEME_AI.alarm）

@@ -121,7 +121,17 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   if (dodge) { mx = dodge.x; my = dodge.y; threat += dodge.w; }
   // 落點紅圈（終焉核心的轟炸、砲艦的砲擊，2026-10-19 加）：在圈裡（含飛船半徑＋20）就往圈外走，越快爆越急
   //   以前完全不躲：砲艦精英每 3 秒 3 個圈，電腦站著吃
+  // 標記圈（王的招式，2026-10-24）：集合圈（圈外受傷）→ 往圈中心靠；分攤圈 → 被標的人躲不掉（自己一定算一份），快爆時衝刺（無敵時間）；
+  //   別人往圈裡靠幫忙分（熟練玩家的打法）
+  let markDash = false;
   for (const z of G.zones) {
+    if (!z.kind || z.kind === 'bomb') continue;
+    const me = z.slot === G.slotOf(p), dx = z.x - p.x, dy = z.y - p.y, d = Math.hypot(dx, dy) || 1;
+    if (z.kind === 'share' && me) { if (z.t < 0.15) markDash = true; continue; }
+    if (d > z.r * 0.6) { const w = 4; mx += dx / d * w; my += dy / d * w; threat += w; }
+  }
+  for (const z of G.zones) {
+    if (z.kind && z.kind !== 'bomb') continue;
     const rx = p.x - z.x, ry = p.y - z.y, d = Math.hypot(rx, ry) || 1, R = z.r + p.r + 20;
     if (d > R) continue;
     const w = 3 + 3 * (1 - Math.max(0, z.t) / (z.max || 1)); mx += rx / d * w; my += ry / d * w; threat += w;
@@ -189,7 +199,7 @@ function baseBot(p) {  // 跟 botsim.js 一樣：自動瞄準、閃子彈、危�
   I.joy = l > 0.01 ? { bx: 0, by: 0, x: mx / l * m, y: my / l * m } : null;
   if (chase) I.dash = true;
   if (inHole && G.time - holeStuck.t > 2 && p.dashCd <= 0) I.dash = true;  // 黑洞裡被拖住：往外衝
-  const danger = ramHit || beamHit || (dodge && dodge.hitT < 0.15) || nd < 40;  // 怎麼走都會在 0.15 秒內被打到：衝刺（有無敵時間）
+  const danger = ramHit || beamHit || markDash || (dodge && dodge.hitT < 0.15) || nd < 40;  // 怎麼走都會在 0.15 秒內被打到（含身上的分攤圈快爆）：衝刺（有無敵時間）
   if (danger && p.dashCd <= 0) I.dash = true;
   // 拖曳艦的牽引光束拉住自己（2026-10-19）：往遠離牠的方向衝刺掙脫（熟練玩家看到光束就衝）；衝刺還沒好就先往外走
   const me = G.slotOf(p), puller = all.find(e => e.mode === 'pull' && e.tgt === me);

@@ -1161,7 +1161,7 @@ const Net = {
     const shared = {
       ob: Objects.pack(),         // 地圖物件
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
-      zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max]),  // 王的落點轟炸（紅圈）
+      zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max, ZONE_KINDS.indexOf(z.kind || 'bomb'), z.hold || 0, z.slot || 0]),  // 紅圈（王的落點轟炸、標記圈：種類、定住前剩幾秒、被標的人）
       dc: G.decoys.map(d => [r(d.x), r(d.y), r2(d.t), d.slot, r2(d.aim)]),  // 殘影（幻影號）
       tu: G.turrets.map(q => [r(q.x), r(q.y), r2(q.t), q.slot, r2(q.aim)]),  // 砲台（哨兵號）
       e: live.map(e => trimRow([e.id, ti(e.type), r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
@@ -1172,7 +1172,7 @@ const Net = {
         e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
         e.affixes ? e.affixes.join(',') : null, e.r !== e.t.radius ? r2(e.r) : null, e.ledT > 0 ? 1 : 0,  // 精英詞綴、體型（分裂後變小）、被統帥加成
         e.alertT > 0 ? r2(e.alertT) : 0, e.tgt || 0,  // 剛發現玩家（頭上「!」還顯示幾秒）、拖曳艦鎖定／牽引的玩家號碼（被拉的人自己拉自己，Game.beamPull）
-        e.grp || 0])),  // 同一隻精英（分裂、編隊）：精英血條同一條
+        e.grp || 0, e.lock || 0])),  // 同一隻精英（分裂、編隊）：精英血條同一條；多人時的王鎖定的玩家號碼（畫面標出來）
 
       et, ei,
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
@@ -1313,7 +1313,7 @@ const Net = {
         mode: et[a[12]], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
         shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false,
         cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: type === 'worm' ? num(a[23]) : undefined,
-        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined };
+        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined, lock: num(a[30]) };
     }).filter(Boolean);
     for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
     applyWeaponRow(P, s.ws);  // 武器狀態：敵人更新完才套（鉤爪找勾住的那隻）
@@ -1351,7 +1351,7 @@ const Net = {
     } else if (s.as === 0 && !Arena.rect) Arena.reset();
     Arena.gates.forEach((g, i) => { g.open = i < num(s.go); });
     G.objs = Objects.unpack(s.ob);
-    G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1 }));
+    G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1, kind: ZONE_KINDS[a[5]] || 'bomb', hold: num(a[6]), slot: num(a[7]) }));
     G.decoys = arr(s.dc).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]), r: 12, decoy: true }));
     G.turrets = arr(s.tu).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]) }));
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));

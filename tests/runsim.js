@@ -56,7 +56,7 @@ const BOSSD = process.argv.some(a => a === '--bossdiag' || a.startsWith('--bossd
   };
   // 旗艦的子彈標上是哪一招（from 改成「旗艦名・招式」，被打到時的原因就分得出來；只在這一場、只改模擬裡的子彈）
   const SKILL = { charge: '衝鋒灑彈', cross: '十字彈流', snipe: '三連狙擊', deploy: '部署', spiral: '螺旋', fan: '扇形', ring: '環形', summon: '召喚',
-    nova: '缺口環形波', twin: '雙向螺旋', wall: '彈牆', guard: '護衛', bomb: '轟炸' };
+    nova: '缺口環形波', twin: '雙向螺旋', wall: '彈牆', guard: '護衛', bomb: '轟炸', gather: '集合圈', share: '分攤圈' };
   const os = T_.Enemy.prototype.shootAt;
   T_.Enemy.prototype.shootAt = function (...a) { const r = os.apply(this, a); if (cur && this.t.boss) { const b = G.eBullets[G.eBullets.length - 1]; if (b) b.from = this.t.name + '・' + (SKILL[this.skill] || this.skill || '其他'); } return r; };
   // 打在旗艦身上的傷害照來源分（直接命中、燃燒…）：旗艦的 hurt／update（燃燒在 update 裡扣）期間經過 recordDamage 的都算
