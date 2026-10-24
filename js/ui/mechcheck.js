@@ -1263,7 +1263,7 @@ const MechCheck = {
       // 砲台還在時隊友換了電路（房主收到新電路，跟 net.js 一樣重算）：下一發照新的（武器插上傷害插件）
       const d0 = mb[0] && mb[0].damage, r = splitChain(['weapon', 'amp'].map(fullChip));
       m.L.wSock = CFG.WEAPON_SOCKETS; m.L.chain = r.chain; m.L.socks = r.socks; Game.withLoadout(m.L, () => { Game.stats = analyzeChain(Game.chain); });
-      Game.bullets = []; Game.turrets[0].cd = 0; Game.updateTurrets(1 / 60);
+      Game.bullets = []; Game.turrets[0].fireCd = 0; Game.updateTurrets(1 / 60);
       const tb = Game.bullets.find(b => b.turret), swapN = tb ? +(tb.damage / d0).toFixed(2) : 0, swapOk = near1(swapN, 1 + PLUG.dmg) && Game.turrets.length === 1;
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
       const q = Game.player; Game.turrets = []; q.dashSX = q.x; q.dashSY = q.y; q.onDash();
@@ -1272,33 +1272,52 @@ const MechCheck = {
         got: `衝刺兩次：砲台 ${nT} 座${one ? '' : '（要 1 座）'}；1 秒開火 ${shots} 發、每發 ${dmg1 == null ? '—' : +dmg1.toFixed(2)}（雷射 ${WEAPONS.laser.base.damage} × ${CFG.TURRET.dmg}）、${aimed ? '朝著敵人' : '方向不對'}；傷害統計「砲台」${rec}；${CFG.TURRET.t} 秒後${gone ? '消失' : '還在（錯誤）'}；`
           + `隊友（散彈）的砲台一次 ${mb.length} 發${mateOk ? '、算隊友的' : '（錯誤）'}；砲台還在時插上傷害插件：傷害 ×${swapN}${swapOk ? '' : `（要 ×${1 + PLUG.dmg}）`}；先鋒號${none ? '沒有砲台' : '也有砲台（錯誤）'}` };
     }],
-    ['機體', '哨兵號：砲台 × 每把武器', `砲台只用武器的子彈打人：飛輪、重力井另外算上限（各 ${DISC.max}、${WELL.max} 個，不佔你的、時間到消失不飛回手上）；鉤爪不勾人；吸能刃不回血；光束不加你的熱度；能量刃、無人機照樣開火`, M => {
-      const run = (w, path, final) => {
-        M.setup('sandbox', 'sentry', w, path, final, ['weapon', null, null, null]); M.targets([]);
+    ['機體', '哨兵號：砲台 × 每把武器', `砲台用你的武器玩法自己打一份（傷害 ×${CFG.TURRET.dmg}），你按右鍵時砲台跟著做：光束有自己的熱度、跟著排熱；飛輪、重力井砲台自己最多 ${DISC.max}／${WELL.max} 個（不佔你的），召回時飛回你手上（不算全接）、塌縮一起炸；鉤爪勾到砲台前面、跟著甩；能量刃砲台身邊也彈反；無人機砲台自己一組，收攏時飛來你身邊`, M => {
+      const run = (w, fn) => {
+        M.setup('sandbox', 'sentry', w, null, null, ['weapon', null, null, null]); M.targets([]);
         const p = Game.player, down = Input.down, auto = Input.autoFire;
         Game.startCombat({ sandbox: true, level: 0, wavesTotal: 99 }); Game.combat.waveTimer = 1e9; Game.state = 'play';
         const E = M.targets([[150, 0], [160, 40], [140, -40]], 'brute', true, 999);
         p.dashSX = p.x; p.dashSY = p.y; p.onDash();
-        p.x -= 600; p.hp = 1; Input.down = false; Input.autoFire = false;  // 玩家走遠、不開火
-        let tMax = 0, own = 0, hooked = false, shots = 0, back = 0;
-        try {
-          for (let i = 0; i < 60 * (DISC.park + 1); i++) {
-            Game.update(1 / 60);
-            const T = Game.bullets.filter(b => b.turret && !b.dead);
-            for (const b of T) { if (!b.seen) { b.seen = true; shots++; } if (b.mode === 'return') back++; }
-            tMax = Math.max(tMax, T.filter(b => b.park).length); own = Math.max(own, ownShots(p, 'disc').length + ownShots(p, 'well').length);
-            hooked = hooked || !!p.hookE;
-          }
-        } finally { Input.down = down; Input.autoFire = auto; }
-        const moved = E.some(e => dist2(e.x, e.y, p.x, p.y) < 400 * 400);  // 被勾到飛船前面（擊退推一點不算）
-        return { tMax, own, hooked, shots, back, moved, hp: p.hp, heat: p.hHeat || 0 };
+        p.x -= 600; Input.down = false; Input.autoFire = false;  // 玩家走遠、不開火：只有砲台在打
+        const step = t => { for (let i = 0; i < 60 * t; i++) Game.update(1 / 60); };
+        const alt = () => { p.altCd = 0; p.altQ = true; Game.update(1 / 60); };  // 按一下右鍵
+        try { return fn(p, Game.turrets[0], E, step, alt); } finally { Input.down = down; Input.autoFire = auto; }
       };
-      const d = run('scatter'), g = run('plasma'), h = run('railgun'), b = run('blade', 'C', 0), l = run('laser'), dr = run('drone');
-      const discOk = d.tMax === DISC.max && !d.own && !d.back, wellOk = g.tMax <= WELL.max && g.shots > 0 && !g.own;
-      const hookOk = h.shots > 0 && !h.hooked && !h.moved, bladeOk = b.shots > 0 && b.hp === 1, laserOk = l.shots > 0 && !l.heat, droneOk = dr.shots > 0;
-      return { ok: discOk && wellOk && hookOk && bladeOk && laserOk && droneOk,
-        got: `飛輪：砲台的同時 ${d.tMax} 個（要 ${DISC.max}）、佔你的 ${d.own}、飛回 ${d.back ? '有（錯誤）' : '沒有'}；重力井：砲台的同時 ${g.tMax} 個（最多 ${WELL.max}）、佔你的 ${g.own}；`
-          + `鉤爪：射 ${h.shots} 發、${h.hooked ? '勾住了（錯誤）' : '沒勾人'}、敵人${h.moved ? '被拉走（錯誤）' : '沒被拉'}；吸能刃：HP ${+b.hp.toFixed(1)}（要 1）；光束：射 ${l.shots} 發、你的熱度 ${+l.heat.toFixed(2)}；無人機：射 ${dr.shots} 發` };
+      const l = run('laser', (p, q, E, step, alt) => {
+        step(2); const h = q.hHeat || 0, mine = p.hHeat || 0;
+        alt(); return { h, mine, vent: Game.bullets.filter(b => b.turret && b.pierce >= 99).length, after: q.hHeat || 0 };
+      });
+      const d = run('scatter', (p, q, E, step, alt) => {
+        step(2); const tN = ownShots(q, 'disc').length, own = ownShots(p, 'disc').length, canP = WEAPON_PLAY.scatter.canFire(p);
+        alt(); const R = Game.bullets.filter(b => b.turret && b.mode === 'return' && b.ownerP === p), back = R.length;
+        step(2); return { tN, own, canP, back, left: R.filter(b => !b.dead).length, fast: p.fastN || 0 };  // left：召回的那批還沒接到的
+      });
+      const g = run('plasma', (p, q, E, step, alt) => {
+        step(2.5); const T = ownShots(q, 'well').filter(b => b.mode === 'park').length, own = ownShots(p, 'well').length, hp = E.map(e => e.hp);
+        alt(); return { T, own, left: ownShots(q, 'well').filter(b => b.mode === 'park').length, hit: E.some((e, i) => e.hp < hp[i] - 1) };
+      });
+      const h = run('railgun', (p, q, E, step, alt) => {
+        step(1); const e = q.hookE, near = !!e && dist2(e.x, e.y, q.x, q.y) < 120 ** 2, mine = !!p.hookE;
+        alt(); return { near, mine, flung: (q.flung || []).length, free: !q.hookE };
+      });
+      const bl = run('blade', (p, q, E, step, alt) => {
+        alt(); const win = q.parryWinT > 0;
+        Game.eBullets.push({ x: q.x + 25, y: q.y + 60, vx: 0, vy: -300, r: 5, dmg: 10, life: 2, from: '測試' });
+        step(0.15); return { win, n: q.parryN || 0 };
+      });
+      const dr = run('drone', (p, q, E, step, alt) => {
+        step(1); const n = (q.drones || []).length, dmg = Math.round(Game.runStats.dmg.turret || 0);
+        alt(); step(0.6); return { n, dmg, nearP: (q.drones || []).filter(o => dist2(o.x, o.y, p.x, p.y) < 80 ** 2).length };
+      });
+      const lOk = l.h >= HEAT.min && !l.mine && l.vent >= HEAT.n && l.after < l.h, dOk = d.tN === DISC.max && !d.own && d.canP && d.back === DISC.max && !d.left && !d.fast;
+      const gOk = g.T >= 1 && g.T <= WELL.max && !g.own && !g.left && g.hit, hOk = h.near && !h.mine && h.flung === 1 && h.free, bOk = bl.win && bl.n >= 1, drOk = dr.n === DRONE.n && dr.dmg > 0 && dr.nearP === dr.n;
+      return { ok: lOk && dOk && gOk && hOk && bOk && drOk,
+        got: `光束：砲台熱度 ${+l.h.toFixed(2)}、你的 ${+l.mine.toFixed(2)}、右鍵後砲台放出衝擊波 ${l.vent} 發、熱度 → ${+l.after.toFixed(2)}；`
+          + `飛輪：砲台停著 ${d.tN} 個（要 ${DISC.max}）、你的 ${d.own}、你${d.canP ? '還能擲' : '不能擲（錯誤）'}、召回飛向你 ${d.back} 個、沒接到 ${d.left}、全接${d.fast ? '算了（錯誤）' : '沒算'}；`
+          + `重力井：砲台的井 ${g.T} 個、你的 ${g.own}、塌縮後剩 ${g.left}、敵人${g.hit ? '受傷' : '沒受傷（錯誤）'}；`
+          + `鉤爪：${h.near ? '勾到砲台前面' : '沒勾到砲台前（錯誤）'}、你${h.mine ? '也勾住（錯誤）' : '沒勾'}、右鍵後甩出 ${h.flung} 隻${h.free ? "" : "、還勾著（錯誤）"}；能量刃：右鍵後砲台${bl.win ? '在格擋' : '沒格擋（錯誤）'}、擋下 ${bl.n} 顆；`
+          + `無人機：砲台 ${dr.n} 架、1 秒傷害 ${dr.dmg}、收攏後飛到你身邊 ${dr.nearP} 架` };
     }],
     ['機體', '星門號：傳送門','衝刺開出一對門，子彈穿過從另一個門出來；門開在飛船身上不會馬上傳送；衝刺途中穿門不會把門越拉越長', M => {
       M.setup('sandbox', 'gate', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);

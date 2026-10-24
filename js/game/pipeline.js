@@ -77,7 +77,7 @@ function analyzeChain(chain) {
 
 // 武器這一次出手的子彈：元素插件加在每一顆；有武器線（後面接了晶片）就標上 ln（命中照武器的觸發係數往下傳，見 Game.linePass）
 function weaponShots(pw = 1) {
-  const list = elemize(weaponEmit(Game.wp, pw).map(b => Object.assign(b, { src: 'weapon', cr: null })), Game.wp.el);
+  const k = fireK(), list = elemize(weaponEmit(Game.wp, pw).map(b => Object.assign(b, { src: 'weapon', cr: null, damage: b.damage * k })), Game.wp.el);  // 砲台：×CFG.TURRET.dmg
   const L0 = Game.stats.line;
   if (L0.cells.length) for (const b of list) b.ln = { line: L0, k: -1 };
   return list;

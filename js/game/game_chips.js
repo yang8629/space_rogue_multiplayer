@@ -68,7 +68,7 @@ Object.assign(Game, {
       const rr = PARRY.r + eb.r;
       if (dist2(eb.x, eb.y, p.x, p.y) >= rr * rr) continue;
       const L = loadoutOf(p), perfect = L.wp.perfect && p.parryWin0 - p.parryWinT <= PERFECT.early;  // 完美彈反（升級）：剛按下就擋到
-      this.withLoadout(L, () => {
+      this.withShip(p, () => {
         parryShoot(p, eb);
         if (perfect) for (const o of this.eBullets) if (o.life > 0 && dist2(o.x, o.y, p.x, p.y) < PERFECT.r * PERFECT.r) parryShoot(p, o);
       });
@@ -135,7 +135,7 @@ Object.assign(Game, {
     Events.emit('mineBlast', b);
   },
   updateEnemyBullets(dt) {
-    const ps = this.players();
+    const ps = this.players(), pr = this.turrets.length ? ps.concat(this.turrets.filter(q => q.pl)) : ps;  // pr：彈反也看砲台（隊友那邊的砲台是同步來的資料，沒有 pl）
     Objects.buildGrid();  // 地圖物件格子（敵彈打行星、小行星）
     for (const b of this.eBullets) {
       if (b.home > 0) {  // 精英「追蹤彈」：射出後一段時間內轉向最近的玩家（每秒最多 40°）
@@ -151,7 +151,7 @@ Object.assign(Game, {
       this.portalHop(b, b.r, 'portalT', 0.3, null, b.x - b.vx * dt, b.y - b.vy * dt);  // 敵彈也會穿門
       if (!Arena.rect && (Arena.f(b.x, b.y) < 0 || Arena.gateCross(b.x - b.vx * dt, b.y - b.vy * dt, b.x, b.y))) { b.life = 0; continue; }  // 大地圖：敵彈打到牆、閘門就消失
       if (Objects.eBulletHit(b)) continue;
-      if (this.parryReflect(b, ps)) continue;
+      if (this.parryReflect(b, pr)) continue;
       for (const p of ps) {
         const rr = b.r + p.r, d2 = dist2(b.x, b.y, p.x, p.y);
         if (d2 < rr * rr && !p.invuln && !p.dead) {

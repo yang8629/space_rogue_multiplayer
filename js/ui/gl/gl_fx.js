@@ -84,7 +84,7 @@ const GLFx = {
       }
     }
     // 能量刃彈反的格擋時間：飛船外圍一圈亮的護盾（最後幾幀淡掉）
-    for (const p of ships) {
+    for (const p of ships.concat(G.turrets)) {
       if (!(p.parryWinT > 0)) continue;
       const al = Math.min(1, p.parryWinT / 0.08);
       const h = this.spr(P, tx.halo, p.x, p.y); h.scaleX = h.scaleY = PARRY.r * 1.1 / R.dot; h.tint = 0xff8fd8; h.alpha = 0.35 * al;
@@ -106,7 +106,7 @@ const GLFx = {
       const q = (G.time * 1.5 + k / 3) % 1;
       g.circle(b.x, b.y, b.vortex * (1 - q)).stroke({ width: 2, color: 0xb388ff, alpha: 0.5 * q });
     }
-    for (const p of ships) {
+    for (const p of ships.concat(G.turrets)) {  // 砲台也有自己的鉤爪、無人機
       if (p.hookE && !p.hookE.dead) { g.moveTo(p.x, p.y); g.lineTo(p.hookE.x, p.hookE.y); g.stroke({ width: 2.5, color: 0xffd166, alpha: 0.85 }); }
       const hs = p.hookShip || (p.hookShipSlot && Game.allShips().find(s => Game.slotOf(s) === p.hookShipSlot));  // 勾住的隊友（房主有 hookShip，隊友那邊照同步的號碼找）
       if (hs) { g.moveTo(p.x, p.y); g.lineTo(hs.x, hs.y); g.stroke({ width: 2.5, color: 0xffd166, alpha: 0.85 }); }

@@ -1167,7 +1167,7 @@ const Net = {
       pt: G.portals.map(q => [r(q.ax), r(q.ay), r(q.bx), r(q.by), r2(q.t), q.color]),
       zn: G.zones.map(z => [r(z.x), r(z.y), z.r, r2(z.t), z.max, ZONE_KINDS.indexOf(z.kind || 'bomb'), z.hold || 0, z.slot || 0]),  // 紅圈（王的落點轟炸、標記圈：種類、定住前剩幾秒、被標的人）
       dc: G.decoys.map(d => [r(d.x), r(d.y), r2(d.t), d.slot, r2(d.aim)]),  // 殘影（幻影號）
-      tu: G.turrets.map(q => [r(q.x), r(q.y), r2(q.t), q.slot, r2(q.aim)]),  // 砲台（哨兵號）
+      tu: G.turrets.map(q => [r(q.x), r(q.y), r2(q.t), q.slot, r2(q.aim), weaponRow(q)]),  // 砲台（哨兵號）：武器狀態畫勾住的線、無人機
       e: live.map(e => trimRow([e.id, ti(e.type), r(e.x), r(e.y), r(e.vx), r(e.vy), r(e.hp), r(e.maxHp), r2(e.rot),
         e.flash > 0 ? 1 : 0, r2(Math.max(0, e.spawnT)), e.spawnMax, ti(e.mode), r2(e.modeT), r2(e.chargeA),
         e.slowT > 0 ? 1 : 0, e.burnT > 0 ? 1 : 0, e.enraged ? 1 : 0, e.stuck ? e.stuck.length : 0,
@@ -1357,7 +1357,7 @@ const Net = {
     G.objs = Objects.unpack(s.ob);
     G.zones = arr(s.zn).filter(Array.isArray).map(a => ({ x: num(a[0]), y: num(a[1]), r: num(a[2], 100), t: num(a[3]), max: num(a[4], 1) || 1, kind: ZONE_KINDS[a[5]] || 'bomb', hold: num(a[6]), slot: num(a[7]) }));
     G.decoys = arr(s.dc).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]), r: 12, decoy: true }));
-    G.turrets = arr(s.tu).filter(Array.isArray).slice(0, NET_MAX).map(a => ({ x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]) }));
+    G.turrets = arr(s.tu).filter(Array.isArray).slice(0, NET_MAX).map(a => { const q = { x: num(a[0]), y: num(a[1]), t: num(a[2]), slot: clamp(Math.floor(num(a[3], 1)), 1, NET_MAX), aim: num(a[4]) }; applyWeaponRow(q, a[5]); return q; });
     G.portals = arr(s.pt).filter(Array.isArray).map(a => ({ ax: num(a[0]), ay: num(a[1]), bx: num(a[2]), by: num(a[3]), t: num(a[4]), color: typeof a[5] === 'string' ? a[5] : '#2ee6a6' }));
     G.eBullets = arr(s.eb).map(a => ({ x: num(a[0]), y: num(a[1]), vx: num(a[2]), vy: num(a[3]), r: num(a[4], 5), col: typeof pal[a[5]] === 'string' ? pal[a[5]] : null,
       mine: num(a[6]) > 0, life: num(a[6]), max: AFFIX.mine.life }));

@@ -243,6 +243,12 @@ while (!sector2 && guard++ < 40) {
       step(2);
       ok(CB.bullets.some(b => b.vortex === 130), `vortex radius synced to client (${CB.bullets.map(b => b.vortex).filter(Boolean).join() || 'none'})`);
       for (const b of GA.bullets) b.dead = true;
+      // 哨兵號的砲台有自己的武器狀態：隊友那邊要拿到砲台勾住的敵人（畫勾住的線）
+      const hid = A.run(`{ const e = new Enemy('brute', Game.player.x + 200, Game.player.y, 1); e.spawnT = 0; Game.enemies.push(e); const q = new Turret(Game.player, Game.player.x, Game.player.y); q.t = 99; q.hookE = e; q.hookT = 99; Game.turrets.push(q); e ? e.id : 0; }`);
+      step(1);
+      const ct = CB.turrets[0];
+      ok(hid && ct && ct.hookE && ct.hookE.id === hid, `turret weapon state synced to client (hooked ${hid}, client ${ct && ct.hookE ? ct.hookE.id : 'none'})`);
+      A.run(`for (const q of Game.turrets) Game.endTurret(q); Game.turrets = [];`); step(1);
       P.iframe = me.iframe = GA.mates[0].iframe = 0;
     }
     if (!beamChecked && type === 'combat') {  // 星環守門者的光束：隊友那邊每幀都要轉（同步 1/30 秒一次，以前每兩幀才跳一次、末端一次跳 17px）

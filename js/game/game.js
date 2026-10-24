@@ -23,7 +23,7 @@ const Game = {
   stats: null, passives: computePassives([]),
   map: null, node: null, visited: [], combat: null, inArena: false,
   cam: { x: 0, y: 0 },
-  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], slashQ: [], zones: [],
+  stars: [], bullets: [], enemies: [], eBullets: [], pickups: [], triggerQueue: [], slashQ: [], zones: [], firer: null,
   weapon: { id: 'laser', path: null, final: null }, wp: null,
   time: 0, nextId: 1,
   // 雙人：mate = 隊友的飛船（房主這邊是真的模擬對象，隊友那邊只是畫出來的影子）
@@ -82,29 +82,32 @@ const Game = {
     this.decoys = this.decoys.filter(d => d.owner !== p);
     this.decoys.push({ x, y, r: p.r, vx: 0, vy: 0, t: CFG.DECOY.t, owner: p, slot: p === this.player ? Net.mySlot() : p.slot || 0, aim: p.aim, decoy: true });
   },
-  // 哨兵號・砲台：衝刺起點留一座砲台（CFG.TURRET），同一個人同時只有一座；pl = 放的那艘飛船（開火用 pl.L 的配裝）
+  // 哨兵號・砲台：衝刺起點留一座砲台（Turret，CFG.TURRET），同一個人同時只有一座
   addTurret(p, x, y) {
+    for (const q of this.turrets) if (q.pl === p) this.endTurret(q);
     this.turrets = this.turrets.filter(q => q.pl !== p);
-    this.turrets.push({ x, y, t: CFG.TURRET.t, pl: p, slot: p === this.player ? Net.mySlot() : p.slot || 0, aim: p.aim, cd: 0 });
+    this.turrets.push(new Turret(p, x, y));
   },
-  // 砲台開火：射速照放的人（機體的射速增減；移動、站著不動才有的加成不算），朝射程內（跟自動攻擊一樣）最近的敵人
-  //   用那個人的武器（命中照樣觸發武器線），傷害 ×CFG.TURRET.dmg；子彈標 turret（傷害統計另外一類）
-  //   只射武器的子彈（不走 canFire／onFire：不加熱、沒有連段）；命中不走武器玩法（onHit：不勾人、不吸血）；飛輪、重力井另外算上限（turretCanFire）
+  endTurret(q) { q.dead = true; this.withShip(q, () => weaponPlay().onGone(q)); },  // 停著的飛輪、重力井留到時間到（飛輪時間到飛回砲台＝消失）
+  // 砲台每幀：朝射程內（跟自動攻擊一樣）最近的敵人，照飛船的流程開火（Player.tickAlt、tickFire：射速照放的人，移動才有的加成不算）
   updateTurrets(dt) {
     for (const q of this.turrets) {
-      q.t -= dt; q.cd -= dt;
-      if (q.cd > 0 || q.pl.dead) continue;
-      this.withLoadout(q.pl.L, () => {
-        const S = this.stats, w = this.wp, M = this.mech, e = nearestEnemy(q.x, q.y, clamp(w.speed * w.life + 40, 140, CFG.AUTO_RANGE), null, true);
-        if (!e || !S || !weaponPlay().turretCanFire(q.pl)) return;
-        q.aim = Math.atan2(e.y - q.y, e.x - q.x); q.cd = Math.max(q.cd, -dt) + S.interval / (M.rate * M.rateMul);
-        const list = weaponShots().map(s => ({ ...s, damage: s.damage * CFG.TURRET.dmg }));
-        const n0 = this.bullets.length;
-        if (list.length) spawnShots(list, q.x + Math.cos(q.aim) * 10, q.y + Math.sin(q.aim) * 10, q.aim, 0, null);
-        for (let i = n0; i < this.bullets.length; i++) this.bullets[i].turret = true;
+      if ((q.t -= dt) <= 0) { this.endTurret(q); continue; }
+      this.withShip(q, () => {
+        const w = this.wp, e = this.stats && nearestEnemy(q.x, q.y, clamp(w.speed * w.life + 40, 140, CFG.AUTO_RANGE), null, true);
+        if (e && !q.hookE) q.aim = Math.atan2(e.y - q.y, e.x - q.x);  // 勾著的時候不轉（勾住的拉在砲台前方）
+        q.wantFire = !!e && !q.pl.dead;
+        q.tickAlt(dt);
+        q.tickFire(dt, q.wantFire);
       });
     }
-    this.turrets = this.turrets.filter(q => q.t > 0);
+    this.turrets = this.turrets.filter(q => !q.dead);
+  },
+  // 用 p（飛船或砲台）的身分算：p 的配裝；p 是砲台時 firer = 砲台（射出的子彈算砲台的、傷害 ×CFG.TURRET.dmg，見 fireK）
+  withShip(p, fn) {
+    if (!p.pl) return this.withLoadout(loadoutOf(p), fn);
+    const f0 = this.firer; this.firer = p;
+    try { return this.withLoadout(loadoutOf(p), fn); } finally { this.firer = f0; }
   },
   // 暫時把 Game 的配裝換成 L（隊友的），執行完再換回來；L 為 null 時就是房主自己
   withLoadout(L, fn) {  // 算隊友的事：Game 的配裝欄位暫時指向 L（見 LOADOUT_KEYS），shooter = L（傷害記在他身上）
@@ -457,7 +460,7 @@ const Game = {
   },
   updateBullets(dt) {
     // 能量刃連段排隊的刃片（EnergyBlade.onFire）：時間到就從那艘船現在的位置放出（跟著船走）
-    for (const q of this.slashQ) if ((q.t -= dt) <= 0) this.withLoadout(loadoutOf(q.p), () => spawnShots([q.s], q.p.x + Math.cos(q.a) * 4, q.p.y + Math.sin(q.a) * 4, q.a, 0, null));
+    for (const q of this.slashQ) if ((q.t -= dt) <= 0) this.withShip(q.p, () => spawnShots([q.s], q.p.x + Math.cos(q.a) * 4, q.p.y + Math.sin(q.a) * 4, q.a, 0, null));
     this.slashQ = this.slashQ.filter(q => q.t > 0);
     const B = this.bullets, E = this.enemies, Q = this.triggerQueue;
     buildEnemyGrid();  // 共用的敵人格子（追蹤、地雷、迴旋折返、找最近的敵人用；見 spatial.js）
@@ -480,7 +483,8 @@ const Game = {
     for (const b of B) {
       if (b.dead) continue;
       const bdt = fields.length && fields.some(e => dist2(b.x, b.y, e.x, e.y) < FR2) ? dt * AFFIX.field.slow : dt;
-      if (b.owner) this.withLoadout(b.owner, () => b.update(bdt)); else b.update(bdt);  // 隊友的子彈：停留、飛回這些照隊友的武器升級
+      if (b.ownerP && b.ownerP.pl) this.withShip(b.ownerP, () => b.update(bdt));  // 砲台的子彈：停留、飛回照砲台
+      else if (b.owner) this.withLoadout(b.owner, () => b.update(bdt)); else b.update(bdt);  // 隊友的子彈：停留、飛回這些照隊友的武器升級
       if (b.dead || b.mode === 'wait') continue;  // 停滯：停住的子彈不會打到敵人
       if (b.comet && this.cometShardHit(b)) continue;  // 彗星碎片：也會打到飛船
       if (b.mode !== 'orbit' && this.portalHop(b, b.r, 'portalT', 0.3, b.angle, b.px, b.py)) { b.px = b.x; b.py = b.y; }
@@ -508,7 +512,7 @@ const Game = {
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.wakeEnemy(e); this.reflectShot(e, b, ca); break; }  // 打在盾上不扣血，待機的也會醒（CFG.ALERT）
         }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
-        if (b.ownerP && !b.turret) this.withLoadout(loadoutOf(b.ownerP), () => weaponPlay().onHit(b.ownerP, b, e));  // 打中時（鉤爪勾住、吸能刃）：射的人的武器
+        if (b.ownerP) this.withShip(b.ownerP, () => weaponPlay().onHit(b.ownerP, b, e));  // 打中時（鉤爪勾住、吸能刃）：射的人（砲台）的武器
         const dmg = hitDamage(b), att = b.att;
         const knock = b.knock, kb = Math.min(220, dmg * 5) * (14 / e.r) * knock;
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.turret ? 'turret' : b.depth > 0 ? 'echo' : 'direct', att, knock);
@@ -588,6 +592,7 @@ for (const k of LOADOUT_KEYS) {
 Game.cur = Game.L;
 // 這艘船（房主自己或隊友）的配裝
 const loadoutOf = p => (p && p.L) || Game.L;
+const fireK = () => Game.firer ? CFG.TURRET.dmg : 1;  // 武器傷害的倍率：砲台在開火（Game.withShip）時 ×CFG.TURRET.dmg
 
 // 主題小兵：cost = 佔一波的預算、from = 第幾星區開始出現、max = 一波最多幾隻
 const THEMES = {

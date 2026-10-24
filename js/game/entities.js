@@ -208,6 +208,7 @@ class Player {
     if (!A || this.altCd > 0) return;
     this.altCd = A.cd;
     weaponPlay().alt(this);
+    for (const q of Game.turrets) if (q.pl === this) Game.withShip(q, () => weaponPlay().turretAlt(q, this));  // 哨兵號：砲台跟著做一次
     Events.emit('alt', { p: this, weapon: Game.weapon.id });  // 音效（ui/listeners.js）
   }
   // 自動瞄準：最近的敵人；被牆、行星擋住打不到時，改打最近的打得到的那隻（都打不到就照樣打最近的）
@@ -242,6 +243,16 @@ class Player {
   }
 }
 
+// 哨兵號的砲台：不會動的「你」——跟飛船同一套開火、武器玩法（熱度、連段、勾住、飛輪、無人機都是砲台自己一份），自動打射程內最近的敵人
+//   傷害 ×CFG.TURRET.dmg（Game.withShip 裡 fireK）；pl = 放的那艘飛船，L = 他的配裝（loadoutOf）；fixed：不會被拉走、不勾隊友；aimD 0：無人機繞著砲台
+class Turret extends Player {
+  constructor(pl, x, y) {
+    super(pl.ship);
+    this.pl = pl; this.L = pl.L; this.x = x; this.y = y; this.aim = pl.aim; this.aimD = 0; this.fixed = true; this.quenchT = 0;
+    this.t = CFG.TURRET.t; this.slot = pl === Game.player ? Net.mySlot() : pl.slot || 0; this.hp = this.maxHp = 1;  // hp：狂戰、血祭、熔芯算砲台自己的，不動到你
+  }
+}
+
 let bulletN = 0;  // 子彈編號（多人：隊友那邊用編號對上同一顆，見 Net.bulletRows）
 class Bullet {
   constructor(x, y, angle, s, depth, ignoreId) {
@@ -264,7 +275,8 @@ class Bullet {
     this.hitSet = new Set();
     if (ignoreId != null) this.hitSet.add(ignoreId);
     this.owner = Game.shooter || null;  // 雙人：這顆子彈是誰的（null = 房主自己）
-    this.ownerP = Game.shipOf(Game.shooter);  // 迴旋、飛輪要飛回的飛船
+    this.ownerP = Game.firer || Game.shipOf(Game.shooter);  // 迴旋、飛輪要飛回的飛船（砲台射的 = 砲台）
+    this.turret = !!Game.firer && this.att.src === 'weapon';  // 砲台的武器子彈（傷害統計「砲台」）
     this.dead = false;
     this.mode = 'fly'; this.flyAge = 0; this.R = this.speed0 * this.life; this.dist = 0;  // R：射程；dist：已飛距離
   }
@@ -364,7 +376,7 @@ class Bullet {
         } else if (this.boom && this.mode === 'fly') { this.x = hit.x; this.y = hit.y; this.startReturn(); }  // 迴旋：撞牆折返
         else if (this.toPark(hit.x - Math.cos(this.angle) * this.r, hit.y - Math.sin(this.angle) * this.r)) return;  // 飛輪、重力井：停在牆前
         else {
-          if (this.hook && this.ownerP && !this.turret) weaponPlay(this.ownerP).onWall(this.ownerP, hit.x, hit.y);  // 鉤爪打到牆（鉤索）
+          if (this.hook && this.ownerP) weaponPlay(this.ownerP).onWall(this.ownerP, hit.x, hit.y);  // 鉤爪打到牆（鉤索）
           this.dead = true; this.x = hit.x; this.y = hit.y;  // 停在牆面
           return;
         }
