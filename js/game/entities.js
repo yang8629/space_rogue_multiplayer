@@ -364,7 +364,7 @@ class Bullet {
         } else if (this.boom && this.mode === 'fly') { this.x = hit.x; this.y = hit.y; this.startReturn(); }  // 迴旋：撞牆折返
         else if (this.toPark(hit.x - Math.cos(this.angle) * this.r, hit.y - Math.sin(this.angle) * this.r)) return;  // 飛輪、重力井：停在牆前
         else {
-          if (this.hook && this.ownerP) weaponPlay(this.ownerP).onWall(this.ownerP, hit.x, hit.y);  // 鉤爪打到牆（鉤索）
+          if (this.hook && this.ownerP && !this.turret) weaponPlay(this.ownerP).onWall(this.ownerP, hit.x, hit.y);  // 鉤爪打到牆（鉤索）
           this.dead = true; this.x = hit.x; this.y = hit.y;  // 停在牆面
           return;
         }

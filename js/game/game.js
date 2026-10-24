@@ -89,13 +89,14 @@ const Game = {
   },
   // 砲台開火：射速照放的人（機體的射速增減；移動、站著不動才有的加成不算），朝射程內（跟自動攻擊一樣）最近的敵人
   //   用那個人的武器（命中照樣觸發武器線），傷害 ×CFG.TURRET.dmg；子彈標 turret（傷害統計另外一類）
+  //   只射武器的子彈（不走 canFire／onFire：不加熱、沒有連段）；命中不走武器玩法（onHit：不勾人、不吸血）；飛輪、重力井另外算上限（turretCanFire）
   updateTurrets(dt) {
     for (const q of this.turrets) {
       q.t -= dt; q.cd -= dt;
       if (q.cd > 0 || q.pl.dead) continue;
       this.withLoadout(q.pl.L, () => {
         const S = this.stats, w = this.wp, M = this.mech, e = nearestEnemy(q.x, q.y, clamp(w.speed * w.life + 40, 140, CFG.AUTO_RANGE), null, true);
-        if (!e || !S) return;
+        if (!e || !S || !weaponPlay().turretCanFire(q.pl)) return;
         q.aim = Math.atan2(e.y - q.y, e.x - q.x); q.cd = Math.max(q.cd, -dt) + S.interval / (M.rate * M.rateMul);
         const list = weaponShots().map(s => ({ ...s, damage: s.damage * CFG.TURRET.dmg }));
         const n0 = this.bullets.length;
@@ -507,7 +508,7 @@ const Game = {
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.wakeEnemy(e); this.reflectShot(e, b, ca); break; }  // 打在盾上不扣血，待機的也會醒（CFG.ALERT）
         }
         if (b.lock && b.ownerP) { b.ownerP.lockE = e; b.ownerP.lockT = this.time + 1; }  // 鎖定（感測器 2 層）：打中後 1 秒內子彈追蹤這一隻
-        if (b.ownerP) this.withLoadout(loadoutOf(b.ownerP), () => weaponPlay().onHit(b.ownerP, b, e));  // 打中時（鉤爪勾住、吸能刃）：射的人的武器
+        if (b.ownerP && !b.turret) this.withLoadout(loadoutOf(b.ownerP), () => weaponPlay().onHit(b.ownerP, b, e));  // 打中時（鉤爪勾住、吸能刃）：射的人的武器
         const dmg = hitDamage(b), att = b.att;
         const knock = b.knock, kb = Math.min(220, dmg * 5) * (14 / e.r) * knock;
         e.hurt(dmg, Math.cos(b.angle) * kb, Math.sin(b.angle) * kb, b.comet ? 'comet' : b.turret ? 'turret' : b.depth > 0 ? 'echo' : 'direct', att, knock);

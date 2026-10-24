@@ -8,6 +8,7 @@
 class WeaponPlay {
   constructor(id) { this.id = id; }
   canFire(p) { return true; }        // 能不能開火（過熱、飛輪全在場上時不能）
+  turretCanFire(p) { return true; }  // p 的砲台（哨兵號）能不能開火
   onFire(p, list) { return list; }   // 左鍵出手：回傳這一幀要從飛船射出的子彈（其餘自己排隊或從別處射）
   tick(p, dt) {}                     // 每幀（Player.tickAlt）
   alt(p) {}                          // 右鍵（WEAPONS[id].alt 有寫才會呼叫，冷卻由 Player.tickAlt 管）
@@ -22,14 +23,15 @@ class ParkWeapon extends WeaponPlay {
   shots(p) { return ownShots(p, this.kind); }  // 這艘船停著／飛著的（飛回來途中的不算）
   count(p) { return this.shots(p).length; }    // 佔掉幾個（HUD）
   max() { return Infinity; }                     // 場上最多幾個
+  turretCanFire(p) { return turretShots(p, this.kind).length < this.max(); }  // 砲台的另外算一份上限（不佔你的；以前沒上限，砲台射出一堆飛輪，10-25 使用者回報）
 }
 
 // 停在場上的子彈（Bullet 的 park 模式）：kind 分辨是誰的、t 停多久（mul：升級的倍率）、rehit 隔多久能再打同一隻、
 //   tick 每幀做的事、onPark 剛停住、onCatch 飛回飛船時
 const DISC_PARK = { kind: 'disc', t: DISC.park, rehit: DISC.rehit, dmg: DISC.parkMul, mul: () => Game.wp.parkMul || 1,  // dmg：停住時的傷害倍率（hitDamage）
-  onPark(b) {  // 疊輪：停在另一個停住的飛輪旁邊就疊上去
+  onPark(b) {  // 疊輪：停在另一個停住的飛輪旁邊就疊上去（砲台的只疊砲台的）
     if (!Game.wp.discStack) return;
-    const o = ownShots(b.ownerP, 'disc').find(o => o !== b && o.mode === 'park' && (o.lvl || 1) < DISC_UP.stackMax && dist2(o.x, o.y, b.x, b.y) < DISC_UP.stackR ** 2);
+    const o = parkShots(b.ownerP, 'disc', b.turret).find(o => o !== b && o.mode === 'park' && (o.lvl || 1) < DISC_UP.stackMax && dist2(o.x, o.y, b.x, b.y) < DISC_UP.stackR ** 2);
     if (!o) return;
     o.lvl = (o.lvl || 1) + 1; o.r *= DISC_UP.stackGrow; if (o.r0) o.r0 *= DISC_UP.stackGrow; o.damage *= DISC_UP.stackDmg; o.parkT = Math.max(o.parkT, b.parkT);
     b.dead = true; ringFx(o.x, o.y, o.r + 10, '#ffb347');
@@ -39,7 +41,7 @@ const DISC_PARK = { kind: 'disc', t: DISC.park, rehit: DISC.rehit, dmg: DISC.par
     b.r0 = b.r0 || b.r; b.age = (b.age || 0) + dt;
     b.r = b.r0 * Math.min(DISC_UP.grind.max, 1 + DISC_UP.grind.grow * b.age);
   },
-  onExpire(b) { discReturn(b, 1); },  // 停住時間到：自己飛回手上（回程照樣打人；不吃召回的回程倍率，以前直接消失，10-23）
+  onExpire(b) { if (b.turret) b.dead = true; else discReturn(b, 1); },  // 砲台的不飛回手上（接住會觸發爆輪、自動再擲）  // 停住時間到：自己飛回手上（回程照樣打人；不吃召回的回程倍率，以前直接消失，10-23）
   onCatch(b) {  // 飛輪飛回手上：全接快擲、爆輪、自動再擲
     const p = b.ownerP, w = Game.wp;
     if (b.recall && p.recallN && ++p.caught >= p.recallN) { p.fastN = p.recallN; p.recallN = 0; floatText(p.x, p.y - 26, '全接！', '#ffb347'); }  // fastN：手上還有幾個強化的（排在前面）
@@ -83,8 +85,10 @@ const WELL_PARK = { kind: 'well', t: WELL.park, rehit: WELL.rehit,
 // 準星指向的點：飛船＋瞄準方向 × 準星距離（限制在 min～max）。沒有準星距離（電腦、舊存檔）用 250
 //   用 ?? 不用 ||：游標放在飛船上時距離是 0，以前被當成沒有、變成 250，無人機飛到前面亂跳（10-23）
 function aimAt(p, min = 0, max = Infinity) { const d = clamp(p.aimD ?? 250, min, max); return [p.x + Math.cos(p.aim) * d, p.y + Math.sin(p.aim) * d]; }
-// p 的飛輪／重力井（飛回來途中的不算）
-const ownShots = (p, kind) => Game.bullets.filter(b => !b.dead && b.ownerP === p && b.park && b.park.kind === kind && b.mode !== 'return');
+// p 的飛輪／重力井（飛回來途中的不算）；砲台射的另外算（turretShots），不佔上限、不被召回／塌縮
+const parkShots = (p, kind, turret) => Game.bullets.filter(b => !b.dead && b.ownerP === p && b.park && b.park.kind === kind && b.mode !== 'return' && !b.turret === !turret);
+const ownShots = (p, kind) => parkShots(p, kind, false);
+const turretShots = (p, kind) => parkShots(p, kind, true);
 // 右鍵沒東西可用：灰色光圈往內收，冷卻只扣一點
 const altMiss = p => { ringFx(p.x, p.y, 30, '#8a8fa8', true); p.altCd = 0.2; };
 // 武器原型直接造成的傷害（不是子彈打的：撕扯、撞擊、電弧）算在武器上
@@ -269,7 +273,7 @@ class GrappleHook extends WeaponPlay {
     if (p.hookE || p.hookShip || p.grabBy) return;
     const me = Game.slotOf(p);
     for (const b of Game.bullets) {
-      if (b.dead || !b.hook || b.ownerP !== p || b.mode !== 'fly') continue;
+      if (b.dead || !b.hook || b.turret || b.ownerP !== p || b.mode !== 'fly') continue;  // 砲台的鉤爪不勾人
       const q = Game.allShips().find(s => s !== p && !s.gone && !s.grabBy && segDist2(b.px, b.py, b.x, b.y, s.x, s.y) < (s.r + b.r) ** 2);  // 看這一幀飛過的線段（一幀 21 > 飛船＋鉤爪的半徑，只看點會跳過去）
       if (!q) continue;
       b.dead = true; p.hookShip = q; q.grabBy = me; p.hookT = this.holdT();
