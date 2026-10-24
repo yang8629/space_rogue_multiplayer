@@ -13,6 +13,8 @@ function hubShade(c, k) {
 // 切面的亮度：法線朝左上（光的方向）越亮
 const hubLit = (nx, ny) => (-nx - ny) / Math.SQRT2;
 
+// 戰績室螢幕上的旗艦全像用哪幾張圖集的圖（由下往上疊）；沒列的 = 跟旗艦同名的那張
+const HUB_BOSS_ART = { boss: ['boss_ring', 'boss'], boss3: ['boss3_ring_out', 'boss3_ring_in', 'boss3_core'] };
 // 操作台螢幕上的圖樣：每個面板一個（軍械庫 = 槍、晶片庫 = 晶片、戰績 = 獎盃）；k = 大小
 const CONSOLE_ICON = {
   armory: (g, x, y, c, a, k = 1) => {  // 槍的側面（槍口朝右）：槍托、槍身、槍管、握把
@@ -80,7 +82,7 @@ const hubRect = (cx, cy, w, h, a) => { const c = Math.cos(a), n = Math.sin(a), o
 const GLHub = {
   init() {
     const L = GLR.L;
-    this.sky = new PIXI.Container(); L.hub.addChild(this.sky);  // 站體後面的太空：中子星（skyDraw）
+    this.sky = new PIXI.Container(); L.hub.addChild(this.sky);  // 站體後面的太空：中子星、星環（skyDraw）
     this.gSky = new PIXI.Graphics(); this.sky.addChild(this.gSky);
     this.pSky = GLR.pool('hubSky', this.sky, () => new PIXI.Sprite());
     this.gBase = new PIXI.Graphics(); L.hub.addChild(this.gBase);   // 不會動的：牆、地板、擺設、停機位、武器架、操作台、發射台的底座
@@ -386,7 +388,7 @@ const GLHub = {
     const hall = R.hall, hg = R.hangar, ar = R.armory, lab = R.lab, deck = R.deck, rec = R.records, bay = R.bay;
     const L = Z.find(z => z.kind === 'launch');
     // 每間房上牆一排燈（燈座裝在牆的內緣上，地板的光每幀畫）：照牆寬平均排、左右對稱；碰到門口、窗戶的那盞連同對稱的那盞一起拿掉
-    //   上牆放不下（門、窗、獎盃）的：燈改到左右牆；信號燈裝在大廳四個角的牆角（不佔地板、不碰門）
+    //   上牆放不下（門、窗、擊沉紀錄）的：燈改到左右牆；信號燈裝在大廳四個角的牆角（不佔地板、不碰門）
     //   燈：[x, y, 光往哪照（0 下、1 右、-1 左）]
     // 戰績室左右牆下段的顯示螢幕（跟大廳終端機同一種掛牆面板；下面畫，燈要避開）：放在左牆門口（往觀景台）和地板下緣之間，右牆對稱
     const py0 = rec.y + rec.h / 2 + HUB.DOOR_W / 2 + 10, py1 = rec.y + rec.h - 6, ph = Math.min(104, py1 - py0);
@@ -470,7 +472,7 @@ const GLHub = {
     // 晶片實驗室：上牆、左牆一排伺服器機櫃（燈每幀閃）
     for (let x = lab.x + 30; x < lab.x + lab.w - 60; x += 70) this.server(g, x, lab.y + 8, 56, 40, D);
     for (let y = lab.y + 90; y < lab.y + lab.h - 60; y += 70) this.server(g, lab.x + 8, y, 40, 56, D);
-    // 窗戶的玻璃（洞在畫牆的時候挖好了：透出外面真的太空；觀景台外面那顆行星在 skyDraw）
+    // 窗戶的玻璃（洞在畫牆的時候挖好了：透出外面真的太空；觀景台窗外的星環在 skyDraw）
     for (const q of this.windows) this.window(g, q);
     // 觀景台：兩個面向窗戶的停泊台（跟機庫停機位同一套的切面台座）
     for (const sg of [-1, 1]) {
@@ -478,10 +480,16 @@ const GLHub = {
       this.hexPad(g, bx, by, 48, 0x1a2238, 6);
       this.hexPad(g, bx, by, 26, 0x2a3454, 6);
     }
-    // 戰績室：上牆一排獎盃（旗艦的顏色），左右牆下段的顯示螢幕
-    const bosses = Object.values(ENEMY_TYPES).filter(t => t.boss);
-    const step = Math.min(100, (rec.w - 40) / bosses.length), pw = Math.min(60, step - 14);  // 旗艦多了就排密一點，整排留在房間裡（5 隻時 100 一個會超出牆）
-    bosses.forEach((t, i) => { const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * step, y = rec.y + 30; g.rect(x - pw / 2, rec.y + 4, pw, 44).fill(0x3a3220).stroke({ width: 2, color: HUB_INK }); D.leds.push({ x, y, col: glColor(t.color), trophy: true }); });
+    // 戰績室：上牆一排擊沉紀錄（每隻旗艦一面螢幕：打倒過 = 牠的全像，還沒 = 暗的剪影；每幀畫），左右牆下段的顯示螢幕
+    const bosses = Object.keys(ENEMY_TYPES).filter(id => ENEMY_TYPES[id].boss);
+    const step = Math.min(100, (rec.w - 40) / bosses.length), pw = Math.min(64, step - 12), ph2 = 50;  // 旗艦多了就排密一點，整排留在房間裡（5 隻時 100 一個會超出牆）
+    D.records = bosses.map((id, i) => {
+      const x = rec.x + rec.w / 2 + (i - (bosses.length - 1) / 2) * step, y0 = rec.y + 4;
+      g.rect(x - pw / 2 - 4, y0, pw + 8, ph2 + 4).fill(0x3a4466).stroke({ width: 2.5, color: HUB_INK });  // 金屬框（下緣厚一點）
+      g.rect(x - pw / 2 - 4, y0 + ph2, pw + 8, 4).fill(hubShade(0x3a4466, -0.35));
+      g.rect(x - pw / 2, y0 + 4, pw, ph2 - 8).fill(0x070c1c).stroke({ width: 2, color: HUB_INK });  // 螢幕
+      return { id, x, y: y0 + ph2 / 2, w: pw, h: ph2 - 8 };
+    });
     for (const s of panels) { this.wallPanel(g, s.x0, s.yc, s.h, s.side); D.leds.push({ ...s, col: 0xffd166, panel: true }); }  // 位置在上面燈那段算
     // 巡邏的維修無人機：大廳繞圈、機庫走道上下、實驗室繞圈
     D.drones = [
@@ -533,7 +541,7 @@ const GLHub = {
     const g = this.gAnim, t = Hub.t, s = Hub.ship, seen = unlockSeen(), D = this.decor;
     g.clear();
     this.skyDraw(t);
-    // 導管的光點、燈照在地板上、信號燈、伺服器的燈、獎盃、無人機
+    // 導管的光點、燈照在地板上、信號燈、伺服器的燈、擊沉紀錄、無人機
     for (const P of D.paths) {  // 左右兩條同時出發（對稱）
       const d = (t * 110) % (P.len + 160);
       if (d > P.len) continue;
@@ -560,9 +568,9 @@ const GLHub = {
     }
     for (const [i, [x, y]] of D.pylons.entries()) { const k = 0.6 + 0.4 * Math.sin(t * 1.6 + i * Math.PI / 2); g.circle(x, y, 4).fill({ color: 0x9fe8ff, alpha: k }); this.glow(x, y, 34, 0x4cc9f0, 0.35 * k); }  // 大廳的導航燈柱：慢慢一明一暗
     for (const [i, [x, y]] of D.beacons.entries()) { const on = Math.sin(t * 2.4 + i * Math.PI / 2) > 0.6; g.circle(x, y, 3.5).fill(on ? 0xff4d6d : 0x5a1f2e); if (on) this.glow(x, y, 26, 0xff4d6d, 0.5); }
+    if (D.records) this.bossRecords(g, D.records, t);
     for (const e of D.leds) {
-      if (e.trophy) { CONSOLE_ICON.stats(g, e.x, e.y, e.col, 0.95); this.glow(e.x, e.y, 30, e.col, 0.3); }
-      else if (e.panel) this.wallPanelScreen(g, e.x0, e.yc, e.h, e.col, t, 50, 0.22);
+      if (e.panel) this.wallPanelScreen(g, e.x0, e.yc, e.h, e.col, t, 50, 0.22);
       else { const on = Math.sin(t * 3 + e.k) > 0; g.circle(e.x, e.y, 2.5).fill(on ? e.col : 0x1a3a30); if (on) this.glow(e.x, e.y, 10, e.col, 0.5); }
     }
     for (const Rd of D.drones) {  // 無人機：影子、四支螺旋臂、機身（左上亮）、一閃一閃的燈
@@ -679,16 +687,42 @@ const GLHub = {
     GLActors.glowAt(P, x, y, 110, 0x7fd4ff, 0.55 + 0.1 * Math.sin(t * 9));
     GLActors.glowAt(P, x, y, 36, 0xeaf8ff, 1);
     g.circle(x, y, 7).fill(0xffffff);
-    // 觀景台外面的行星（從觀景台的大窗看得到）：同樣的視差；藍色的球、左上亮面、右下陰影、一圈大氣光
+    // 觀景台窗外的星環（設計方向：觀景台看得到星環）：中繼站在最外圈，從大窗看出去是一大段弧形的環體；同樣的視差
+    //   圓心在站體下方很遠，只看得到最上面那段弧（兩端沉到站體後面）；環體一片一片的切面（外半圈亮、內半圈暗，照左上光），每 4 片一道接縫
+    //   中線一條電路光、光點沿著跑（星環是環形計算機）
     const dk = HUB.rooms.deck;
     if (dk) {
-      const ax = dk.x + dk.w * 0.68, ay = dk.y - 70, R = 160;  // 中心在大窗後面一點：一半被站體擋住
-      const qx = ax + (Hub.cam.x - (ax - VW / 2 / Hub.k)) * this.SKY_PAR, qy = ay + (Hub.cam.y - (ay - VH / 2 / Hub.k)) * this.SKY_PAR;
-      GLActors.glowAt(P, qx, qy, R * 1.5, 0x4a7cff, 0.22);
-      g.circle(qx, qy, R).fill(0x23407a);
-      g.circle(qx - R * 0.22, qy - R * 0.22, R * 0.78).fill({ color: 0x5f8fe0, alpha: 0.35 });
-      for (const [dy, a] of [[-0.35, 0.12], [0.05, 0.1], [0.4, 0.08]]) g.ellipse(qx, qy + dy * R, R * Math.sqrt(1 - dy * dy) * 0.98, R * 0.07).fill({ color: 0xbfd8ff, alpha: a });  // 雲帶
-      g.circle(qx + R * 0.3, qy + R * 0.3, R * 0.95).fill({ color: 0x050a18, alpha: 0.45 });  // 背光的那半邊
+      const ax = dk.x + dk.w / 2, ay = dk.y - 126, RR = 600, W2 = 22, span = 0.9, N = 56;  // ay = 弧頂的環體中線（鏡頭在觀景台時視差往下約 80，弧頂落在大窗中間）；RR = 弧的半徑；W2 = 環體半寬
+      const qx = ax + (Hub.cam.x - (ax - VW / 2 / Hub.k)) * this.SKY_PAR, qy = ay + (Hub.cam.y - (ay - VH / 2 / Hub.k)) * this.SKY_PAR, cy = qy + RR;
+      const pt = (a, r) => [qx + Math.sin(a) * r, cy - Math.cos(a) * r];  // a = 從弧頂往右轉的角度
+      const arc = (r, i0 = 0, i1 = N) => { const [x0, y0] = pt(-span + 2 * span * i0 / N, r); g.moveTo(x0, y0); for (let i = i0 + 1; i <= i1; i++) g.lineTo(...pt(-span + 2 * span * i / N, r)); };
+      GLActors.glowAt(P, qx, qy, 520, 0x4a7cff, 0.12);
+      for (let k = 0; k < N; k++) {
+        const a0 = -span + 2 * span * k / N, a1 = a0 + 2 * span / N, am = (a0 + a1) / 2, L = hubLit(Math.sin(am), -Math.cos(am)) * 0.3, seam = k % 4 === 0;
+        g.poly([...pt(a0, RR + W2), ...pt(a1, RR + W2), ...pt(a1, RR), ...pt(a0, RR)]).fill(hubShade(seam ? 0x4a5a86 : 0x5f6f9c, L));
+        g.poly([...pt(a0, RR), ...pt(a1, RR), ...pt(a1, RR - W2), ...pt(a0, RR - W2)]).fill(hubShade(seam ? 0x1c2440 : 0x2e3a5e, L * 0.5));
+        if (seam) { g.moveTo(...pt(a0, RR + W2)).lineTo(...pt(a0, RR - W2)).stroke({ width: 2, color: HUB_INK }); }
+      }
+      for (const r of [RR + W2, RR - W2]) { arc(r); g.stroke({ width: 3, color: HUB_INK }); }
+      arc(RR + W2 * 0.45); g.stroke({ width: 2, color: 0x4cc9f0, alpha: 0.5 });  // 電路光（外半圈上）
+      for (let i = 0; i < 6; i++) {
+        const [px, py] = pt(-span + ((t * 0.03 + i / 6) % 1) * 2 * span, RR + W2 * 0.45);
+        g.circle(px, py, 2.5).fill(0xffffff); GLActors.glowAt(P, px, py, 22, 0x4cc9f0, 0.6);
+      }
+    }
+  },
+  // 戰績室的擊沉紀錄（設計方向：戰績室記錄擊沉的王）：打倒過的旗艦 = 螢幕上牠的全像（牠的顏色、加法發光、微微閃）＋一道往下掃的掃描線；還沒打倒 = 暗的剪影
+  bossRecords(g, recs, t) {
+    const P = unlockProgress(), A = GLActors;
+    for (const [i, R] of recs.entries()) {
+      const T = ENEMY_TYPES[R.id], col = glColor(T.color), sunk = (P.boss[R.id] || 0) > 0, sc = Math.min(R.w, R.h) * 0.42 / T.radius / 2;  // 圖集是 2 倍解析度
+      for (const f of HUB_BOSS_ART[R.id] || [R.id]) {
+        const s = GLR.sprite(A.pE, A.frame(f, 0)); s.position.set(R.x, R.y); s.scale.set(sc); s.rotation = Math.PI / 2;  // 船頭朝下（朝房間）
+        if (sunk) { s.tint = col; s.alpha = 0.8 + 0.1 * Math.sin(t * 6 + i); s.blendMode = 'add'; } else { s.tint = 0x2a3454; s.alpha = 0.9; }
+      }
+      if (!sunk) continue;
+      g.rect(R.x - R.w / 2, R.y - R.h / 2 + ((t * 0.5 + i * 0.37) % 1) * R.h, R.w, 1.5).fill({ color: col, alpha: 0.5 });
+      this.glow(R.x, R.y, 34, col, 0.3);
     }
   },
   // 沒解鎖的飛船：黑色剪影＋一圈淡淡的灰光（看得出形狀）

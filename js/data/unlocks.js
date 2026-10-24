@@ -74,6 +74,12 @@ function unlockDone() {
   }
   return unlockMemo.done;
 }
+// 進度本身：存檔沒變就沿用（基地每幀要看打倒過哪些旗艦）
+let unlockPMemo = { raw: undefined, P: null };
+function unlockProgress() {
+  if (Save.raw('unlocks') !== unlockPMemo.raw || !unlockPMemo.P) { const P = unlockLoad(); unlockPMemo = { raw: Save.raw('unlocks'), P }; }  // 第一次會升級存檔，所以存檔要重讀一次
+  return unlockPMemo.P;
+}
 // 現在能不能選（UNLOCK_ALL 時一律可以；沒列在 UNLOCKS 的一開始就開放）
 function isUnlocked(kind, id) {
   if (CFG.UNLOCK_ALL) return true;

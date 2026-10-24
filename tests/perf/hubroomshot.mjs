@@ -1,5 +1,6 @@
 // 基地房間截圖：飛船停在指定房間，拍一張 → art_lab/screenshots/基地_<房間>.png
 //   用法：node perf/hubroomshot.mjs [機庫中間|戰績室|觀景台|中央大廳|軍械庫|晶片實驗室|發射甲板|全景]（不給 = 全部）
+//   --sunk=boss,boss3：先在存檔記成打倒過這幾隻旗艦（看戰績室的擊沉紀錄亮起來）
 //   全景：整個基地一張（看燈、門、窗的整體配置）：視窗開到放得下整個基地（Hub.follow 的縮放上限 1.3，視窗 = 基地大小 × 1.3）
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -7,6 +8,8 @@ const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', defa
 const p = await b.newPage();
 p.on('pageerror', e => console.log('頁面錯誤', e.message));
 await p.goto(GAME + 'index.html'); await new Promise(r => setTimeout(r, 2500));
+const SUNK = (process.argv.find(a => a.startsWith('--sunk=')) || '').slice(7);
+if (SUNK) await p.evaluate(ids => { const P = unlockLoad(); for (const id of ids) P.boss[id] = 1; unlockSave(P); }, SUNK.split(','));
 // 每個房間：飛船停的位置（照 HUB 的配置算）
 const SPOTS = {
   機庫中間: 'const h = HUB.rooms.hangar; return [h.cx || h.x + h.w / 2, (h.cy || h.y + h.h / 2) + 130];',
@@ -17,7 +20,7 @@ const SPOTS = {
   晶片實驗室: 'const r = HUB.rooms.lab; return [r.x + r.w / 2, r.y + r.h - 60];',
   發射甲板: 'const r = HUB.rooms.bay; return [r.x + r.w / 2, r.y + r.h / 2];',
 };
-const want = process.argv[2] ? [process.argv[2]] : [...Object.keys(SPOTS), '全景'];
+const arg = process.argv.slice(2).find(a => !a.startsWith('--')), want = arg ? [arg] : [...Object.keys(SPOTS), '全景'];
 for (const name of want) {
   if (name === '全景') {
     const [w, h] = await p.evaluate(() => [Math.ceil(HUB.W * 1.3), Math.ceil((HUB.H + HUB.TOP) * 1.3)]);
