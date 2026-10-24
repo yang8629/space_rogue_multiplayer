@@ -1,29 +1,42 @@
-// 星環電路 多人版 · audio.js：音效 SFX（音檔＋Web Audio 即時合成）、背景音樂 Music（即時合成）
+// 星環電路 多人版 · audio.js：音效 SFX（音檔）、背景音樂 Music（Web Audio 即時合成）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 'use strict';
 
 // 音檔（assets/sfx_data.js 的 SFX_DATA：Kenney 的 CC0 音效，tools/audio/build_sfx.js 產生；來源見 assets/sfx/LICENSE.txt）
 //   key = play 的聲音名稱（射擊是「shoot:武器」）；file = SFX_DATA 的哪個檔、vol 音量、gap 同一種最短間隔（毫秒）、pitch 每次隨機升降調的幅度（常聽到的聲音不那麼單調）
-//   沒列的、或音檔還沒解碼好（測試、剛啟動）就用 play 裡的合成音
+//   10-24 使用者：音效統一用音檔（以前是 Web Audio 即時合成）
 const SFX_FILE = {
+  'shoot:laser': { file: 'laser', vol: 0.25, gap: 45, pitch: 0.06 },
+  'shoot:scatter': { file: 'flywheel', vol: 0.35, gap: 60, pitch: 0.1 },
+  'shoot:plasma': { file: 'gravity', vol: 0.25, gap: 80, pitch: 0.08 },
+  'shoot:railgun': { file: 'hook', vol: 0.4, gap: 50, pitch: 0.08 },
+  'shoot:drone': { file: 'drone', vol: 0.15, gap: 45, pitch: 0.12 },
+  'shoot:blade': { file: 'blade', vol: 0.35, gap: 60, pitch: 0.12 },
   hit: { file: 'hit', vol: 0.35, gap: 35, pitch: 0.12 },
   kill: { file: 'kill', vol: 0.45, gap: 30, pitch: 0.1 },
   bigkill: { file: 'bigkill', vol: 0.7, gap: 80 },
   explode: { file: 'bigkill', vol: 0.4, gap: 60, pitch: 0.15 },
-  trigger: { file: 'trigger', vol: 0.22, gap: 70, pitch: 0.2 },  // 晶片觸發（新加的聲音：沒有合成版）
-  bossin: { file: 'bossin', vol: 0.9, gap: 500 },                // 旗艦出現（王的招式還是 boss 的合成音）
+  eshot: { file: 'eshot', vol: 0.12, gap: 90, pitch: 0.1 },       // 敵人開火（很頻繁，小聲）
+  trigger: { file: 'trigger', vol: 0.22, gap: 70, pitch: 0.2 },   // 晶片觸發
+  boss: { file: 'warn', vol: 0.45, gap: 400 },                     // 王出招、警報艇響、彗星來了
+  bossin: { file: 'bossin', vol: 0.9, gap: 500 },                  // 旗艦出現
   bossdeath: { file: 'bossdeath', vol: 0.9, gap: 500 },
   hurt: { file: 'hurt', vol: 0.7, gap: 80 },
+  death: { file: 'death', vol: 0.8, gap: 500 },
   dash: { file: 'dash', vol: 0.4, gap: 80 },
   pickup: { file: 'pickup', vol: 0.3, gap: 40, pitch: 0.15 },
+  wave: { file: 'wave', vol: 0.4, gap: 200 },
+  clear: { file: 'clear', vol: 0.5, gap: 200 },
+  click: { file: 'click', vol: 0.4, gap: 40 },
   upgrade: { file: 'upgrade', vol: 0.6, gap: 100 },
   fuseok: { file: 'upgrade', vol: 0.6, gap: 100 },
-  'shoot:laser': { file: 'laser', vol: 0.25, gap: 45, pitch: 0.06 },
+  fusefail: { file: 'fusefail', vol: 0.6, gap: 200 },
+  fusing: { file: 'fusing', vol: 0.5, gap: 200 },
 };
 
 // =====================================================================
-// SFX — 音效：有音檔的播音檔（SFX_FILE），其他用 Web Audio 即時合成
-//   瀏覽器規定要使用者互動後才能發聲，所以在第一次點擊或按鍵時 init
+// SFX — 音效：照 SFX_FILE 播音檔
+//   瀏覽器規定要使用者互動後才能發聲，所以在第一次點擊或按鍵時 init（解碼音檔要一點時間，解好之前不出聲）
 //   同一種聲音有最短間隔（gap），避免高射速時變成噪音
 // =====================================================================
 const SFX = {
@@ -38,14 +51,14 @@ const SFX = {
       this.master = this.ctx.createGain();
       this.master.gain.value = this.gainNow();
       this.master.connect(this.ctx.destination);
-      const len = this.ctx.sampleRate * 0.6, buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate), d = buf.getChannelData(0);
+      const len = this.ctx.sampleRate * 0.6, buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate), d = buf.getChannelData(0);  // 白噪音（背景音樂的鼓用）
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.noise = buf;
       this.loadFiles();
     } catch (e) { this.ctx = null; }
     Music.init();
   },
-  // 把 SFX_DATA 的音檔解碼好放進 buf（非同步；解好之前照樣用合成音）
+  // 把 SFX_DATA 的音檔解碼好放進 buf（非同步）
   loadFiles() {
     const D = globalThis.SFX_DATA;
     if (!D) return;
@@ -75,67 +88,12 @@ const SFX = {
     this.last[key] = t;
     return true;
   },
-  tone({ type = 'square', f = 440, f2 = 0, dur = 0.1, vol = 0.2, delay = 0 }) {
-    const c = this.ctx, t = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(f, t);
-    if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + dur);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.master);
-    o.start(t); o.stop(t + dur + 0.02);
-  },
-  hiss({ dur = 0.15, vol = 0.2, freq = 1200, f2 = 0, filter = 'lowpass', q = 1, delay = 0 }) {
-    const c = this.ctx, t = c.currentTime + delay, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
-    s.buffer = this.noise;
-    f.type = filter; f.Q.value = q;
-    f.frequency.setValueAtTime(freq, t);
-    if (f2) f.frequency.exponentialRampToValueAtTime(f2, t + dur);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(f); f.connect(g); g.connect(this.master);
-    s.start(t); s.stop(t + dur + 0.02);
-  },
-  arp(notes, type = 'sine', step = 0.08, vol = 0.12) {
-    notes.forEach((f, i) => this.tone({ type, f, dur: 0.18, vol, delay: i * step }));
-  },
   play(name, arg) {
     // 房主的戰場音效轉給隊友（受傷、衝刺、介面音效各自在自己的電腦播）
     if (Net.role === 'host' && !['hurt', 'death', 'dash', 'click', 'upgrade'].includes(name)) Net.fx(['s', name, arg]);
     if (!this.ctx || this.muted) return;  // 音效還沒啟動（或瀏覽器不支援）時直接略過，不能讓遊戲當掉
-    const F = SFX_FILE[name === 'shoot' ? 'shoot:' + arg : name];
-    if (F && this.buf[F.file]) { if (this.ready(name + (arg || ''), F.gap)) this.sample(this.buf[F.file], F.vol, F.pitch); return; }
-    const T = (o) => this.tone(o), H = (o) => this.hiss(o);
-    switch (name) {
-      case 'shoot':
-        if (arg === 'laser' && this.ready('shoot', 45)) T({ f: 1400, f2: 600, dur: 0.06, vol: 0.06 });
-        if (arg === 'scatter' && this.ready('shoot', 60)) { H({ freq: 3000, f2: 400, dur: 0.12, vol: 0.18 }); T({ type: 'sine', f: 160, f2: 60, dur: 0.1, vol: 0.12 }); }
-        if (arg === 'plasma' && this.ready('shoot', 80)) T({ type: 'sine', f: 320, f2: 90, dur: 0.25, vol: 0.18 });
-        if (arg === 'railgun' && this.ready('shoot', 50)) { H({ freq: 5000, filter: 'highpass', dur: 0.08, vol: 0.18 }); T({ type: 'sawtooth', f: 900, f2: 120, dur: 0.18, vol: 0.08 }); }
-        if (arg === 'drone' && this.ready('shoot', 45)) T({ f: 1800, f2: 1200, dur: 0.04, vol: 0.04 });
-        if (arg === 'blade' && this.ready('shoot', 60)) H({ freq: 2600, f2: 800, filter: 'bandpass', q: 2, dur: 0.12, vol: 0.2 });
-        break;
-      case 'ricochet': if (this.ready('ricochet', 50)) T({ type: 'triangle', f: 1600, f2: 2400, dur: 0.05, vol: 0.06 }); break;
-      case 'hit': if (this.ready('hit', 35)) T({ type: 'triangle', f: 500 + Math.random() * 200, f2: 250, dur: 0.04, vol: 0.05 }); break;
-      case 'kill': if (this.ready('kill', 30)) T({ f: 520, f2: 110, dur: 0.1, vol: 0.07 }); break;
-      case 'bigkill': if (this.ready('bigkill', 80)) { H({ freq: 900, f2: 90, dur: 0.5, vol: 0.35 }); T({ type: 'sine', f: 130, f2: 40, dur: 0.5, vol: 0.25 }); } break;
-      case 'bossdeath': H({ freq: 1200, f2: 60, dur: 1.4, vol: 0.5 }); T({ type: 'sawtooth', f: 200, f2: 30, dur: 1.4, vol: 0.2 }); this.arp([523, 659, 784, 1047], 'triangle', 0.12, 0.1); break;
-      case 'explode': if (this.ready('explode', 60)) H({ freq: 1400, f2: 150, dur: 0.3, vol: 0.2 }); break;
-      case 'eshot': if (this.ready('eshot', 90)) T({ f: 700, f2: 480, dur: 0.05, vol: 0.035 }); break;
-      case 'hurt': T({ type: 'sawtooth', f: 240, f2: 70, dur: 0.25, vol: 0.22 }); H({ freq: 800, dur: 0.15, vol: 0.15 }); break;
-      case 'death': T({ type: 'sawtooth', f: 400, f2: 40, dur: 1.2, vol: 0.25 }); H({ freq: 1000, f2: 80, dur: 1.2, vol: 0.35 }); break;
-      case 'dash': if (this.ready('dash', 80)) H({ freq: 500, f2: 2600, filter: 'bandpass', q: 1.5, dur: 0.16, vol: 0.14 }); break;
-      case 'shock': H({ freq: 500, f2: 80, dur: 0.35, vol: 0.3 }); T({ type: 'sine', f: 110, f2: 40, dur: 0.3, vol: 0.25 }); break;
-      case 'pickup': if (this.ready('pickup', 40)) T({ type: 'sine', f: 1200 + Math.random() * 300, f2: 1900, dur: 0.05, vol: 0.05 }); break;
-      case 'wave': T({ f: 440, dur: 0.1, vol: 0.08 }); T({ f: 660, dur: 0.14, vol: 0.08, delay: 0.1 }); break;
-      case 'boss': case 'bossin': T({ type: 'sawtooth', f: 90, f2: 45, dur: 1.4, vol: 0.28 }); H({ freq: 300, dur: 1.4, vol: 0.25 }); break;
-      case 'clear': this.arp([523, 659, 784], 'triangle', 0.09, 0.1); break;
-      case 'click': if (this.ready('click', 40)) T({ type: 'triangle', f: 820, dur: 0.04, vol: 0.07 }); break;
-      case 'upgrade': this.arp([523, 659, 784, 1047], 'sine', 0.07, 0.13); break;
-      case 'fuseok': this.arp([392, 523, 659, 784, 1047], 'triangle', 0.09, 0.13); break;
-      case 'fusefail': T({ type: 'sawtooth', f: 300, f2: 50, dur: 0.7, vol: 0.2 }); H({ freq: 600, f2: 100, dur: 0.6, vol: 0.25 }); break;
-      case 'fusing': T({ type: 'sine', f: 60, f2: 400, dur: 1.1, vol: 0.2 }); H({ freq: 200, f2: 2000, filter: 'bandpass', dur: 1.1, vol: 0.15 }); break;
-    }
+    const key = name === 'shoot' ? 'shoot:' + arg : name, F = SFX_FILE[key], b = F && this.buf[F.file];
+    if (b && this.ready(key, F.gap)) this.sample(b, F.vol, F.pitch);
   },
 };
 if (Save.flag('muted', false)) SFX.muted = true;

@@ -14,6 +14,19 @@ https://creativecommons.org/publicdomain/zero/1.0/
   pickup.ogg     Interface Sounds glass_002.ogg
   upgrade.ogg    Interface Sounds confirmation_001.ogg
   laser.ogg      Sci-Fi Sounds    laserSmall_000.ogg
+  flywheel.ogg   Interface Sounds scratch_005.ogg
+  gravity.ogg    Sci-Fi Sounds    forceField_001.ogg
+  hook.ogg       Impact Sounds    impactMetal_light_001.ogg
+  drone.ogg      Sci-Fi Sounds    laserSmall_003.ogg
+  blade.ogg      Interface Sounds scratch_002.ogg
+  eshot.ogg      Sci-Fi Sounds    laserRetro_002.ogg
+  warn.ogg       Sci-Fi Sounds    forceField_000.ogg
+  clear.ogg      Interface Sounds confirmation_002.ogg
+  fusing.ogg     Interface Sounds maximize_005.ogg
+  fusefail.ogg   Interface Sounds error_006.ogg
+  death.ogg      Sci-Fi Sounds    explosionCrunch_001.ogg
+  wave.ogg       Interface Sounds open_002.ogg
+  click.ogg      Interface Sounds select_002.ogg
 
 音效包：
   https://kenney.nl/assets/sci-fi-sounds

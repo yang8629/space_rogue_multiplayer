@@ -262,8 +262,11 @@ while (!sector2 && guard++ < 40) {
     if (!bossSkillChecked && type === 'combat') {  // 王的招式在多人：房主出招，隊友那邊看得到、照樣受影響（吞噬在自己的電腦上被吸、受傷照房主算）
       bossSkillChecked = true;
       const GA = HA.Game, CB = CL.T.Game, me = CB.player, mate = GA.mates[0], S = HA.CFG.BOSS_SKILL, out = [];
+      const af = HA.Input.autoFire, afB = CL.T.Input.autoFire, dn = HA.Input.down, dnB = CL.T.Input.down; HA.Input.autoFire = CL.T.Input.autoFire = HA.Input.down = CL.T.Input.down = false;  // 兩邊都不開火（自動攻擊、按住開火）：自動攻擊朝王射牽引鉤，半路打中隊友會把他勾住（被勾住會被拉到房主前方，蓋過吞噬的吸力）
+      HA.WEAPON_PLAY ? HA.WEAPON_PLAY.railgun.freeShip(GA.player) : (GA.player.hookShip = null); mate.grabBy = 0; step(3);
       const save = GA.enemies; GA.enemies = []; step(3);
-      const spawn = (type, dx = 300) => { GA.enemies = GA.enemies.filter(e => !e.t.boss && e.type !== 'egg' && e.type !== 'core_shard'); const e = new HA.Enemy(type, me.x + dx, me.y, 1); e.spawnT = 0; e.alert = true; e.skillCd = 1e9; GA.enemies.push(e); if (e.t.twin) GA.makeTwin(e); for (const k of GA.enemies) { k.spawnT = 0; k.skillCd = 1e9; } step(3); return e; };
+      const spawn = (type, dx = 300) => { GA.enemies = GA.enemies.filter(e => !e.t.boss && e.type !== 'egg' && e.type !== 'core_shard'); const A = HA.Arena, ok2 = (x, y) => A.rect || (A.f(x, y) > 160 && !A.losPoint(me.x, me.y, x, y, 8)), a0 = [0, 1, 2, 3, 4, 5, 6, 7].map(i => i * Math.PI / 4).find(a => ok2(me.x + Math.cos(a) * dx, me.y + Math.sin(a) * dx)) || 0;  // 大地圖：挑周圍有空地、中間沒有牆的方向（以前固定往右，有時候生在牆邊：衝鋒一出手就撞牆、吞噬隔著牆拉不動）
+        const e = new HA.Enemy(type, me.x + Math.cos(a0) * dx, me.y + Math.sin(a0) * dx, 1); e.spawnT = 0; e.alert = true; e.skillCd = 1e9; GA.enemies.push(e); if (e.t.twin) GA.makeTwin(e); for (const k of GA.enemies) { k.spawnT = 0; k.skillCd = 1e9; } step(3); return e; };
       const cast = (e, k) => { e.forceSkill = k; e.skillCd = 0; e.mode = 'chase'; step(1); e.skillCd = 1e9; step(2); };
       const ce = e => CB.enemies.find(x => x.id === e.id), hp = () => me.hp;
       GA.player.iframe = 1e9;
@@ -276,7 +279,7 @@ while (!sector2 && guard++ < 40) {
       out.push(['集合圈', CB.zones.length === 1 && CB.zones[0].kind === 'gather' && CB.zones[0].hold > 0, `隊友看到 ${CB.zones.map(z => z.kind).join(',')}`]);
       GA.zones = []; step(3);
       // 吞噬：隊友的船在自己的電腦上被吸（房主也看到他被吸過去）
-      e = spawn('boss', 500); const d0 = Math.hypot(me.x - e.x, me.y - e.y); cast(e, 'devour'); step(40);
+      e = spawn('boss', 500); me.vx = me.vy = 0; const d0 = Math.hypot(me.x - e.x, me.y - e.y); cast(e, 'devour'); step(40);  // 先停住（前面的測試可能剛把隊友甩出去）
       const d1 = Math.hypot(me.x - e.x, me.y - e.y), dm = Math.hypot(mate.x - e.x, mate.y - e.y);
       out.push(['吞噬', d1 < d0 - 60 && Math.abs(dm - d1) < 30, `隊友被吸近 ${Math.round(d0 - d1)}，房主看到的位置差 ${Math.round(Math.abs(dm - d1))}`]);
       cast(e, 'egg'); out.push(['孵化囊', CB.enemies.filter(x => x.type === 'egg').length === S.egg.n, `隊友看到 ${CB.enemies.filter(x => x.type === 'egg').length} 顆卵`]);
@@ -297,7 +300,7 @@ while (!sector2 && guard++ < 40) {
       step(Math.ceil(S.reverse.warn * 60) + 10); const ra = c6 && ce(e).rot; step(30); const rb = ce(e) && ce(e).rot;
       out.push(['光束反轉', rev && rb < ra, `隊友看到警告 ${rev}、反轉後轉向 ${rb < ra ? '變了' : '沒變'}`]);
       for (const [n, c, txt] of out) ok(c, `boss skill in co-op: ${n}（${txt}）`);
-      GA.enemies = save; GA.zones = []; GA.eBullets = []; GA.player.iframe = mate.iframe = me.iframe = 0; step(3);
+      GA.enemies = save; HA.Input.autoFire = af; CL.T.Input.autoFire = afB; HA.Input.down = dn; CL.T.Input.down = dnB; GA.zones = []; GA.eBullets = []; GA.player.iframe = mate.iframe = me.iframe = 0; step(3);
     }    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
       alertChecked = true;
       HA.Game.spawnEnemy('alarm'); const al = HA.Game.enemies[HA.Game.enemies.length - 1]; al.spawnT = 0;
@@ -310,6 +313,7 @@ while (!sector2 && guard++ < 40) {
       ok(HB.Game.playKills[pid] === 7, `play kills synced to client (${pid}: ${HB.Game.playKills[pid]})`);
       // 待機的敵人中間幾次只送 id（ei）：隊友那邊要一直留著、不閃；打掉之後要消失
       for (let i = 0; i < 3; i++) { HA.Game.spawnEnemy('swarmer'); const w = HA.Game.enemies[HA.Game.enemies.length - 1]; w.spawnT = 0; w.x = HA.Game.player.x + 2000 + i * 30; }
+      step(2);  // 剛生出來的要等下一次同步（每兩幀送一次）才會到隊友那邊：從那之後才算（以前剛好落在送出的那一幀，前面的檢查多走幾幀就會錯開）
       const send0 = hostConn.send; let partial = 0, missing = 0, idleN = 0;
       hostConn.send = m => { if (m.t === 's' && m.ei && m.ei.length) partial++; send0(m); };
       for (let i = 0; i < 12; i++) {
