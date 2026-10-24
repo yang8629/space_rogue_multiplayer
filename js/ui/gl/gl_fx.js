@@ -27,6 +27,18 @@ const GLFx = {
     this.res = { dot: GLR.res('b/dot'), line: GLR.res('b/line'), dart: GLR.res('b/dart'), blade: GLR.res('b/blade'), ring: GLR.res('b/ring'), eb: GLR.res('eb'), sq: GLR.res('p/sq'), ebFill: GLR.res('eb_fill'), ebw: GLR.res('b/ebw'), ice: GLR.res('b/ice') };
   },
   spr(P, tex, x, y) { return P.get(tex, x, y); },
+  // 蜂群的無人機（從上往下看、機頭朝 a、長約 15）：金屬機身（上半亮下半暗）、兩側推進艙、機頭一顆發光的機眼、機尾噴口
+  droneBody(g, x, y, a) {
+    const c = Math.cos(a), s = Math.sin(a), T = pts => pts.flatMap(([lx, ly]) => [x + lx * c - ly * s, y + lx * s + ly * c]);
+    for (const sg of [-1, 1]) g.poly(T([[-4, 3.5 * sg], [3, 3.5 * sg], [2, 7.5 * sg], [-5, 7.5 * sg]])).fill(0x3a4566).stroke({ width: 1.2, color: 0x03050c });  // 推進艙
+    const body = [[8, 0], [2, -4], [-6, -3], [-7, 0], [-6, 3], [2, 4]];
+    g.poly(T(body)).fill(0x6a7699);  // 跟武器的金屬同色（太亮會被 bloom 吃掉細節）
+    g.poly(T(body.map(([lx, ly]) => [lx, Math.min(ly, 0)]))).fill({ color: 0xffffff, alpha: 0.25 });
+    g.poly(T(body.map(([lx, ly]) => [lx, Math.max(ly, 0)]))).fill({ color: 0x000000, alpha: 0.2 });
+    g.poly(T(body)).stroke({ width: 1.4, color: 0x03050c });
+    const [ex, ey] = T([[3, 0]]), [nx, ny] = T([[-7, 0]]);
+    g.circle(ex, ey, 1.8).fill(0x7cf5c8); g.circle(nx, ny, 1.3).fill(0xe8fff6);
+  },
 
   draw() {
     const G = Game, tx = this.tx, R = this.res, P = this.pB;
@@ -100,8 +112,8 @@ const GLFx = {
       if (hs) { g.moveTo(p.x, p.y); g.lineTo(hs.x, hs.y); g.stroke({ width: 2.5, color: 0xffd166, alpha: 0.85 }); }
       for (const d of ((Net.role === 'client' || loadoutOf(p).weapon.id === 'drone') && p.drones) || []) {  // 隊友那邊：房主同步來的（換武器就是空的）
         if (d.down > 0) continue;  // 壞掉、等重生
-        const h = this.spr(this.pP, tx.halo, d.x, d.y); h.scaleX = h.scaleY = 16 / R.dot; h.tint = p.guardT > 0 ? 0xffffff : 0x7cf5c8; h.alpha = 0.45;
-        const c = this.spr(this.pP, tx.dart, d.x, d.y); c.rotation = d.a || 0; c.scaleX = c.scaleY = 9 / R.dart; c.tint = 0xe8fff6;  // 機身朝移動方向（DroneSwarm.tick 的 d.a）
+        const h = this.spr(this.pP, tx.halo, d.x, d.y); h.scaleX = h.scaleY = 16 / R.dot; h.tint = p.guardT > 0 ? 0xffffff : 0x7cf5c8; h.alpha = 0.35;
+        this.droneBody(g, d.x, d.y, d.a || 0);  // 機身朝移動方向（DroneSwarm.tick 的 d.a）
       }
     }
     for (const z of FX.zaps) {
