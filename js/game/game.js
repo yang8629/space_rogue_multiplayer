@@ -531,6 +531,7 @@ const Game = {
     }
     const T = Q.splice(0);  // 線：這一幀排進來的觸發（命中往下傳、衝刺、定時）→ 放出產物
     for (const t of T) this.lineFire(t);
+    if (T.length) Events.emit('chipTrigger', T.length);  // 音效（ui/listeners.js）
     let w = 0;  // 原地拿掉消失的子彈（不每幀建新陣列：子彈很多時記憶體回收會造成卡頓）；順便數每個人場上的產物（產物預算，見 lineSpawn）
     const prodN = new Map();
     for (let i = 0; i < B.length; i++) {

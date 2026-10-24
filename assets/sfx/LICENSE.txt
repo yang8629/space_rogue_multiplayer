@@ -1,0 +1,21 @@
+這個資料夾的音效都來自 Kenney（www.kenney.nl），授權 Creative Commons Zero（CC0，公眾領域）：
+可以用在個人、教學、商業專案，不用標示作者。
+https://creativecommons.org/publicdomain/zero/1.0/
+
+檔名 = 遊戲裡的聲音（audio.js 的 SFX_FILE），原始檔：
+  hit.ogg        Impact Sounds    impactGeneric_light_000.ogg
+  kill.ogg       Impact Sounds    impactMetal_medium_000.ogg
+  bigkill.ogg    Sci-Fi Sounds    explosionCrunch_000.ogg
+  trigger.ogg    Interface Sounds glitch_001.ogg
+  bossin.ogg     Sci-Fi Sounds    lowFrequency_explosion_000.ogg
+  bossdeath.ogg  Sci-Fi Sounds    explosionCrunch_004.ogg
+  hurt.ogg       Impact Sounds    impactPunch_heavy_002.ogg
+  dash.ogg       Interface Sounds maximize_002.ogg
+  pickup.ogg     Interface Sounds glass_002.ogg
+  upgrade.ogg    Interface Sounds confirmation_001.ogg
+  laser.ogg      Sci-Fi Sounds    laserSmall_000.ogg
+
+音效包：
+  https://kenney.nl/assets/sci-fi-sounds
+  https://kenney.nl/assets/impact-sounds
+  https://kenney.nl/assets/interface-sounds

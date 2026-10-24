@@ -38,7 +38,7 @@
   S('overheat', 'hurt');
   S('enemyShot', 'eshot');
   S('bossSkill', 'boss');
-  S('bossArrive', 'boss');
+  S('bossArrive', 'bossin');
   S('alarm', 'boss');  // 警報艇響了（整區被叫醒）
   S('cometIncoming', 'boss');
   S('areaClear', 'clear');
@@ -50,7 +50,9 @@
   S('pickup', 'pickup');
   S('nudge', 'click');
   Events.on('shoot', d => SFX.play('shoot', d.weapon));
-  Events.on('waveStart', d => SFX.play(d.boss ? 'boss' : 'wave'));
+  Events.on('waveStart', d => SFX.play(d.boss ? 'bossin' : 'wave'));
+  let trigT = 0;  // 晶片觸發：一幀可能觸發很多次，這裡先擋（房主播的音效會轉給隊友，不擋會一直送）
+  Events.on('chipTrigger', () => { const t = performance.now(); if (t - trigT < 70) return; trigT = t; SFX.play('trigger'); });
   Events.on('fuseEnd', d => SFX.play(d.good ? 'fuseok' : 'fusefail'));
   Events.on('enemyKilled', d => SFX.play(d.e.t.boss ? 'bossdeath' : d.big ? 'bigkill' : 'kill'));
   Events.on('playerHurt', d => SFX.play(d.dead ? 'death' : 'hurt'));
