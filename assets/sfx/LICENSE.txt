@@ -10,7 +10,6 @@ https://creativecommons.org/publicdomain/zero/1.0/
   bossin.ogg     Sci-Fi Sounds    lowFrequency_explosion_000.ogg
   bossdeath.ogg  Sci-Fi Sounds    explosionCrunch_004.ogg
   hurt.ogg       Impact Sounds    impactPunch_heavy_002.ogg
-  dash.ogg       Interface Sounds maximize_002.ogg
   pickup.ogg     Interface Sounds glass_002.ogg
   upgrade.ogg    Interface Sounds confirmation_001.ogg
   laser.ogg      Sci-Fi Sounds    laserSmall_000.ogg
@@ -18,7 +17,7 @@ https://creativecommons.org/publicdomain/zero/1.0/
   gravity.ogg    Sci-Fi Sounds    forceField_001.ogg
   hook.ogg       Impact Sounds    impactMetal_light_001.ogg
   drone.ogg      Sci-Fi Sounds    laserSmall_003.ogg
-  whoosh.ogg     Sci-Fi Sounds    thrusterFire_001.ogg（能量刃、甩擊只播其中一小段）
+  whoosh.ogg     Sci-Fi Sounds    thrusterFire_001.ogg（衝刺、能量刃、甩擊各播其中一小段）
   vent.ogg       Sci-Fi Sounds    lowFrequency_explosion_001.ogg
   recall.ogg     Interface Sounds minimize_002.ogg
   collapse.ogg   Sci-Fi Sounds    explosionCrunch_002.ogg

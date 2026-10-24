@@ -30,7 +30,7 @@ const SFX_FILE = {
   bossdeath: { file: 'bossdeath', vol: 0.9, gap: 500 },
   hurt: { file: 'hurt', vol: 0.7, gap: 80 },
   death: { file: 'death', vol: 0.8, gap: 500 },
-  dash: { file: 'dash', vol: 0.4, gap: 80 },
+  dash: { file: 'whoosh', vol: 0.5, gap: 80, from: 0.2, dur: 0.3, rate: 0.85 },  // 低沉的噴射破風聲（10-25 使用者：以前的介面提示音太尖銳）
   pickup: { file: 'pickup', vol: 0.3, gap: 40, pitch: 0.15 },
   wave: { file: 'wave', vol: 0.4, gap: 200 },
   clear: { file: 'clear', vol: 0.5, gap: 200 },
@@ -81,7 +81,7 @@ const SFX = {
     g.gain.setValueAtTime(F.vol, t + real * 0.7); g.gain.linearRampToValueAtTime(0.0001, t + real);
     s.start(t, F.from || 0, F.dur);
   },
-  gainNow() { return this.muted ? 0 : this.VOLUME * Settings.vol; },  // 主音量（設定頁）
+  gainNow() { return this.muted ? 0 : this.VOLUME * Settings.vol; },  // 音效音量（設定頁；只管音效，音樂另外一條：Music.gainNow）
   applyVolume() { if (this.master) this.master.gain.value = this.gainNow(); },
   setMuted(m) {
     this.muted = m;
@@ -110,7 +110,7 @@ if (Save.flag('muted', false)) SFX.muted = true;
 // MUSIC — 背景音樂（assets/music/*.mp3：OpenGameArt 的 CC0 曲子，來源見 assets/music/LICENSE.txt；10-24 以前是即時合成）
 //   calm：基地、航圖、商店；battle：一般戰鬥；boss_<旗艦 id>：每隻王一首（使用者 10-24：王的音樂要不一樣）。用 <audio loop> 播（遊戲用 file:// 開也能播）；換曲時交叉淡出淡入
 //   第一次要播才建 <audio>、開始下載（一進遊戲不會把 7 首都載下來）
-//   音量 = 音效的主音量（含靜音）× VOL × 設定頁的音樂音量；另外可以單獨關掉音樂
+//   音量 = 基本音量（SFX.VOLUME）× VOL × 設定頁的音樂音量；跟音效音量分開（10-25 使用者），靜音（M）一起關；另外可以單獨關掉音樂
 // =====================================================================
 const MUSIC_FILE = { calm: 'assets/music/calm.mp3', battle: 'assets/music/battle.mp3',
   boss_boss: 'assets/music/boss_boss.mp3', boss_boss2: 'assets/music/boss_boss2.mp3', boss_boss3: 'assets/music/boss_boss3.mp3',
@@ -126,6 +126,7 @@ const Music = {
     this.on = !this.on;
     Save.setFlag('music', this.on);
   },
+  gainNow() { return this.on && !SFX.muted ? SFX.VOLUME * this.VOL * Settings.musicVol : 0; },
   // 每一幀依遊戲狀態決定要播哪首；每首的音量往目標慢慢移（要播的淡入、其他淡出），淡到 0 就暫停；設定頁的音量、靜音也是每幀照算
   update() {
     if (!this.els) return;
@@ -134,7 +135,7 @@ const Music = {
     this.track = Game.state === 'dead' ? null : Game.inArena ? (boss || (Game.combat && Game.combat.boss) ? (MUSIC_FILE[bossKey] ? bossKey : 'battle') : 'battle') : 'calm';
     if (this.track) this.el(this.track);
     const now = performance.now(), dt = Math.min(0.1, (now - (this.last || now)) / 1000); this.last = now;
-    const full = this.on ? SFX.gainNow() * this.VOL * Settings.musicVol : 0;
+    const full = this.gainNow();
     for (const [k, a] of Object.entries(this.els)) {
       const want = k === this.track ? full : 0, v = this.vol[k], step = dt / this.FADE * Math.max(full, v, 0.05);  // 照比較大的那個算：淡入淡出都是 FADE 秒左右
       this.vol[k] = want > v ? Math.min(want, v + step) : Math.max(want, v - step);

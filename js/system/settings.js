@@ -4,7 +4,7 @@
 'use strict';
 
 const Settings = {
-  vol: 1,         // 主音量（0～1，乘在 SFX.VOLUME 上；音樂接在音效後面，一起變）
+  vol: 1,         // 音效音量（0～1，乘在 SFX.VOLUME 上；不影響音樂。欄位名沿用以前的主音量，存檔不用改）
   musicVol: 1,    // 音樂音量（0～1，乘在 Music.VOL 上）
   shake: true,    // 畫面震動（爆炸、撞牆、旗艦落地）
   fps: true,      // 戰鬥畫面右上角顯示 FPS
