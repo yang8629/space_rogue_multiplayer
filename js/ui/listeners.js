@@ -50,6 +50,7 @@
   S('pickup', 'pickup');
   S('nudge', 'click');
   Events.on('shoot', d => SFX.play('shoot', d.weapon));
+  Events.on('alt', d => SFX.play('alt', d.weapon));  // 武器右鍵
   Events.on('waveStart', d => SFX.play(d.boss ? 'bossin' : 'wave'));
   let trigT = 0;  // 晶片觸發：一幀可能觸發很多次，這裡先擋（房主播的音效會轉給隊友，不擋會一直送）
   Events.on('chipTrigger', () => { const t = performance.now(); if (t - trigT < 70) return; trigT = t; SFX.play('trigger'); });

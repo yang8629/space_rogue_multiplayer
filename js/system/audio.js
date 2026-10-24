@@ -3,15 +3,22 @@
 'use strict';
 
 // 音檔（assets/sfx_data.js 的 SFX_DATA：Kenney 的 CC0 音效，tools/audio/build_sfx.js 產生；來源見 assets/sfx/LICENSE.txt）
-//   key = play 的聲音名稱（射擊是「shoot:武器」）；file = SFX_DATA 的哪個檔、vol 音量、gap 同一種最短間隔（毫秒）、pitch 每次隨機升降調的幅度（常聽到的聲音不那麼單調）
+//   key = play 的聲音名稱（射擊是「shoot:武器」、右鍵是「alt:武器」）；file = SFX_DATA 的哪個檔、vol 音量、gap 同一種最短間隔（毫秒）、pitch 每次隨機升降調的幅度（常聽到的聲音不那麼單調）
+//   from／dur：只播音檔的一段（秒，結尾淡出；長的推進器聲切一小段當破風聲）、rate：播放速度（>1 音調變高、變短）
 //   10-24 使用者：音效統一用音檔（以前是 Web Audio 即時合成）
 const SFX_FILE = {
-  'shoot:laser': { file: 'laser', vol: 0.25, gap: 45, pitch: 0.06 },
-  'shoot:scatter': { file: 'flywheel', vol: 0.35, gap: 60, pitch: 0.1 },
+  'shoot:laser': { file: 'laser', vol: 0.6, gap: 45, pitch: 0.06 },  // 音檔本身小聲（平均 -22 dB）：0.25 → 0.6（10-25 使用者：太小聲）
+  'shoot:scatter': { file: 'flywheel', vol: 0.3, gap: 60, pitch: 0.1 },  // 金屬鋸齒輪甩出去（10-25 使用者：以前的刮擦聲像黃色小鴨）
   'shoot:plasma': { file: 'gravity', vol: 0.25, gap: 80, pitch: 0.08 },
   'shoot:railgun': { file: 'hook', vol: 0.4, gap: 50, pitch: 0.08 },
   'shoot:drone': { file: 'drone', vol: 0.15, gap: 45, pitch: 0.12 },
-  'shoot:blade': { file: 'blade', vol: 0.35, gap: 60, pitch: 0.12 },
+  'shoot:blade': { file: 'whoosh', vol: 0.45, gap: 60, pitch: 0.12, from: 0.2, dur: 0.2, rate: 1.6 },  // 刃片破風聲（推進器聲切一小段、調高）
+  'alt:laser': { file: 'vent', vol: 0.6, gap: 200 },           // 排熱
+  'alt:scatter': { file: 'recall', vol: 0.45, gap: 200 },      // 召回
+  'alt:plasma': { file: 'collapse', vol: 0.6, gap: 200 },      // 塌縮
+  'alt:railgun': { file: 'whoosh', vol: 0.6, gap: 200, from: 0.2, dur: 0.4, rate: 1.1 },  // 甩擊
+  'alt:blade': { file: 'parry', vol: 0.5, gap: 200, pitch: 0.05 },  // 彈反
+  'alt:drone': { file: 'guard', vol: 0.4, gap: 200 },          // 收攏
   hit: { file: 'hit', vol: 0.35, gap: 35, pitch: 0.12 },
   kill: { file: 'kill', vol: 0.45, gap: 30, pitch: 0.1 },
   bigkill: { file: 'bigkill', vol: 0.7, gap: 80 },
@@ -64,11 +71,15 @@ const SFX = {
       this.ctx.decodeAudioData(bin.buffer).then(b => { this.buf[k] = b; }).catch(() => {});
     }
   },
-  sample(b, vol, pitch = 0) {
-    const c = this.ctx, s = c.createBufferSource(), g = c.createGain();
-    s.buffer = b; s.playbackRate.value = 1 + (Math.random() * 2 - 1) * pitch;
-    g.gain.value = vol;
-    s.connect(g); g.connect(this.master); s.start();
+  sample(b, F) {
+    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), t = c.currentTime;
+    s.buffer = b; s.playbackRate.value = (F.rate || 1) * (1 + (Math.random() * 2 - 1) * (F.pitch || 0));
+    g.gain.setValueAtTime(F.vol, t);
+    s.connect(g); g.connect(this.master);
+    if (!F.dur) { s.start(); return; }
+    const real = F.dur / s.playbackRate.value;  // 切一段：結尾 30% 淡出（不然切斷處會喀一聲）
+    g.gain.setValueAtTime(F.vol, t + real * 0.7); g.gain.linearRampToValueAtTime(0.0001, t + real);
+    s.start(t, F.from || 0, F.dur);
   },
   gainNow() { return this.muted ? 0 : this.VOLUME * Settings.vol; },  // 主音量（設定頁）
   applyVolume() { if (this.master) this.master.gain.value = this.gainNow(); },
@@ -89,8 +100,8 @@ const SFX = {
     // 房主的戰場音效轉給隊友（受傷、衝刺、介面音效各自在自己的電腦播）
     if (Net.role === 'host' && !['hurt', 'death', 'dash', 'click', 'upgrade'].includes(name)) Net.fx(['s', name, arg]);
     if (!this.ctx || this.muted) return;  // 音效還沒啟動（或瀏覽器不支援）時直接略過，不能讓遊戲當掉
-    const key = name === 'shoot' ? 'shoot:' + arg : name, F = SFX_FILE[key], b = F && this.buf[F.file];
-    if (b && this.ready(key, F.gap)) this.sample(b, F.vol, F.pitch);
+    const key = name === 'shoot' || name === 'alt' ? name + ':' + arg : name, F = SFX_FILE[key], b = F && this.buf[F.file];
+    if (b && this.ready(key, F.gap)) this.sample(b, F);
   },
 };
 if (Save.flag('muted', false)) SFX.muted = true;

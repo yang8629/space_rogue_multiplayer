@@ -208,6 +208,7 @@ class Player {
     if (!A || this.altCd > 0) return;
     this.altCd = A.cd;
     weaponPlay().alt(this);
+    Events.emit('alt', { p: this, weapon: Game.weapon.id });  // 音效（ui/listeners.js）
   }
   // 自動瞄準：最近的敵人；被牆、行星擋住打不到時，改打最近的打得到的那隻（都打不到就照樣打最近的）
   //   每 0.1 秒重選一次（沿線檢查視線，每幀算太貴），中間照原本的目標瞄

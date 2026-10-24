@@ -14,11 +14,16 @@ https://creativecommons.org/publicdomain/zero/1.0/
   pickup.ogg     Interface Sounds glass_002.ogg
   upgrade.ogg    Interface Sounds confirmation_001.ogg
   laser.ogg      Sci-Fi Sounds    laserSmall_000.ogg
-  flywheel.ogg   Interface Sounds scratch_005.ogg
+  flywheel.ogg   Impact Sounds    impactMetal_light_003.ogg
   gravity.ogg    Sci-Fi Sounds    forceField_001.ogg
   hook.ogg       Impact Sounds    impactMetal_light_001.ogg
   drone.ogg      Sci-Fi Sounds    laserSmall_003.ogg
-  blade.ogg      Interface Sounds scratch_002.ogg
+  whoosh.ogg     Sci-Fi Sounds    thrusterFire_001.ogg（能量刃、甩擊只播其中一小段）
+  vent.ogg       Sci-Fi Sounds    lowFrequency_explosion_001.ogg
+  recall.ogg     Interface Sounds minimize_002.ogg
+  collapse.ogg   Sci-Fi Sounds    explosionCrunch_002.ogg
+  parry.ogg      Impact Sounds    impactBell_heavy_004.ogg
+  guard.ogg      Sci-Fi Sounds    forceField_003.ogg
   eshot.ogg      Sci-Fi Sounds    laserRetro_002.ogg
   warn.ogg       Sci-Fi Sounds    forceField_000.ogg
   clear.ogg      Interface Sounds confirmation_002.ogg
