@@ -69,6 +69,8 @@ Net.startClient({ ship: 'bulwark', map: packedMap, bossId: mapBoss }); Game.star
 assert(Game.state === 'play' && Game.mates[0].ship === SHIPS.bulwark, 'client started');
 Net.applySnap(snap);
 assert(Game.enemies.length === snap.e.length + snap.ei.length && Game.bullets.length === snap.b.length, `client applied snapshot (${Game.enemies.length} enemies, ${Game.bullets.length} bullets)`);
+Game.player.hookE = { id: 999, type: 'brute', t: ENEMY_TYPES.brute, x: Game.player.x + 40, y: Game.player.y, hp: 50, maxHp: 130 }; Game.player.hookT = 1; render(); Game.player.hookE = null;  // 隊友勾住敵人：左上角鉤爪狀態（同步來的敵人沒有方法，以前畫面當掉）
+assert(true, 'client HUD with a hooked (synced) enemy');
 for (let i = 0; i < 120; i++) { Game.update(1 / 60); render(); }
 Net.onDmg(dmgMsg);
 assert(Object.values(Game.runStats.dmg).reduce((a, b) => a + b, 0) > 0 && Game.runStats.kills === dmgMsg.team[2].kills, 'client got its own damage from host');

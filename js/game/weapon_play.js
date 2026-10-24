@@ -252,7 +252,7 @@ class GravityWell extends ParkWeapon {
 // 牽引鉤：勾住、甩擊、釘住旗艦
 class GrappleHook extends WeaponPlay {
   constructor() { super('railgun'); }
-  holdT(e) { return (e ? e.ccDur('hook', HOOK.t) : HOOK.t) + (Game.wp.hookT || 0); }  // 勾住（釘住）e 最多幾秒：照控制抗性（CFG.CC，精英比較短），升級的勾住時間另外加
+  holdT(e) { return (e && e.ccDur ? e.ccDur('hook', HOOK.t) : HOOK.t) + (Game.wp.hookT || 0); }  // 隊友那邊的敵人是同步來的資料（沒有方法）：左上角的鉤爪狀態照基本時間算（以前直接呼叫，隊友勾住敵人時畫面當掉，smoke.js 偶發）  // 勾住（釘住）e 最多幾秒：照控制抗性（CFG.CC，精英比較短），升級的勾住時間另外加
   shield(list) {  // 這些敵人（勾住的、甩出去還在飛的）擋下碰到的敵彈、照子彈傷害扣血（算在射鉤爪的人身上）；反射盾：擋下的彈回去打最近的敵人（不打 list 裡的）
     const skip = Game.wp.hookReflect ? new Set(list.map(o => o.id)) : null;
     for (const o of list) for (const b of Game.eBullets) {
