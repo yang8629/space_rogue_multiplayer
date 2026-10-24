@@ -18,11 +18,9 @@ const ZONE_LOOK = {
       g.poly([z.x + c * (d - 10), z.y + s * (d - 10), z.x + c * d - s * w, z.y + s * d + c * w, z.x + c * d + s * w, z.y + s * d - c * w]).fill({ color: 0xff4d6d, alpha: 0.9 * (1 - q * 0.6) });
     }
   },
-  share(g, z, k, a) {  // 分攤圈（圈裡的人平分）：實心紅圈越來越紅，圈裡站幾個人就切成幾塊（一個人 = 不切）
-    const held = z.t <= z.hold, n = Game.players().filter(p => dist2(p.x, p.y, z.x, z.y) < (z.r + p.r * 0.5) ** 2).length;
-    g.circle(z.x, z.y, z.r).fill({ color: 0xff2a2a, alpha: 0.16 + 0.24 * k }).stroke({ width: held ? 5 : 2.5, color: 0xff2a2a, alpha: a });
-    for (let i = 0; n > 1 && i < n; i++) { const u = i * TAU / n - Math.PI / 2; g.moveTo(z.x, z.y).lineTo(z.x + Math.cos(u) * z.r, z.y + Math.sin(u) * z.r).stroke({ width: 3, color: 0xffd0d6, alpha: 0.8 }); }
-    g.circle(z.x, z.y, 7).fill({ color: 0xffd0d6, alpha: 0.9 });
+  track(g, z, k, a) {  // 追蹤紅圈（圈裡受傷）：跟落點轟炸一樣實心圓越長越大，跟著人跑的時候外圈細、定住後變粗
+    g.circle(z.x, z.y, z.r).stroke({ width: z.t <= z.hold ? 5 : 2.5, color: 0xff2a2a, alpha: a });
+    g.circle(z.x, z.y, z.r * k).fill({ color: 0xff2a2a, alpha: 0.18 + 0.2 * k });
   },
 };
 

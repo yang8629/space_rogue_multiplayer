@@ -822,10 +822,10 @@ class Enemy {
   // 出招（以前固定順序輪流，背得起來）：加權隨機、不連續用同一招，再看情況調整
   //   玩家離得遠（450 外）：瞄準型（扇形、狙擊、彈牆、衝鋒）多一點；玩家貼近（350 內）：範圍型（螺旋、環形、新星、十字、雙螺旋）多一點
   //   叫出來的小怪還有 6 隻以上：少召喚；技能清單裡寫兩次的招式（獵艦的衝鋒）機率加倍；forceSkill：指定下一招（機制檢查用）
-  // 標記圈（CFG.MARK，王的招式）：套在鎖定的人（多人時）或最近的玩家身上；mul = 傷害倍率
+  // 標記圈（CFG.MARK，王的招式）：集合圈套在鎖定的人（多人時）或最近的玩家身上；追蹤紅圈每個活著的人各一個；mul = 傷害倍率
   markCast(kind, mul = 1) {
-    const M = CFG.MARK, q = Game.lockFoe(this), T = M.follow + M.hold;
-    Game.zones.push({ x: q.x, y: q.y, r: M.r, t: T, max: T, hold: M.hold, kind, tgt: q, slot: Game.slotOf(q), dmg: M.kinds[kind].dmg * mul, from: `${this.t.name}（${M.kinds[kind].name}）` });
+    const M = CFG.MARK, T = M.follow + M.hold, Q = kind === 'track' ? Game.players() : [Game.lockFoe(this)];
+    for (const q of Q) Game.zones.push({ x: q.x, y: q.y, r: M.r, t: T, max: T, hold: M.hold, kind, tgt: q, slot: Game.slotOf(q), dmg: M.kinds[kind].dmg * mul, from: `${this.t.name}（${M.kinds[kind].name}）` });
     Events.emit('bossSkill', this);
   }
   pickSkill(d) {

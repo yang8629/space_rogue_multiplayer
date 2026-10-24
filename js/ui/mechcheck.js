@@ -441,18 +441,19 @@ const MechCheck = {
       return { ok: first === 1 && toMate && rotate && swap && split && solo,
         got: `一開始鎖 ${first}P；隊友打王後鎖${toMate ? '隊友' : '（錯）'}；沒人打${rotate ? '輪到房主' : '沒輪換（錯）'}；鎖定的人倒下${swap ? '馬上換' : '沒換（錯）'}；紅圈 房主 ${near(p)}、隊友 ${near(m)}；單人${solo ? '不鎖' : '有鎖（錯）'}` };
     }],
-    ['敵人', '王的標記圈：集合圈、分攤圈', `紅圈套在一個人身上跟著跑 ${CFG.MARK.follow} 秒、定住 ${CFG.MARK.hold} 秒後爆發；集合圈：圈外的人受傷；分攤圈：圈裡的人（＋被標的人）平分傷害，一個人就吃全部`, M => {
+    ['敵人', '王的標記圈：集合圈、追蹤紅圈', `紅圈套在人身上跟著跑 ${CFG.MARK.follow} 秒、定住 ${CFG.MARK.hold} 秒後爆發；集合圈（套在一個人身上）：圈外的人受傷；追蹤紅圈：每個人各一個，圈裡的人受傷（跑出去就沒事；兩個圈疊在一起只扣一次：受傷後的無敵時間）`, M => {
       const m = M.coop(), p = Game.player, B = M.targets([[400, 0]], 'boss3', true, 1)[0], MK = CFG.MARK, T = MK.follow + MK.hold;
       const run = s => { for (let i = 0; i < Math.round(s * 60); i++) Game.updateZones(1 / 60); };
-      const reset = () => { for (const q of [p, m]) { q.hp = q.maxHp; q.iframe = 0; q.dashT = 0; } Game.zones = []; }, lost = q => q.maxHp - q.hp;
-      reset(); B.lock = 1; B.markCast('gather'); const z = Game.zones[0];
+      const reset = () => { for (const q of [p, m]) { q.hp = q.maxHp; q.iframe = 0; q.dashT = 0; } Game.zones = []; }, lost = q => +(q.maxHp - q.hp).toFixed(1);
+      reset(); B.lock = 1; B.markCast('gather'); const z = Game.zones[0], one = Game.zones.length;
       p.x += 60; run(MK.follow / 2); const follow = Math.hypot(z.x - p.x, z.y - p.y) < 1;
       run(MK.follow / 2 + 0.05); const x0 = z.x; p.x += 60; run(0.1); const held = Math.abs(z.x - x0) < 1;
       p.x = z.x; p.y = z.y; run(T); const gHost = lost(p), gMate = lost(m);  // 房主回到圈裡、隊友在 300 外
-      reset(); m.x = p.x + 20; m.y = p.y; B.markCast('share'); run(T + 0.05); const sHost = lost(p), sMate = lost(m);
-      reset(); m.x = p.x; m.y = p.y + 600; B.markCast('share'); run(T + 0.05); const solo = lost(p), soloMate = lost(m);
-      const ok = follow && held && gHost === 0 && gMate > 0 && sHost > 0 && Math.abs(sHost - sMate) < 0.5 && solo > sHost * 1.5 && soloMate === 0;
-      return { ok, got: `${follow ? '先跟著跑' : '沒跟著跑（錯）'}、${held ? '再定住' : '沒定住（錯）'}；集合圈：圈裡的房主扣 ${gHost}、圈外的隊友扣 ${gMate}；分攤圈：兩人都在圈裡各扣 ${+sHost.toFixed(1)}／${+sMate.toFixed(1)}，隊友不在圈裡：房主扣 ${+solo.toFixed(1)}、隊友扣 ${soloMate}` };
+      reset(); m.x = p.x; m.y = p.y + 600; B.markCast('track'); const two = Game.zones.length;
+      run(MK.follow + 0.05); m.x += 250; run(MK.hold); const tHost = lost(p), tMate = lost(m);  // 房主待著、隊友在定住後跑出自己的圈
+      reset(); m.x = p.x + 20; m.y = p.y; B.markCast('track'); run(T + 0.05); const stack = lost(p);  // 站在一起：兩個圈疊在一起
+      const D = MK.kinds.track.dmg, ok = one === 1 && follow && held && gHost === 0 && gMate > 0 && two === 2 && tHost === D && tMate === 0 && stack === D;
+      return { ok, got: `${follow ? '先跟著跑' : '沒跟著跑（錯）'}、${held ? '再定住' : '沒定住（錯）'}；集合圈 ${one} 個：圈裡的房主扣 ${gHost}、圈外的隊友扣 ${gMate}；追蹤紅圈 ${two} 個：待著的房主扣 ${tHost}、跑出去的隊友扣 ${tMate}；兩人站一起各扣 ${stack}` };
     }],
     ['多人', '子彈變大會重送給隊友', '疊井、疊輪、磨盤讓停住的子彈變大：位置沒變也要重送（Net.bulletRows 只送預測會錯的）', M => {
       M.setup('sandbox', 'vanguard', 'plasma', null, null, ['weapon', null, null, null]); M.targets([]);

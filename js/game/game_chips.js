@@ -7,7 +7,7 @@
 const ZONE_HIT = {
   bomb: (z, P, inside) => P.filter(inside).map(p => [p, z.dmg]),                 // 落點轟炸、砲擊：圈裡的
   gather: (z, P, inside) => P.filter(p => !inside(p)).map(p => [p, z.dmg]),     // 集合圈：圈外的
-  share: (z, P, inside) => { const S = P.filter(p => inside(p) || p === z.tgt); return S.map(p => [p, z.dmg / S.length]); },  // 分攤圈：圈裡的人（＋被標的人）平分
+  track: (z, P, inside) => P.filter(inside).map(p => [p, z.dmg]),                // 追蹤紅圈：圈裡的（跟落點轟炸一樣，只是先跟著人跑）
 };
 const ZONE_KINDS = Object.keys(ZONE_HIT);  // 同步用的種類號碼
 Object.assign(Game, {

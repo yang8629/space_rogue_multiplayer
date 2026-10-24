@@ -1,7 +1,7 @@
 // 章節專屬王的截圖：真的開一場王戰（雙子獵艦、星環守門者），飛船無敵、不開火，等幾秒讓招式出來
 //   守門者等到光束開著時拍；另外各拍一張美術放大圖（tools/art 的畫法）
 //   用法：node perf/newbossshot.mjs   → art_lab/screenshots/王_雙子獵艦.png、王_星環守門者.png、王_美術.png
-//   --marks：（含 --coop）終焉核心放集合圈、分攤圈（隊友靠過來）各截一張 → 王_集合圈.png、王_分攤圈.png
+//   --marks：（含 --coop）終焉核心放集合圈、追蹤紅圈各截一張 → 王_集合圈.png、王_追蹤紅圈.png
 //   --coop：多一個本機的隊友（不連線、不動），看多人時王鎖定的標記（Game.bossLockTick）；檔名加「_多人」，不拍美術放大
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -34,9 +34,9 @@ const fight = async (id, wait, until) => {
   if (until) while (Date.now() - t0 < wait + 8000 && !(await p.evaluate(until))) await new Promise(r => setTimeout(r, 100));
 };
 if (MARKS) {
-  for (const [kind, name] of [['gather', '集合圈'], ['share', '分攤圈']]) {
+  for (const [kind, name] of [['gather', '集合圈'], ['track', '追蹤紅圈']]) {
     await fight('boss3', 2500);
-    await p.evaluate(kind => { const B = Game.enemies.find(e => e.t.boss), P = Game.player, m = Game.mates[0]; Game.zones = []; B.lock = 1; B.markCast(kind); if (kind === 'share') { m.x = P.x + 40; m.y = P.y + 20; } }, kind);
+    await p.evaluate(kind => { const B = Game.enemies.find(e => e.t.boss), P = Game.player, m = Game.mates[0]; Game.zones = []; B.lock = 1; B.markCast(kind); if (kind === 'track') { m.x = P.x + 260; m.y = P.y - 40; } }, kind);
     await new Promise(r => setTimeout(r, 650));
     await p.screenshot({ path: SHOTS + `王_${name}.png` }); console.log(`存好 王_${name}.png`);
   }
