@@ -387,6 +387,12 @@ while (!sector2 && guard++ < 40) {
       ok(hostEd && cliEd && HB.Game.state === 'map', `victory screen: inventory opens (host ${hostEd}, client ${cliEd}); client editing still follows to the next sector (${HB.Game.state})`);
       ok(HB.Game.sector === 2 && HA.Game.sector === 2 && HA.Game.bossId === HB.Game.bossId &&
         JSON.stringify(HA.Net.packMap(HA.Game.map)) === JSON.stringify(HB.Net.packMap(HB.Game.map)), 'sector 2 map synced');
+      {  // 房主的遊玩紀錄有隊友的取得紀錄（隊友傳配裝時帶過來），跟隊友自己的一樣
+        HB.Net.sendLoadout(); pump();
+        const lines = X => X.run('recordText(Net.buildRecord("test"))').split('\n');
+        const mineB = lines(B).find(l => l.startsWith('取得 ')) || '', mateLine = lines(A).find(l => l.startsWith('隊友取得')) || '';
+        ok(mineB && mateLine && mateLine.replace('隊友取得 ', '') === mineB.replace('取得 ', ''), `host record shows the client's pickups (${mateLine.slice(0, 60)} | client: ${mineB.slice(0, 60)})`);
+      }
       sector2 = true;
       break;
     }

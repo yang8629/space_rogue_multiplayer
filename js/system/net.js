@@ -1015,7 +1015,8 @@ const Net = {
     if (this.role !== 'client' || !this.linked) return;
     const G = Game;
     this.send({ t: 'lo', weapon: G.weapon, chain: G.chain, sk: G.socks || [], inventory: G.inventory, hp: G.player.hp, cr: G.credits,
-      parts: G.parts, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft(), bn: G.boons });
+      parts: G.parts, ps: G.partSlots, cap: G.cap, ws: G.wSock, bp: G.startPicksLeft(), bn: G.boons,
+      gotLog: G.runStats ? { up: G.runStats.upgrades, got: G.runStats.got } : null });  // 取得紀錄：房主的遊玩紀錄寫「隊友取得」（10-25 使用者）
   },
   // 檢查對方傳來的電路、倉庫、武器、強化過的格子：不認得的晶片變空格（晶片 id 可以帶插座數 ~2、等級 ^2，見 parseChipId）
   sanitizeLoadout(m) {
@@ -1046,6 +1047,8 @@ const Net = {
     L.cap = clamp(Math.floor(num(m.cap, L.cap || 4)), 0, 40);
     L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
     L.bonusPicks = clamp(Math.floor(num(m.bp, L.bonusPicks || 0)), 0, 9);  // 開局三選一還剩幾次（隊友重新整理時還原）
+    const strs = a => Array.isArray(a) ? a.filter(t => typeof t === 'string').slice(-80).map(t => t.slice(0, 120)) : [];  // 隊友傳來的字串：只收字串、限長度
+    if (m.gotLog && typeof m.gotLog === 'object') L.gotLog = { up: strs(m.gotLog.up), got: strs(m.gotLog.got) };
     L.boons = cleanBoons(m.bn);  // ？事件的這一局效果（終焉護殼用掉時房主會先告訴隊友，所以以隊友傳來的為準）
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.boons); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
@@ -1110,6 +1113,7 @@ const Net = {
         matePerf: this.matePerf,  // 隊友那邊最慢的一幀（每秒的 ping 帶過來）
         team: this.teamRows().map(r => ({ who: `${r.tag}${r.me ? '（你）' : ''}`, ship: SHIPS[r.ship] ? SHIPS[r.ship].name : '？',
           dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit), downs: r.downs, revives: r.revives })),
+        mateGot: host ? G.mates.filter(m => m.L && m.L.gotLog).map(m => ({ tag: Game.tagOf(m), ...m.L.gotLog })) : [],  // 隊友的取得紀錄（隊友傳配裝時一起帶過來）
         mateChipDmg: (T => T.flatMap(t => t.rows.map(([n, , v]) => [(T.length > 1 ? `${t.tag} ` : '') + n, Math.round(v)])))(this.mateChipRows()),  // 隊友的晶片傷害（整局；三人以上名稱前面標號碼）
       },
     };

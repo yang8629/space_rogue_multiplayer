@@ -745,8 +745,8 @@ function recordText(r) {
     const m = /星區 (\d+)：戰鬥 (\d+) 秒、擊殺 (\d+)、傷害 (\d+)、離開時 HP (\d+\/\d+)、晶體 (\d+)/.exec(t), n = m ? m[1] : String(i + 1);
     L.push(`S${n} ${m ? `${m[2]}秒 殺${m[3]} 傷${m[4]} HP${m[5]} 晶${m[6]}` : t}｜${(nodes[n] || []).join(' ')}`);
   });
-  // 取得：同一層的東西只在第一個前面寫層號
-  const got = [...(r.upgrades || []).map(t => [t, 1]), ...(r.got || []).map(t => [t, 0])].map(([t, up]) => {
+  // 取得：同一層的東西只在第一個前面寫層號（自己的、隊友的用同一套：gotText）
+  const gotText = (ups, gots) => { const got = [...(ups || []).map(t => [t, 1]), ...(gots || []).map(t => [t, 0])].map(([t, up]) => {
     const m = /^(\d+)-(\d+) (.*)$/.exec(t);
     if (!m) return null;
     let b = m[3];
@@ -758,13 +758,16 @@ function recordText(r) {
     return { s: +m[1], l: +m[2], b: up ? b : chip(b) };
   }).filter(Boolean).sort((a, b) => a.s - b.s || a.l - b.l);
   let last = '';
-  if (got.length) L.push('取得 ' + got.map(g => { const k = g.s + '-' + g.l, t = (k === last ? '' : k) + g.b; last = k; return t; }).join(' '));
+  return got.map(g => { const k = g.s + '-' + g.l, t = (k === last ? '' : k) + g.b; last = k; return t; }).join(' '); };
+  const mine = gotText(r.upgrades, r.got);
+  if (mine) L.push('取得 ' + mine);
   if (r.coop) {
     const c = r.coop, ping = typeof c.ping === 'object' ? `延遲${c.ping.avg}ms(最高${c.ping.max})` : '';
     // 同步最長的那次在哪（第幾層、第幾波、場上子彈數）、超過 150ms 的停頓幾次
     L.push(`多人 ${c.role}｜隊友 ${c.mate}${c.mateDown ? '(倒下)' : ''}｜${ping} 同步最長${c.sync.maxGapMs}ms${c.sync.maxGapAt ? `(${c.sync.maxGapAt})` : ''}${c.sync.gaps150 != null ? ` 停頓>150ms ${c.sync.gaps150}次` : ''}`);
     if (c.team) L.push(`分工 ${c.team.map(t => `${t.who} ${t.ship} ${t.dmg}(殺${t.kills}${t.downs ? ` 倒${t.downs}` : ''}${t.revives ? ` 救${t.revives}` : ''})`).join('｜')}`);
     if (c.matePerf && c.matePerf.worst) L.push(`隊友效能 最慢一幀${c.matePerf.worst}ms(${c.matePerf.at}) 卡>100ms ${c.matePerf.slow}次`);
+    for (const g of c.mateGot || []) { const t = gotText(g.up, g.got); if (t) L.push(`隊友取得${c.mateGot.length > 1 ? ' ' + g.tag : ''} ${t}`); }
     if (c.mateChipDmg && c.mateChipDmg.length) L.push(`隊友晶片 ${c.mateChipDmg.map(([k, v]) => (/^武器・/.test(k) ? '武器' : chip(k)) + v).join(' ')}`);
   }
   return L.join('\n');
