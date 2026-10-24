@@ -322,7 +322,8 @@ class GrappleHook extends WeaponPlay {
     else if (e) {
       p.hookX = (p.hookX || []).filter(o => !o.dead);
       if (!e.t.boss) [e, ...p.hookX].forEach((o, i) => {  // 拉到飛船前方（群鉤的排在兩側）、暈住（stunT：不動、不攻擊）；走 move 才會被牆擋住（以前直接改位置，會被拉穿牆，10-22）
-        const side = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 32, tx = p.x + Math.cos(p.aim) * HOOK.hold - Math.sin(p.aim) * side, ty = p.y + Math.sin(p.aim) * HOOK.hold + Math.cos(p.aim) * side, k = Math.min(1, dt * 12);
+        const hold = Math.max(HOOK.hold, p.r + o.r + (o.shieldA != null ? SHIELD_OUT : 0) + 12);  // 大隻的、帶盾的拉在遠一點（不貼在船上）
+        const side = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 32, tx = p.x + Math.cos(p.aim) * hold - Math.sin(p.aim) * side, ty = p.y + Math.sin(p.aim) * hold + Math.cos(p.aim) * side, k = Math.min(1, dt * 12);
         const n = Math.max(1, Math.ceil(Math.hypot(tx - o.x, ty - o.y) * k / (o.r * 0.5)));  // 分小步走：一步超過牆厚會穿過去（碰撞是移動後才檢查）
         o.vx = (tx - o.x) * k / dt; o.vy = (ty - o.y) * k / dt;
         for (let s = 0; s < n; s++) o.move(dt / n);
