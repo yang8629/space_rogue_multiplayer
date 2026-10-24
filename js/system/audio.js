@@ -97,16 +97,19 @@ if (Save.flag('muted', false)) SFX.muted = true;
 
 // =====================================================================
 // MUSIC — 背景音樂（assets/music/*.mp3：OpenGameArt 的 CC0 曲子，來源見 assets/music/LICENSE.txt；10-24 以前是即時合成）
-//   calm：基地、航圖、商店；battle：一般戰鬥；boss：旗艦戰。用 <audio loop> 播（遊戲用 file:// 開也能播）；換曲時交叉淡出淡入
+//   calm：基地、航圖、商店；battle：一般戰鬥；boss_<旗艦 id>：每隻王一首（使用者 10-24：王的音樂要不一樣）。用 <audio loop> 播（遊戲用 file:// 開也能播）；換曲時交叉淡出淡入
+//   第一次要播才建 <audio>、開始下載（一進遊戲不會把 7 首都載下來）
 //   音量 = 音效的主音量（含靜音）× VOL × 設定頁的音樂音量；另外可以單獨關掉音樂
 // =====================================================================
-const MUSIC_FILE = { calm: 'assets/music/calm.mp3', battle: 'assets/music/battle.mp3', boss: 'assets/music/boss.mp3' };
+const MUSIC_FILE = { calm: 'assets/music/calm.mp3', battle: 'assets/music/battle.mp3',
+  boss_boss: 'assets/music/boss_boss.mp3', boss_boss2: 'assets/music/boss_boss2.mp3', boss_boss3: 'assets/music/boss_boss3.mp3',
+  boss_boss4: 'assets/music/boss_boss4.mp3', boss_boss5: 'assets/music/boss_boss5.ogg' };
 const Music = {
   on: true, track: null, els: null, vol: {}, last: 0, VOL: 0.6, FADE: 0.8,  // FADE：淡入淡出幾秒
-  init() {
-    if (this.els || typeof Audio === 'undefined') return;
-    this.els = {};
-    for (const [k, src] of Object.entries(MUSIC_FILE)) { const a = new Audio(src); a.loop = true; a.preload = 'auto'; a.volume = 0; this.els[k] = a; this.vol[k] = 0; }
+  init() { if (!this.els && typeof Audio !== 'undefined') this.els = {}; },
+  el(k) {  // 這首的 <audio>（第一次用到才建）
+    if (!this.els[k]) { const a = new Audio(MUSIC_FILE[k]); a.loop = true; a.volume = 0; this.els[k] = a; this.vol[k] = 0; }
+    return this.els[k];
   },
   toggle() {
     this.on = !this.on;
@@ -116,7 +119,9 @@ const Music = {
   update() {
     if (!this.els) return;
     const boss = Game.inArena && Game.enemies.find(e => e.t.boss && !e.dead);
-    this.track = Game.state === 'dead' ? null : Game.inArena ? (boss || (Game.combat && Game.combat.boss) ? 'boss' : 'battle') : 'calm';
+    const bossKey = 'boss_' + (boss ? boss.type : Game.bossId);  // 王還沒出場（旗艦戰剛開始）就照這一關的旗艦
+    this.track = Game.state === 'dead' ? null : Game.inArena ? (boss || (Game.combat && Game.combat.boss) ? (MUSIC_FILE[bossKey] ? bossKey : 'battle') : 'battle') : 'calm';
+    if (this.track) this.el(this.track);
     const now = performance.now(), dt = Math.min(0.1, (now - (this.last || now)) / 1000); this.last = now;
     const full = this.on ? SFX.gainNow() * this.VOL * Settings.musicVol : 0;
     for (const [k, a] of Object.entries(this.els)) {

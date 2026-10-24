@@ -1,11 +1,19 @@
-這個資料夾的背景音樂都來自 OpenGameArt.org，授權 Creative Commons Zero（CC0，公眾領域）：
-可以用在個人、教學、商業專案，不用標示作者。
-https://creativecommons.org/publicdomain/zero/1.0/
+這個資料夾的背景音樂都來自 OpenGameArt.org，可以用在商業專案、不用標示作者：
+除了 boss_boss4 之外都是 Creative Commons Zero（CC0，公眾領域）https://creativecommons.org/publicdomain/zero/1.0/
+boss_boss4 是作者自己的授權：「可以用在個人或商業專案、可以修改、可以再散布；不用標示（標示的話很感謝）」
 
-檔名 = 遊戲裡的場合（audio.js 的 MUSIC_FILE）：
-  calm.mp3    基地、航圖、商店、三選一   Outer Space Loop（wipics）
-              https://opengameart.org/content/outer-space-loop        原檔 outer_space_2.mp3
-  battle.mp3  一般戰鬥、精英戰           Space Battle（MintoDog）
-              https://opengameart.org/node/172812                     原檔 space_battle_bpm130.mp3
-  boss.mp3    旗艦戰                     Hard Boss Battle 2（MintoDog）
-              https://opengameart.org/content/hard-boss-battle-2      原檔 hard_boss_battle_2_bpm210.mp3
+檔名 = 遊戲裡的場合（audio.js 的 MUSIC_FILE）；王戰照旗艦的 id（ENEMY_TYPES）：
+  calm.mp3          基地、航圖、商店、三選一   Outer Space Loop（wipics）
+                    https://opengameart.org/content/outer-space-loop             原檔 outer_space_2.mp3
+  battle.mp3        一般戰鬥、精英戰           Space Battle（MintoDog）
+                    https://opengameart.org/node/172812                          原檔 space_battle_bpm130.mp3
+  boss_boss.mp3     星噬母艦                   Boss Battle (loop)（Pro Sensory / Alex McCulloch，作者希望在製作名單寫他的名字，CC0 不強制）
+                    https://opengameart.org/content/boss-battle-loop             原檔 boss_battle_loop_0.mp3
+  boss_boss2.mp3    裂界獵艦                   Hard Battle 1（MintoDog）
+                    https://opengameart.org/content/hard-battle-1                原檔 hard_battle_1_bpm170.mp3
+  boss_boss3.mp3    終焉核心                   Hard Boss Battle 2（MintoDog）
+                    https://opengameart.org/content/hard-boss-battle-2           原檔 hard_boss_battle_2_bpm210.mp3
+  boss_boss4.mp3    雙子獵艦                   Boss Fight 2（ansimuz / Luis Zuno）
+                    https://opengameart.org/content/boss-fight-2                 原檔 boss_fight_2_files.zip 裡的 Boss Fight 2.mp3
+  boss_boss5.ogg    星環守門者                 Boss Stage Synth Track（killerfishred）
+                    https://opengameart.org/content/boss-stage-synth-track       原檔 fight_0.ogg
