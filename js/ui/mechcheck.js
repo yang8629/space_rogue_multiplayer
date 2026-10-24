@@ -441,6 +441,38 @@ const MechCheck = {
       return { ok: first === 1 && toMate && rotate && swap && split && solo,
         got: `一開始鎖 ${first}P；隊友打王後鎖${toMate ? '隊友' : '（錯）'}；沒人打${rotate ? '輪到房主' : '沒輪換（錯）'}；鎖定的人倒下${swap ? '馬上換' : '沒換（錯）'}；紅圈 房主 ${near(p)}、隊友 ${near(m)}；單人${solo ? '不鎖' : '有鎖（錯）'}` };
     }],
+    ['敵人', '王的專屬新招', '星噬母艦：吞噬（把人往自己吸）、孵化囊（時間到孵出蟲群）；裂界獵艦：裂隙突襲（從背後冒出來衝）、空間裂痕（衝鋒路線留不會動的敵彈）；終焉核心：過載脈衝（範圍內受傷）、核心碎片（繞著轉、時間到碎掉）；雙子獵艦：交叉衝鋒（兩艘一起衝）、光束橫掃（隊形轉快）；星環守門者：封鎖環（牆外受傷）、光束反轉', M => {
+      M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
+      const p = Game.player, S = CFG.BOSS_SKILL, out = [];
+      const boss = (type, dx = 400) => { const e = new Enemy(type, p.x + dx, p.y, 1); e.spawnT = 0; e.alert = true; Game.enemies = [e]; if (e.t.twin) Game.makeTwin(e); Game.eBullets = []; p.hp = p.maxHp = 1000; p.iframe = 0; p.aim = 0; return e; };
+      const step = n => { for (let i = 0; i < n; i++) { Game.time += 1 / 60; for (const e of Game.enemies.slice()) if (!e.dead) e.update(1 / 60, Game.enemyTarget(e)); Game.enemies = Game.enemies.filter(e => !e.dead); p.iframe = 0; } };
+      const cast = (e, k) => { e.forceSkill = k; e.skillCd = 0; e.mode = 'chase'; step(1); };
+      const ok = (name, cond, txt) => { out.push(`${cond ? '' : '✗'}${name}：${txt}`); return cond; };
+      let all = true, e;
+      e = boss('boss'); const d0 = Math.hypot(e.x - p.x, e.y - p.y); cast(e, 'devour'); for (let i = 0; i < 30; i++) { Game.beamPull(p, 1 / 60); step(1); }
+      const d1 = Math.hypot(e.x - p.x, e.y - p.y); all &= ok('吞噬', e.mode === 'devour' && d1 < d0 - 50, `0.5 秒被吸近 ${Math.round(d0 - d1)}`);
+      e = boss('boss'); cast(e, 'egg'); e.skillCd = 99; const eggs = Game.enemies.filter(o => o.type === 'egg').length; step(Math.ceil((S.egg.hatch + 0.3) * 60) + 3);  // 0.3：出場動畫
+      const sw = Game.enemies.filter(o => o.type === 'swarmer').length; all &= ok('孵化囊', eggs === S.egg.n && sw === eggs * S.egg.swarm && !Game.enemies.some(o => o.type === 'egg'), `${eggs} 顆卵 → ${sw} 隻蟲群`);
+      e = boss('boss2'); cast(e, 'rift'); step(1); const hid = e.cloak === 1; step(Math.ceil(S.rift.t * 60));
+      all &= ok('裂隙突襲', hid && e.mode === 'windup' && Math.abs(e.x - (p.x - S.rift.back)) < 5 && Math.abs(e.y - p.y) < 5, `${hid ? '隱形' : '沒隱形'}，冒出來在玩家背後 ${Math.round(p.x - e.x)}、${e.mode}`);
+      e = boss('boss2'); cast(e, 'scar'); step(120); const still = Game.eBullets.filter(b => b.vx === 0 && b.vy === 0 && b.life > 0).length;
+      all &= ok('空間裂痕', still > 5, `衝鋒路線上 ${still} 顆不會動的敵彈`);
+      e = boss('boss3', 200); cast(e, 'overload'); step(Math.ceil(S.overload.t * 60) + 2); const near = p.maxHp - p.hp;
+      e = boss('boss3', S.overload.r + 200); cast(e, 'overload'); step(Math.ceil(S.overload.t * 60) + 2); const far = p.maxHp - p.hp;
+      all &= ok('過載脈衝', near > 0 && far === 0, `範圍內扣 ${near}、範圍外扣 ${far}`);
+      e = boss('boss3'); cast(e, 'shard'); const sh = Game.enemies.filter(o => o.type === 'core_shard'); step(20); const orb = sh.every(o => Math.abs(Math.hypot(o.x - e.x, o.y - e.y) - S.shard.orbit) < 1);
+      step(Math.ceil(S.shard.t * 60)); all &= ok('核心碎片', sh.length === S.shard.n && orb && !Game.enemies.some(o => o.type === 'core_shard'), `${sh.length} 塊${orb ? '繞著核心轉' : '沒繞著轉（錯）'}，時間到${Game.enemies.some(o => o.type === 'core_shard') ? '還在（錯）' : '碎掉'}`);
+      e = boss('boss4'); cast(e, 'xcharge'); all &= ok('交叉衝鋒', Game.enemies.filter(o => o.t.twin && o.mode === 'windup').length === 2, '兩艘一起蓄力');
+      e = boss('boss4'); const P = e.pair, a0 = P.ang; step(60); const slow = Math.abs(P.ang - a0); cast(e, 'sweep'); step(Math.ceil(S.sweep.warn * 60) + 1); const a1 = P.ang; step(60); const fast = Math.abs(P.ang - a1);
+      all &= ok('光束橫掃', fast > slow * 2, `隊形 1 秒轉 ${slow.toFixed(2)} → ${fast.toFixed(2)} 弧度`);
+      e = boss('boss5', 900); cast(e, 'cage'); step(70); const outside = p.maxHp - p.hp;
+      e = boss('boss5', 150); cast(e, 'cage'); step(70); const inside = p.maxHp - p.hp;
+      all &= ok('封鎖環', outside > 0 && inside === 0, `牆外扣 ${outside}、牆內扣 ${inside}`);
+      e = boss('boss5'); cast(e, 'reverse'); const warn = Game.bossBeams().some(b => b.rev) || e.cd <= CFG.WARDEN.rest; step(Math.ceil(S.reverse.warn * 60) + 1);
+      all &= ok('光束反轉', e.spinDir === -1 && e.mode === 'chase', `轉向 ${e.spinDir}`);
+      Game.enemies = []; Game.eBullets = [];
+      return { ok: !!all, got: out.join('；') };
+    }],
     ['敵人', '王的標記圈：集合圈、追蹤紅圈', `紅圈套在人身上跟著跑 ${CFG.MARK.follow} 秒、定住 ${CFG.MARK.hold} 秒後爆發；集合圈（套在一個人身上）：圈外的人受傷；追蹤紅圈：每個人各一個，圈裡的人受傷（跑出去就沒事；兩個圈疊在一起只扣一次：受傷後的無敵時間）`, M => {
       const m = M.coop(), p = Game.player, B = M.targets([[400, 0]], 'boss3', true, 1)[0], MK = CFG.MARK, T = MK.follow + MK.hold;
       const run = s => { for (let i = 0; i < Math.round(s * 60); i++) Game.updateZones(1 / 60); };

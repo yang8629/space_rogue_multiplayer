@@ -830,7 +830,7 @@ class Enemy {
   }
   pickSkill(d) {
     if (this.forceSkill) { const s = this.forceSkill; this.forceSkill = null; return s; }
-    const AIM = ['fan', 'snipe', 'wall', 'charge'], AREA = ['spiral', 'ring', 'nova', 'cross', 'twin'], CALL = ['summon', 'deploy', 'guard'];
+    const AIM = ['fan', 'snipe', 'wall', 'charge', 'rift', 'scar', 'xcharge'], AREA = ['spiral', 'ring', 'nova', 'cross', 'twin', 'devour', 'overload'], CALL = ['summon', 'deploy', 'guard', 'egg', 'shard'];
     const minions = Game.enemies.filter(e => e.summoned && !e.dead).length, cnt = {};
     for (const k of this.t.skills) cnt[k] = (cnt[k] || 0) + 1;
     const opts = Object.keys(cnt), w = opts.map(k => k === this.skill ? 0
@@ -849,7 +849,9 @@ class Enemy {
       Game.shake(14);
       burst(this.x, this.y, t.color, 60, 380, 0.8, 3);
     }
-    if (this.mode === 'windup') {  // 裂界獵艦、雙子獵艦：蓄力（畫面上有預警線），期間慢慢停下
+    const BM = BOSS_SKILL[this.mode];
+    if (BM && BM.mode) BM.mode.call(this, dt, rage);  // 專屬新招出招後的狀態（吞噬、裂隙、過載、封鎖環、光束反轉）
+    else if (this.mode === 'windup') {  // 裂界獵艦、雙子獵艦：蓄力（畫面上有預警線），期間慢慢停下
       this.modeT -= dt; this.brake(dt); this.move(dt);
       if (this.modeT <= 0) {
         const C = CFG.CHARGE[this.type];
@@ -859,14 +861,19 @@ class Enemy {
       }
     } else if (this.mode === 'charge') {  // 衝鋒：往兩側灑出慢速彈，撞牆或時間到就停
       this.modeT -= dt; this.move(dt); this.fireAcc += dt;
-      while (this.fireAcc >= 0.07) {
+      const SC = CFG.BOSS_SKILL.scar;
+      if (this.scarOn) while (this.fireAcc >= SC.every) {  // 空間裂痕：沿路留不會動的敵彈（紫色的芯）
+        this.fireAcc -= SC.every;
+        Game.eBullets.push({ x: this.x, y: this.y, vx: 0, vy: 0, r: SC.r, dmg: SC.dmg * (this.t.shotMul || 1), life: SC.life, from: this.t.name + '（空間裂痕）', boss: true, col: '#b388ff' });
+      }
+      else while (this.fireAcc >= 0.07) {
         this.fireAcc -= 0.07;
         this.shootAt(this.chargeA + Math.PI / 2, 110, 5, 12);
         this.shootAt(this.chargeA - Math.PI / 2, 110, 5, 12);
       }
       trail(this.x, this.y, t.color, 0.35, 8);
       const wall = Arena.rect ? this.x <= this.r + 1 || this.x >= CFG.WORLD_W - this.r - 1 || this.y <= this.r + 1 || this.y >= CFG.WORLD_H - this.r - 1 : !!this.wallN;  // 大地圖：撞牆（move 記下的 wallN）
-      if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx = this.vy = 0; }  // 衝完停住（不滑出預警線）
+      if (this.modeT <= 0 || wall) { this.mode = 'chase'; this.vx = this.vy = 0; this.scarOn = false; }  // 衝完停住（不滑出預警線）
     } else if (BOSS_MOVE[this.type]) BOSS_MOVE[this.type].call(this, dt, rage);
     else {
       // 與玩家保持距離並緩慢繞行（獵艦貼得比較近，核心幾乎不動）
@@ -918,6 +925,7 @@ class Enemy {
     this.skillCd -= dt * endlessAtk();
     if (this.share || this.skillCd > 0 || this.mode !== 'chase') return;  // 雙子獵艦：出招由主艦決定（twinSkill 分給兩艘）
     this.skill = this.pickSkill(d);
+    if (BOSS_SKILL[this.skill]) { BOSS_SKILL[this.skill].cast.call(this, rage); return; }  // 專屬新招（雙子獵艦由主艦放，兩艘一起處理）
     if (this.skill === 'mark') { this.markCast(pick(Object.keys(CFG.MARK.kinds))); this.skillCd = rage ? 2.2 : 2.8; return; }  // 標記圈：每隻王都有（雙子獵艦由主艦放）
     if (this.pair) { this.twinSkill(this.skill, rage); return; }
     switch (this.skill) {

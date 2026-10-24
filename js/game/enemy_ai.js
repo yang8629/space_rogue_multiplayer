@@ -13,6 +13,21 @@ const TURRET_FIRE = {
 
 // ---------- 主題小兵的行為（this = Enemy）；回傳 true 表示這一幀的移動已經處理完 ----------
 const THEME_AI = {
+  egg(dt) {  // 孵化囊（星噬母艦的招式）：不動，modeT 秒後孵出蟲群（不掉晶體）、自己消失（不算擊殺）
+    this.vx = this.vy = 0;
+    if ((this.modeT -= dt) > 0) return true;
+    const C = CFG.BOSS_SKILL.egg;
+    for (let i = 0; i < C.swarm; i++) { const a = i / C.swarm * TAU, s = new Enemy('swarmer', this.x + Math.cos(a) * 14, this.y + Math.sin(a) * 14, this.hpScale / C.hp); s.summoned = true; s.noPlay = true; s.alert = true; Game.enemies.push(s); }
+    burst(this.x, this.y, this.t.color, 24, 220, 0.4, 2); this.dead = true;
+    return true;
+  },
+  core_shard(dt, p) {  // 核心碎片（終焉核心的招式）：繞著核心轉、每 cd 秒朝目標射一發；時間到或核心沒了就碎掉（不算擊殺）
+    const C = CFG.BOSS_SKILL.shard, o = this.owner;
+    if (!o || o.dead || (this.modeT -= dt) <= 0) { burst(this.x, this.y, this.t.color, 10, 160, 0.3, 2); this.dead = true; return true; }
+    this.orbA += dt * C.spin; this.x = o.x + Math.cos(this.orbA) * C.orbit; this.y = o.y + Math.sin(this.orbA) * C.orbit; this.vx = this.vy = 0; this.rot = this.orbA;
+    if ((this.cd -= dt) <= 0) { this.cd = C.cd; this.shootAt(Math.atan2(p.y - this.y, p.x - this.x), 260, 5, 10); }
+    return true;
+  },
   gunboat(dt, p, dx, dy, d) {  // 停在 420～520 外；每 3 秒閃 0.6 秒後從 8 根砲管各射一發慢速彈（砲塔 rot 慢慢轉）
     if (this.mode === 'windup') {
       this.modeT -= dt; this.brake(dt); this.move(dt);
@@ -124,7 +139,8 @@ const BOSS_MOVE = {
       P.at = Game.time;
       const q = Game.nearestPlayer(P.x, P.y) || Game.player, vx = q.x - P.x, vy = q.y - P.y, l = Math.hypot(vx, vy) || 1, s = Math.min(l, C.drift * endlessSpd() * dt);
       [P.x, P.y] = Arena.clampIn(P.x + vx / l * s, P.y + vy / l * s, C.orbit + 40);  // 中心離牆至少轉圈半徑：兩艘都在空地上（不然一艘卡在牆裡）
-      P.ang += dt * (rage ? C.spinRage : C.spin) * endlessAtk() * P.dir;
+      const S = CFG.BOSS_SKILL.sweep, sw = P.sweepT > 0 ? ((P.sweepT -= dt) > S.t ? 0.3 : S.mul) : 1;  // 光束橫掃：先慢下來 warn 秒，再快轉
+      P.ang += dt * (rage ? C.spinRage : C.spin) * endlessAtk() * P.dir * sw;
     }
     const a = P.ang + (this.share ? Math.PI : 0), ax = P.x + Math.cos(a) * C.orbit - this.x, ay = P.y + Math.sin(a) * C.orbit - this.y;
     const l = Math.hypot(ax, ay) || 1, sp = Math.min(380, l * 5) * this.spdMul, k = Math.min(1, dt * 6);
@@ -135,10 +151,102 @@ const BOSS_MOVE = {
   boss5(dt, rage) {
     const W = CFG.WARDEN;
     this.vx = this.vy = 0;
-    this.rot += dt * (rage ? W.spinRage : W.spin) * endlessAtk();
+    this.rot += dt * (rage ? W.spinRage : W.spin) * endlessAtk() * (this.spinDir || 1);  // spinDir：光束反轉（BOSS_SKILL.reverse）
     if ((this.cd -= dt) <= 0) this.cd += W.beam + W.rest;  // cd > rest：光束開著；cd < warn：快開了（預警線）
   },
 };
+
+// 王的專屬新招（使用者 10-24，數值 CFG.BOSS_SKILL）：cast = 出招那一下（this = 王；雙子獵艦是主艦，兩艘一起處理）
+//   mode = 出招後的狀態（this.mode 跟招式同名），每幀在 updateBoss 跑，取代平常的移動；結束時改回 'chase'
+const bossFoe = e => Game.lockFoe(e);  // 招式的目標：多人時鎖定的人，不然最近的玩家
+const BOSS_SKILL = {
+  devour: {  // 星噬母艦・吞噬：停下來把附近的玩家往自己吸（被吸的船在自己的電腦上拉：Game.beamPull），同時放螺旋彈
+    cast(rage) {
+      const C = CFG.BOSS_SKILL.devour;
+      this.mode = 'devour'; this.modeT = C.t; this.fireAcc = 0;
+      this.stream = { t: C.t, every: rage ? 0.06 : 0.09, arms: 2, turn: 0.3, spd: 170, r: 5, dmg: 12 };
+      this.skillCd = C.t + (rage ? 1 : 1.6);
+    },
+    mode(dt) { this.brake(dt); this.move(dt); if ((this.modeT -= dt) <= 0) this.mode = 'chase'; },
+  },
+  egg: {  // 星噬母艦・孵化囊：丟卵到四周（孵化在 THEME_AI.egg）
+    cast(rage) {
+      const C = CFG.BOSS_SKILL.egg, n = C.n + (rage ? 1 : 0);
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU + rand(0, 1), [x, y] = Arena.clampIn(this.x + Math.cos(a) * C.dist, this.y + Math.sin(a) * C.dist, 40);
+        const e = new Enemy('egg', x, y, this.hpScale * C.hp); e.summoned = true; e.noPlay = true; e.alert = true; e.modeT = C.hatch; e.spawnT = e.spawnMax = 0.3; Game.enemies.push(e);  // 出場動畫短一點（動畫中不倒數）
+      }
+      burst(this.x, this.y, this.t.color, 24, 200, 0.5, 2);
+      this.skillCd = rage ? 2.6 : 3.2;
+    },
+  },
+  rift: {  // 裂界獵艦・裂隙突襲：隱形，落點（rx, ry：目標背後，跟著目標更新）畫裂縫；時間到從那裡冒出來，短蓄力後衝鋒
+    cast(rage) { this.mode = 'rift'; this.modeT = CFG.BOSS_SKILL.rift.t; this.skillCd = rage ? 2.6 : 3.2; },
+    mode(dt) {
+      const C = CFG.BOSS_SKILL.rift, q = bossFoe(this), a = q.aim || 0;
+      [this.rx, this.ry] = Arena.clampIn(q.x - Math.cos(a) * C.back, q.y - Math.sin(a) * C.back, this.r + 10);
+      this.vx = this.vy = 0; this.cloak = 1;
+      if ((this.modeT -= dt) > 0) return;
+      burst(this.x, this.y, this.t.color, 20, 220, 0.4, 2);
+      this.x = this.rx; this.y = this.ry; this.cloak = 0;
+      this.mode = 'windup'; this.modeT = C.windup; this.chargeA = Math.atan2(q.y - this.y, q.x - this.x);
+      burst(this.x, this.y, this.t.color, 30, 260, 0.5, 3); Game.shake(5);
+    },
+  },
+  scar: {  // 裂界獵艦・空間裂痕：一般的衝鋒，衝的時候沿路留下不會動的敵彈（updateBoss 的衝鋒看 scarOn）
+    cast(rage) { const q = bossFoe(this); this.mode = 'windup'; this.modeT = rage ? 0.55 : 0.8; this.chargeA = Math.atan2(q.y - this.y, q.x - this.x); this.scarOn = true; this.skillCd = rage ? 2.4 : 3; },
+  },
+  overload: {  // 終焉核心・過載脈衝：停下來蓄力，時間到 r 內看得到核心的人受傷（牆、柱子、行星、小行星擋得住）
+    cast(rage) { const C = CFG.BOSS_SKILL.overload; this.mode = 'overload'; this.modeT = C.t; this.skillCd = C.t + (rage ? 1 : 1.6); },
+    mode(dt) {
+      this.brake(dt); this.move(dt);
+      if ((this.modeT -= dt) > 0) return;
+      const C = CFG.BOSS_SKILL.overload; this.mode = 'chase';
+      for (const p of Game.players()) {
+        if (dist2(p.x, p.y, this.x, this.y) > (C.r + p.r) ** 2) continue;
+        if (Arena.losPoint(this.x, this.y, p.x, p.y, 4) || (Game.objs.length && Objects.losBlocked(this.x, this.y, p.x, p.y, 4))) continue;
+        Game.hurtPlayer(C.dmg, this.t.name + '（過載脈衝）', p, this.x, this.y);
+      }
+      ringFx(this.x, this.y, C.r, this.t.color); burst(this.x, this.y, this.t.color, 60, 420, 0.6, 3); Game.shake(10); Events.emit('explode', this);
+    },
+  },
+  shard: {  // 終焉核心・核心碎片：碎片繞著核心轉、朝玩家射（THEME_AI.core_shard）
+    cast(rage) {
+      const C = CFG.BOSS_SKILL.shard;
+      for (let i = 0; i < C.n; i++) {
+        const e = new Enemy('core_shard', this.x, this.y, this.hpScale * C.hp);
+        e.summoned = true; e.noPlay = true; e.alert = true; e.spawnT = e.spawnMax = 0.3; e.owner = this; e.orbA = i / C.n * TAU; e.modeT = C.t; e.cd = C.cd * (0.5 + i / C.n);
+        Game.enemies.push(e);
+      }
+      burst(this.x, this.y, this.t.color, 30, 260, 0.5, 2);
+      this.skillCd = rage ? 2.8 : 3.4;
+    },
+  },
+  xcharge: {  // 雙子獵艦・交叉衝鋒：兩艘同時蓄力、各自朝目標衝（從兩側交叉成 X）
+    cast(rage) {
+      for (const s of this.pair ? this.pair.members.filter(o => !o.dead) : [this]) { const q = bossFoe(s); s.mode = 'windup'; s.modeT = rage ? 0.6 : 0.85; s.chargeA = Math.atan2(q.y - s.y, q.x - s.x); }
+      this.skillCd = rage ? 2.4 : 3;
+    },
+  },
+  sweep: {  // 雙子獵艦・光束橫掃：隊形先慢下來（warn），再轉得很快（BOSS_MOVE.boss4 看 pair.sweepT），中間的光束掃過去
+    cast(rage) { const C = CFG.BOSS_SKILL.sweep; if (this.pair) this.pair.sweepT = C.warn + C.t; this.skillCd = C.warn + C.t + (rage ? 0.6 : 1); },
+  },
+  cage: {  // 星環守門者・封鎖環：能量牆從外圈往內收（半徑照 modeT 算，隊友那邊照同步的 modeT 畫），牆外的人每 every 秒受傷
+    cast(rage) { const C = CFG.BOSS_SKILL.cage; this.mode = 'cage'; this.modeT = C.t; this.cageTick = C.every; this.skillCd = C.t + (rage ? 0.8 : 1.4); },
+    mode(dt, rage) {
+      BOSS_MOVE.boss5.call(this, dt, rage);
+      const C = CFG.BOSS_SKILL.cage, R = cageR(this);
+      if ((this.cageTick -= dt) <= 0) { this.cageTick += C.every; for (const p of Game.players()) if (dist2(p.x, p.y, this.x, this.y) > R * R) Game.hurtPlayer(C.dmg, this.t.name + '（封鎖環）', p, p.x, p.y); }
+      if ((this.modeT -= dt) <= 0) this.mode = 'chase';
+    },
+  },
+  reverse: {  // 星環守門者・光束反轉：光束閃警告（Game.bossBeams 的 rev），時間到反方向轉（spinDir）
+    cast(rage) { this.mode = 'reverse'; this.modeT = CFG.BOSS_SKILL.reverse.warn; this.skillCd = rage ? 2.4 : 3; },
+    mode(dt, rage) { BOSS_MOVE.boss5.call(this, dt, rage); if ((this.modeT -= dt) <= 0) { this.spinDir = -(this.spinDir || 1); this.mode = 'chase'; Game.shake(4); } },
+  },
+};
+// 封鎖環現在的半徑（畫面也用）：modeT 從 t 倒數到 0，半徑從 r0 收到 r1
+const cageR = e => { const C = CFG.BOSS_SKILL.cage; return C.r1 + (C.r0 - C.r1) * clamp(e.modeT / C.t, 0, 1); };
 
 // 每秒轉幾弧度（e.rot：虛空獵手環形彈的起始角、彈幕艇的砲塔；畫面也用）
 const ENEMY_SPIN = { brute: 0.8, elite: 1.5, boss: 0.4, gunboat: 0.5 };

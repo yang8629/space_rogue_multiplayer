@@ -2,6 +2,7 @@
 //   守門者等到光束開著時拍；另外各拍一張美術放大圖（tools/art 的畫法）
 //   用法：node perf/newbossshot.mjs   → art_lab/screenshots/王_雙子獵艦.png、王_星環守門者.png、王_美術.png
 //   --marks：（含 --coop）終焉核心放集合圈、追蹤紅圈各截一張 → 王_集合圈.png、王_追蹤紅圈.png
+//   --skills：每隻王的專屬新招各截一張（出招後等一下讓畫面出來）→ 王招_<招式>.png
 //   --coop：多一個本機的隊友（不連線、不動），看多人時王鎖定的標記（Game.bossLockTick）；檔名加「_多人」，不拍美術放大
 import { GAME, SHOTS, CHROME } from './paths.mjs';
 import puppeteer from 'puppeteer-core';
@@ -33,6 +34,18 @@ const fight = async (id, wait, until) => {
   await new Promise(r => setTimeout(r, Math.max(0, wait - 1800)));
   if (until) while (Date.now() - t0 < wait + 8000 && !(await p.evaluate(until))) await new Promise(r => setTimeout(r, 100));
 };
+if (process.argv.includes('--skills')) {
+  const L = [['boss', 'devour', '吞噬', 900], ['boss', 'egg', '孵化囊', 1500], ['boss2', 'rift', '裂隙突襲', 600], ['boss2', 'scar', '空間裂痕', 1400],
+    ['boss3', 'overload', '過載脈衝', 1300], ['boss3', 'shard', '核心碎片', 1200], ['boss4', 'xcharge', '交叉衝鋒', 500], ['boss4', 'sweep', '光束橫掃', 1500],
+    ['boss5', 'cage', '封鎖環', 2200], ['boss5', 'reverse', '光束反轉', 500]];
+  for (const [id, k, name, ms] of L) {
+    await fight(id, 2500);
+    await p.evaluate(k => { const B = Game.enemies.find(e => e.t.boss && !e.share); Game.eBullets = []; Game.zones = []; B.forceSkill = k; B.skillCd = 0; B.mode = 'chase'; for (const e of Game.enemies) if (e.pair) e.pair.sweepT = 0; }, k);
+    await new Promise(r => setTimeout(r, ms));
+    await p.screenshot({ path: SHOTS + `王招_${name}.png` }); console.log(`存好 王招_${name}.png`);
+  }
+  await b.close(); process.exit(0);
+}
 if (MARKS) {
   for (const [kind, name] of [['gather', '集合圈'], ['track', '追蹤紅圈']]) {
     await fight('boss3', 2500);

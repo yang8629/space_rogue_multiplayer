@@ -84,6 +84,44 @@ function glWeapon(g, id, x, y, rot, k, col, mode = '', glowFn = null, a = 1, st 
   }
 }
 
+// 王的專屬新招出招後的畫面（照 e.mode；BOSS_SKILL，modeT、rx／ry 有同步給隊友）：(g, 王, 時間)
+const BOSS_MODE_LOOK = {
+  devour(g, e, t) {  // 吞噬：吸引範圍的外圈＋三圈往王收的弧
+    const R = CFG.BOSS_SKILL.devour.r;
+    g.circle(e.x, e.y, R).stroke({ width: 2, color: 0xff4d6d, alpha: 0.25 });
+    for (let k = 0; k < 3; k++) {
+      const q = (t * 0.8 + k / 3) % 1, r = R * (1 - q) + e.r * q;
+      for (let i = 0; i < 6; i++) { const u = i * TAU / 6 + t * 0.5 + k; glArc(g, e.x, e.y, r, u, u + 0.45); g.stroke({ width: 3, color: 0xff4d6d, alpha: 0.6 * q }); }
+    }
+  },
+  rift(g, e, t) {  // 裂隙突襲：落點一道紫色的裂縫（鋸齒，越來越長），王從這裡鑽出來
+    if (!e.rx && !e.ry) return;
+    const k = 1 - clamp(e.modeT / CFG.BOSS_SKILL.rift.t, 0, 1), L = 24 + 46 * k, pts = [];
+    for (let i = 0; i <= 6; i++) pts.push([e.rx + (i % 2 ? 7 : -7) * (1 - Math.abs(i / 3 - 1)), e.ry - L + i / 6 * 2 * L]);
+    for (const [w, c, a] of [[12, 0xb388ff, 0.35], [4, 0xffffff, 0.9]]) { g.moveTo(...pts[0]); for (const q of pts.slice(1)) g.lineTo(...q); g.stroke({ width: w, color: c, alpha: a }); }
+    g.circle(e.rx, e.ry, e.r).stroke({ width: 2, color: 0xb388ff, alpha: 0.4 + 0.4 * Math.sin(t * 20) ** 2 });
+  },
+  overload(g, e, t) {  // 過載脈衝：範圍紅圈，裡面的實心圓越長越大（跟落點轟炸一樣的讀法）
+    const C = CFG.BOSS_SKILL.overload, k = 1 - clamp(e.modeT / C.t, 0, 1);
+    g.circle(e.x, e.y, C.r).stroke({ width: 3, color: 0xff2a2a, alpha: 0.5 + 0.4 * Math.sin(t * 20) ** 2 });
+    g.circle(e.x, e.y, C.r * k).fill({ color: 0xff2a2a, alpha: 0.12 + 0.15 * k });
+  },
+  reverse(g, e, t) {  // 光束反轉：核心外圍三段黃色箭頭，指向反轉之後的方向（光束關著的時候也看得到）
+    const dir = -(e.spinDir || 1), R = e.r + 34, a0 = t * 2 * dir;
+    for (let i = 0; i < 3; i++) {
+      const a = a0 + i * TAU / 3, b = a + 0.9 * dir, c = Math.cos(b), s = Math.sin(b);
+      glArc(g, e.x, e.y, R, Math.min(a, b), Math.max(a, b)); g.stroke({ width: 5, color: 0xffd166, alpha: 0.5 + 0.5 * Math.sin(t * 30) ** 2 });
+      const hx = e.x + c * R, hy = e.y + s * R, tx = -s * dir, ty = c * dir;
+      g.poly([hx + tx * 12, hy + ty * 12, hx - c * 9, hy - s * 9, hx + c * 9, hy + s * 9]).fill({ color: 0xffd166, alpha: 0.95 });
+    }
+  },
+  cage(g, e, t) {  // 封鎖環：一圈往內收的能量牆（外面一層寬的淡光＋亮的牆線）
+    const R = cageR(e);
+    g.circle(e.x, e.y, R + 10).stroke({ width: 22, color: 0xffb86b, alpha: 0.18 });
+    g.circle(e.x, e.y, R).stroke({ width: 4, color: 0xffd9a0, alpha: 0.75 + 0.2 * Math.sin(t * 16) });
+  },
+};
+
 const GLActors = {
   init() {
     const L = GLR.L, S = () => new PIXI.Sprite();
@@ -120,6 +158,7 @@ const GLActors = {
     this.enemies();
     for (const e of G.enemies) this.telegraph(e);
     this.bossBeams();
+    for (const e of G.enemies) if (!e.dead && BOSS_MODE_LOOK[e.mode]) BOSS_MODE_LOOK[e.mode](g, e, G.time);  // 王的專屬新招（出招後的狀態）
     // 多人時的王鎖定的人（Game.bossLockTick）：船外一圈紅色的瞄準角（往內收、一閃一閃）＋從王拉一條淡淡的紅線，大家都看得到王現在追誰
     for (const e of G.enemies) {
       const q = !e.dead && e.lock && G.shipBySlot(e.lock);
@@ -215,6 +254,22 @@ const GLActors = {
         main = this.spr(this.frame('boss3_core', Math.floor(t / (TAU / 3) * 8) % 8), e.x, e.y, k / 2, 0);
         break;
       }
+      case 'egg': {  // 孵化囊：深紅的六角卵殼（上半亮）＋裡面一顆芯，快孵的時候越亮、跳得越快（modeT 有同步）
+        const g = this.gE, R = e.r * sp, h = 1 - clamp((e.modeT || 0) / CFG.BOSS_SKILL.egg.hatch, 0, 1), beat = 0.5 + 0.5 * Math.sin(t * (6 + 18 * h));
+        const pts = []; for (let i = 0; i < 6; i++) { const u = i / 6 * TAU - Math.PI / 2; pts.push(e.x + Math.cos(u) * R * 0.95, e.y + Math.sin(u) * R * 1.15); }
+        g.poly(pts).fill({ color: 0xb0304e, alpha }).stroke({ width: 2.5, color: 0x03050c, alpha });
+        g.poly(pts.map((v, i) => i % 2 ? Math.min(v, e.y) : v)).fill({ color: 0xffffff, alpha: 0.15 * alpha });
+        g.circle(e.x, e.y + 2, R * (0.32 + 0.12 * beat)).fill({ color: 0xff4d6d, alpha: (0.5 + 0.5 * h) * alpha });
+        main = this.glowAt(this.pE, e.x, e.y, R * (1.2 + h), 0xff4d6d, (0.25 + 0.5 * h * beat) * alpha);
+        break;
+      }
+      case 'core_shard': {  // 核心碎片：青綠色的菱形晶體（尖端朝前進方向，左上亮）＋光暈
+        const g = this.gE, R = e.r * sp, a = (e.rot || 0) + Math.PI / 2, P = (u, r) => [e.x + Math.cos(a + u) * r, e.y + Math.sin(a + u) * r];
+        g.poly([...P(0, R * 1.5), ...P(Math.PI / 2, R * 0.7), ...P(Math.PI, R * 1.1), ...P(-Math.PI / 2, R * 0.7)]).fill({ color: 0x1fa87a, alpha }).stroke({ width: 2, color: 0x03050c, alpha });
+        g.poly([...P(0, R * 1.5), ...P(-Math.PI / 2, R * 0.7), e.x, e.y]).fill({ color: 0x9fffd8, alpha: 0.6 * alpha });
+        main = this.glowAt(this.pE, e.x, e.y, R * 2, 0x2ee6a6, 0.5 * alpha);
+        break;
+      }
       default: main = this.glowAt(this.pE, e.x, e.y, e.r, glColor(T.color || '#ffffff'), 1);
     }
     main.alpha = (main.alpha < 1 ? main.alpha : 1) * alpha;
@@ -285,6 +340,7 @@ const GLActors = {
     const g = this.gE, t = Game.time;
     for (const B of Game.bossBeams()) {
       if (B.warn) { g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: 2, color: 0xff2a2a, alpha: 0.3 + 0.5 * Math.sin(t * 30) ** 2 }); continue; }
+      if (B.rev) g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: B.w * 3.5, color: 0xffd166, alpha: 0.5 * Math.sin(t * 30) ** 2 });  // 光束快反轉了：外面閃一層黃
       const f = 0.85 + 0.15 * Math.sin(t * 40);
       g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: B.w * 2.2, color: 0xff3b5c, alpha: 0.18 * f });
       g.moveTo(B.x1, B.y1).lineTo(B.x2, B.y2).stroke({ width: B.w, color: 0xff3b5c, alpha: 0.75 * f });

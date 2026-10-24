@@ -1172,7 +1172,7 @@ const Net = {
         e.type === 'worm' ? wormAhead(e) : null,  // 列隊蟲：前面那節（活著的）的 id，0 = 自己是頭
         e.affixes ? e.affixes.join(',') : null, e.r !== e.t.radius ? r2(e.r) : null, e.ledT > 0 ? 1 : 0,  // 精英詞綴、體型（分裂後變小）、被統帥加成
         e.alertT > 0 ? r2(e.alertT) : 0, e.tgt || 0,  // 剛發現玩家（頭上「!」還顯示幾秒）、拖曳艦鎖定／牽引的玩家號碼（被拉的人自己拉自己，Game.beamPull）
-        e.grp || 0, e.lock || 0])),  // 同一隻精英（分裂、編隊）：精英血條同一條；多人時的王鎖定的玩家號碼（畫面標出來）
+        e.grp || 0, e.lock || 0, e.mode === 'rift' ? r(e.rx) : 0, e.mode === 'rift' ? r(e.ry) : 0])),  // 裂界獵艦・裂隙突襲的落點  // 同一隻精英（分裂、編隊）：精英血條同一條；多人時的王鎖定的玩家號碼（畫面標出來）
 
       et, ei,
       pk: G.pickups.map(c => [c.id, r(c.x), r(c.y), r2(c.life), r(c.vx), r(c.vy), c.vacuum ? 1 : 0]),
@@ -1313,7 +1313,7 @@ const Net = {
         mode: et[a[12]], modeT: num(a[13]), chargeA: num(a[14]), slowT: a[15] ? 1 : 0, burnT: a[16] ? 1 : 0, enraged: !!a[17], stuckN: num(a[18]),
         shieldA: typeof a[19] === 'number' ? a[19] : null, cloak: num(a[20]), dead: false,
         cd: typeof a[21] === 'number' ? a[21] : undefined, markT: a[22] ? 1 : 0, aheadId: type === 'worm' ? num(a[23]) : undefined,
-        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined, lock: num(a[30]) };
+        affixes: typeof a[24] === 'string' ? a[24].split(',').filter(id => AFFIX[id]).slice(0, 3) : null, ledT: a[26] ? 1 : 0, alertT: num(a[27]), tgt: num(a[28]), grp: num(a[29]) || undefined, lock: num(a[30]), rx: num(a[31]), ry: num(a[32]) };
     }).filter(Boolean);
     for (const id of arr(s.ei)) { const e = prev.get(id); if (e) G.enemies.push(e); }
     applyWeaponRow(P, s.ws);  // 武器狀態：敵人更新完才套（鉤爪找勾住的那隻）

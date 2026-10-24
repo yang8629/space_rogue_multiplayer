@@ -17,7 +17,19 @@ const CFG = {
   //   gather 集合圈：套在一個人身上，圈外的人受傷（大家擠進圈裡）；track 追蹤紅圈：每個人身上各一個，圈裡的人受傷（單人多人一樣）
   //   王的招式：招式表（ENEMY_TYPES 的 skills）裡的 mark，放的時候隨機一種（兩種合佔一格：使用者 10-24 說各佔一格太常出現）
   MARK: { follow: 0.5, hold: 0.5, r: 110, kinds: { gather: { name: '集合圈', dmg: 20 }, track: { name: '追蹤紅圈', dmg: 25 } } },
-  BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
+  BOSS_BOMB: { n: 4, nRage: 6, r: 110, delay: 1.2, dmg: 25 },
+  // 王的專屬新招（使用者 10-24；行為在 enemy_ai.js 的 BOSS_SKILL，招式表在 ENEMY_TYPES 的 skills）
+  BOSS_SKILL: {
+    devour: { t: 2, r: 900, speed: 150, stop: 70 },             // 星噬母艦・吞噬：t 秒內把 r 內的玩家往自己吸（每秒 speed，比飛船慢、頂得住），同時放螺旋彈
+    egg: { n: 3, hatch: 3, swarm: 4, dist: 230, hp: 0.6 },      // 星噬母艦・孵化囊：丟 n 顆卵（暴走 +1），hatch 秒後各孵 swarm 隻蟲群；打破就不孵；hp = 卵的血量倍率
+    rift: { t: 0.9, back: 170, windup: 0.35 },                 // 裂界獵艦・裂隙突襲：隱形 t 秒（落點畫裂縫），從目標背後 back 冒出來，蓄力 windup 秒就衝
+    scar: { every: 0.035, life: 4, r: 9, dmg: 12 },             // 裂界獵艦・空間裂痕：衝鋒路線每 every 秒留一顆不會動的敵彈，留 life 秒
+    overload: { t: 2, r: 320, dmg: 35 },                        // 終焉核心・過載脈衝：蓄力 t 秒，r 內看得到核心的人受傷（躲到柱子後面擋得住）
+    shard: { n: 4, t: 6, orbit: 120, spin: 1.2, cd: 1.1, hp: 0.25 },  // 終焉核心・核心碎片：n 塊繞著核心轉（每秒 spin 弧度），每 cd 秒朝玩家射一發，t 秒後碎掉
+    sweep: { t: 2.5, warn: 0.6, mul: 3 },                        // 雙子獵艦・光束橫掃：先慢下來 warn 秒，再隊形轉速 ×mul 轉 t 秒，中間的光束掃過去
+    cage: { t: 5, r0: 950, r1: 320, dmg: 8, every: 0.5 },       // 星環守門者・封鎖環：能量牆從 r0 收到 r1，牆外每 every 秒扣 dmg
+    reverse: { warn: 1 },                                       // 星環守門者・光束反轉：光束閃 warn 秒後反方向轉
+  },  // 終焉核心的落點轟炸：紅圈數（暴走後）、半徑、幾秒後爆炸、傷害  // 星噬核心（模組）：每 6 秒朝 6 個方向各用電路開一槍
   START_SLOTS: 3, MAX_SLOTS: 8, INV_SLOTS: 6,  // START_SLOTS 含武器格：開局 2 格晶片
   MECH_SLOT_EVERY: 0,       // 機體強化（零件每 1 層）每拿幾個，電路格 +1（0 = 關閉；10-08 關掉：旗艦改成電路插槽／零件格二選一，零件不再間接給電路格）
   RARE: { chance: 0.04, shop: 0.15, price: 2 },  // 稀有晶片：三選一每格晶片 chance、商店每件 shop 機率是稀有版，價錢 ×price；精英戰、寶藏的三選一保證一張

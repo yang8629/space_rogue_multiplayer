@@ -175,7 +175,13 @@ Object.assign(Game, {
   beamPull(P, dt) {
     if (P.dashT > 0 || !this.enemies.length) return;
     const me = this.slotOf(P), T = CFG.TRACTOR;
+    const D = CFG.BOSS_SKILL.devour;
     for (const e of this.enemies) {
+      if (e.mode === 'devour' && !e.dead) {  // 星噬母艦・吞噬：範圍內的人都被吸（比飛船慢，頂得住）
+        const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1, k = Math.min(D.speed * dt, d - (e.r + P.r + D.stop));
+        if (d < D.r && k > 0) { P.x += dx / d * k; P.y += dy / d * k; }
+        continue;
+      }
       if (e.mode !== 'pull' || e.tgt !== me || e.dead) continue;
       const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1, k = Math.min(T.speed * dt, d - (e.r + P.r + T.stop));
       if (k > 0) { P.x += dx / d * k; P.y += dy / d * k; }
@@ -210,7 +216,7 @@ Object.assign(Game, {
       const n = e.enraged ? 3 : 2;
       for (let k = 0; k < n; k++) {
         const a = e.rot + k * TAU / n, c = Math.cos(a), s = Math.sin(a), L = Arena.rayLen(e.x, e.y, a, 1500);
-        list.push({ x1: e.x + c * e.r, y1: e.y + s * e.r, x2: e.x + c * L, y2: e.y + s * L, w: warn ? 3 : W.beamW, dmg: warn ? 0 : W.beamDmg, from: `${e.t.name}（光束）`, warn });
+        list.push({ x1: e.x + c * e.r, y1: e.y + s * e.r, x2: e.x + c * L, y2: e.y + s * L, w: warn ? 3 : W.beamW, dmg: warn ? 0 : W.beamDmg, from: `${e.t.name}（光束）`, warn, rev: e.mode === 'reverse' });  // rev：快反轉了（畫面閃黃）
       }
     }
     this.beamMemo = { t: this.time, n: this.enemies, list };
