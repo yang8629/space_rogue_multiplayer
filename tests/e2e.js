@@ -96,7 +96,7 @@ ok(HA.Game.mates[0].L.wSock === 2, `weapon sockets synced to host (${HA.Game.mat
 const both = f => { f(HA); f(HB); };
 let drawn = 0, fights = 0, pausedChecked = false, sector2 = false, guard = 0, goChecked = false, treasChecked = false;
 let tractorChecked = false, beamChecked = false, nonFightChecked = false;  // nonFightChecked：補給站這類節點不倒數  // beamChecked：守門者的光束在隊友那邊轉得順  // 拖曳艦的牽引：被拉的人自己的電腦上拉、衝刺掙脫
-let alertChecked = false, hookChecked = false;  // hookChecked：牽引鉤勾隊友（被勾的人自己的電腦上被拉、衝刺掙脫、甩出去、倒下被拖）  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
+let alertChecked = false, hookChecked = false, bossSkillChecked = false;  // hookChecked：牽引鉤勾隊友（被勾的人自己的電腦上被拉、衝刺掙脫、甩出去、倒下被拖）  // 警戒（CFG.ALERT）、警報艇：「!」和響的倒數有同步到隊友
 function killAll() { for (const e of HA.Game.enemies) if (!e.dead && e.spawnT <= 0) e.hurt(1e6, 0, 0, 'direct', { src: 'weapon', cr: null, owner: Math.random() < 0.5 ? null : HA.Game.mates[0].L }); }
 function finishNode(H) {
   const G = H.Game;
@@ -258,6 +258,46 @@ while (!sector2 && guard++ < 40) {
       // 門檻照實測（2026-10-19，跑 8 次）：修好後最快每次都是房主的 1.47 倍（假網路的時間固定）、跟房主差最多 0.003 弧度；修之前 3.16 倍、45 幀不動
       ok(still === 0 && fast < dH * 1.6 && lag < 0.01, `warden beam turns smoothly on the client (still frames ${still}/${dC.length}, max ${(fast / dH).toFixed(2)}x host, lag ${lag.toFixed(3)} rad)`);
       core.dead = true; GA.enemies = GA.enemies.filter(e => e !== core); GA.player.iframe = GA.mates[0].iframe = 0;
+    }
+    if (!bossSkillChecked && type === 'combat') {  // 王的招式在多人：房主出招，隊友那邊看得到、照樣受影響（吞噬在自己的電腦上被吸、受傷照房主算）
+      bossSkillChecked = true;
+      const GA = HA.Game, CB = CL.T.Game, me = CB.player, mate = GA.mates[0], S = HA.CFG.BOSS_SKILL, out = [];
+      const save = GA.enemies; GA.enemies = []; step(3);
+      const spawn = (type, dx = 300) => { GA.enemies = GA.enemies.filter(e => !e.t.boss && e.type !== 'egg' && e.type !== 'core_shard'); const e = new HA.Enemy(type, me.x + dx, me.y, 1); e.spawnT = 0; e.alert = true; e.skillCd = 1e9; GA.enemies.push(e); if (e.t.twin) GA.makeTwin(e); for (const k of GA.enemies) { k.spawnT = 0; k.skillCd = 1e9; } step(3); return e; };
+      const cast = (e, k) => { e.forceSkill = k; e.skillCd = 0; e.mode = 'chase'; step(1); e.skillCd = 1e9; step(2); };
+      const ce = e => CB.enemies.find(x => x.id === e.id), hp = () => me.hp;
+      GA.player.iframe = 1e9;
+      // 鎖定：隊友那邊知道王鎖誰（畫瞄準角）
+      let e = spawn('boss3'); e.lock = 2; e.lockT = 99; step(3);
+      out.push(['鎖定', ce(e) && ce(e).lock === 2, `隊友看到鎖 ${ce(e) && ce(e).lock}P`]);
+      cast(e, 'mark'); GA.zones = []; e.markCast('track'); step(3);
+      out.push(['追蹤紅圈', CB.zones.filter(z => z.kind === 'track').length === 2 && CB.zones.some(z => z.slot === 2), `隊友看到 ${CB.zones.length} 個（${CB.zones.map(z => z.kind + z.slot).join(',')}）`]);
+      GA.zones = []; e.markCast('gather'); step(3);
+      out.push(['集合圈', CB.zones.length === 1 && CB.zones[0].kind === 'gather' && CB.zones[0].hold > 0, `隊友看到 ${CB.zones.map(z => z.kind).join(',')}`]);
+      GA.zones = []; step(3);
+      // 吞噬：隊友的船在自己的電腦上被吸（房主也看到他被吸過去）
+      e = spawn('boss', 500); const d0 = Math.hypot(me.x - e.x, me.y - e.y); cast(e, 'devour'); step(40);
+      const d1 = Math.hypot(me.x - e.x, me.y - e.y), dm = Math.hypot(mate.x - e.x, mate.y - e.y);
+      out.push(['吞噬', d1 < d0 - 60 && Math.abs(dm - d1) < 30, `隊友被吸近 ${Math.round(d0 - d1)}，房主看到的位置差 ${Math.round(Math.abs(dm - d1))}`]);
+      cast(e, 'egg'); out.push(['孵化囊', CB.enemies.filter(x => x.type === 'egg').length === S.egg.n, `隊友看到 ${CB.enemies.filter(x => x.type === 'egg').length} 顆卵`]);
+      e = spawn('boss2'); cast(e, 'rift'); step(5);
+      const c2 = ce(e); out.push(['裂隙突襲', c2 && c2.mode === 'rift' && c2.cloak > 0.5 && Math.hypot(c2.rx - e.rx, c2.ry - e.ry) < 30, `隊友看到 ${c2 && c2.mode}、落點差 ${c2 ? Math.round(Math.hypot(c2.rx - e.rx, c2.ry - e.ry)) : '?'}`]);
+      step(60); e = spawn('boss2'); cast(e, 'scar'); step(90);
+      out.push(['空間裂痕', CB.eBullets.filter(b => b.vx === 0 && b.vy === 0).length > 5, `隊友看到 ${CB.eBullets.filter(b => b.vx === 0 && b.vy === 0).length} 顆不會動的敵彈`]);
+      GA.eBullets = []; step(3);
+      e = spawn('boss3', 200); me.iframe = mate.iframe = 0; let h0 = hp(); cast(e, 'overload'); step(Math.ceil(S.overload.t * 60) + 5);
+      out.push(['過載脈衝', h0 - hp() > 0, `隊友在範圍內扣 ${Math.round(h0 - hp())}`]);
+      cast(e, 'shard'); out.push(['核心碎片', CB.enemies.filter(x => x.type === 'core_shard').length === S.shard.n, `隊友看到 ${CB.enemies.filter(x => x.type === 'core_shard').length} 塊`]);
+      e = spawn('boss4'); cast(e, 'xcharge');
+      out.push(['交叉衝鋒', CB.enemies.filter(x => x.t.twin && x.mode === 'windup').length === 2, `隊友看到 ${CB.enemies.filter(x => x.t.twin && x.mode === 'windup').length} 艘在蓄力`]);
+      step(90); e = spawn('boss4'); cast(e, 'sweep'); out.push(['光束橫掃', !!e.pair.sweepT && CB.enemies.filter(x => x.t.twin).length === 2, '房主開始橫掃、隊友看得到兩艘']);
+      e = spawn('boss5', 1000); mate.iframe = me.iframe = 0; h0 = hp(); cast(e, 'cage'); step(70);
+      const c5 = ce(e); out.push(['封鎖環', c5 && c5.mode === 'cage' && Math.abs(c5.modeT - e.modeT) < 0.2 && h0 - hp() > 0, `隊友看到 ${c5 && c5.mode}（倒數差 ${c5 ? Math.abs(c5.modeT - e.modeT).toFixed(2) : '?'}）、在牆外扣 ${Math.round(h0 - hp())}`]);
+      step(Math.ceil(S.cage.t * 60)); cast(e, 'reverse'); const c6 = ce(e), r0 = c6 && c6.rot, rev = CB.bossBeams().some(b => b.rev) || (c6 && c6.mode === 'reverse');
+      step(Math.ceil(S.reverse.warn * 60) + 10); const ra = c6 && ce(e).rot; step(30); const rb = ce(e) && ce(e).rot;
+      out.push(['光束反轉', rev && rb < ra, `隊友看到警告 ${rev}、反轉後轉向 ${rb < ra ? '變了' : '沒變'}`]);
+      for (const [n, c, txt] of out) ok(c, `boss skill in co-op: ${n}（${txt}）`);
+      GA.enemies = save; GA.zones = []; GA.eBullets = []; GA.player.iframe = mate.iframe = me.iframe = 0; step(3);
     }    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
       alertChecked = true;
       HA.Game.spawnEnemy('alarm'); const al = HA.Game.enemies[HA.Game.enemies.length - 1]; al.spawnT = 0;
