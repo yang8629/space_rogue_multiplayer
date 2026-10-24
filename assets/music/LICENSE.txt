@@ -1,0 +1,11 @@
+這個資料夾的背景音樂都來自 OpenGameArt.org，授權 Creative Commons Zero（CC0，公眾領域）：
+可以用在個人、教學、商業專案，不用標示作者。
+https://creativecommons.org/publicdomain/zero/1.0/
+
+檔名 = 遊戲裡的場合（audio.js 的 MUSIC_FILE）：
+  calm.mp3    基地、航圖、商店、三選一   Outer Space Loop（wipics）
+              https://opengameart.org/content/outer-space-loop        原檔 outer_space_2.mp3
+  battle.mp3  一般戰鬥、精英戰           Space Battle（MintoDog）
+              https://opengameart.org/node/172812                     原檔 space_battle_bpm130.mp3
+  boss.mp3    旗艦戰                     Hard Boss Battle 2（MintoDog）
+              https://opengameart.org/content/hard-boss-battle-2      原檔 hard_boss_battle_2_bpm210.mp3

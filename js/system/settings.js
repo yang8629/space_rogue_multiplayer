@@ -25,7 +25,6 @@ const Settings = {
     Save.save('settings', { vol: this.vol, musicVol: this.musicVol, shake: this.shake, fps: this.fps, detail: this.detail, unlockAll: this.unlockAll });
     if (k === 'unlockAll') CFG.UNLOCK_ALL = v;  // 基地的武器架、停機位每幀照 isUnlocked 畫，馬上跟著變
     if (k === 'vol') SFX.applyVolume();
-    if (k === 'musicVol') Music.applyVolume();
     if (k === 'detail') document.body.classList.toggle('detail', v);
   },
 };

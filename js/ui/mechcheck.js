@@ -460,7 +460,7 @@ const MechCheck = {
       e = boss('boss3', 200); cast(e, 'overload'); step(Math.ceil(S.overload.t * 60) + 2); const near = p.maxHp - p.hp;
       e = boss('boss3', S.overload.r + 200); cast(e, 'overload'); step(Math.ceil(S.overload.t * 60) + 2); const far = p.maxHp - p.hp;
       all &= ok('過載脈衝', near > 0 && far === 0, `範圍內扣 ${near}、範圍外扣 ${far}`);
-      e = boss('boss3'); cast(e, 'shard'); const sh = Game.enemies.filter(o => o.type === 'core_shard'); step(20); const orb = sh.every(o => Math.abs(Math.hypot(o.x - e.x, o.y - e.y) - S.shard.orbit) < 1);
+      e = boss('boss3'); cast(e, 'shard'); e.skillCd = 99; const sh = Game.enemies.filter(o => o.type === 'core_shard'); step(20); const orb = sh.every(o => Math.abs(Math.hypot(o.x - e.x, o.y - e.y) - S.shard.orbit) < 1);
       step(Math.ceil(S.shard.t * 60)); all &= ok('核心碎片', sh.length === S.shard.n && orb && !Game.enemies.some(o => o.type === 'core_shard'), `${sh.length} 塊${orb ? '繞著核心轉' : '沒繞著轉（錯）'}，時間到${Game.enemies.some(o => o.type === 'core_shard') ? '還在（錯）' : '碎掉'}`);
       e = boss('boss4'); cast(e, 'xcharge'); all &= ok('交叉衝鋒', Game.enemies.filter(o => o.t.twin && o.mode === 'windup').length === 2, '兩艘一起蓄力');
       e = boss('boss4'); const P = e.pair, a0 = P.ang; step(60); const slow = Math.abs(P.ang - a0); cast(e, 'sweep'); step(Math.ceil(S.sweep.warn * 60) + 1); const a1 = P.ang; step(60); const fast = Math.abs(P.ang - a1);

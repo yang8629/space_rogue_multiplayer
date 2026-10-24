@@ -493,6 +493,8 @@
 
 ## 技術說明
 
+音效（Kenney）和背景音樂（OpenGameArt）都是 CC0 授權（公眾領域，可商用、不用標示），每個檔的來源在 `assets/sfx/LICENSE.txt`、`assets/music/LICENSE.txt`。
+
 程式架構（分層、每個檔案負責什麼、多人連線誰算什麼、存檔、測試）：[`docs/架構.md`](docs/架構.md)。遊戲的目標與設計方向：[`docs/設計方向.md`](docs/設計方向.md)。
 
 ---
