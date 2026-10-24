@@ -511,7 +511,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="between"><h2>⚙ 設定</h2><button data-act="setback" data-back>返回 (Esc)</button></div>
       <div class="base-body set-body">
         <h3>聲音</h3>
-        ${slider('vol', '音效音量')}${slider('musicVol', '音樂音量')}
+        ${slider('master', '總音量')}${slider('vol', '音效音量')}${slider('musicVol', '音樂音量')}
         <div class="row"><button data-act="mute">${SFX.muted ? '🔇 音效關' : '🔊 音效開'}</button>
           <button data-act="music">${Music.on ? '🎵 音樂開' : '<span class="slash">🎵</span> 音樂關'}</button></div>
         <h3>畫面</h3>

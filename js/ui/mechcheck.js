@@ -2701,19 +2701,19 @@ const MechCheck = {
         got: `留下 ${a.recs.length} 筆紀錄（要 2）、章節 ${a.ch.join(',') || '無'}（要 2）、成績 ${P.runs} 局擊殺 ${P.kills}（不變）${keepOk ? '' : '（錯誤）'}；第二次${onceOk ? '不再刪' : '又做了一次（錯誤）'}；${newGot}${newOk ? '' : '（錯誤）'}；`
           + `2.20.0 紀錄換回：王 ${r0.bossIds.join(',')}、武器 ${r0.weapon}、迴旋 ${r0.play.boomerang}${convOk ? '' : '（錯誤）'}` };
     }],
-    ['介面', '設定', '設定頁的值存在瀏覽器、重新讀回來一樣；壞掉的存檔用預設值；音效音量只乘在音效上、音樂只照音樂音量；關掉畫面震動就不會震', M => {
-      const keep = localStorage.getItem(Save.KEYS.settings), old = { vol: Settings.vol, musicVol: Settings.musicVol, shake: Settings.shake, fps: Settings.fps, detail: Settings.detail, unlockAll: Settings.unlockAll }, ulk = CFG.UNLOCK_ALL;  // ulk：讀設定會改 CFG.UNLOCK_ALL（模擬預設全開），結束要還原
+    ['介面', '設定', '設定頁的值存在瀏覽器、重新讀回來一樣；壞掉的存檔用預設值；音效音量只乘在音效上、音樂只照音樂音量，總音量兩個都乘；關掉畫面震動就不會震', M => {
+      const keep = localStorage.getItem(Save.KEYS.settings), old = { master: Settings.master, vol: Settings.vol, musicVol: Settings.musicVol, shake: Settings.shake, fps: Settings.fps, detail: Settings.detail, unlockAll: Settings.unlockAll }, ulk = CFG.UNLOCK_ALL;  // ulk：讀設定會改 CFG.UNLOCK_ALL（模擬預設全開），結束要還原
       try {
         Settings.set('vol', 0.5); Settings.set('shake', false); Settings.set('fps', false);
         Settings.vol = 1; Settings.shake = true; Settings.fps = true; Settings.load();  // 重新讀
         const saved = Settings.vol === 0.5 && !Settings.shake && !Settings.fps && Settings.musicVol === old.musicVol;
-        const m = SFX.muted; SFX.muted = false; const gain = Math.abs(SFX.gainNow() - SFX.VOLUME * 0.5) < 1e-9, on = Music.on; Music.on = true; const mv = Music.gainNow(); Settings.vol = 1; const apart = Music.gainNow() === mv && mv > 0; Settings.vol = 0.5; Music.on = on; SFX.muted = m;
+        const m = SFX.muted; SFX.muted = false; const gain = Math.abs(SFX.gainNow() - SFX.VOLUME * 0.5) < 1e-9, on = Music.on; Music.on = true; const mv = Music.gainNow(); Settings.vol = 1; const apart = Music.gainNow() === mv && mv > 0; Settings.vol = 0.5; const s0 = SFX.gainNow(); Settings.master = 0.5; const both = Math.abs(SFX.gainNow() - s0 / 2) < 1e-9 && Math.abs(Music.gainNow() - mv / 2) < 1e-9; Settings.master = old.master; Music.on = on; SFX.muted = m;
         FX.shake = 0; Events.emit('shake', 12); const noShake = FX.shake === 0;
         Settings.set('shake', true); Events.emit('shake', 12); const shakes = FX.shake === 12; FX.shake = 0;
         localStorage.setItem(Save.KEYS.settings, '{"vol":"大聲","shake":3,"musicVol":9}'); Settings.load();
         const bad = Settings.vol === 1 && Settings.shake === true && Settings.musicVol === 1;
-        return { ok: saved && gain && apart && noShake && shakes && bad,
-          got: `存了再讀：${saved ? '音效音量 0.5、震動關、FPS 關' : '不對（錯誤）'}；音效${gain ? '照音效音量' : '沒乘（錯誤）'}、音樂${apart ? '不受音效音量影響' : '跟著音效音量變（錯誤）'}；震動關掉${noShake ? '不震' : '還在震（錯誤）'}、打開${shakes ? '會震' : '不震（錯誤）'}；壞掉的存檔${bad ? '用預設值' : '沒處理（錯誤）'}` };
+        return { ok: saved && gain && apart && both && noShake && shakes && bad,
+          got: `存了再讀：${saved ? '音效音量 0.5、震動關、FPS 關' : '不對（錯誤）'}；音效${gain ? '照音效音量' : '沒乘（錯誤）'}、音樂${apart ? '不受音效音量影響' : '跟著音效音量變（錯誤）'}、總音量${both ? '兩個都減半' : '沒乘到（錯誤）'}；震動關掉${noShake ? '不震' : '還在震（錯誤）'}、打開${shakes ? '會震' : '不震（錯誤）'}；壞掉的存檔${bad ? '用預設值' : '沒處理（錯誤）'}` };
       } finally {
         if (keep == null) localStorage.removeItem(Save.KEYS.settings); else localStorage.setItem(Save.KEYS.settings, keep);
         Object.assign(Settings, old); CFG.UNLOCK_ALL = ulk;
