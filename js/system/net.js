@@ -18,6 +18,9 @@ const NET_REJOIN_TIME = 120;  // 斷線後房間保留多久等隊友重連（�
 const NET_ROOM_RATE = 1 / 30;  // 房間（共用的基地）裡每秒同步幾次飛船位置（跟戰鬥一樣；以前 12 次，對方的船每 5 幀才跳一次：tests/roomlag.js）
 const NET_ROOM_STALE = 2000;   // 多久沒收到某人的位置就不畫他（ms）
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+// 對方傳來的取得紀錄 { up, got }（字串清單）：只收字串、限長度
+const netStrs = a => Array.isArray(a) ? a.filter(t => typeof t === 'string').slice(-80).map(t => t.slice(0, 120)) : [];
+const cleanGot = g => (g && typeof g === 'object' ? { up: netStrs(g.up), got: netStrs(g.got) } : null);
 const r2 = v => Math.round(v * 100) / 100;
 const BULLET_TOL = 4, BULLET_STALE = 4;  // 子彈：隊友那邊的直線預測差多少（px）才重送；隊友那邊過了射程幾秒還沒消息（訊息掉了）就自己拿掉
 const wormAhead = e => { let a = e.ahead; while (a && a.dead) a = a.ahead; return a ? a.id : 0; };
@@ -153,7 +156,7 @@ const Net = {
   },
   waitMods(on) { for (const q of this.peers) { const m = this.mateOf(q); q.modWait = !!on && q.linked && !!m && !m.gone; } },  // 房主：等隊友選好旗艦獎勵（二選一）
   modWaiting() { return this.peers.some(q => q.modWait); },
-  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; },
+  resetStats() { this.stats = { pings: [], snaps: 0, inputs: 0, lastRecv: 0, maxGap: 0, maxGapAt: '', gaps: 0 }; this.team = null; this.matePerf = null; this.teamGot = null; this.gotKey = ''; },
   close() {
     if (this.role) this.send({ t: 'bye' });  // 告訴對方我走了（連線的關閉通知不一定送得出去：關掉分頁時）
     const peer = this.peer, conns = [this.conn, ...this.peers.map(q => q.conn), ...this.pending.map(q => q.conn)];
@@ -219,7 +222,12 @@ const Net = {
     if (!mates.length) return;
     this.team = { 1: this.dmgPack(Game.runStats) };
     for (const m of mates) this.team[m.slot] = this.dmgPack(m.L.R, m.L);
-    this.send({ t: 'dmg', team: this.team });
+    // 每個人的取得紀錄（隊友的遊玩紀錄寫「房主取得」）：有變才帶（一份最多幾 KB，不用每秒送）
+    const R = Game.runStats, got = { 1: R ? { up: R.upgrades, got: R.got } : null };
+    for (const m of mates) got[m.slot] = m.L.gotLog || null;
+    const key = Object.values(got).map(g => g ? g.up.length + '.' + g.got.length : '-').join();
+    this.send({ t: 'dmg', team: this.team, ...(key !== this.gotKey ? { got } : {}) });
+    this.gotKey = key;
   },
   onDmg(m) {  // 隊友：收到每個人的傷害；自己那份寫進自己的 runStats（結算、紀錄都用它）
     const esc = s => String(s).slice(0, 40).replace(/[<>&"]/g, '');
@@ -231,6 +239,7 @@ const Net = {
         .map(([k, v]) => [String(k).slice(0, 40), Array.isArray(v) ? [esc(v[0]), /^#[0-9a-f]{3,8}$/i.test(v[1]) ? v[1] : '#8fa3d9'] : [esc(k), '#8fa3d9']])),
       kills: num(p.kills), maxHit: num(p.maxHit), downs: num(p.downs), revives: num(p.revives), el: num(p.el), ek: num(p.ek) } : null);
     const T = m.team && typeof m.team === 'object' ? m.team : {};
+    if (m.got && typeof m.got === 'object') { this.teamGot = {}; for (let s = 1; s <= NET_MAX; s++) if (s !== this.slot && m.got[s]) this.teamGot[s] = cleanGot(m.got[s]); }  // 其他人的取得紀錄
     this.team = {};
     for (let s = 1; s <= NET_MAX; s++) if (T[s]) this.team[s] = clean(T[s], s === this.slot);
     const R = Game.runStats, mine = this.team[this.slot];
@@ -1047,8 +1056,7 @@ const Net = {
     L.cap = clamp(Math.floor(num(m.cap, L.cap || 4)), 0, 40);
     L.wSock = clamp(Math.floor(num(m.ws, L.wSock || CFG.START_WSOCK)), 1, CFG.WEAPON_SOCKETS);
     L.bonusPicks = clamp(Math.floor(num(m.bp, L.bonusPicks || 0)), 0, 9);  // 開局三選一還剩幾次（隊友重新整理時還原）
-    const strs = a => Array.isArray(a) ? a.filter(t => typeof t === 'string').slice(-80).map(t => t.slice(0, 120)) : [];  // 隊友傳來的字串：只收字串、限長度
-    if (m.gotLog && typeof m.gotLog === 'object') L.gotLog = { up: strs(m.gotLog.up), got: strs(m.gotLog.got) };
+    if (m.gotLog && typeof m.gotLog === 'object') L.gotLog = cleanGot(m.gotLog);
     L.boons = cleanBoons(m.bn);  // ？事件的這一局效果（終焉護殼用掉時房主會先告訴隊友，所以以隊友傳來的為準）
     Game.withLoadout(L, () => { Game.stats = analyzeChain(Game.chain); Game.passives = computePassives(Game.inventory); Game.mech = mechStats(Game.parts, Game.boons); });
     mate.maxHp = Game.maxHpOf(mate.ship, L.passives, L.mech);
@@ -1113,7 +1121,8 @@ const Net = {
         matePerf: this.matePerf,  // 隊友那邊最慢的一幀（每秒的 ping 帶過來）
         team: this.teamRows().map(r => ({ who: `${r.tag}${r.me ? '（你）' : ''}`, ship: SHIPS[r.ship] ? SHIPS[r.ship].name : '？',
           dmg: Math.round(r.dmg), kills: r.kills, maxHit: Math.round(r.maxHit), downs: r.downs, revives: r.revives })),
-        mateGot: host ? G.mates.filter(m => m.L && m.L.gotLog).map(m => ({ tag: Game.tagOf(m), ...m.L.gotLog })) : [],  // 隊友的取得紀錄（隊友傳配裝時一起帶過來）
+        mateGot: host ? G.mates.filter(m => m.L && m.L.gotLog).map(m => ({ tag: Game.tagOf(m), ...m.L.gotLog }))  // 其他人的取得紀錄：房主有隊友傳配裝時帶過來的；隊友有房主同步傷害時帶過來的
+          : Object.keys(this.teamGot || {}).map(Number).sort((a, b) => a - b).map(s => ({ tag: `${s}P`, ...this.teamGot[s] })),
         mateChipDmg: (T => T.flatMap(t => t.rows.map(([n, , v]) => [(T.length > 1 ? `${t.tag} ` : '') + n, Math.round(v)])))(this.mateChipRows()),  // 隊友的晶片傷害（整局；三人以上名稱前面標號碼）
       },
     };

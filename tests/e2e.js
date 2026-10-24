@@ -398,6 +398,10 @@ while (!sector2 && guard++ < 40) {
         const lines = X => X.run('recordText(Net.buildRecord("test"))').split('\n');
         const mineB = lines(B).find(l => l.startsWith('取得 ')) || '', mateLine = lines(A).find(l => l.startsWith('隊友取得')) || '';
         ok(mineB && mateLine && mateLine.replace('隊友取得 ', '') === mineB.replace('取得 ', ''), `host record shows the client's pickups (${mateLine.slice(0, 60)} | client: ${mineB.slice(0, 60)})`);
+        // 反過來：隊友的紀錄有房主的取得紀錄（房主同步傷害統計時帶過來）
+        HA.Net.sendDmg(); pump();
+        const mineA = lines(A).find(l => l.startsWith('取得 ')) || '', hostLine = lines(B).find(l => l.startsWith('房主取得')) || '';
+        ok(mineA && hostLine && hostLine.replace('房主取得 ', '') === mineA.replace('取得 ', ''), `client record shows the host's pickups (${hostLine.slice(0, 60)} | host: ${mineA.slice(0, 60)})`);
       }
       sector2 = true;
       break;
