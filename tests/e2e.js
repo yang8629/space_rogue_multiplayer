@@ -233,15 +233,18 @@ while (!sector2 && guard++ < 40) {
         ok(grab && near && broke && regrab && flung && dragged, `hook a teammate: client pulled on its side (${grab}, ${near}), dash breaks (${broke}), fling (${flung}, v ${Math.round(vFl)}), downed dragged (${dragged})`);
       }
       // 很長的同步訊息（散彈＋環繞放開那一刻）：以前一則超過 PeerJS 的上限就送不出去、被當成斷線；現在切段送，隊友照樣收到
-      const big0 = tooBig;
+      //   這裡和下面的漩渦測的是同步，不是撞物件：生子彈那一下先拿掉地圖物件（隊友的位置是前面勾人測完留下的，10-25 有時落在小行星裡，600 顆一生出來就撞掉，房主 0 顆）
+      const big0 = tooBig, objs2 = GA.objs; GA.objs = [];
+      const where = A.run(`{ const M = Game.mates[0]; \`隊友在 \${Math.round(M.x)},\${Math.round(M.y)}、離牆 \${Math.round(Arena.f(M.x, M.y))}、狀態 \${Game.state}\`; }`);  // 沒過時印出來：子彈生在哪
       A.run(`{ const M = Game.mates[0]; for (let i = 0; i < 600; i++) spawnShots([shot({ speed: 20, life: 3 })], M.x, M.y, i / 600 * TAU, 0, null); }`);
       step(2);
       const sent = GA.bullets.length, got = CB.bullets.length;
-      ok(tooBig === big0 && sent >= 600 && got >= 600 && CL.T.Net.linked, `long snapshot is split, client still gets it (host ${sent} bullets, client ${got}, oversized messages ${tooBig - big0})`);
+      ok(tooBig === big0 && sent >= 600 && got >= 600 && CL.T.Net.linked, `long snapshot is split, client still gets it (host ${sent} bullets, client ${got}, oversized messages ${tooBig - big0}；${where})`);
       for (const b of GA.bullets) b.dead = true;
       A.run(`{ const M = Game.mates[0]; spawnShots([shot({ speed: 0, life: 1, vortex: 130 })], M.x, M.y, 0, 0, null); }`);  // 漩渦：隊友那邊也要知道吸引半徑（畫範圍圈）
       step(2);
       ok(CB.bullets.some(b => b.vortex === 130), `vortex radius synced to client (${CB.bullets.map(b => b.vortex).filter(Boolean).join() || 'none'})`);
+      GA.objs = objs2;  // 漩渦也生在隊友身上：測完才放回地圖物件
       for (const b of GA.bullets) b.dead = true;
       // 哨兵號的砲台有自己的武器狀態：隊友那邊要拿到砲台勾住的敵人（畫勾住的線）
       const hid = A.run(`{ const e = new Enemy('brute', Game.player.x + 200, Game.player.y, 1); e.spawnT = 0; Game.enemies.push(e); const q = new Turret(Game.player, Game.player.x, Game.player.y); q.t = 99; q.hookE = e; q.hookT = 99; Game.turrets.push(q); e ? e.id : 0; }`);
@@ -270,7 +273,7 @@ while (!sector2 && guard++ < 40) {
       const GA = HA.Game, CB = CL.T.Game, me = CB.player, mate = GA.mates[0], S = HA.CFG.BOSS_SKILL, out = [];
       const af = HA.Input.autoFire, afB = CL.T.Input.autoFire, dn = HA.Input.down, dnB = CL.T.Input.down; HA.Input.autoFire = CL.T.Input.autoFire = HA.Input.down = CL.T.Input.down = false;  // 兩邊都不開火（自動攻擊、按住開火）：自動攻擊朝王射牽引鉤，半路打中隊友會把他勾住（被勾住會被拉到房主前方，蓋過吞噬的吸力）
       HA.WEAPON_PLAY ? HA.WEAPON_PLAY.railgun.freeShip(GA.player) : (GA.player.hookShip = null); mate.grabBy = 0; step(3);
-      const save = GA.enemies; GA.enemies = []; step(3);
+      const save = GA.enemies, objsB = GA.objs, objsC = CB.objs; GA.enemies = []; GA.objs = []; CB.objs = []; step(3);  // 拿掉地圖物件：測的是招式同步，不是撞物件（10-25：吞噬時隊友被小行星擋住只吸近 1、空間裂痕的敵彈生在物件旁）
       const spawn = (type, dx = 300) => { GA.enemies = GA.enemies.filter(e => !e.t.boss && e.type !== 'egg' && e.type !== 'core_shard'); const A = HA.Arena, ok2 = (x, y) => A.rect || (A.f(x, y) > 160 && !A.losPoint(me.x, me.y, x, y, 8)), a0 = [0, 1, 2, 3, 4, 5, 6, 7].map(i => i * Math.PI / 4).find(a => ok2(me.x + Math.cos(a) * dx, me.y + Math.sin(a) * dx)) || 0;  // 大地圖：挑周圍有空地、中間沒有牆的方向（以前固定往右，有時候生在牆邊：衝鋒一出手就撞牆、吞噬隔著牆拉不動）
         const e = new HA.Enemy(type, me.x + Math.cos(a0) * dx, me.y + Math.sin(a0) * dx, 1); e.spawnT = 0; e.alert = true; e.skillCd = 1e9; GA.enemies.push(e); if (e.t.twin) GA.makeTwin(e); for (const k of GA.enemies) { k.spawnT = 0; k.skillCd = 1e9; } step(3); return e; };
       const cast = (e, k) => { e.forceSkill = k; e.skillCd = 0; e.mode = 'chase'; step(1); e.skillCd = 1e9; step(2); };
@@ -306,7 +309,7 @@ while (!sector2 && guard++ < 40) {
       step(Math.ceil(S.reverse.warn * 60) + 10); const ra = c6 && ce(e).rot; step(30); const rb = ce(e) && ce(e).rot;
       out.push(['光束反轉', rev && rb < ra, `隊友看到警告 ${rev}、反轉後轉向 ${rb < ra ? '變了' : '沒變'}`]);
       for (const [n, c, txt] of out) ok(c, `boss skill in co-op: ${n}（${txt}）`);
-      GA.enemies = save; HA.Input.autoFire = af; CL.T.Input.autoFire = afB; HA.Input.down = dn; CL.T.Input.down = dnB; GA.zones = []; GA.eBullets = []; GA.player.iframe = mate.iframe = me.iframe = 0; step(3);
+      GA.enemies = save; GA.objs = objsB; CB.objs = objsC; HA.Input.autoFire = af; CL.T.Input.autoFire = afB; HA.Input.down = dn; CL.T.Input.down = dnB; GA.zones = []; GA.eBullets = []; GA.player.iframe = mate.iframe = me.iframe = 0; step(3);
     }    if (!alertChecked && type === 'combat') {  // 分區的一般戰：敵人出場先待機；打到警報艇 → 隊友看到「!」和響的倒數
       alertChecked = true;
       HA.Game.spawnEnemy('alarm'); const al = HA.Game.enemies[HA.Game.enemies.length - 1]; al.spawnT = 0;
