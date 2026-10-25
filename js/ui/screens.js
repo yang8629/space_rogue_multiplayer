@@ -42,8 +42,8 @@ function dmgKeyColor(key) {
     : CHIPS[key] ? TYPE_META[CHIPS[key].type].color : '#8fa3d9';
 }
 
-// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、插件金、機體強化（零件）銀白
-const CARD_CAT = { chip: '晶片', comp: '插件', mech: '機體強化' };
+// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、插件金、零件銀白
+const CARD_CAT = { chip: '晶片', comp: '插件', mech: '零件' };
 const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 
 // 武器卡片的內容（選武器、軍械庫）：名稱、一句話；詳細 = 說明、數值、三條升級路線
@@ -392,7 +392,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       if (id === 'slot') return slotCard();
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
-        return partCard(k, `<button ${ok && !no(id) ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
+        return partCard(k, `<button ${ok && !no(id) ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「零件」
       }
       const ok = Game.canAcquire(id) && !no(id), label = no(id) ? '選擇' : ok ? '選擇' : '倉庫已滿';
       return chipCard(id, placeLine(id) + `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);

@@ -143,7 +143,7 @@ const Game = {
       : mode === 'range' ? ['weapon', null, null, null, null, null] : mode === 'tutorial' ? ['weapon', null, null] : startChain(startChip);  // 靶場：6 格空電路；新手教學：晶片在教學中途給（game/tutorial.js）
     this.socks = mode === 'sandbox' ? [['amp']] : mode === 'range' || mode === 'tutorial' ? [] : startSocks(startChip);
     this.inventory = mode === 'sandbox' || mode === 'range' || mode === 'tutorial' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是插件 → 插武器（見 startSocks）
-    this.playKills = {}; this.unlockFresh = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
+    this.playKills = {}; this.unlockFresh = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾層零件  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
     this.credits = this.freePlay() ? 999 : 0;

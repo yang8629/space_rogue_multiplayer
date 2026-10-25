@@ -335,7 +335,7 @@ while (!sector2 && guard++ < 40) {
     }
     step(10);
     ok(HB.Game.objs.length === HA.Game.objs.filter(o => o.type !== 'cometgen').length, `map objects synced (${HB.Game.objs.map(o => o.type).join(',') || 'none'})`);
-    const sA0 = HA.Game.chain.length, sB0 = HB.Game.chain.length;  // 打之前的插槽數（零件的機體強化也會 +1，所以跟打之前比）
+    const sA0 = HA.Game.chain.length, sB0 = HB.Game.chain.length;  // 打之前的插槽數（零件湊滿也會 +1，所以跟打之前比）
     const cA0 = HA.Game.credits, cB0 = HB.Game.credits, rw = { combat: 0, elite: 15, boss: 50 }[type];
     if (type !== 'boss') ok(!HA.Arena.rect && HB.Arena.seed === HA.Arena.seed && HB.Arena.W === HA.Arena.W && HB.Arena.gates.length === HA.Arena.gates.length, `${type}: client built the same big map (seed ${HB.Arena.seed} / ${HA.Arena.seed})`);
     let gatesSeen = 0, crystalsHost = 0, crystalsSeen = 0;  // 晶體：房主地上有的時候，隊友那邊也要看得到

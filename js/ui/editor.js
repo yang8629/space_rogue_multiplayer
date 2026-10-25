@@ -605,7 +605,7 @@ const Editor = {
     });
     row.appendChild(this.addSlot(free));
     this.chainEl.appendChild(row);
-    this.countEl.innerHTML = `空位 ${free} · <span>插件 ${sockCount()}</span>${CFG.MECH_SLOT_EVERY && chain.length < CFG.MAX_SLOTS ? ` · <span>機體強化 ${(Game.mechN || 0) % CFG.MECH_SLOT_EVERY} / ${CFG.MECH_SLOT_EVERY} → 電路格 +1</span>` : ''}`;
+    this.countEl.innerHTML = `空位 ${free} · <span>插件 ${sockCount()}</span>${CFG.MECH_SLOT_EVERY && chain.length < CFG.MAX_SLOTS ? ` · <span>零件 ${(Game.mechN || 0) % CFG.MECH_SLOT_EVERY} / ${CFG.MECH_SLOT_EVERY} → 電路格 +1</span>` : ''}`;
 
     this.invEl.innerHTML = '';
     Game.inventory.forEach((_, i) => this.invEl.appendChild(this.makeSlot(Game.inventory, i, 'inv', '倉庫 ' + (i + 1))));

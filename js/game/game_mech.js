@@ -63,7 +63,7 @@ Object.assign(Game, {
     p.streak = 0;  // 無傷連殺
   },
   // 零件：加 1 層（零件格滿了就不行）、換零件（改裝廠）
-  // 機體強化（零件 1 層）：每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
+  // 零件：每拿 1 層算 1 個，每拿 CFG.MECH_SLOT_EVERY 個，電路格 +1（最多 MAX_SLOTS）；回傳要接在提示後面的文字
   mechGain() {
     const k = CFG.MECH_SLOT_EVERY;
     if (!k) return '';
@@ -71,8 +71,8 @@ Object.assign(Game, {
     if (this.mechN % k || this.chain.length >= CFG.MAX_SLOTS) return '';
     this.chain.push(null);
     this.recalc();
-    if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（機體強化）`);
-    return `；機體強化 ${this.mechN} 個：電路格 +1`;
+    if (this.runStats) this.runStats.got.push(`${this.here()} 插槽 +1（零件）`);
+    return `；零件 ${this.mechN} 層：電路格 +1`;
   },
   addPart(id) {
     if (!PARTS[id] || partsUsed(this.parts) >= this.partSlots) return false;

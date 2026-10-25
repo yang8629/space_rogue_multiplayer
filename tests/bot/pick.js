@@ -9,7 +9,7 @@ const SCORE_FIX = { trigger: 1.0, scrap: 0 };
 const nearKey = (obj, L) => Object.keys(obj).map(Number).reduce((a, b) => Math.abs(b - L) < Math.abs(a - L) ? b : a);
 // 換電路格：拿這層零件多出來的電路格價值
 //   一格的價值 = 倉庫裡最好的、還沒裝上的晶片分數（裝得上去）；倉庫沒有 → 0.5（要等之後再拿到晶片才用得到）；電路本來就有空格 → 0（用不到）
-//   這層零件湊滿一格（第 k、2k… 個機體強化）→ 整格的價值；沒湊滿 → 1/k
+//   這層零件湊滿一格（第 k、2k… 層零件）→ 整格的價值；沒湊滿 → 1/k
 function slotGain() {
   const C = CFG, k = C.MECH_SLOT_EVERY;
   if (!k || G.chain.length >= C.MAX_SLOTS || G.chain.includes(null)) return 0;
@@ -19,7 +19,7 @@ function slotGain() {
 }
 function chipScore(id) {
   if (!id) return -1;
-  // 零件：試裝後整套配裝的分數變幾倍（bot/value.js；2026-10-09 以前一律 1.05）；機體強化換電路格開著時（CFG.MECH_SLOT_EVERY = k）再加上「多一格電路」的價值 × 這層零件佔的份量
+  // 零件：試裝後整套配裝的分數變幾倍（bot/value.js；2026-10-09 以前一律 1.05）；零件換電路格開著時（CFG.MECH_SLOT_EVERY = k）再加上「多一格電路」的價值 × 這層零件佔的份量
   if (!CH[id]) {
     const part = String(id).startsWith('part:') && PARTS[String(id).slice(5)];  // 三選一的零件代號是 part:零件
     return part ? partScore(String(id).slice(5)) + slotGain() : 1.05;
