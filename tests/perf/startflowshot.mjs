@@ -69,6 +69,7 @@ await p2.evaluate(() => { Tutorial.go(7); }); await wait(2500); await shot2('7�
 await p2.evaluate(() => { Tutorial.go(8); }); await wait(1500); await shot2('7教學9精英');
 await p2.evaluate(() => Tutorial.escDown()); await wait(400); await p2.screenshot({ path: SHOTS + '開局_7教學10按住Esc.png' });
 await wait(1200); console.log('按住 Esc 之後：', await p2.evaluate(() => `${Game.mode} / ${Game.state}、看過 ${Save.flag('tutorial', false)}`));
+for (let k = 0; k < 40 && await p2.evaluate(() => !!Hub.seq); k++) await wait(100);  // 等回航過場播完
 await p2.evaluate(() => { const z = HUB.zones.find(q => q.id === 'tutorial'); Hub.build(z.x + 50, z.y, Math.PI); }); await wait(800); await shot2('8大廳_新手教學終端機');
 await b.close();
 console.log('done');
