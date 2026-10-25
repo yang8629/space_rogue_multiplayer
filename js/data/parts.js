@@ -26,7 +26,7 @@ const PARTS = {
     t4: { id: 'ram', name: '衝撞', desc: '撞到敵人造成「最大 HP × 45%」傷害並撞飛，自己不受碰撞傷害（HP 越高撞越痛）' } },
   larmor:  { name: '輕裝甲', color: '#9fe8ff', fx: [{ stat: 'dashCd', v: -8, pct: true }, { stat: 'taken', v: 3, pct: true }],
     t2: { id: 'deflect', name: '偏折', desc: '被打到後的無敵時間 +0.8 秒' },
-    t4: { id: 'streak', name: '無傷連殺', desc: `沒被打中時每擊殺 1 隻，傷害 +${STREAK.per * 100}%（最多 ${STREAK.max} 層 +${STREAK.per * STREAK.max * 100}%）；被打中就歸零（護盾擋下不算）` } },
+    t4: { id: 'streak', name: '無傷連殺', desc: `沒被打中時每擊殺 1 隻，傷害 +${pct(STREAK.per)}（最多 ${STREAK.max} 層 +${pct(STREAK.per * STREAK.max)}）；被打中就歸零（護盾擋下不算）` } },
   booster: { name: '加速器', color: '#4cc9f0', fx: [{ stat: 'speed', v: 6, pct: true }, { stat: 'hp', v: -10 }],
     t2: { id: 'gale', name: '疾風', desc: '移動中射速 +20%' },
     t4: { id: 'assault', name: '突擊', desc: '衝刺穿過的敵人受到「武器傷害 × 4」' } },

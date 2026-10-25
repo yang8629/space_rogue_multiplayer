@@ -546,6 +546,14 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
+    ['說明文字', '百分比、數字沒有長小數', '電路總覽（規則、晶片、插件、機體、武器）、航圖節點、零件特性、新手教學的文字裡沒有 4 位以上的小數（直接乘 100 沒四捨五入：0.03 × 15 × 100 = 44.99999999999999%）', M => {
+      const texts = [Codex.rules(), Codex.chips(), Codex.comps(), Codex.bodyTab(), Codex.weapons(),
+        ...Object.values(NODE_META).map(n => typeof n.desc === 'function' ? n.desc() : n.desc || ''),
+        ...Object.values(PARTS).flatMap(P => [P.up, P.dn, P.t2 && P.t2.desc, P.t4 && P.t4.desc]),
+        ...TUTORIAL.map(s => s.goal()), ...Object.values(TUTORIAL_TERMS).map(t => t.text())];
+      const bad = texts.flatMap(t => { const p = String(t || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '); return [...p.matchAll(/\d+\.\d{4,}/g)].map(m => p.slice(Math.max(0, m.index - 16), m.index + m[0].length)); });  // 連前面幾個字一起印（看是哪一段）
+      return { ok: !bad.length, got: bad.length ? `有長小數：${[...new Set(bad)].slice(0, 4).join('｜')}（錯）` : `掃了 ${texts.length} 段，沒有長小數` };
+    }],
     ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；排熱一開始先停下來指熱度條、右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；插插件時泡泡框依序說明倉庫、插件、指著插座，只能插在教學的晶片上；打完回基地、記下看過`, M => {
       const flag = Save.raw('tutorial'), log = [];
       const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
@@ -1333,7 +1341,7 @@ const MechCheck = {
       const q = Game.player; Game.state = 'play'; q.iframe = 0; q.dashT = 0; Game.hurtPlayer(30, 'mc', q);
       const other = q.drRec || 0;
       const ok = Math.abs(rec - lost * G.share) < 0.01 && early === 0 && Math.abs(back - rec) < 0.5 && Math.abs(cap - p.maxHp * G.cap) < 0.01 && endRec === 0 && Math.abs(end - (hpEnd0 + cap)) < 0.01 && other === 0;
-      return { ok, got: `扣 ${lost.toFixed(1)} 血：灰血 ${rec.toFixed(1)}；${G.delay - 0.1} 秒內回 ${early}、之後回 ${back.toFixed(1)}；連續挨打：灰血上限 ${cap.toFixed(1)}（最大 HP ${p.maxHp} 的 ${G.cap * 100}%）；戰鬥結束 ${Math.round(hpEnd0)} → ${Math.round(end)}（灰血剩 ${endRec}）；先鋒號灰血 ${other}` };
+      return { ok, got: `扣 ${lost.toFixed(1)} 血：灰血 ${rec.toFixed(1)}；${G.delay - 0.1} 秒內回 ${early}、之後回 ${back.toFixed(1)}；連續挨打：灰血上限 ${cap.toFixed(1)}（最大 HP ${p.maxHp} 的 ${pct(G.cap)}）；戰鬥結束 ${Math.round(hpEnd0)} → ${Math.round(end)}（灰血剩 ${endRec}）；先鋒號灰血 ${other}` };
     }],
     ['機體', '幻影號：殘影', '衝刺時在起點留下殘影：附近 400 內的敵人追殘影（400 外照樣追玩家），1.5 秒後消失；其他飛船沒有殘影', M => {
       M.setup('sandbox', 'wraith', 'laser', null, null, ['weapon', null, null, null]); M.targets([]);
@@ -1608,7 +1616,7 @@ const MechCheck = {
         () => pocket(1200, 900, [0, 1, 2, 3, 4, 5].map(i => [Math.cos(i / 6 * TAU) * 40, Math.sin(i / 6 * TAU) * 40, 24]), [900, 900], [0, 200], true),
       ]);
     }],
-    ['地圖物件', '黑洞：正中間也扣血', `敵人在黑洞核心裡每秒扣最大 HP 的 ${OBJ.HOLE_PCT * 100}%（至少每 0.25 秒 10），剛好在正中間也一樣`, M => {
+    ['地圖物件', '黑洞：正中間也扣血', `敵人在黑洞核心裡每秒扣最大 HP 的 ${pct(OBJ.HOLE_PCT)}（至少每 0.25 秒 10），剛好在正中間也一樣`, M => {
       // 2026-10-16 整局模擬（散彈第 66 局）：蟲群被拉到正中間（離中心不到 1）又自己走出一點、來回擺，以前那一段整個跳過、永遠不扣血，戰鬥卡住
       M.setup('sandbox', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, hx = p.x + 400, hy = p.y;
@@ -1903,7 +1911,7 @@ const MechCheck = {
       return { ok: !w1 && allBug && L.length === want && Math.abs(per1s - 1 / CFG.SWARM.gap) <= 2 && tight && Math.abs(k - CFG.SWARM.hp) < 0.01,
         got: `第 1 區${w1 ? '是蟲潮（錯誤）' : '照常'}；第 2 區 ${L.length} 隻（應為 ${want}）${allBug ? '全是蟲群' : '混了別的（錯誤）'}；1 秒出場 ${per1s} 隻；前 ${CFG.SWARM.clump} 隻${tight ? '擠在一起' : '散開（錯誤）'}；血量 ×${k.toFixed(2)}` };
     }],
-    ['敵人', '精英亂入', `3 區的一般戰鬥、第 2 區以後：這一區都出場、剩 ${CFG.INTRUDE.at * 100}% 以下時闖進一隻帶詞綴的精英（只闖一次）；分裂的兩隻都打掉：打贏後多一次三選一`, M => {
+    ['敵人', '精英亂入', `3 區的一般戰鬥、第 2 區以後：這一區都出場、剩 ${pct(CFG.INTRUDE.at)} 以下時闖進一隻帶詞綴的精英（只闖一次）；分裂的兩隻都打掉：打贏後多一次三選一`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, intrude: 2 });
       const C = Game.combat, els = () => Game.enemies.filter(e => e.intruder);
@@ -1969,7 +1977,7 @@ const MechCheck = {
       return { ok: idle0 && still && called && seen && awake && kIdle && kWake,
         got: `出場${idle0 ? '待機' : '就追（錯誤）'}；2 秒內離出生點最遠 ${Math.round(drift)}、敵彈 ${Game.eBullets.length}；打 a：a ${a.alert ? '醒' : '沒醒'}、100 外的 b ${bCall ? '醒' : '沒醒（錯誤）'}、420 外的 c ${cCall ? '醒（錯誤）' : '沒醒'}；靠近 c 到 ${CFG.ALERT.see - 30}：${seen ? '醒' : '沒醒'}；精英亂入／寶藏／不分區：${[intr, tre, one].map(e => e.alert ? '醒' : '待機').join('／')}；母巢 5 秒生 ${kids.length} 隻${kIdle ? '、在旁邊待機' : '（沒待機或跑遠，錯誤）'}、打母巢後${kWake ? '全醒' : '沒全醒'}` };
     }],
-    ['敵人', '警報艇', `分區的戰鬥第 ${CFG.ALARM.from} 區以後每區 ${CFG.ALARM.chance * 100}% 放 1 隻（蟲潮那區不放）；不攻擊、撞到不扣血；被打到開始響、往遠離玩家的方向逃，${CFG.ALARM.delay} 秒後開始每 ${CFG.ALARM.every} 秒叫醒身邊 ${CFG.ALARM.r} 以內待機的敵人（邊逃邊叫）；倒數內打掉就完全不會叫`, M => {
+    ['敵人', '警報艇', `分區的戰鬥第 ${CFG.ALARM.from} 區以後每區 ${pct(CFG.ALARM.chance)} 放 1 隻（蟲潮那區不放）；不攻擊、撞到不扣血；被打到開始響、往遠離玩家的方向逃，${CFG.ALARM.delay} 秒後開始每 ${CFG.ALARM.every} 秒叫醒身邊 ${CFG.ALARM.r} 以內待機的敵人（邊逃邊叫）；倒數內打掉就完全不會叫`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 3, id: 'mc' }; Game.startCombat({ level: 3, wavesTotal: 3, elites: 0, swarm: 3 }); Arena.reset();
       Game.objs = [];  // 開戰時隨機放的地圖物件（行星、小行星帶）會擋住逃跑路線
@@ -2055,7 +2063,7 @@ const MechCheck = {
       const sync = e2.ev === 'chart' && e2.evArg === e.evArg && back.find(n => n.id === t.id).hoard && back.filter(n => n.hoard).length === 1;
       return { ok: !bad.length && two >= N * 0.9 && sync, got: `${N} 張：${bad.length ? '問題 ' + [...new Set(bad)].join('、') : '都符合'}；2 個以上的 ${two} 張；同步${sync ? '帶著事件和寶藏星域' : '少了東西（錯誤）'}` };
     }],
-    ['事件', '漂流殘骸', `搜刮：HP −最大 HP 的 ${CFG.EVENT.wreck.hp * 100}%（最少留 1）、晶片三選一；拆反應爐 ${CFG.EVENT.wreck.core.chance * 100}%：先揭曉，再三選一 ${1 + CFG.EVENT.wreck.core.again} 次，失敗 HP −${CFG.EVENT.wreck.core.hp * 100}%；離開：什麼都不變`, M => {
+    ['事件', '漂流殘骸', `搜刮：HP −最大 HP 的 ${pct(CFG.EVENT.wreck.hp)}（最少留 1）、晶片三選一；拆反應爐 ${pct(CFG.EVENT.wreck.core.chance)}：先揭曉，再三選一 ${1 + CFG.EVENT.wreck.core.again} 次，失敗 HP −${pct(CFG.EVENT.wreck.core.hp)}；離開：什麼都不變`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       const p = Game.player, node = { id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'wreck' };
       Game.openEvent(node); const st0 = Game.state, hp0 = p.hp;
@@ -2112,7 +2120,7 @@ const MechCheck = {
         got: `全力救援${flag ? '記下' : '沒記下（錯誤）'}；下一場精英戰${elite ? '帶著、用掉了' : '沒帶到（錯誤）'}；一波的預算 ${c0} → ${c1}（應為 ${want(sc.full.mul)}）；打贏之後再選 ${add} 次${rare ? '' : '（錯誤）'}；` +
           `只護送：預算 ${c2}（應為 ${want(sc.escort.mul)}）、${again ? '多一次三選一' : '沒有多一次（錯誤）'}、${done ? '之後回航圖' : '沒回航圖（錯誤）'}；隊友全力＋自己護送：×${team.sos}、拿${team.sosKey}；自己被發現＋隊友護送：×${team2.sos}、拿${team2.sosKey}` };
     }],
-    ['事件', '終焉護殼', `裝上：這一局一次受到致命傷害時留 1 HP、無敵 ${CFG.EVENT.ward.iframe} 秒，受到的傷害 +${CFG.EVENT.ward.taken * 100}%，用掉之後再受到致命傷害就會被擊墜；拆下核心：回復最大 HP 的 ${CFG.EVENT.ward.heal * 100}%`, M => {
+    ['事件', '終焉護殼', `裝上：這一局一次受到致命傷害時留 1 HP、無敵 ${CFG.EVENT.ward.iframe} 秒，受到的傷害 +${pct(CFG.EVENT.ward.taken)}，用掉之後再受到致命傷害就會被擊墜；拆下核心：回復最大 HP 的 ${pct(CFG.EVENT.ward.heal)}`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', null, null, null]);
       Game.node = { type: 'combat', L: 1, id: 'mc', next: [] }; Game.startCombat({ level: 1, wavesTotal: 1, elites: 0 });
       const p = Game.player, t0 = Game.mech.taken, node = { id: 'mcev', L: 1, k: 0, n: 1, type: 'event', next: [], ev: 'ward' };
@@ -2126,7 +2134,7 @@ const MechCheck = {
       return { ok: healed === Math.round(p.maxHp * CFG.EVENT.ward.heal) && w0 === 1 && hud === 1 && Math.abs(t1 - t0 - CFG.EVENT.ward.taken) < 1e-9 && saved && died,
         got: `拆下核心回 ${healed}；裝上後免死 ${w0} 次（血條旁顯示 ${hud}）、受到的傷害 ×${t0.toFixed(2)} → ×${t1.toFixed(2)}；第一次致命傷害${saved ? '留 1 HP、無敵、標示消失' : `沒擋下（HP ${p.hp}）`}；第二次${died ? '被擊墜' : '沒死（錯誤）'}` };
     }],
-    ['事件', '星圖情報：寶藏星域', `解讀座標：標出產生航圖時決定的第 1 場；強行破解 ${CFG.EVENT.chart.chance * 100}%：標出 2 場，失敗：下一場敵人 ×${CFG.EVENT.sos.caught.mul}、什麼都沒標；寶藏星域每一區都有一架寶藏無人機，打掉幾架就多幾次三選一`, M => {
+    ['事件', '星圖情報：寶藏星域', `解讀座標：標出產生航圖時決定的第 1 場；強行破解 ${pct(CFG.EVENT.chart.chance)}：標出 2 場，失敗：下一場敵人 ×${CFG.EVENT.sos.caught.mul}、什麼都沒標；寶藏星域每一區都有一架寶藏無人機，打掉幾架就多幾次三選一`, M => {
       M.setup('run', 'vanguard', 'laser', null, null, ['weapon', 'boomerang', null, null]);
       let m, e;
       for (let i = 0; i < 50 && !e; i++) { m = genMap(); e = m.flat().find(n => n.type === 'event' && n.ev === 'chart'); }

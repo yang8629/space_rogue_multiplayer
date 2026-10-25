@@ -170,6 +170,8 @@ const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx 
 const SHIELD_OUT = 13;  // 盾衛的盾外緣比身體多多少（畫面上的盾在 r+6～r+13）：子彈從盾那一側碰到這裡就反彈、飛船撞到就被彈開
 const angleDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
 const mod = (v, m) => ((v % m) + m) % m;
+// 比例 → 百分比文字（四捨五入到整數：直接乘 100 會出現 0.03 × 15 × 100 = 44.99999999999999%）
+const pct = v => Math.round(v * 100) + '%';
 // 射擊間隔倍率 → 說明文字：間隔 ×0.7 寫成「射速加快 1.43 倍」（紅），×1.3 寫成「射速變慢 1.3 倍」（綠）
 const rateTxt = (m, pre = '') => m < 1
   ? `<span style='color:#ff6b6b'>射速${pre}加快 ${+(1 / m).toFixed(2)} 倍</span>`

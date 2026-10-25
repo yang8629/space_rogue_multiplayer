@@ -20,7 +20,6 @@ const COMBO = { reset: 0.6, sweepT: 0.09, steps: [
   { name: '反手斬', sweep: 1, dmg: 1.15, grow: 1, wide: 1, lunge: 0, cd: 1 },
   { name: '重斬', sweep: 0, dmg: 2.2, grow: 1.5, wide: 1.6, lunge: 380, cd: 2 }] };
 // ===== 武器（2026-10-21）：每把武器左鍵累積、右鍵兌現。這裡只放數值、說明、升級樹；行為在 game/weapon_play.js =====
-const pct = v => Math.round(v * 100) + '%';
 // 熱能光束（laser）：每發加熱 per，滿了過熱停火 lock 秒；沒開火每秒降 cool；右鍵排熱：熱度 min 以上才能用，熱度換成 n 道衝擊波（射程 r）
 const HEAT = { per: 0.03, cool: 0.4, wait: 1, lock: 1.5, min: 0.25, n: 18, dmg: 70, r: 170, cd: 2.5 };  // cd：排熱冷卻（10-23 使用者：0.8 太短 → 2.5）；wait：最後一發之後幾秒才開始降溫（10-24 使用者：熱度掉太快）
 // 連段（2026-10-22，使用者：其他武器也要有能量刃那種連段回饋）：每把照自己的玩法；收尾不額外觸發武器線

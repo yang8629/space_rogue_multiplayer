@@ -23,7 +23,7 @@ const SHIPS = {
     brief: '血多、耐打；受到的傷害有一部分之後會慢慢回來。',
     ability: 'gray', abilityName: '灰血',
     abilityDesc: [
-      `受到的傷害有 ${CFG.GRAY.share * 100}% 變成灰血（血條上淡色那段，最多最大 HP 的 ${CFG.GRAY.cap * 100}%）`,
+      `受到的傷害有 ${pct(CFG.GRAY.share)} 變成灰血（血條上淡色那段，最多最大 HP 的 ${pct(CFG.GRAY.cap)}）`,
       `${CFG.GRAY.delay} 秒沒被打到就開始回，每秒 ${CFG.GRAY.rate}`,
       '戰鬥結束時剩下的灰血回滿',
     ] },
@@ -53,7 +53,7 @@ const SHIPS = {
     ability: 'turret', abilityName: '砲台',
     abilityDesc: [
       `衝刺時在起點留下一座砲台（${CFG.TURRET.t} 秒，同時只有一座）`,
-      `用你的武器和整條電路打射程內最近的敵人（傷害 ${CFG.TURRET.dmg * 100}%，射速跟飛船一樣）`,
+      `用你的武器和整條電路打射程內最近的敵人（傷害 ${pct(CFG.TURRET.dmg)}，射速跟飛船一樣）`,
       `熱度、飛輪、重力井、鉤爪、無人機都是砲台自己一份`,
       `你按右鍵時砲台跟著做：排熱、召回（飛輪飛回你手上）、塌縮、甩擊、彈反、收攏（無人機飛來你身邊）`,
     ] },

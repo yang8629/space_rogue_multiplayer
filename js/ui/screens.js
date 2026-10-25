@@ -433,7 +433,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="cards">${cards}</div>
       <div class="row" style="justify-content:center">
         ${Game.shop.healed ? '<button disabled>已補血</button>'
-          : `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_REPAIR.price) && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${Game.shopHealHp()}（最大 HP 的 ${CFG.SHOP_REPAIR.ratio * 100}%，◆ ${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）</button>`}
+          : `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_REPAIR.price) && Game.player.hp < Game.player.maxHp ? '' : 'disabled'} data-act="heal">✚ 補血 HP +${Game.shopHealHp()}（最大 HP 的 ${pct(CFG.SHOP_REPAIR.ratio)}，◆ ${Game.shopPrice(CFG.SHOP_REPAIR.price)}，限 1 次）</button>`}
         ${!Game.shop.slotBought && Game.chain.length < CFG.MAX_SLOTS
           ? `<button ${Game.credits >= Game.shopPrice(CFG.SHOP_SLOT) ? '' : 'disabled'} data-act="slot" data-arg="shop">🔌 電路擴充 插槽 +1（◆ ${Game.shopPrice(CFG.SHOP_SLOT)}，每間限 1 次）</button>` : ''}
         <button data-act="leave">離開補給站</button></div>

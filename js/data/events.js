@@ -11,22 +11,21 @@
 // 雙人：每個人各自選、各自賭；扣血、晶體、三選一、護殼都是自己的。
 //   下一場變難（求救訊號、星圖情報被發現）和寶藏星域是全隊的：誰觸發都告訴所有人（Game.addSos、Game.markHoard）
 //   team：全隊投票的事件（多人時選項＝投票，到齊或時間到由房主照票數抽籤，結果全隊一樣；Game.evResolve、Net.evVote）
-const pctTxt = v => `${Math.round(v * 100)}%`;
 const leaveOpt = (lab, msg) => ({ lab, txt: () => lab, go: () => msg });
-const chanceTxt = v => `🎲 ${pctTxt(v)}`;
+const chanceTxt = v => `🎲 ${pct(v)}`;
 // 下一場變難的說明（CFG.EVENT.sos 的一種）：敵人 +x%、打贏的獎勵
 const sosTxt = k => { const S = CFG.EVENT.sos[k];
-  return `下一場戰鬥（一般戰鬥或精英戰）敵人 +${pctTxt(S.mul - 1)}${S.bonus ? `，打贏後多 ${CFG.BONUS[S.bonus].again} 次三選一` : ''}${S.again ? `，打贏後多一次三選一` : ''}`; };
+  return `下一場戰鬥（一般戰鬥或精英戰）敵人 +${pct(S.mul - 1)}${S.bonus ? `，打贏後多 ${CFG.BONUS[S.bonus].again} 次三選一` : ''}${S.again ? `，打贏後多一次三選一` : ''}`; };
 const hoardIds = node => String(node.evArg || '').split('|').filter(Boolean);  // 星圖情報可以標的寶藏星域（第一個 = 解讀座標標的那個）
 const EVENTS = {
   wreck: {
     name: '漂流殘骸', icon: '⚙', color: '#8fa3d9',
     text: () => '一艘被擊毀的運輸艦在漂流，貨艙還封著。反應爐很不穩定，靠近一定會被波及；要是敢拆開反應爐，裡面的核心晶片可值錢了。',
     opts: [
-      { lab: '搜刮', txt: G => `搜刮貨艙：HP −${G.evHp(CFG.EVENT.wreck.hp)}（最大 HP 的 ${pctTxt(CFG.EVENT.wreck.hp)}，最少留 1 HP），晶片三選一`,
+      { lab: '搜刮', txt: G => `搜刮貨艙：HP −${G.evHp(CFG.EVENT.wreck.hp)}（最大 HP 的 ${pct(CFG.EVENT.wreck.hp)}，最少留 1 HP），晶片三選一`,
         go: G => { G.evHurt(CFG.EVENT.wreck.hp); G.openReward('event', { note: '漂流殘骸的貨艙' }); return true; } },
       { lab: '拆反應爐', txt: G => { const C = CFG.EVENT.wreck.core;
-          return `${chanceTxt(C.chance)} 強行拆反應爐：成功 → 三選一 ${1 + C.again} 次；失敗 → 爆炸 HP −${G.evHp(C.hp)}（最大 HP 的 ${pctTxt(C.hp)}，最少留 1 HP），什麼都沒拿到`; },
+          return `${chanceTxt(C.chance)} 強行拆反應爐：成功 → 三選一 ${1 + C.again} 次；失敗 → 爆炸 HP −${G.evHp(C.hp)}（最大 HP 的 ${pct(C.hp)}，最少留 1 HP），什麼都沒拿到`; },
         go: G => { const C = CFG.EVENT.wreck.core;
           if (Math.random() < C.chance) return { msg: '✦ 拆到了！完好的核心晶片', color: '#ffd166', then: G => { G.openReward('event', { again: C.again, note: '反應爐的核心晶片' }); return true; } };
           const hp = G.evHurt(C.hp);
@@ -38,14 +37,14 @@ const EVENTS = {
     name: '黑市商人', icon: '⚖', color: '#ff9f1c',
     text: () => '一艘沒有識別碼的貨船靠過來：「改造晶片、走私零件、還有幾個連我都不知道裝了什麼的包裹。改造晶片要拆掉你一點裝甲，其他的付錢就行。」',
     opts: [
-      { lab: '改造晶片', txt: G => `改造晶片：◆${G.shopPrice(CFG.EVENT.market.price)}，這一局最大 HP −${pctTxt(CFG.EVENT.market.hpCut)}；三選一 ${1 + CFG.EVENT.market.again} 次`,
+      { lab: '改造晶片', txt: G => `改造晶片：◆${G.shopPrice(CFG.EVENT.market.price)}，這一局最大 HP −${pct(CFG.EVENT.market.hpCut)}；三選一 ${1 + CFG.EVENT.market.again} 次`,
         can: G => G.credits >= G.shopPrice(CFG.EVENT.market.price),
         go: G => G.pay(G.shopPrice(CFG.EVENT.market.price), () => { G.boons.hp++; G.recalc(); G.openReward('event', { again: CFG.EVENT.market.again, note: '黑市的改造晶片' }); }) },
       { lab: '走私零件', txt: G => `走私零件：◆${G.shopPrice(CFG.EVENT.market.part)}，零件三選一（佔 1 個零件格）${partsUsed(G.parts) < G.partSlots ? '' : '——零件格已滿'}`,
         can: G => G.credits >= G.shopPrice(CFG.EVENT.market.part) && partsUsed(G.parts) < G.partSlots,
         go: G => G.pay(G.shopPrice(CFG.EVENT.market.part), () => { G.openReward('eventPart', { note: '黑市的走私零件' }); }) },
       { lab: '神祕包裹', txt: G => { const B = CFG.EVENT.market.box;
-          return `🎲 神祕包裹：◆${G.shopPrice(B.price)}，${pctTxt(B.chip)} 直接拿到一個晶片、${pctTxt(1 - B.chip)} 空包${G.inventory.includes(null) ? '' : '——倉庫已滿'}`; },
+          return `🎲 神祕包裹：◆${G.shopPrice(B.price)}，${pct(B.chip)} 直接拿到一個晶片、${pct(1 - B.chip)} 空包${G.inventory.includes(null) ? '' : '——倉庫已滿'}`; },
         can: G => G.credits >= G.shopPrice(CFG.EVENT.market.box.price) && G.inventory.includes(null),
         go: G => { const B = CFG.EVENT.market.box;
           G.pay(G.shopPrice(B.price), () => {});
@@ -70,9 +69,9 @@ const EVENTS = {
     name: '終焉護殼', icon: '⛨', color: '#ffd166',
     text: () => '殘骸裡有一具還能運作的終焉護殼：能撐住一次致命的攻擊，但它會干擾機體的護甲。也可以拆下它的能量核心，馬上修好船。',
     opts: [
-      { lab: '裝上', txt: () => `裝上：這一局有一次受到致命傷害時留 1 HP、無敵 ${CFG.EVENT.ward.iframe} 秒；這一局受到的傷害 +${pctTxt(CFG.EVENT.ward.taken)}`,
+      { lab: '裝上', txt: () => `裝上：這一局有一次受到致命傷害時留 1 HP、無敵 ${CFG.EVENT.ward.iframe} 秒；這一局受到的傷害 +${pct(CFG.EVENT.ward.taken)}`,
         go: G => { G.boons.ward++; G.boons.taken++; G.recalc(); return '裝上終焉護殼：這一局可以免死一次'; } },
-      { lab: '拆下核心', txt: G => `拆下核心：馬上回復 HP +${G.evHp(CFG.EVENT.ward.heal)}（最大 HP 的 ${pctTxt(CFG.EVENT.ward.heal)}）`,
+      { lab: '拆下核心', txt: G => `拆下核心：馬上回復 HP +${G.evHp(CFG.EVENT.ward.heal)}（最大 HP 的 ${pct(CFG.EVENT.ward.heal)}）`,
         go: G => { const p = G.player, hp = G.evHp(CFG.EVENT.ward.heal); p.hp = Math.min(p.maxHp, p.hp + hp); return `拆下核心：HP +${hp}`; } },
       leaveOpt('不碰它，離開', '你留下了護殼'),
     ],
@@ -89,7 +88,7 @@ const EVENTS = {
         go: (G, node) => {
           if (Math.random() < CFG.EVENT.chart.chance) { G.markHoard(hoardIds(node)); return { msg: '✦ 破解成功！標出 2 個寶藏星域', color: '#ffd166' }; }
           G.addSos('caught');
-          return { msg: `⚠ 被發現了！下一場敵人 +${pctTxt(CFG.EVENT.sos.caught.mul - 1)}`, color: '#ff4d6d' }; } },
+          return { msg: `⚠ 被發現了！下一場敵人 +${pct(CFG.EVENT.sos.caught.mul - 1)}`, color: '#ff4d6d' }; } },
     ],
   },
 };
