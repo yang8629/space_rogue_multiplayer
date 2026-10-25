@@ -546,7 +546,7 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
-    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；排熱一開始先停下來指熱度條、右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；打完回基地、記下看過`, M => {
+    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；排熱一開始先停下來指熱度條、右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；插插件時泡泡框依序說明倉庫、插件、指著插座；打完回基地、記下看過`, M => {
       const flag = Save.raw('tutorial'), log = [];
       const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
       const at = () => (TUTORIAL[Tutorial.i] || { id: '結束' }).id, P = () => Game.player;
@@ -585,7 +585,11 @@ const MechCheck = {
           if (R) { Game.takeReward(R.options[1]); if (Game.state !== 'reward') log.push('選插件也收了（只能選晶片，錯）'); Game.takeReward(R.options[0]); }
         },
         trigger: () => fireRow('迴旋'),
-        plug: () => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc(); },
+        plug: () => {
+          const seen = []; for (let k = 0; k < 4; k++) { const t = Tutorial.tipNow(); seen.push(t ? t.title + (t.dim ? '' : '（不壓暗）') : '沒有'); Tutorial.nextTip(); }
+          if (seen.join('、') !== '倉庫、插件、拖到這裡（不壓暗）、拖到這裡（不壓暗）') log.push(`插件的泡泡框依序：${seen.join('、')}（錯）`);
+          const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc();
+        },
         burn: () => fireRow('燃燒'),
         fight: killAll,
         elite: () => { const e = Game.enemies.find(q => q.t.elite); if (!e || Math.abs(e.maxHp - ENEMY_TYPES[CFG.TUTORIAL.elite].hp * CFG.TUTORIAL.eliteHp) > 1) log.push(`精英血量 ${e && Math.round(e.maxHp)}（錯）`); killAll(); },

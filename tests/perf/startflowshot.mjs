@@ -53,8 +53,9 @@ const fireUntilHalt = async name => {
 await fireUntilHalt('7教學5迴旋');
 await p2.evaluate(() => { Input.down = true; }); await wait(3000); await p2.evaluate(() => { Input.down = false; });
 console.log('迴旋那步之後：', await p2.evaluate(() => `第 ${Tutorial.i} 步 ${(TUTORIAL[Tutorial.i] || {}).id}`));
-await p2.evaluate(() => Tutorial.go(5)); await wait(300); await p2.evaluate(() => Game.toggleEditor()); await shot2('7教學6插件_電路');
-await p2.click('.bb-cover'); await shot2('7教學6插件_電路_收起');
+await p2.evaluate(() => Tutorial.go(5)); await wait(300); await p2.evaluate(() => Game.toggleEditor()); await shot2('7教學6插件_1倉庫');
+await p2.click('.bb-cover'); await shot2('7教學6插件_2插件');
+await p2.click('.bb-cover'); await shot2('7教學6插件_3拖到這裡');
 await p2.evaluate(() => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Editor.changed(); Game.toggleEditor(); }); await wait(1600);
 await fireUntilHalt('7教學7燃燒');
 await p2.evaluate(() => { Tutorial.go(7); }); await wait(2500); await shot2('7教學8實戰');

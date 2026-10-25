@@ -484,6 +484,7 @@ const Editor = {
   // 插座：晶片卡下面的大圓。h = 第幾格的晶片，k = 第幾個插座（空的插座 id 是 null）
   sockEl(h, k, J) {
     const el = document.createElement('div'), C = Game.chain, S = Game.socks[h] || [], id = S[k] || null;
+    el.dataset.sock = h + ':' + k;  // 新手教學的泡泡框照這個找插座
     if (id) {
       const m = TYPE_META[CHIPS[id].type], on = this.sel && this.sel.from === 'sock' && this.sel.h === h && this.sel.k === k;
       el.className = 'sock' + (J && J.idle ? ' idle' : '') + (on ? ' sel' : '');
@@ -527,6 +528,7 @@ const Editor = {
   makeSlot(arr, i, from, label, cls, idle, why, lv = lvOf(arr[i])) {
     const slot = document.createElement('div');
     slot.className = 'slot' + (cls ? ' ' + cls : '');
+    slot.dataset.slot = from + ':' + i;  // 新手教學的泡泡框照這個找格子
     slot.innerHTML = `<span class="idx">${label}</span>`;
     const id = arr[i];
     if (id) {

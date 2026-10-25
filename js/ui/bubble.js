@@ -15,12 +15,20 @@ const Bubble = {
     this.cover.addEventListener('click', () => { SFX.play('click'); Tutorial.nextTip(); this.sync(); });
     addEventListener('resize', () => this.sync());
   },
-  // 指著的地方（螢幕上的矩形）：三選一第 i 張卡片、電路畫面倉庫裡的 item（拖走了就收起來）、戰場上的位置
+  // 指著的地方（螢幕上的矩形）：照物件找（選項 id、倉庫格、插座的 data- 標記），不照畫面上第幾個（排版改了不用跟著改）；三選一第 i 張卡片、電路畫面的倉庫（整個、裡面的 item：拖走了就收）、教學晶片的空插座、戰鬥畫面左上角、戰場上的位置
   rect(t) {
-    if (t.at === 'card') { const el = Game.state === 'reward' && Screen.el.querySelectorAll('.cards > .card')[t.i]; return el ? el.getBoundingClientRect() : null; }
+    if (t.at === 'card') { const b = Game.state === 'reward' && Screen.el.querySelector(`[data-act="reward"][data-arg="${t.item}"]`), el = b && b.closest('.card'); return el ? el.getBoundingClientRect() : null; }  // 照選項 id 找那張的按鈕
+    if (t.at === 'invbox' && Game.state === 'editor') return Editor.invEl.getBoundingClientRect();
+    if (t.at === 'sock' && Game.state === 'editor') {  // 教學晶片下一個空插座（插好了就收）
+      const i = Tutorial.chipAt(), S = Game.socks[i] || [];
+      if (i < 0 || S.includes(CFG.TUTORIAL.plug)) return null;
+      const el = Editor.el.querySelector(`[data-sock="${i}:${S.length}"]`);
+      return el ? el.getBoundingClientRect() : null;
+    }
     if (t.at === 'inv' && Game.state === 'editor') {
       const k = Game.inventory.findIndex(id => id && baseOf(id) === t.item);
-      return k >= 0 ? Editor.invEl.children[k].getBoundingClientRect() : null;
+      const el = k >= 0 && Editor.el.querySelector(`[data-slot="inv:${k}"]`);
+      return el ? el.getBoundingClientRect() : null;
     }
     if (t.at === 'hud' && HUD_AT[t.item] && Game.state === 'play') {
       const c = canvas.getBoundingClientRect(), h = HUD_AT[t.item];
@@ -51,6 +59,7 @@ const Bubble = {
     this.el.classList.toggle('hidden', !r);
     this.spot.classList.toggle('hidden', !r);
     if (!r) return;
+    this.spot.classList.toggle('soft', !t.dim);  // 不壓暗：只留亮框
     const P = 6;  // 亮著的範圍比指著的東西大一點
     Object.assign(this.spot.style, { left: r.left - P + 'px', top: r.top - P + 'px', width: r.width + 2 * P + 'px', height: r.height + 2 * P + 'px', borderRadius: r.round ? '50%' : '8px' });
     this.el.innerHTML = `<div class="bb-ttl">${t.title}</div><div class="bb-txt">${t.text}</div>${t.stay ? '' : '<div class="bb-next">點畫面繼續</div>'}`;

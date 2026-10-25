@@ -36,7 +36,7 @@ const TUTORIAL_PLAY = {
   },
   reward: {  // 正式的三選一畫面：晶片、插件、零件各一張，只能選晶片（Game.reward.only）；選完回戰場（CFG.REWARDS.tutorial 的 after）
     setup() {
-      const T = CFG.TUTORIAL, options = [chipId(T.chip, 1), T.plug, 'part:' + T.part];
+      const options = tutorialOptions();
       Game.openReward('tutorial', { options, only: options[0] });
       Game.view();
     },
@@ -50,7 +50,7 @@ const TUTORIAL_PLAY = {
   },
   plug: {
     keep: true,  // 前排留著
-    setup() { Tutorial.give(CFG.TUTORIAL.plug); },
+    setup() { const T = CFG.TUTORIAL; if (!Game.inventory.includes(T.plug) && !Game.socks.some(s => s && s.includes(T.plug))) Tutorial.give(T.plug); },  // 已經有了就不再給
     done: () => { const i = Tutorial.chipAt(); return i >= 0 && (Game.socks[i] || []).includes(CFG.TUTORIAL.plug); },
   },
   burn: {  // 同樣的隊形、後排血比較厚：迴旋刃帶著燃燒；第一隻燒起來停下來說明
@@ -123,7 +123,7 @@ const Tutorial = {
     const term = t.term && TUTORIAL_TERMS[t.term];
     if (t.cue && !this.S.cued) return null;  // 等這一步說「發生了」
     const title = term ? term.title : typeof t.title === 'function' ? t.title() : t.title;
-    return { title, text: (term || t).text(), at: t.at, i: t.i, item: t.item && t.item(), stay: !!t.stay, cue: !!t.cue, pos: t.cue ? this.S.cueAt : null };
+    return { title, text: (term || t).text(), at: t.at, item: t.item && t.item(), stay: !!t.stay, dim: t.dim !== false, cue: !!t.cue, pos: t.cue ? this.S.cueAt : null };
   },
   // 戰場上發生了要說明的事（迴旋刃打到後排、後排燒起來）：記下位置、停住戰場、叫畫面跳泡泡框
   cue(S, e) { S.cued = true; S.cueAt = { x: e.x, y: e.y, r: e.t.radius }; Events.emit('tutorialTip'); },

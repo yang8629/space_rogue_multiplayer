@@ -594,6 +594,7 @@ i.new { position: absolute; top: -7px; right: -7px; font-style: normal; font-siz
 /* 新手教學的泡泡框（ui/bubble.js）：金屬底、深色描邊、金色邊和光；箭頭（::after）指著卡片、倉庫格或戰場上的位置，--ax = 箭頭離左邊多遠 */
 /* bb-spot：指著的東西那一塊亮著，其他地方用它的大陰影壓暗（點得穿：stay 的時候要能按到底下的按鈕） */
 .bb-spot { position: fixed; z-index: 60; pointer-events: none; box-shadow: 0 0 0 200vmax rgba(3, 5, 12, .72), 0 0 16px 4px rgba(255, 209, 102, .55); }
+.bb-spot.soft { box-shadow: 0 0 16px 4px rgba(255, 209, 102, .7); }  /* 不壓暗（要從倉庫拖東西過來）：只留亮框 */
 .bb-cover { position: fixed; inset: 0; z-index: 61; cursor: pointer; }
 .bubble { position: fixed; z-index: 62; width: 260px; padding: 12px 14px; pointer-events: none;
   background: linear-gradient(180deg, #1d2a52 0%, #0c1330 100%); border: 1px solid #ffd166; border-radius: 6px;
