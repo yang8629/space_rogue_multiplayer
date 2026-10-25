@@ -609,6 +609,19 @@ const MechCheck = {
         return { ok: !log.length, got: (log.length ? log.join('；') : `${TUTORIAL.length} 步都照順序換，打完回基地`) + `；後排打完：迴旋 ${secs['迴旋']}、燃燒 ${secs['燃燒']}` };
       } finally { if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
     }],
+    ['新手教學', '迴旋的隊形橫著排、在畫面裡', '飛船在場地中間正下方、靠右牆、靠左牆時：前排和後排都跟飛船同一個高度（橫著排），最遠那隻離飛船不超過半個畫面寬', M => {
+      const flag = Save.raw('tutorial'), c = Arena.center, bad = [], half = (ZW || innerWidth / ZOOM) / 2;  // 半個畫面寬（Node 測試沒有畫面：用視窗寬）
+      try {
+        Tutorial.begin();
+        for (const [name, x, y] of [['正下方', c.x, c.y + 500], ['靠右牆', Arena.W - 80, c.y], ['靠左牆', 80, c.y]]) {
+          Game.enemies = []; Game.player.x = x; Game.player.y = y;
+          Tutorial.row(10); const P = Game.player;
+          const far = Math.max(...Game.enemies.map(e => Math.abs(e.x - P.x))), tilt = Math.max(...Game.enemies.map(e => Math.abs(e.y - P.y)));
+          if (tilt > 1 || far > half) bad.push(`${name}：上下差 ${Math.round(tilt)}、最遠 ${Math.round(far)}（半個畫面 ${Math.round(half)}）`);
+        }
+        return { ok: !bad.length, got: bad.length ? bad.join('；') + '（錯）' : '三個位置都橫著排、在畫面裡' };
+      } finally { Game.pauseMenu = false; if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
+    }],
     ['新手教學', '按住 Esc 跳過', `按住 Esc ${CFG.TUTORIAL.skipHold} 秒跳過回基地；沒按滿就放開 = 打開選單、不跳過；第一次開遊戲才自動進`, M => {
       const flag = Save.raw('tutorial');
       try {

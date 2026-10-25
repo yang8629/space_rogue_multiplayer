@@ -140,10 +140,11 @@ const Tutorial = {
     Game.exit = P ? { x: Arena.center.x + P[0], y: Arena.center.y + P[1], r: CFG.TUTORIAL.pointR, label: '目標' } : null;
   },
   alive() { return Game.enemies.filter(e => !e.dead).length; },
-  // 迴旋的隊形：前排一隻打不死（光束被它擋住），後面一列 n 隻（血量 hp）；朝場地中間排（飛船靠牆時不排到牆外）
+  // 迴旋的隊形：前排一隻打不死（光束被它擋住），後面一列 n 隻（血量 hp）
+  //   一律橫著排、往場地中間那一側（飛船靠牆時不排到牆外）：直著排時整列約 440 長，畫面上下 720 放不下（10-25 使用者看到最後幾隻在畫面外）
   row(hp) {
-    const T = CFG.TUTORIAL.row, p = Game.player, c = Arena.center, far = Math.hypot(c.x - p.x, c.y - p.y) > 200;
-    const a = far ? Math.atan2(c.y - p.y, c.x - p.x) : 0, at = d => [p.x + Math.cos(a) * d, p.y + Math.sin(a) * d];
+    const T = CFG.TUTORIAL.row, p = Game.player;
+    const a = Arena.center.x >= p.x ? 0 : Math.PI, at = d => [p.x + Math.cos(a) * d, p.y];
     Range.spawn(1, ...at(T.dist), { type: T.front, move: false, kill: false, lv: 1 });
     const out = [];
     for (let k = 1; k <= T.n; k++) for (const e of Range.spawn(1, ...at(T.dist + ENEMY_TYPES[T.front].radius + k * T.gap), { type: 'swarmer', move: false, kill: true, lv: 1 })) { e.hp = e.maxHp = hp; out.push(e); }
