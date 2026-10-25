@@ -89,7 +89,7 @@ const Tutorial = {
     this.i = i; this.S = {}; this.wait = 0; Game.exit = null;
     const st = TUTORIAL[i];
     if (!st) { this.endT = CFG.TUTORIAL.endT; bannerFx('教學完成', '回到基地', CFG.TUTORIAL.endT); return; }
-    if (!TUTORIAL_PLAY[st.id].keep) Game.enemies = [];
+    if (!TUTORIAL_PLAY[st.id].keep) { Game.enemies = []; Game.bullets = []; Game.eBullets = []; }  // 新場地：上一步還在飛的子彈（迴旋刃）也清掉，免得一生出來就被打到
     if (i === 0 || TUTORIAL[i - 1].sec !== st.sec) bannerFx(st.sec, '', 1.6);  // 新的一段
     TUTORIAL_PLAY[st.id].setup(this.S);
     Events.emit('tutorialTip');  // 這一步一開始就有泡泡框（熱度條）：叫畫面畫
@@ -140,14 +140,19 @@ const Tutorial = {
     Game.exit = P ? { x: Arena.center.x + P[0], y: Arena.center.y + P[1], r: CFG.TUTORIAL.pointR, label: '目標' } : null;
   },
   alive() { return Game.enemies.filter(e => !e.dead).length; },
-  // 迴旋的隊形：前排一隻打不死（光束被它擋住），後面一列 n 隻（血量 hp）
+  // 插插件那一步：教學的插件只能插在教學的晶片上（插到飛船的插座就看不到迴旋刃燒起來）；不能插回傳原因（ui/editor.js 的 canPlug 顯示）
+  plugLock(h, id) {
+    const st = TUTORIAL[this.i], T = CFG.TUTORIAL;
+    return st && st.id === 'plug' && baseOf(id) === T.plug && h !== this.chipAt() ? `這次插在${CHIPS[T.chip].name}下面的插座` : '';
+  },
+  // 迴旋的隊形：前排一隻打不死（光束被它擋住），後面一列 n 隻（血量 hp，只有迴旋刃打得到）
   //   一律橫著排、往場地中間那一側（飛船靠牆時不排到牆外）：直著排時整列約 440 長，畫面上下 720 放不下（10-25 使用者看到最後幾隻在畫面外）
   row(hp) {
     const T = CFG.TUTORIAL.row, p = Game.player;
     const a = Arena.center.x >= p.x ? 0 : Math.PI, at = d => [p.x + Math.cos(a) * d, p.y];
     Range.spawn(1, ...at(T.dist), { type: T.front, move: false, kill: false, lv: 1 });
     const out = [];
-    for (let k = 1; k <= T.n; k++) for (const e of Range.spawn(1, ...at(T.dist + ENEMY_TYPES[T.front].radius + k * T.gap), { type: 'swarmer', move: false, kill: true, lv: 1 })) { e.hp = e.maxHp = hp; out.push(e); }
+    for (let k = 1; k <= T.n; k++) for (const e of Range.spawn(1, ...at(T.dist + ENEMY_TYPES[T.front].radius + k * T.gap), { type: 'swarmer', move: false, kill: true, lv: 1 })) { e.hp = e.maxHp = hp; e.hurtBy = CFG.TUTORIAL.chip; out.push(e); }  // 後排只有迴旋刃打得到（光束從旁邊直接打也打不死）
     return out;
   },
   give(id) { const k = Game.inventory.indexOf(null); if (k >= 0) Game.inventory[k] = id; },  // 放進倉庫第一個空格

@@ -510,6 +510,7 @@ const Game = {
           if (e.shieldA == null || d2 >= (rr + SHIELD_OUT) ** 2 || Math.abs(angleDiff(Math.atan2(b.py - e.y, b.px - e.x), e.shieldA)) >= Math.PI / 3) continue;
         }
         b.hitSet.add(e.id);
+        if (e.immuneTo(b.att)) continue;  // 打不到的（新手教學的後排）：穿過去，不算命中、不觸發晶片
         if (e.shieldA != null) {  // 盾衛：從盾的那一側（±60°）打過來的子彈反彈回去
           const ca = Math.atan2(b.py - e.y, b.px - e.x);
           if (Math.abs(angleDiff(ca, e.shieldA)) < Math.PI / 3) { this.wakeEnemy(e); this.reflectShot(e, b, ca); break; }  // 打在盾上不扣血，待機的也會醒（CFG.ALERT）

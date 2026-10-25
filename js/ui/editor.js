@@ -409,7 +409,8 @@ const Editor = {
     this.changed();
   },
   canPlug(h, compId, used) {  // 不能插的原因（可以插回傳空字串）
-    const hostId = Game.chain[h];
+    const hostId = Game.chain[h], lock = Game.mode === 'tutorial' && Tutorial.plugLock(h, compId);
+    if (lock) return lock;  // 新手教學：這一步指定插哪
     if (!isHost(hostId)) return `${CHIPS[hostId].name}沒有插座（插件插在武器或晶片上）`;
     if (used >= socketsOf(hostId)) return `${CHIPS[hostId].name}的插座滿了（${socketsOf(hostId)} 個）${hostId === 'weapon' ? '；武器插座每打完一隻王 +1，最多 3 個' : ''}`;
     return '';

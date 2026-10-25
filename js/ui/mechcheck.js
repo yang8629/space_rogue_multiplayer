@@ -546,7 +546,7 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
-    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；排熱一開始先停下來指熱度條、右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；插插件時泡泡框依序說明倉庫、插件、指著插座；打完回基地、記下看過`, M => {
+    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；排熱一開始先停下來指熱度條、右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；插插件時泡泡框依序說明倉庫、插件、指著插座，只能插在教學的晶片上；打完回基地、記下看過`, M => {
       const flag = Save.raw('tutorial'), log = [];
       const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
       const at = () => (TUTORIAL[Tutorial.i] || { id: '結束' }).id, P = () => Game.player;
@@ -588,6 +588,7 @@ const MechCheck = {
         plug: () => {
           const seen = []; for (let k = 0; k < 4; k++) { const t = Tutorial.tipNow(); seen.push(t ? t.title + (t.dim ? '' : '（不壓暗）') : '沒有'); Tutorial.nextTip(); }
           if (seen.join('、') !== '倉庫、插件、拖到這裡（不壓暗）、拖到這裡（不壓暗）') log.push(`插件的泡泡框依序：${seen.join('、')}（錯）`);
+          if (!Editor.canPlug(0, CFG.TUTORIAL.plug, 0) || Editor.canPlug(Tutorial.chipAt(), CFG.TUTORIAL.plug, 0)) log.push(`插件那一步：插飛船「${Editor.canPlug(0, CFG.TUTORIAL.plug, 0) || '可以'}」、插${CHIPS[CFG.TUTORIAL.chip].name}「${Editor.canPlug(Tutorial.chipAt(), CFG.TUTORIAL.plug, 0) || '可以'}」（要只能插${CHIPS[CFG.TUTORIAL.chip].name}）`);
           const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc();
         },
         burn: () => fireRow('燃燒'),
@@ -609,7 +610,7 @@ const MechCheck = {
         return { ok: !log.length, got: (log.length ? log.join('；') : `${TUTORIAL.length} 步都照順序換，打完回基地`) + `；後排打完：迴旋 ${secs['迴旋']}、燃燒 ${secs['燃燒']}` };
       } finally { if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
     }],
-    ['新手教學', '迴旋的隊形橫著排、在畫面裡', '飛船在場地中間正下方、靠右牆、靠左牆時：前排和後排都跟飛船同一個高度（橫著排），最遠那隻離飛船不超過半個畫面寬', M => {
+    ['新手教學', '迴旋的隊形橫著排、在畫面裡', '飛船在場地中間正下方、靠右牆、靠左牆時：前排和後排都跟飛船同一個高度（橫著排），最遠那隻離飛船不超過半個畫面寬；後排光束打不動、迴旋刃打得動；裝著迴旋從旁邊直接射後排也打不動（光束穿過去、不觸發迴旋）', M => {
       const flag = Save.raw('tutorial'), c = Arena.center, bad = [], half = (ZW || innerWidth / ZOOM) / 2;  // 半個畫面寬（Node 測試沒有畫面：用視窗寬）
       try {
         Tutorial.begin();
@@ -617,9 +618,17 @@ const MechCheck = {
           Game.enemies = []; Game.player.x = x; Game.player.y = y;
           Tutorial.row(10); const P = Game.player;
           const far = Math.max(...Game.enemies.map(e => Math.abs(e.x - P.x))), tilt = Math.max(...Game.enemies.map(e => Math.abs(e.y - P.y)));
+          const back = Game.enemies.find(e => e.hurtBy), hp0 = back.hp;
+          back.hurt(5, 0, 0, 'direct', { src: 'weapon' }); const hp1 = back.hp; back.hurt(1, 0, 0, 'direct', { src: chipId(CFG.TUTORIAL.chip, 1) });
+          if (hp1 !== hp0 || !(back.hp < hp1)) bad.push(`${name}：後排被光束打 ${hp0}→${hp1}、被迴旋打 ${hp1}→${back.hp}（光束要打不動、迴旋要打得動）`);
           if (tilt > 1 || far > half) bad.push(`${name}：上下差 ${Math.round(tilt)}、最遠 ${Math.round(far)}（半個畫面 ${Math.round(half)}）`);
         }
-        return { ok: !bad.length, got: bad.length ? bad.join('；') + '（錯）' : '三個位置都橫著排、在畫面裡' };
+        // 真的開火：裝著迴旋、站在後排旁邊直接射 2 秒（光束要穿過去，不扣血、也不觸發迴旋把它打死）
+        Game.chain[1] = chipId(CFG.TUTORIAL.chip, 1); Game.recalc();
+        const back = Game.enemies.filter(e => e.hurtBy).pop(), P = Game.player;
+        P.x = back.x; P.y = back.y + 200; P.aim = -Math.PI / 2; W_.step(120, true);
+        if (back.hp < back.maxHp) bad.push(`站在旁邊直接射後排 2 秒：剩 ${back.hp.toFixed(1)} / ${back.maxHp}（要打不動）`);
+        return { ok: !bad.length, got: bad.length ? bad.join('；') + '（錯）' : '三個位置都橫著排、在畫面裡；從旁邊直接射後排打不動' };
       } finally { Game.pauseMenu = false; if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
     }],
     ['新手教學', '按住 Esc 跳過', `按住 Esc ${CFG.TUTORIAL.skipHold} 秒跳過回基地；沒按滿就放開 = 打開選單、不跳過；第一次開遊戲才自動進`, M => {

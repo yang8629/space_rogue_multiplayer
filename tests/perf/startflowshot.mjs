@@ -56,8 +56,15 @@ console.log('迴旋那步之後：', await p2.evaluate(() => `第 ${Tutorial.i} 
 await p2.evaluate(() => Tutorial.go(5)); await wait(300); await p2.evaluate(() => Game.toggleEditor()); await shot2('7教學6插件_1倉庫');
 await p2.click('.bb-cover'); await shot2('7教學6插件_2插件');
 await p2.click('.bb-cover'); await shot2('7教學6插件_3拖到這裡');
+await p2.evaluate(() => Editor.plug(0, { from: 'inv', index: Game.inventory.indexOf(CFG.TUTORIAL.plug) })); await shot2('7教學6插件_4插飛船被擋');
 await p2.evaluate(() => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Editor.changed(); Game.toggleEditor(); }); await wait(1600);
 await fireUntilHalt('7教學7燃燒');
+// 光束從旁邊直接打後排：無效（後排只有迴旋刃打得到）
+await p2.evaluate(() => { Input.down = false; Tutorial.go(4); const e = Game.enemies.filter(q => q.hurtBy).pop(), P = Game.player; P.x = e.x; P.y = e.y + 220; P.vx = P.vy = 0; });
+await wait(1000);  // 等鏡頭跟上（鏡頭還在動時設準星，準星會掃到前排）
+await p2.evaluate(() => { const e = Game.enemies.filter(q => q.hurtBy).pop(); window.__aim = setInterval(() => { Input.mx = (e.x - Game.cam.x) * ZOOM; Input.my = (e.y - Game.cam.y) * ZOOM; }, 10); Input.down = true; });  // 鏡頭會往準星偏：每一幀重新對準
+await wait(1200); await shot2('7教學5迴旋_光束打後排無效');
+console.log('光束直接打後排：', await p2.evaluate(() => { clearInterval(window.__aim); Input.down = false; return Game.enemies.filter(q => q.hurtBy).map(q => q.hp + '/' + q.maxHp).join(' '); }));
 await p2.evaluate(() => { Tutorial.go(7); }); await wait(2500); await shot2('7教學8實戰');
 await p2.evaluate(() => { Tutorial.go(8); }); await wait(1500); await shot2('7教學9精英');
 await p2.evaluate(() => Tutorial.escDown()); await wait(400); await p2.screenshot({ path: SHOTS + '開局_7教學10按住Esc.png' });

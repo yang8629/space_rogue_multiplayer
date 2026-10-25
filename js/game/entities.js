@@ -1022,6 +1022,14 @@ class Enemy {
     const v1 = Math.hypot(this.vx, this.vy);
     if (v1 > lim) { this.vx *= lim / v1; this.vy *= lim / v1; }
   }
+  // 只有 hurtBy 這片晶片的產物打得到（新手教學的後排：光束、排熱打不到，要靠迴旋刃；燃燒另外扣、不經過這裡）：別的打過來 = 閃一下、冒「無效」（每 0.5 秒最多一次）
+  //   子彈碰撞（Game.updateBullets）也問這個：打不到的直接穿過去，不算命中、不觸發晶片
+  immuneTo(att) {
+    if (!this.hurtBy || (att && CHIPS[att.src] && baseOf(att.src) === this.hurtBy)) return false;
+    this.flash = 0.08;
+    if (!(Game.time < (this.noHurtT || 0))) { this.noHurtT = Game.time + 0.5; floatText(this.x, this.y - 16, '無效', '#8fa3d9'); }
+    return true;
+  }
   // raw：傷害已經算過弱點、破甲（雙子獵艦的另一艘轉過來的），不再乘一次
   hurt(dmg, kx, ky, source = 'direct', att = null, knock = null, raw = false) {
     const vul = raw ? 0 : (this.markT > 0 ? 0.25 : 0) + (this.shredT > 0 ? this.shredAmt : 0);  // 弱點標記（感測器 4 層）＋破甲，各自算、相加，沒有上限
@@ -1034,6 +1042,7 @@ class Enemy {
       this.hp = this.share.hp;
       return;
     }
+    if (this.immuneTo(att)) return;  // 只有指定晶片的產物打得到（見 immuneTo）
     if (this.ledT > 0) dmg *= AFFIX.command.taken;  // 精英「統帥」身邊的小兵：受到的傷害 −20%
     if (att) this.lastAtt = att;
     if (this.t.boss) { const o = (att && att.owner) || Game.shooter; if (o) { const k = Game.slotOf(o); (this.aggro = this.aggro || {})[k] = (this.aggro[k] || 0) + dmg; } }  // 多人時的王：誰打得痛（Game.bossLockTick）
