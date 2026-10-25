@@ -220,7 +220,7 @@ function drawRangePanel() {
   }
 }
 
-// 新手引導：上方中間一個框（第幾段、這一步要做什麼、進度；完成時變綠）；右下角「按住 Esc 跳過」＋按住的進度條
+// 新手教學：上方中間一個框（第幾段、這一步要做什麼、進度；完成時變綠）；右下角「按住 Esc 跳過」＋按住的進度條
 function drawTutorialPanel() {
   const V = Tutorial.view();
   if (!V) return;
@@ -231,7 +231,7 @@ function drawTutorialPanel() {
   ctx.textAlign = 'right'; if (V.prog || V.done) hudText(V.done ? '✓ 完成' : V.prog, x + w - 14, y + 20, col, 'bold 12px Microsoft JhengHei');
   ctx.textAlign = 'center'; hudText(V.goal, VW / 2, y + 48, '#ffffff', 'bold 17px Microsoft JhengHei', w - 24);
   if (Input.touch) return;  // 手機沒有 Esc：從「選單」離開
-  ctx.textAlign = 'right'; hudText('按住 Esc 跳過引導', VW - 20, VH - 40, V.hold > 0 ? '#ffffff' : '#6a79ad', '12px Microsoft JhengHei');
+  ctx.textAlign = 'right'; hudText('按住 Esc 跳過教學', VW - 20, VH - 40, V.hold > 0 ? '#ffffff' : '#6a79ad', '12px Microsoft JhengHei');
   if (V.hold > 0) hudBar(VW - 128, VH - 32, 108, 5, V.hold, '#ffd166');
 }
 
@@ -430,7 +430,7 @@ function drawHUD() {
   });
 
   ctx.textAlign = 'right';
-  hudText(C.tutorial ? '📘 新手引導' : C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34, '#cfe8ff', `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`);
+  hudText(C.tutorial ? '📘 新手教學' : C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34, '#cfe8ff', `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`);
   hudText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54, '#8fa3d9', '12px Microsoft JhengHei');
   // FPS（右上角最上面）：綠 ≥ 55、黃 ≥ 40、紅
   if (Settings.fps) { ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b'; ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14); }  // 設定頁可以關掉

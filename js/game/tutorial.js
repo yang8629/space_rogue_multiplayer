@@ -1,4 +1,4 @@
-// 星環電路 多人版 · tutorial.js：新手引導：一次教一件事的短戰鬥（每一步的文字在 data/tutorial.js，數字在 CFG.TUTORIAL）
+// 星環電路 多人版 · tutorial.js：新手教學：一次教一件事的短戰鬥（每一步的文字在 data/tutorial.js，數字在 CFG.TUTORIAL）
 // 所有 js/**/*.js 共用同一個全域範圍，載入順序見 index.html
 //   第一次開遊戲自動進（main.js），之後從中央大廳的終端機進；按住 Esc 跳過；打完、跳過、從選單離開都算看過（Save 的 tutorial）
 'use strict';
@@ -26,12 +26,13 @@ const TUTORIAL_PLAY = {
     prog: () => `${CFG.TUTORIAL.shootN - Tutorial.alive()} / ${CFG.TUTORIAL.shootN}`,
   },
   vent: {
-    setup(S) {  // 一圈圍在飛船身邊（排熱的衝擊波打得到）
-      const p = Game.player, n = CFG.TUTORIAL.ventN;
+    setup(S) {  // 一圈圍在飛船身邊（排熱的衝擊波打得到；血量一下打得掉）
+      const T = CFG.TUTORIAL, p = Game.player;
       S.a0 = p.altN || 0;
-      for (let i = 0; i < n; i++) { const a = i / n * TAU; Range.spawn(1, p.x + Math.cos(a) * CFG.TUTORIAL.ventR, p.y + Math.sin(a) * CFG.TUTORIAL.ventR, { type: 'swarmer', move: false, kill: true, lv: 1 }); }
+      for (let i = 0; i < T.ventN; i++) { const a = i / T.ventN * TAU; for (const e of Range.spawn(1, p.x + Math.cos(a) * T.ventR, p.y + Math.sin(a) * T.ventR, { type: 'swarmer', move: false, kill: true, lv: 1 })) e.hp = e.maxHp = T.ventHp; }
     },
-    done: S => (Game.player.altN || 0) > S.a0,
+    done: S => Tutorial.alive() === 0 && (Game.player.altN || 0) > S.a0,  // 一隻一隻射掉也行，但要排熱過一次
+    prog: () => `剩 ${Tutorial.alive()} 隻`,
   },
   reward: {  // 正式的三選一畫面：晶片、插件、零件各一張，只能選晶片（Game.reward.only）；選完回戰場（CFG.REWARDS.tutorial 的 after）
     setup() {
@@ -41,14 +42,22 @@ const TUTORIAL_PLAY = {
     },
     done: () => Game.state === 'play' && Tutorial.chipAt() >= 0,
   },
-  trigger: {
-    setup() { const p = Game.player; for (const [dx, dy] of CFG.TUTORIAL.dummies) Range.dummy(p.x + dx, p.y + dy); },
-    done: () => (Game.runStats.chips[CFG.TUTORIAL.chip] || 0) > 0,
+  trigger: {  // 前排打不死、後排一列：光束被前排擋住，迴旋刃打得到後排；第一次打到後排停下來說明
+    setup(S) { S.row = Tutorial.row(CFG.TUTORIAL.row.hp); },
+    tick(S) { if (!S.cued) { const e = S.row.find(q => q.lastAtt && CHIPS[q.lastAtt.src] && baseOf(q.lastAtt.src) === CFG.TUTORIAL.chip); if (e) Tutorial.cue(S, e); } },
+    done: S => S.row.every(e => e.dead),
+    prog: S => `後排 ${S.row.filter(e => e.dead).length} / ${S.row.length}`,
   },
   plug: {
-    keep: true,  // 標靶留著：插上之後打標靶看得到燃燒
+    keep: true,  // 前排留著
     setup() { Tutorial.give(CFG.TUTORIAL.plug); },
     done: () => { const i = Tutorial.chipAt(); return i >= 0 && (Game.socks[i] || []).includes(CFG.TUTORIAL.plug); },
+  },
+  burn: {  // 同樣的隊形、後排血比較厚：迴旋刃帶著燃燒；第一隻燒起來停下來說明
+    setup(S) { S.row = Tutorial.row(CFG.TUTORIAL.row.burnHp); },
+    tick(S) { if (!S.cued) { const e = S.row.find(q => q.burnT > 0); if (e) Tutorial.cue(S, e); } },
+    done: S => S.row.every(e => e.dead),
+    prog: S => `後排 ${S.row.filter(e => e.dead).length} / ${S.row.length}`,
   },
   fight: {
     setup() { Game.combat.wave = 1; for (const t of CFG.TUTORIAL.fight) Game.spawnEnemy(t); },
@@ -79,7 +88,7 @@ const Tutorial = {
   go(i) {
     this.i = i; this.S = {}; this.wait = 0; Game.exit = null;
     const st = TUTORIAL[i];
-    if (!st) { this.endT = CFG.TUTORIAL.endT; bannerFx('引導完成', '回到基地', CFG.TUTORIAL.endT); return; }
+    if (!st) { this.endT = CFG.TUTORIAL.endT; bannerFx('教學完成', '回到基地', CFG.TUTORIAL.endT); return; }
     if (!TUTORIAL_PLAY[st.id].keep) Game.enemies = [];
     if (i === 0 || TUTORIAL[i - 1].sec !== st.sec) bannerFx(st.sec, '', 1.6);  // 新的一段
     TUTORIAL_PLAY[st.id].setup(this.S);
@@ -87,6 +96,7 @@ const Tutorial = {
   tick(dt) {
     if (this.holding && (this.hold += dt) >= CFG.TUTORIAL.skipHold) { this.holding = false; Game.quitRun(); return; }
     if (this.endT > 0) { if ((this.endT -= dt) <= 0) Game.quitRun(); return; }
+    if (this.halted()) return;  // 停下來說明中
     const st = TUTORIAL[this.i];
     if (!st) return;
     if (this.wait > 0) { if ((this.wait -= dt) <= 0) this.go(this.i + 1); return; }
@@ -110,8 +120,13 @@ const Tutorial = {
     const st = TUTORIAL[this.i], t = st && st.tips && st.tips[this.S.tip || 0];
     if (!t || this.wait > 0) return null;
     const term = t.term && TUTORIAL_TERMS[t.term];
-    return { title: term ? term.title : t.title, text: (term || t).text(), at: t.at, i: t.i, item: t.item && t.item(), stay: !!t.stay };
+    if (t.cue && !this.S.cued) return null;  // 等這一步說「發生了」
+    const title = term ? term.title : typeof t.title === 'function' ? t.title() : t.title;
+    return { title, text: (term || t).text(), at: t.at, i: t.i, item: t.item && t.item(), stay: !!t.stay, cue: !!t.cue, pos: t.cue ? this.S.cueAt : null };
   },
+  // 戰場上發生了要說明的事（迴旋刃打到後排、後排燒起來）：記下位置、停住戰場、叫畫面跳泡泡框
+  cue(S, e) { S.cued = true; S.cueAt = { x: e.x, y: e.y, r: e.t.radius }; Events.emit('tutorialTip'); },
+  halted() { const t = this.tipNow(); return !!(t && t.cue); },
   nextTip() { const t = this.tipNow(); if (t && !t.stay) this.S.tip = (this.S.tip || 0) + 1; },  // 點畫面：換下一個
   // 電路畫面底下提示列的字：這一步要做的事；在電路畫面裡就做到了（插好插件）= 叫玩家回戰鬥
   tip() {
@@ -124,6 +139,15 @@ const Tutorial = {
     Game.exit = P ? { x: Arena.center.x + P[0], y: Arena.center.y + P[1], r: CFG.TUTORIAL.pointR, label: '目標' } : null;
   },
   alive() { return Game.enemies.filter(e => !e.dead).length; },
+  // 迴旋的隊形：前排一隻打不死（光束被它擋住），後面一列 n 隻（血量 hp）；朝場地中間排（飛船靠牆時不排到牆外）
+  row(hp) {
+    const T = CFG.TUTORIAL.row, p = Game.player, c = Arena.center, far = Math.hypot(c.x - p.x, c.y - p.y) > 200;
+    const a = far ? Math.atan2(c.y - p.y, c.x - p.x) : 0, at = d => [p.x + Math.cos(a) * d, p.y + Math.sin(a) * d];
+    Range.spawn(1, ...at(T.dist), { type: T.front, move: false, kill: false, lv: 1 });
+    const out = [];
+    for (let k = 1; k <= T.n; k++) for (const e of Range.spawn(1, ...at(T.dist + ENEMY_TYPES[T.front].radius + k * T.gap), { type: 'swarmer', move: false, kill: true, lv: 1 })) { e.hp = e.maxHp = hp; out.push(e); }
+    return out;
+  },
   give(id) { const k = Game.inventory.indexOf(null); if (k >= 0) Game.inventory[k] = id; },  // 放進倉庫第一個空格
-  chipAt() { return Game.chain.findIndex(id => id && baseOf(id) === CFG.TUTORIAL.chip); },  // 引導的晶片裝在電路第幾格（沒裝 = -1）
+  chipAt() { return Game.chain.findIndex(id => id && baseOf(id) === CFG.TUTORIAL.chip); },  // 教學的晶片裝在電路第幾格（沒裝 = -1）
 };

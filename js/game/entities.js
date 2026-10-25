@@ -209,7 +209,7 @@ class Player {
     this.altCd = A.cd;
     const miss = this.missN || 0;
     weaponPlay().alt(this);
-    if ((this.missN || 0) === miss) this.altN = (this.altN || 0) + 1;  // 成功用了幾次右鍵（新手引導看這個）
+    if ((this.missN || 0) === miss) this.altN = (this.altN || 0) + 1;  // 成功用了幾次右鍵（新手教學看這個）
     for (const q of Game.turrets) if (q.pl === this) Game.withShip(q, () => weaponPlay().turretAlt(q, this));  // 哨兵號：砲台跟著做一次
     Events.emit('alt', { p: this, weapon: Game.weapon.id });  // 音效（ui/listeners.js）
   }

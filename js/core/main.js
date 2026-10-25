@@ -27,7 +27,7 @@ Screen.el.addEventListener('input', e => {
 if (matchMedia('(pointer: coarse)').matches) setTouchMode(true);
 unlockLoad();  // 存檔升級（2.20.0 以前的紀錄刪掉、章節進度重來、補新的成績），要在標題畫面之前
 Screen.title();
-if (Tutorial.firstRun()) Tutorial.begin();  // 第一次開遊戲：直接進新手引導（看過就不再自動進）
+if (Tutorial.firstRun()) Tutorial.begin();  // 第一次開遊戲：直接進新手教學（看過就不再自動進）
 SFX.setMuted(SFX.muted);  // 依記住的設定更新靜音按鈕文字
 // 網址帶 #charts 或 #mech 時直接打開對應的總覽分頁（方便分享、檢查）
 if (['#charts', '#mech', '#rules', '#chips', '#comps', '#weapons'].includes(location.hash)) Codex.open(location.hash.slice(1));
@@ -46,7 +46,7 @@ function frame(now) {
   Game.update(gdt);
   if (Hub.shown() && (Hub.seq || (Hub.driving && !Codex.isOpen))) Hub.update(dt);  // 基地：開著飛船走（開了面板、總覽就停；出發動畫照播）
   if (Game.mode === 'range' && Game.state === 'play') Range.tick(gdt);  // 靶場「擋彈」：標靶射彈幕
-  if (Game.mode === 'tutorial' && Game.state === 'play') Tutorial.tick(dt);  // 新手引導：換下一步、按住 Esc 跳過
+  if (Game.mode === 'tutorial' && Game.state === 'play') Tutorial.tick(dt);  // 新手教學：換下一步、按住 Esc 跳過
   RangeBar.sync();  // 靶場按鈕列（只在靶場戰鬥中顯示）
   NetView.tick();  // 多人的倒數數字（重連、投票、出發）
   render();

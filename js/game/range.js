@@ -17,10 +17,10 @@ const Range = {
   SPAWN_LV: [1, 3, 6, 10, 17],
   spawnTypes() { return Object.keys(ENEMY_TYPES).filter(k => !ENEMY_TYPES[k].dummy && k !== 'splitling'); },
   // 在 (x, y) 生 n 隻（n > 1 時散在周圍 80 內）；不動 = 跟標靶一樣不移動也不攻擊；打不死 = 血量歸零自動補滿
-  //   o 可以蓋掉靶場按鈕列的設定：{ type, move, kill, lv }（新手引導用）
+  //   o 可以蓋掉靶場按鈕列的設定：{ type, move, kill, lv }（新手教學用）
   spawn(n, x, y, o = {}) {
     const G = Game, type = o.type || this.spawnType, move = o.move != null ? o.move : this.spawnMove, kill = o.kill != null ? o.kill : this.spawnKill;
-    const scale = enemyHpMul(o.lv || this.spawnLv, 1);
+    const scale = enemyHpMul(o.lv || this.spawnLv, 1), out = [];
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU), d = n > 1 ? rand(20, 80) : 0;
       const [ex, ey] = Arena.clampIn(x + Math.cos(a) * d, y + Math.sin(a) * d, ENEMY_TYPES[type].radius + 4);
@@ -30,9 +30,10 @@ const Range = {
         e.t = { ...e.t, dmg: 0 }; e.frozen = true; e.hx = ex; e.hy = ey; e.cloak = 0;  // 不跑 AI（跟標靶一樣被打退會彈回原位）；潛伏者不隱形
       }
       if (!kill) e.immortal = true;
-      G.enemies.push(e);
+      G.enemies.push(e); out.push(e);
       if (move) for (const k of G.spawnParts(e)) { k.manual = true; k.immortal = e.immortal; }  // 編隊、雙子獵艦、守門者的砲塔：會動的才補齊整組
     }
+    return out;
   },
   // 生成的位置：鍵盤 G = 滑鼠指的地方；按鈕（手機）= 飛船前方 300
   spawnAt(n, atMouse) {

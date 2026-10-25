@@ -34,7 +34,7 @@ globalThis.matchMedia = () => ({ matches: false }); globalThis.requestAnimationF
 globalThis.innerWidth = 1280; globalThis.innerHeight = 720; globalThis.devicePixelRatio = 1;
 // 存檔放在記憶體裡（章節進度等要讀得回來，機制檢查「章節進度」會測）；遊玩紀錄不存：模擬一跑幾百局，越存越大會拖慢
 //   --locked：解鎖進度、章節進度也不存，每一局都是新玩家的晶片池
-//   新手引導當作看過（v2_tutorial）：不然載入時 main.js 直接進引導，測試拿到的不是基地
+//   新手教學當作看過（v2_tutorial）：不然載入時 main.js 直接進教學，測試拿到的不是基地
 globalThis.localStorage = (() => { const m = new Map([['v2_tutorial', '1']]), drop = ['v2_runRecords', ...(${LOCKED} ? ['v2_unlocks', 'v2_chapters'] : [])]; return {
   getItem: k => (m.has(k) ? m.get(k) : null),
   setItem(k, v) { if (!drop.includes(k)) m.set(k, String(v)); },

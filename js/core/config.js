@@ -37,11 +37,13 @@ const CFG = {
   GRAY: { share: 0.4, cap: 0.25, delay: 4, rate: 6 },  // 堡壘號・灰血：受傷的 40% 變成灰血（最多最大 HP 的 25%），4 秒沒被打開始回每秒 6；戰鬥結束時剩下的回滿
   DECOY: { t: 1.5, r: 400 },  // 幻影號・殘影：衝刺起點留殘影 1.5 秒，附近 400 內的敵人改打殘影
   UNLOCK_ALL: false,  // 局外成長（js/data/unlocks.js）：true = 全部開放（測試用，進度照樣記）；遊戲裡由設定頁「測試：全部解鎖」開關（Settings.unlockAll）；模擬預設 true，--locked 才上鎖（tests/load_game.js）
-  // 新手引導（game/tutorial.js）：第一次開遊戲自動進；skipHold = 按住 Esc 幾秒跳過；points = 移動要飛到的點（離場地中心）；
+  // 新手教學（game/tutorial.js）：第一次開遊戲自動進；skipHold = 按住 Esc 幾秒跳過；points = 移動要飛到的點（離場地中心）；
   //   wait = 每一步完成後停幾秒才換下一步（看得到「完成」）；fight = 實戰那一波的敵人；eliteHp = 最後那隻精英的血量倍率
-  //   chip、plug、part = 三選一的三張（只能選晶片；插件之後放進倉庫自己插）
+  //   chip、plug、part = 三選一的三張（只能選晶片；插件之後放進倉庫自己插）；ventR = 圍住飛船那圈的半徑（排熱 18 道射線，半徑 80 以內射線之間沒有空隙，110 時有 2 隻剛好落在空隙）；ventHp = 那圈的血（衝擊波熱度 25% 時約 17，一下打掉）
+  //   row = 迴旋那幾步的隊形：前排 front 打不死（光束被它擋住），後面 n 隻一列，間隔 gap；hp = 看迴旋那步的後排血量、burnHp = 看燃燒那步的
   TUTORIAL: { skipHold: 1, ship: 'vanguard', weapon: 'laser', points: [[350, -200], [350, 200], [-350, 0]], pointR: 50, dashes: 3,
-    shootN: 5, ventN: 8, ventR: 110, chip: 'boomerang', plug: 'ignite', part: 'armor', dummies: [[300, -60], [340, 60]], fight: ['swarmer', 'swarmer', 'swarmer', 'swarmer', 'swarmer', 'spitter', 'spitter'],
+    shootN: 5, ventN: 8, ventR: 80, ventHp: 10, chip: 'boomerang', plug: 'ignite', part: 'armor',
+    row: { front: 'brute', dist: 240, n: 4, gap: 45, hp: 8, burnHp: 30 }, fight: ['swarmer', 'swarmer', 'swarmer', 'swarmer', 'swarmer', 'spitter', 'spitter'],
     elite: 'elite', eliteHp: 0.5, wait: 1, endT: 2.5 },
   TURRET: { t: 3, dmg: 0.5 },  // 哨兵號・砲台：衝刺起點留一座砲台 t 秒（每人同時一座），用那個人的整條電路朝射程內最近的敵人開火，傷害 ×dmg、射速跟飛船一樣
   PHASE: { dist: 150, t: 0.05 },  // 先鋒號・相位跳躍：衝刺改成瞬移 dist（穿牆、穿小行星，不落在裡面、不跳到別區）；瞬移後停 t 秒（算衝刺中，衝刺結束的效果照常）；無敵時間跟一般衝刺一樣是 DASH_TIME（以前只有 t：電腦用衝刺躲子彈，第 2 星區多死，整局模擬 2026-10-18）
@@ -56,7 +58,7 @@ const CFG = {
     combat: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },
     elite:  { reroll: 30, rerollUp: 20, slotCard: true, rare: 1 },
     boss:   { reroll: 30, rerollUp: 20, slotCard: false, rare: 1, after: 'victory' },  // 擊沉旗艦：先三選一，再到勝利畫面
-    tutorial: { reroll: 0, rerollUp: 0, slotCard: false, rare: 0, parts: true, after: 'play', bare: true },  // 新手引導：三張由 Tutorial 指定；選完回戰場；bare = 沒有刷新、跳過
+    tutorial: { reroll: 0, rerollUp: 0, slotCard: false, rare: 0, parts: true, after: 'play', bare: true },  // 新手教學：三張由 Tutorial 指定；選完回戰場；bare = 沒有刷新、跳過
     event:  { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },  // ？事件節點給的三選一（漂流殘骸、黑市）
     eventPart: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0, parts: true },  // 黑市的走私零件：三格都是零件
   },

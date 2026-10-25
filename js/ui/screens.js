@@ -383,7 +383,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
   reward() {
     const R = Game.reward, full = !Game.inventory.includes(null);
     if (!R) return;
-    const no = id => R.only && id !== R.only;  // 新手引導：指定選哪張，其他按不了
+    const no = id => R.only && id !== R.only;  // 新手教學：指定選哪張，其他按不了
     const slotCard = () => `<div class="card" style="border-color:#2ee6a6">
       <div class="ty" style="color:#2ee6a6">🔌 電路擴充</div><div class="ttl">插槽 +1</div>
       <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>

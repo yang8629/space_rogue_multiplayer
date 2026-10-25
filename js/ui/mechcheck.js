@@ -546,11 +546,21 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
-    ['新手引導', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；右鍵落空不算排熱；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；打完回基地、記下看過`, M => {
+    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；打完回基地、記下看過`, M => {
       const flag = Save.raw('tutorial'), log = [];
       const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
       const at = () => (TUTORIAL[Tutorial.i] || { id: '結束' }).id, P = () => Game.player;
       const killAll = () => { for (const e of Game.enemies) e.dead = true; };
+      // 朝前排一直射（迴旋那兩步）：打到要說明的事時戰場要停（halted），點掉繼續；回傳有沒有停、花幾秒打完後排
+      const secs = {};
+      const fireRow = id => {
+        const S = Tutorial.S, e0 = Game.enemies.find(e => e.immortal); let halt = false, f = 0;
+        P().aim = Math.atan2(e0.y - P().y, e0.x - P().x);
+        for (; f < 1800 && !S.row.every(e => e.dead); f += 10) { W_.step(10, true); Tutorial.tick(1 / 60); if (Tutorial.halted()) { halt = true; Tutorial.nextTip(); } }
+        secs[id] = S.row.every(e => e.dead) ? (f / 60).toFixed(1) + ' 秒' : '30 秒沒打完';
+        if (!halt) log.push(`${id}：沒停下來說明（錯）`);
+        if (!S.row.every(e => e.dead)) log.push(`${id}：後排 30 秒打不完（錯）`);
+      };
       // 每一步：先不做事等一下（不能換），做到之後再等（要換到下一步）
       const DO = {
         move: () => {  // 光圈飛完、還沒衝刺：不能換
@@ -562,7 +572,8 @@ const MechCheck = {
         vent: () => {
           P().hHeat = 0; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);  // 熱度不夠：落空，不算
           tick(); if (at() !== 'vent') log.push('右鍵落空也算排熱（錯）');
-          P().hHeat = 0.6; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);
+          P().hHeat = HEAT.min + 0.01; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60); W_.step(30);  // 熱度剛好夠：衝擊波要一下打掉整圈
+          if (Tutorial.alive()) log.push(`排熱（熱度 ${pct(HEAT.min)}）沒打掉一圈：剩 ${Tutorial.alive()} 隻（錯）`);
         },
         reward: () => {  // 晶片、插件、零件各一張；泡泡框依序跳、最後一個留著；只能選晶片
           const R = Game.reward, kinds = R ? R.options.map(id => id.startsWith('part:') ? '零件' : isComp(id) ? '插件' : '晶片').join('、') : '沒有';
@@ -571,8 +582,9 @@ const MechCheck = {
           if (seen.join('、') !== '晶片、插件、零件、選這張、選這張') log.push(`泡泡框依序：${seen.join('、')}（錯）`);
           if (R) { Game.takeReward(R.options[1]); if (Game.state !== 'reward') log.push('選插件也收了（只能選晶片，錯）'); Game.takeReward(R.options[0]); }
         },
-        trigger: () => { const d = Game.enemies[0]; P().aim = Math.atan2(d.y - P().y, d.x - P().x); W_.step(600, true); },
+        trigger: () => fireRow('迴旋'),
         plug: () => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc(); },
+        burn: () => fireRow('燃燒'),
         fight: killAll,
         elite: () => { const e = Game.enemies.find(q => q.t.elite); if (!e || Math.abs(e.maxHp - ENEMY_TYPES[CFG.TUTORIAL.elite].hp * CFG.TUTORIAL.eliteHp) > 1) log.push(`精英血量 ${e && Math.round(e.maxHp)}（錯）`); killAll(); },
       };
@@ -588,10 +600,10 @@ const MechCheck = {
         tick(CFG.TUTORIAL.endT + 0.1);
         const home = Game.state === 'title' && Save.flag('tutorial', false);
         if (!home) log.push(`打完：狀態 ${Game.state}、看過 ${Save.flag('tutorial', false)}（要回基地、記下看過）`);
-        return { ok: !log.length, got: log.length ? log.join('；') : `${TUTORIAL.length} 步都照順序換，打完回基地` };
+        return { ok: !log.length, got: (log.length ? log.join('；') : `${TUTORIAL.length} 步都照順序換，打完回基地`) + `；後排打完：迴旋 ${secs['迴旋']}、燃燒 ${secs['燃燒']}` };
       } finally { if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
     }],
-    ['新手引導', '按住 Esc 跳過', `按住 Esc ${CFG.TUTORIAL.skipHold} 秒跳過回基地；沒按滿就放開 = 打開選單、不跳過；第一次開遊戲才自動進`, M => {
+    ['新手教學', '按住 Esc 跳過', `按住 Esc ${CFG.TUTORIAL.skipHold} 秒跳過回基地；沒按滿就放開 = 打開選單、不跳過；第一次開遊戲才自動進`, M => {
       const flag = Save.raw('tutorial');
       try {
         Save.remove('tutorial'); const first = Tutorial.firstRun() || (typeof navigator !== 'undefined' && navigator.webdriver);
