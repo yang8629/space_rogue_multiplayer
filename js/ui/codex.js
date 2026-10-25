@@ -269,11 +269,11 @@ const Codex = {
     if (SV && Object.keys(SV.route).length) rvHtml = svTabs('sv-rv', w => {
       const R = SV.route[w]; if (!R) return '<div class="cap">這把武器還沒有資料。</div>';
       const P = WEAPONS[w].paths, cols = ['none', ...Object.keys(P), ...Object.keys(P).flatMap(p => [p + '0', p + '1'])].filter(k => R[k]);
-      // 列的順序固定（不照分數排）：晶片照晶片清單的順序（玩法晶片、組件、觸發器），再來零件（每種 +1／+2／+4 層）；遊戲裡已經沒有的東西不列
+      // 列的順序固定（不照分數排）：晶片照晶片清單的順序（玩法晶片、插件、觸發器），再來零件（每種 +1／+2／+4 層）；遊戲裡已經沒有的東西不列
       const have = new Set(cols.flatMap(k => Object.keys(R[k].items)));
       const order = [...Object.keys(CHIPS).filter(id => !id.includes('#') && !id.includes('~')), ...Object.keys(PARTS).flatMap(p => [1, 2, 4].map(n => 'part:' + p + ':' + n))];
       const items = order.filter(id => have.has(id));
-      return `<div class="cap">路線價值表 ${SV.when[w][1] || ''} 量的。每一欄是一條路線（括號是量的難度），每一列是一樣東西（順序固定：晶片、零件）。只有「沒升級」那一欄有數值晶片、組件、觸發器（其他路線沒量）。</div>
+      return `<div class="cap">路線價值表 ${SV.when[w][1] || ''} 量的。每一欄是一條路線（括號是量的難度），每一列是一樣東西（順序固定：晶片、零件）。只有「沒升級」那一欄有數值晶片、插件、觸發器（其他路線沒量）。</div>
         <div class="tbl"><table><tr><th>東西</th>${cols.map(k => `<th>${pathName(w, k)}<br><span style="color:#6a79ad;font-weight:normal">（${R[k].L}）</span></th>`).join('')}</tr>
         ${items.map(id => `<tr><td>${itemName(id)}</td>${cols.map(k => { const x = R[k].items[id]; return svCell(x ? x[0] : null, 1, 9, x ? `${pathName(w, k)}：清場速度 ${x2(x[1])}、掉血 ${x2(x[2])}（${x[3]} 組）` : ''); }).join('')}</tr>`).join('')}</table></div>`;
     });

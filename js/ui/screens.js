@@ -42,8 +42,8 @@ function dmgKeyColor(key) {
     : CHIPS[key] ? TYPE_META[CHIPS[key].type].color : '#8fa3d9';
 }
 
-// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、組件金、機體強化（零件）銀白
-const CARD_CAT = { chip: '晶片', comp: '組件', mech: '機體強化' };
+// 卡片的大類（三選一好分辨）：晶片（玩法晶片、觸發器）青藍、插件金、機體強化（零件）銀白
+const CARD_CAT = { chip: '晶片', comp: '插件', mech: '機體強化' };
 const catBand = k => `<div class="cat">${CARD_CAT[k]}</div>`;
 
 // 武器卡片的內容（選武器、軍械庫）：名稱、一句話；詳細 = 說明、數值、三條升級路線
@@ -79,6 +79,7 @@ const REWARD_TITLE = {
   boss: () => '♛ 旗艦擊沉：三選一',
   event: () => '? 事件：三選一',
   eventPart: () => '⚖ 黑市：零件三選一',
+  tutorial: () => '📘 三選一',
 };
 const FLIP_BEAT_MS = 300;  // 三選一：畫面出來後等這麼久才開始翻卡片
 // 三選一卡片：拿了會裝在哪；進倉庫時改成紅字
@@ -382,6 +383,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
   reward() {
     const R = Game.reward, full = !Game.inventory.includes(null);
     if (!R) return;
+    const no = id => R.only && id !== R.only;  // 新手引導：指定選哪張，其他按不了
     const slotCard = () => `<div class="card" style="border-color:#2ee6a6">
       <div class="ty" style="color:#2ee6a6">🔌 電路擴充</div><div class="ttl">插槽 +1</div>
       <div class="ds">電路多一格（目前 ${Game.chain.length} 格，最多 ${CFG.MAX_SLOTS} 格）。適合晶片流。</div>
@@ -390,9 +392,9 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       if (id === 'slot') return slotCard();
       if (id.startsWith('part:')) {
         const k = id.slice(5), ok = partsUsed(Game.parts) < Game.partSlots;
-        return partCard(k, `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
+        return partCard(k, `<button ${ok && !no(id) ? '' : 'disabled'} data-act="reward" data-arg="${id}">${ok ? '裝上' : '零件格已滿'}</button>`, Game.parts, true);  // 跟晶片混在一起：標「機體強化」
       }
-      const ok = Game.canAcquire(id), label = ok ? '選擇' : '倉庫已滿';
+      const ok = Game.canAcquire(id) && !no(id), label = no(id) ? '選擇' : ok ? '選擇' : '倉庫已滿';
       return chipCard(id, placeLine(id) + `<button ${ok ? '' : 'disabled'} data-act="reward" data-arg="${id}">${label}</button>`);
     };
     const flip = R.flipFor !== R.options;  // 每組卡片（新開、刷新）翻開一次；同一組重畫不再翻
@@ -410,7 +412,7 @@ ${HOARD_TXT}` : ''}">${meta.icon}<small>${meta.label}</small>${n.hoard ? '<i cla
       <div class="between"><div><h2>${REWARD_TITLE[R.kind]()}</h2>
         <div class="sub">${R.note ? `<span style="color:#ffd166">${R.note}</span><br>` : ''}選了會自動裝上電路（電路滿了才放倉庫），按 Tab 調整。</div>${this.fightSummary()}</div>${this.status()}</div>
       <div class="cards${flip ? ' flip-hold' : ''}">${cards}</div>
-      <div class="row" style="justify-content:center">
+      <div class="row${CFG.REWARDS[R.kind].bare ? ' hidden' : ''}" style="justify-content:center">
         ${full ? '<span class="sub">倉庫已滿：按 Tab 整理，把晶片拖到「回收」可換成晶體。</span>' : ''}
         <button data-act="reroll" ${Game.credits < R.reroll ? 'disabled' : ''}>刷新（◆ ${R.reroll}）</button>
         <button data-act="reward" data-arg="">跳過（◆ +10）</button></div></div>`);
@@ -715,7 +717,7 @@ function recordText(r) {
   L.push(`星環電路 ${r.build}｜${r.mode === 'coop' ? '多人 ' : ''}${C.result[r.result] || r.result} ${r.chapter > 1 ? `第${r.chapter}章 ` : ''}${r.endless ? '無盡' : ''}${r.sector}-${r.layer}${bm ? ` ${en(bm[1])}剩${bm[2]}%` : ''}${r.cause ? ` 被${hurt(r.cause)}` : ''}｜${r.ship} ${/觸控/.test(r.input) ? (/開/.test(r.input) ? '觸控自動' : '觸控') : '滑鼠'}｜${r.time}秒 殺${r.kills}${r.bosses && r.bosses.length ? ` 擊沉${r.bosses.map(en).join('')}` : ''}`);
   L.push(`武器 ${r.weapon.replace('・', '+')}`);
   const S = r.stats;
-  const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的組件
+  const wsk = ((r.chain || [])[0] || '').match(/［.+］/);  // 武器插座上的插件
   L.push(`電路 ${wsk ? '武器' + wsk[0] + '｜' : ''}${(r.chain || []).slice(1).map(chip).join('｜')}${S ? `（${S.lines ? S.lines + '條線 ' : S.heat != null ? `能量${S.heat}${S.cap != null ? '/' + S.cap : ''} ` : ''}${S.rps}發/秒 每發${S.perFire}顆${S.fireDmg} 估${S.estDps}）` : ''}${r.inv && r.inv.length ? ` 倉庫 ${r.inv.map(chip).join(' ')}` : ''}`);
   const M = r.mech;
   if (M) {
@@ -732,7 +734,7 @@ function recordText(r) {
   const cap = r.cap;
   if (cap && cap.n) L.push(`子彈上限 觸發${cap.n}幀 刪${cap.cut}顆 最多${cap.max}顆(${cap.at})${cap.first && cap.first !== cap.at ? ` 第一次(${cap.first})` : ''}`
     + `${cap.src && cap.src.length ? `｜來源 ${cap.src.map(([k, v]) => { const m = /^(.+?)(・回響)?$/.exec(k); return chip(m[1]) + (m[2] ? '回響' : '') + v; }).join(' ')}` : ''}`
-    + `${cap.chain && cap.chain.length ? `｜當時電路 ${(cap.chain[0].match(/［.+］/) || []).map(s => '武器' + s + '｜').join('')}${cap.chain.slice(1).map(chip).join('｜')}` : ''}`);  // 武器格只寫插座上的組件（同「電路」那行）
+    + `${cap.chain && cap.chain.length ? `｜當時電路 ${(cap.chain[0].match(/［.+］/) || []).map(s => '武器' + s + '｜').join('')}${cap.chain.slice(1).map(chip).join('｜')}` : ''}`);  // 武器格只寫插座上的插件（同「電路」那行）
   // 每個星區一行：摘要＋走過的節點（戰28-10 ＝ 戰鬥 28 秒、掉 10 血）
   const nodes = {};
   for (const p of r.path || []) {

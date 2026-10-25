@@ -94,7 +94,7 @@ const EVENTS = {
   },
 };
 const EVENT_IDS = Object.keys(EVENTS);
-const HOARD_TXT = '星圖情報標出的一般戰鬥：每一區都有一架寶藏無人機，每打掉一架，三選一多保證 1 格稀有晶片（最多 2 格：一定留一格組件）。';  // 寶藏星域的說明（航圖）
+const HOARD_TXT = '星圖情報標出的一般戰鬥：每一區都有一架寶藏無人機，每打掉一架，三選一多保證 1 格稀有晶片（最多 2 格：一定留一格插件）。';  // 寶藏星域的說明（航圖）
 // 這一局的事件效果（Game.boons）：黑市 hp、終焉護殼 taken 各拿了幾次，ward 還剩幾次免死；o = 對方傳來的（雙人同步，檢查格式）
 const cleanBoons = (o = {}) => Object.fromEntries(['hp', 'taken', 'ward'].map(k => [k, clamp(Math.floor(num(o && o[k])), 0, 9)]));
 // 產生航圖時：每個事件節點抽一種事件（同一張圖盡量不重複；需要參數的事件找不到目標就換一種）

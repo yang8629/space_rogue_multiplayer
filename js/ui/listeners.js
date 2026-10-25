@@ -27,6 +27,7 @@
   Events.on('hubSwap', () => { SFX.play('click'); Screen.hubInfo(Hub.near); });
   Events.on('hubLaunch', () => { if (!Hub.driving) Screen.hubView(); });  // 出發動畫：蓋著的面板（起始晶片、發射台）收起來
   Events.on('editor', d => { if (d.open) Editor.open(); else Editor.close(); });
+  Events.on('view', () => Bubble.sync()); Events.on('editor', () => Bubble.sync());  // 新手引導的泡泡框：換頁就重新找要指的東西
   Events.on('editorMsg', d => {
     if (d.hint === 'newChip') Editor.infoEl.innerHTML = `<b style="color:#9dff6b">${d.msg}</b><br>新晶片在下方倉庫：拖到上方電路（或點一下再點插槽）就能裝上。按 Tab 或「返回」回到航圖。`;
   });

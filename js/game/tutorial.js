@@ -6,21 +6,16 @@
 // 每一步的行為：setup = 開始這一步時擺場地；tick = 每幀（移動的光圈換下一個）；done = 完成了沒；prog = 進度文字（沒有就不顯示）
 //   S = Tutorial.S（這一步自己的暫存），每一步開始時清空
 const TUTORIAL_PLAY = {
-  move: {
-    setup(S) { S.k = 0; Tutorial.point(0); },
+  move: {  // 光圈一個一個亮，衝刺另外算次數；兩個都做到才算
+    setup(S) { S.k = 0; S.d0 = Game.runStats.dashes; Tutorial.point(0); },
     tick(S) {
       const X = Game.exit, p = Game.player;
       if (!X || dist2(p.x, p.y, X.x, X.y) > X.r * X.r) return;
       S.k++; ringFx(X.x, X.y, X.r, '#2ee6a6');
       Tutorial.point(S.k);
     },
-    done: S => S.k >= CFG.TUTORIAL.points.length,
-    prog: S => `${S.k} / ${CFG.TUTORIAL.points.length}`,
-  },
-  dash: {
-    setup(S) { S.d0 = Game.runStats.dashes; },
-    done: S => Game.runStats.dashes - S.d0 >= CFG.TUTORIAL.dashes,
-    prog: S => `${Math.min(CFG.TUTORIAL.dashes, Game.runStats.dashes - S.d0)} / ${CFG.TUTORIAL.dashes}`,
+    done: S => S.k >= CFG.TUTORIAL.points.length && Game.runStats.dashes - S.d0 >= CFG.TUTORIAL.dashes,
+    prog: S => `光圈 ${S.k} / ${CFG.TUTORIAL.points.length}　衝刺 ${Math.min(CFG.TUTORIAL.dashes, Game.runStats.dashes - S.d0)} / ${CFG.TUTORIAL.dashes}`,
   },
   shoot: {
     setup() {  // 飛船前方排成一列弧形，不會動、不會打人
@@ -38,9 +33,13 @@ const TUTORIAL_PLAY = {
     },
     done: S => (Game.player.altN || 0) > S.a0,
   },
-  chip: {
-    setup() { Tutorial.give(chipId(CFG.TUTORIAL.chip, 1)); },
-    done: () => Tutorial.chipAt() >= 0,
+  reward: {  // 正式的三選一畫面：晶片、插件、零件各一張，只能選晶片（Game.reward.only）；選完回戰場（CFG.REWARDS.tutorial 的 after）
+    setup() {
+      const T = CFG.TUTORIAL, options = [chipId(T.chip, 1), T.plug, 'part:' + T.part];
+      Game.openReward('tutorial', { options, only: options[0] });
+      Game.view();
+    },
+    done: () => Game.state === 'play' && Tutorial.chipAt() >= 0,
   },
   trigger: {
     setup() { const p = Game.player; for (const [dx, dy] of CFG.TUTORIAL.dummies) Range.dummy(p.x + dx, p.y + dy); },
@@ -106,7 +105,15 @@ const Tutorial = {
     return { sec: `${TUTORIAL_SECS.indexOf(st.sec) + 1} / ${TUTORIAL_SECS.length}　${st.sec}`, goal: st.goal(), prog: P.prog ? P.prog(this.S) : '',
       done: this.wait > 0, hold: this.holding ? clamp(this.hold / CFG.TUTORIAL.skipHold, 0, 1) : 0 };
   },
-  // 電路畫面的提示：這一步要做的事；在電路畫面裡就做到了（拖好晶片、插好插件）= 叫玩家回戰鬥
+  // 泡泡框（ui/bubble.js 畫）：這一步現在要跳的那一個；做完這一步（停一下換下一步的期間）就不跳
+  tipNow() {
+    const st = TUTORIAL[this.i], t = st && st.tips && st.tips[this.S.tip || 0];
+    if (!t || this.wait > 0) return null;
+    const term = t.term && TUTORIAL_TERMS[t.term];
+    return { title: term ? term.title : t.title, text: (term || t).text(), at: t.at, i: t.i, item: t.item && t.item(), stay: !!t.stay };
+  },
+  nextTip() { const t = this.tipNow(); if (t && !t.stay) this.S.tip = (this.S.tip || 0) + 1; },  // 點畫面：換下一個
+  // 電路畫面底下提示列的字：這一步要做的事；在電路畫面裡就做到了（插好插件）= 叫玩家回戰鬥
   tip() {
     const st = TUTORIAL[this.i];
     return !st ? '' : TUTORIAL_PLAY[st.id].done(this.S) ? '✓ 完成：按 Tab 回到戰鬥' : st.goal();

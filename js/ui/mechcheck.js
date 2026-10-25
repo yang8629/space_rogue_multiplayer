@@ -546,24 +546,33 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
-    ['新手引導', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；右鍵落空不算排熱；打完回基地、記下看過`, M => {
+    ['新手引導', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；右鍵落空不算排熱；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；打完回基地、記下看過`, M => {
       const flag = Save.raw('tutorial'), log = [];
       const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
       const at = () => (TUTORIAL[Tutorial.i] || { id: '結束' }).id, P = () => Game.player;
       const killAll = () => { for (const e of Game.enemies) e.dead = true; };
       // 每一步：先不做事等一下（不能換），做到之後再等（要換到下一步）
       const DO = {
-        move: () => { for (let k = 0; k < CFG.TUTORIAL.points.length; k++) { P().x = Game.exit.x; P().y = Game.exit.y; Tutorial.tick(1 / 60); } },
-        dash: () => { Game.runStats.dashes += CFG.TUTORIAL.dashes; },
+        move: () => {  // 光圈飛完、還沒衝刺：不能換
+          for (let k = 0; k < CFG.TUTORIAL.points.length; k++) { P().x = Game.exit.x; P().y = Game.exit.y; Tutorial.tick(1 / 60); }
+          tick(); if (at() !== 'move') log.push('光圈飛完沒衝刺就換了（錯）');
+          Game.runStats.dashes += CFG.TUTORIAL.dashes;
+        },
         shoot: killAll,
         vent: () => {
           P().hHeat = 0; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);  // 熱度不夠：落空，不算
           tick(); if (at() !== 'vent') log.push('右鍵落空也算排熱（錯）');
           P().hHeat = 0.6; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);
         },
-        chip: () => { const k = Game.inventory.findIndex(id => id && baseOf(id) === CFG.TUTORIAL.chip); Game.chain[1] = Game.inventory[k]; Game.inventory[k] = null; Game.recalc(); },
+        reward: () => {  // 晶片、插件、零件各一張；泡泡框依序跳、最後一個留著；只能選晶片
+          const R = Game.reward, kinds = R ? R.options.map(id => id.startsWith('part:') ? '零件' : isComp(id) ? '插件' : '晶片').join('、') : '沒有';
+          if (Game.state !== 'reward' || kinds !== '晶片、插件、零件') log.push(`三選一：狀態 ${Game.state}、卡片 ${kinds}（要晶片、插件、零件各一張）`);
+          const seen = []; for (let k = 0; k < 5; k++) { const t = Tutorial.tipNow(); seen.push(t ? t.title : '沒有'); Tutorial.nextTip(); }
+          if (seen.join('、') !== '晶片、插件、零件、選這張、選這張') log.push(`泡泡框依序：${seen.join('、')}（錯）`);
+          if (R) { Game.takeReward(R.options[1]); if (Game.state !== 'reward') log.push('選插件也收了（只能選晶片，錯）'); Game.takeReward(R.options[0]); }
+        },
         trigger: () => { const d = Game.enemies[0]; P().aim = Math.atan2(d.y - P().y, d.x - P().x); W_.step(600, true); },
-        plug: () => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[1] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc(); },
+        plug: () => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[Tutorial.chipAt()] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc(); },
         fight: killAll,
         elite: () => { const e = Game.enemies.find(q => q.t.elite); if (!e || Math.abs(e.maxHp - ENEMY_TYPES[CFG.TUTORIAL.elite].hp * CFG.TUTORIAL.eliteHp) > 1) log.push(`精英血量 ${e && Math.round(e.maxHp)}（錯）`); killAll(); },
       };

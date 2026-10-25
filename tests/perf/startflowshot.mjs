@@ -32,18 +32,21 @@ const shot2 = async name => { await wait(500); await p2.screenshot({ path: SHOTS
 console.log('第一次開遊戲：', await p2.evaluate(() => `${Game.mode} / ${Game.state}`));
 await p2.evaluate(() => SFX.setMuted && SFX.setMuted(true));
 await shot2('7引導1移動');
-await p2.evaluate(() => Tutorial.go(2)); await wait(800); await shot2('7引導2射擊');
-await p2.evaluate(() => { Tutorial.go(3); Input.down = true; }); await wait(1500); await p2.evaluate(() => { Input.down = false; }); await shot2('7引導3排熱');
-await p2.evaluate(() => { Tutorial.go(4); Game.toggleEditor(); }); await shot2('7引導4晶片_電路');
-await p2.evaluate(() => { const k = Game.inventory.findIndex(Boolean); Game.chain[1] = Game.inventory[k]; Game.inventory[k] = null; Editor.changed(); }); await shot2('7引導4晶片_電路裝好');
-await p2.evaluate(() => Game.toggleEditor());
-await wait(1500); await p2.evaluate(() => { const d = Game.enemies[0]; Input.mx = (d.x - Game.cam.x) * ZOOM; Input.my = (d.y - Game.cam.y) * ZOOM; Input.down = true; });  // 瞄準第一個標靶
+await p2.evaluate(() => Tutorial.go(1)); await wait(800); await shot2('7引導2射擊');
+await p2.evaluate(() => { Tutorial.go(2); Input.down = true; }); await wait(1500); await p2.evaluate(() => { Input.down = false; }); await shot2('7引導3排熱');
+// 三選一：泡泡框依序（點畫面換下一個），最後指定選晶片
+await p2.evaluate(() => Tutorial.go(3)); await wait(1500); await shot2('7引導4三選一_1晶片');
+for (const [k, name] of [[2, '插件'], [3, '零件'], [4, '選這張']]) { await p2.click('.bb-cover'); await shot2(`7引導4三選一_${k}${name}`); }
+await p2.evaluate(() => Game.takeReward(Game.reward.only)); await wait(1200);
+await wait(300); await p2.evaluate(() => { const d = Game.enemies[0]; Input.mx = (d.x - Game.cam.x) * ZOOM; Input.my = (d.y - Game.cam.y) * ZOOM; Input.down = true; });  // 瞄準第一個標靶
 await wait(2500); await shot2('7引導5晶片觸發');  // 邊射邊拍
 console.log('晶片傷害：', await p2.evaluate(() => JSON.stringify(Game.runStats.chips)));
 await p2.evaluate(() => { Input.down = false; });
-await p2.evaluate(() => { Tutorial.go(7); }); await wait(2500); await shot2('7引導6實戰');
-await p2.evaluate(() => { Tutorial.go(8); }); await wait(1500); await shot2('7引導7精英');
-await p2.evaluate(() => Tutorial.escDown()); await wait(400); await p2.screenshot({ path: SHOTS + '開局_7引導8按住Esc.png' });
+await wait(800); await p2.evaluate(() => Game.toggleEditor()); await shot2('7引導6插件_電路');
+await p2.click('.bb-cover'); await shot2('7引導6插件_電路_收起');
+await p2.evaluate(() => { Game.toggleEditor(); Tutorial.go(6); }); await wait(2500); await shot2('7引導7實戰');
+await p2.evaluate(() => { Tutorial.go(7); }); await wait(1500); await shot2('7引導8精英');
+await p2.evaluate(() => Tutorial.escDown()); await wait(400); await p2.screenshot({ path: SHOTS + '開局_7引導9按住Esc.png' });
 await wait(1200); console.log('按住 Esc 之後：', await p2.evaluate(() => `${Game.mode} / ${Game.state}、看過 ${Save.flag('tutorial', false)}`));
 await p2.evaluate(() => { const z = HUB.zones.find(q => q.id === 'tutorial'); Hub.build(z.x + 50, z.y, Math.PI); }); await wait(800); await shot2('8大廳_新手引導終端機');
 await b.close();

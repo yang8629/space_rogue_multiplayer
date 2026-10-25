@@ -157,7 +157,7 @@ Object.assign(Screen, {
     return `<div class="cards left">${cards}</div>`;
   },
 
-  // ---------- 晶片庫：玩法晶片、組件、觸發器 ----------
+  // ---------- 晶片庫：玩法晶片、插件、觸發器 ----------
   base_chips(P, fresh) {
     return UNLOCK_KINDS.filter(([k]) => BASE_PANELS[1].kinds.includes(k)).map(([kind, label]) => {
       const ids = unlockIds(kind), cards = ids.map(id => {

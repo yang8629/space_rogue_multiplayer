@@ -1036,7 +1036,7 @@ const Net = {
     const inventory = Array.from({ length: CFG.INV_SLOTS }, (_, i) => fix(Array.isArray(m.inventory) ? m.inventory[i] : null));
     const W = m.weapon && WEAPONS[m.weapon.id] ? m.weapon : null, path = W && W.path && WEAPONS[W.id].paths[W.path] ? W.path : null;
     const weapon = W ? { id: W.id, path, final: path && (W.final === 0 || W.final === 1) ? W.final : null } : null;
-    // 插座：只收組件，每格最多插座上限個（多的丟掉）
+    // 插座：只收插件，每格最多插座上限個（多的丟掉）
     const socks = chain.map((id, i) => !id || !Array.isArray(m.sk) || !Array.isArray(m.sk[i]) ? []
       : m.sk[i].slice(0, CFG.MAX_SOCKETS).map(fix).filter(c => c && isComp(c)));
     return { chain, socks, inventory, weapon };

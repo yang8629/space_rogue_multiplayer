@@ -52,6 +52,7 @@ Object.assign(Game, {
   },
   // mode：稀有版本、身上那個已經有不同的詞條時，replace 替換／boost 增強（預設）
   takeReward(id) {
+    if (this.reward && this.reward.only && id !== this.reward.only) return;  // 新手引導：指定選哪張
     let msg;
     if (id && id.startsWith('part:')) {  // 零件
       const k = id.slice(5);
@@ -108,6 +109,7 @@ Object.assign(Game, {
     const R = this.reward;
     this.reward = null;
     if (R && R.again > 0) { this.openReward('combat', { again: R.again - 1, rare: (R.rare || 0) - 1, note: `${msg || ''}<br>✦ 再選一次` }); this.view(); return; }  // 求救訊號「只護送」：打贏多一次三選一
+    if (R && R.after === 'play') { this.state = 'play'; this.view(); return; }  // 新手引導：選完回戰場
     if (!R || R.after !== 'victory') return this.showMap(msg);
     const V = this.victory;
     V.rew = true;

@@ -606,6 +606,7 @@ const Editor = {
 
     this.invEl.innerHTML = '';
     Game.inventory.forEach((_, i) => this.invEl.appendChild(this.makeSlot(Game.inventory, i, 'inv', '倉庫 ' + (i + 1))));
+    if (Game.mode === 'tutorial') Bubble.sync();  // 倉庫重畫了：泡泡框跟著新的格子（拖走了就收）
 
     const s = Game.stats, P = Game.passives;
     const stat = (k, v) => `<div class="stat">${k}<b>${v}</b></div>`;

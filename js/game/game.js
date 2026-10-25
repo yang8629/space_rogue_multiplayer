@@ -142,7 +142,7 @@ const Game = {
     this.chain = mode === 'sandbox' ? ['weapon', null, null, null]
       : mode === 'range' ? ['weapon', null, null, null, null, null] : mode === 'tutorial' ? ['weapon', null, null] : startChain(startChip);  // 靶場：6 格空電路；新手引導：晶片在引導中途給（game/tutorial.js）
     this.socks = mode === 'sandbox' ? [['amp']] : mode === 'range' || mode === 'tutorial' ? [] : startSocks(startChip);
-    this.inventory = mode === 'sandbox' || mode === 'range' || mode === 'tutorial' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 插武器（見 startSocks）
+    this.inventory = mode === 'sandbox' || mode === 'range' || mode === 'tutorial' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是插件 → 插武器（見 startSocks）
     this.playKills = {}; this.unlockFresh = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
@@ -523,7 +523,7 @@ const Game = {
         floatText(e.x, e.y - e.r, Math.round(dmg), ...dmgTextStyle(dmg, WEAPONS[wid] && WEAPONS[wid].base.damage));
         burst(b.x, b.y, b.color, 4, 160, 0.25, 2);
         Events.emit('hit', { e, b, dmg });
-        this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素組件）：燃燒、減速、爆炸、電弧
+        this.hitFx(e, b, dmg, b.x, b.y);  // 命中效果（武器升級、元素插件）：燃燒、減速、爆炸、電弧
         if (b.lifesteal && this.shipOf(b.owner)) this.healPlayer(b.lifesteal, this.shipOf(b.owner));
         if (b.ln) { this.linePass(b, 'hit', e); if (e.dead) this.linePass(b, 'kill', e); }  // 線：命中、擊殺往下一格傳
         if (b.infPierce) { /* 迴旋的回程：不會消失 */ }
@@ -551,7 +551,7 @@ const Game = {
     B.length = w;
     for (const p of this.allShips()) { const L = loadoutOf(p); L.prodN = prodN.get(L) || 0; }
   },
-  // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素組件（燃燒照這一下的傷害 dmg 算），兩邊相加
+  // 命中效果：武器升級的燃燒／減速／爆炸／電弧，加上元素插件（燃燒照這一下的傷害 dmg 算），兩邊相加
   // 武器升級的照這一下的傷害算（ratio）；元素插件是屬性傷害，照疊的層數算好的固定值（explode.dmg、burnEl、arcs.dmg，見 elemize）
   hitFx(e, b, dmg, x, y) {
     // 只有元素插件造成的（燃燒、爆炸、電弧）：傷害統計記在那個元素插件名下（編輯器插件下面的「每秒傷害」）

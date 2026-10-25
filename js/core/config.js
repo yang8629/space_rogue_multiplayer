@@ -39,8 +39,9 @@ const CFG = {
   UNLOCK_ALL: false,  // 局外成長（js/data/unlocks.js）：true = 全部開放（測試用，進度照樣記）；遊戲裡由設定頁「測試：全部解鎖」開關（Settings.unlockAll）；模擬預設 true，--locked 才上鎖（tests/load_game.js）
   // 新手引導（game/tutorial.js）：第一次開遊戲自動進；skipHold = 按住 Esc 幾秒跳過；points = 移動要飛到的點（離場地中心）；
   //   wait = 每一步完成後停幾秒才換下一步（看得到「完成」）；fight = 實戰那一波的敵人；eliteHp = 最後那隻精英的血量倍率
+  //   chip、plug、part = 三選一的三張（只能選晶片；插件之後放進倉庫自己插）
   TUTORIAL: { skipHold: 1, ship: 'vanguard', weapon: 'laser', points: [[350, -200], [350, 200], [-350, 0]], pointR: 50, dashes: 3,
-    shootN: 5, ventN: 8, ventR: 110, chip: 'boomerang', plug: 'ignite', dummies: [[300, -60], [340, 60]], fight: ['swarmer', 'swarmer', 'swarmer', 'swarmer', 'swarmer', 'spitter', 'spitter'],
+    shootN: 5, ventN: 8, ventR: 110, chip: 'boomerang', plug: 'ignite', part: 'armor', dummies: [[300, -60], [340, 60]], fight: ['swarmer', 'swarmer', 'swarmer', 'swarmer', 'swarmer', 'spitter', 'spitter'],
     elite: 'elite', eliteHp: 0.5, wait: 1, endT: 2.5 },
   TURRET: { t: 3, dmg: 0.5 },  // 哨兵號・砲台：衝刺起點留一座砲台 t 秒（每人同時一座），用那個人的整條電路朝射程內最近的敵人開火，傷害 ×dmg、射速跟飛船一樣
   PHASE: { dist: 150, t: 0.05 },  // 先鋒號・相位跳躍：衝刺改成瞬移 dist（穿牆、穿小行星，不落在裡面、不跳到別區）；瞬移後停 t 秒（算衝刺中，衝刺結束的效果照常）；無敵時間跟一般衝刺一樣是 DASH_TIME（以前只有 t：電腦用衝刺躲子彈，第 2 星區多死，整局模擬 2026-10-18）
@@ -55,6 +56,7 @@ const CFG = {
     combat: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },
     elite:  { reroll: 30, rerollUp: 20, slotCard: true, rare: 1 },
     boss:   { reroll: 30, rerollUp: 20, slotCard: false, rare: 1, after: 'victory' },  // 擊沉旗艦：先三選一，再到勝利畫面
+    tutorial: { reroll: 0, rerollUp: 0, slotCard: false, rare: 0, parts: true, after: 'play', bare: true },  // 新手引導：三張由 Tutorial 指定；選完回戰場；bare = 沒有刷新、跳過
     event:  { reroll: 15, rerollUp: 10, slotCard: false, rare: 0 },  // ？事件節點給的三選一（漂流殘骸、黑市）
     eventPart: { reroll: 15, rerollUp: 10, slotCard: false, rare: 0, parts: true },  // 黑市的走私零件：三格都是零件
   },
@@ -108,7 +110,7 @@ const CFG = {
   COOP_COUNT: [2, 2.5], COOP_HP: [1, 1.3],
   COOP_EXTRA: 0.6,  // 三、四人：在線的人每多一個（超過 2 人），敵人數量的倍數再 +0.6（血量不變；2026-10-18 使用者定，實際玩過再調）
   MEASURE_MIN: 10,  // 電路編輯器的實測 DPS：晶片裝上後戰鬥滿這麼多秒才顯示（太短的數字會亂跳）
-  WEAPON_SOCKETS: 3, START_WSOCK: 1, MAX_SOCKETS: 3,  // 武器插座開局 1 個（第一次拿組件就有地方插）、每打完一隻王 +1、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
+  WEAPON_SOCKETS: 3, START_WSOCK: 1, MAX_SOCKETS: 3,  // 武器插座開局 1 個（第一次拿插件就有地方插）、每打完一隻王 +1、最多 3 個（沙盒、靶場直接 3 個）；掉落的晶片 1～3 個（見 rollSockets）
   MAX_TRIGGERS_PER_FRAME: 200,  // 同一幀最多處理的觸發次數（防止無限連鎖卡住）；子彈數量本身沒有上限
   HIT_PT: { per: 10, ring: 0.5 },  // 旗艦命中點（hitPts）：半徑每 per 一點，排在 ring 倍半徑的圓上、單數時中心多一點；重力井塌縮照罩到幾點算幾隻（使用者 10-22 定：照體型、只算數量不重複扣血）
   DEBUG_HIT: false,  // 除錯畫面：true = 畫出敵人、玩家的身體命中範圍和旗艦命中點（console 打 CFG.DEBUG_HIT = true）
