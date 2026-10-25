@@ -315,6 +315,8 @@ function drawHubHud() {
     ctx.font = 'bold 15px Segoe UI'; ctx.fillStyle = '#bdf0ff'; ctx.fillText('E', x, y + 1);
   }
   ctx.textBaseline = 'alphabetic';
+  const fade = Hub.fade();  // 回航的過場：開頭從黑畫面淡入
+  if (fade > 0) { ctx.fillStyle = `rgba(3, 5, 12, ${fade})`; ctx.fillRect(0, 0, VW, VH); }
 }
 
 // HUD 的條（跟介面同一套：描邊 #03050c、凹槽、填色上亮下暗）：k = 0～1，seg = 刻度幾格

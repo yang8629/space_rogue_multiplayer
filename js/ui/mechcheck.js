@@ -644,6 +644,20 @@ const MechCheck = {
           got: `按 0.5 秒放開：${menu ? '打開選單' : '沒打開選單（錯）'}；按住 ${CFG.TUTORIAL.skipHold} 秒：${skipped ? '回基地、記下看過' : `狀態 ${Game.state}（錯）`}；沒看過時${first ? '' : '不'}自動進、看過後${again ? '還會自動進（錯）' : '不再自動進'}` };
       } finally { Game.pauseMenu = false; if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
     }],
+    ['基地', '回航的過場', `從戰鬥回到基地：戰機從基地外沿跑道飛回發射台、再開到大廳正中（${Hub.launchT()} 秒，開頭從黑畫面淡入），播完才能操作；沒打過仗（剛打開遊戲）直接在大廳`, M => {
+      const ready = GLR.ready, st = Game.state, rs = Game.runStats;
+      try {
+        GLR.ready = true;  // 假裝有畫面（過場只在有畫面時播）
+        Game.runStats = null; Game.state = 'title'; Hub.enter(); const fresh = !Hub.seq;
+        Game.runStats = { kills: 0 }; Hub.enter();
+        const q = Hub.seq, s = Hub.ship, out = q && q.arrive && s.y > HUB.rooms.bay.y + HUB.rooms.bay.h, dark = Hub.fade();
+        const busy = Hub.interact() === false;  // 播的時候按 E 沒反應
+        for (let f = 0; f < Math.ceil((Hub.launchT() + 0.1) * 60); f++) Hub.update(1 / 60);
+        const home = !Hub.seq && Math.hypot(s.x - HUB.spawn.x, s.y - HUB.spawn.y) < 1;
+        return { ok: fresh && out && dark > 0.9 && busy && home,
+          got: `剛打開遊戲：${fresh ? '直接在大廳' : '也播了（錯）'}；回航開頭：${out ? '戰機在基地外' : `戰機在 ${Math.round(s.y)}（錯）`}、黑畫面 ${dark.toFixed(2)}；${busy ? '播的時候不能操作' : '播的時候能按 E（錯）'}；播完：${home ? '停在大廳正中、交還操作' : `${Hub.seq ? '還在播' : '位置不對'}（錯）`}` };
+      } finally { GLR.ready = ready; Game.state = st; Game.runStats = rs; Hub.seq = null; }
+    }],
     ['基地', '基地跑戰場那一套', '基地每幀呼叫 Game.step（跟戰鬥同一個函式：戰場加了東西基地就會有）；牽引鉤勾得走標靶機', M => {
       const save = Hub.weaponId; Hub.weaponId = 'railgun';
       try {

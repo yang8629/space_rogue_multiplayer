@@ -114,7 +114,9 @@ const Hub = {
   saveLast() { Save.save('lastPick', { ship: this.shipId, weapon: this.weaponId }); },
   // 進基地：飛船在大廳正中（spawn）；選的飛船（這次開著的 → 上次存的）沒解鎖（例如存檔重來）就換成第一艘解鎖的
   //   存的排在 Game.weapon 前面：遊戲一打開 Game.weapon 就是預設的雷射（真的 Chrome 測到存的武器被它蓋掉）；存的每次換都會更新，一定是最新的
+  //   從戰鬥回來（遠征、靶場、新手教學：還留著那一局的 runStats）：播回航的過場（arrive）；多人房間不播
   enter() {
+    const back = !!Game.runStats && Game.state !== 'pick';
     const L = this.last(), ids = Object.keys(SHIPS), want = this.shipId || L.ship || Game.shipId;
     this.shipId = SHIPS[want] && isUnlocked('ship', want) ? want : ids.find(id => isUnlocked('ship', id)) || ids[0];
     const ws = Object.keys(WEAPONS), ww = this.weaponId || L.weapon || (Game.weapon && Game.weapon.id);  // 武器：上次裝的（沒解鎖就換成第一把解鎖的）
@@ -124,6 +126,7 @@ const Hub = {
     this.build(s ? s.x : HUB.spawn.x, s ? s.y : HUB.spawn.y, s ? s.aim : -Math.PI / 2);
     this.ready = true;
     this.near = null;
+    if (back) this.arrive();
     this.follow();
   },
   // 基地 = 一個房間的戰場：房間、開口的矩形做成場地（Arena.fromRects），飛船、子彈、衝刺、飛船能力、武器右鍵都是戰鬥那一套（Player、Bullet、Dash）；
@@ -236,6 +239,20 @@ const Hub = {
   //   只在基地真的畫在畫面上時播；模擬、測試（沒有畫面）、死亡畫面的「重新開始」直接 then()
   //   mates：多人時其他人的 { slot, off }——大家同時出發，其他人的船在自己這邊照同一套動畫畫（mateSeq），不靠位置同步（同步來的位置會跳、出了基地邊界被夾住）
   LAUNCH: { move: 0.6, charge: 0.55, fly: 0.85 },
+  FADE: 0.4,  // 回航的過場：開頭從黑畫面淡入幾秒
+  launchT() { const T = this.LAUNCH; return T.move + T.charge + T.fly; },
+  // 出發動畫播到第幾秒（回航 = 倒著播：從飛回來那段開始）
+  launchAt(q) { return q.arrive ? this.launchT() - q.t : q.t; },
+  // 回航的過場：出發動畫倒著播——從太空沿跑道飛回發射台（越來越慢）→ 發射台退熱 → 開到大廳正中；播完才能操作
+  //   跟 launch 一樣只在真的有畫面時播（模擬、測試直接停在大廳正中）
+  arrive() {
+    if (typeof GLR === 'undefined' || !GLR.ready || Game.simFast) return;
+    const s = this.ship, L = this.zone('launch');
+    this.seq = { t: 0, arrive: true, then: null, x0: HUB.spawn.x, y0: HUB.spawn.y, a0: -Math.PI / 2, x1: L.x, y1: L.y, y2: HUB.H + 240 };
+    this.launchPos(this.seq, this.launchAt(this.seq), s);
+  },
+  // 開頭淡入：黑畫面還剩多濃（0～1，畫面用）
+  fade() { const q = this.seq; return q && q.arrive ? clamp(1 - q.t / this.FADE, 0, 1) : 0; },
   launch(then, off = 0, mates = []) {
     if (!this.shown() || typeof GLR === 'undefined' || !GLR.ready || Game.simFast) { if (then) then(); return; }  // GLR.ready：真的有畫面
     const s = this.ship, L = this.zone('launch');
@@ -251,8 +268,9 @@ const Hub = {
   updateLaunch(dt) {
     const q = this.seq, s = this.ship, T = this.LAUNCH;
     q.t += dt;
-    this.launchPos(q, q.t, s);
+    this.launchPos(q, Math.max(0, this.launchAt(q)), s);
     this.follow();
+    if (q.arrive && q.t >= this.launchT()) { this.seq = null; s.aim = q.a0; s.moving = false; s.dashT = 0; return; }  // 回航播完：交還操作
     if (q.t >= T.move + T.charge + T.fly && q.then) { const f = q.then; q.then = null; f(); }  // 飛出去之後停在外面（多人：等房主開始）
   },
   // 出發動畫播到 t 秒時飛船 o 在哪（自己的船、其他人的 mateSeq 共用）：開過去 → 蓄能停住 → 越衝越快
@@ -267,14 +285,15 @@ const Hub = {
       const k = Math.min(1, (t - T.move - T.charge) / T.fly);
       o.x = q.x1; o.y = q.y1 + (q.y2 - q.y1) * k * k * k; o.aim = down; o.dashT = 1;  // 越來越快（衝刺的光暈）
     }
+    if (q.arrive) o.aim = q.a0;  // 回航：倒著播，船頭一路朝前進的方向（往上）
     return o;
   },
   // 其他人的船在出發動畫裡的樣子（畫面用）：{ slot, x, y, aim, moving, dashT, s, w }
   mateLaunch() { return this.seq ? (this.mateSeq || []).map(q => this.launchPos(q, this.seq.t, { slot: q.slot, s: q.s, w: q.w })) : null; },
   // 發射台蓄能的程度（0～1，畫面用）：蓄能那段從 0 升到 1，衝出去時保持 1
-  heat() { const q = this.seq; return q ? clamp((q.t - this.LAUNCH.move) / this.LAUNCH.charge, 0, 1) : 0; },
+  heat() { const q = this.seq; return q ? clamp((this.launchAt(q) - this.LAUNCH.move) / this.LAUNCH.charge, 0, 1) : 0; },  // 回航：倒著播 = 停上發射台時最熱、慢慢退
   // 衝出去那段播到哪（0～1，畫尾焰用；還沒衝 = 0）
-  flyK() { const q = this.seq, T = this.LAUNCH; return q ? clamp((q.t - T.move - T.charge) / T.fly, 0, 1) : 0; },
+  flyK() { const q = this.seq, T = this.LAUNCH; return q ? clamp((this.launchAt(q) - T.move - T.charge) / T.fly, 0, 1) : 0; },
   // 鏡頭跟著飛船（飛船在標題列以下那塊的正中間），不超出基地外圍太多；縮放照畫面大小（1280×800 = 1）
   // 鏡頭跟著飛船：dt 有給 = 平滑跟上（跟戰鬥一樣每秒 8 倍差距；先鋒號瞬移時鏡頭不會一下跳過去）；沒給 = 直接對準（進基地、出發動畫）
   follow(dt) {

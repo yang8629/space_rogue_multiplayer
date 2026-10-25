@@ -649,10 +649,11 @@ const GLHub = {
   launchTrail(g, o) {
     const fk = Hub.flyK();
     if (!(fk > 0 && fk < 1)) return;
-    const y0 = Math.max(Hub.seq.y1, o.y - 30 - 320 * fk);
-    g.moveTo(o.x, y0).lineTo(o.x, o.y - 6).stroke({ width: 12, color: 0x4cc9f0, alpha: 0.3 });
-    g.moveTo(o.x, (y0 + o.y) / 2).lineTo(o.x, o.y - 6).stroke({ width: 4, color: 0xffffff, alpha: 0.85 });
-    this.glow(o.x, o.y - 12, 46, 0x4cc9f0, 0.7);
+    const d = Hub.seq.arrive ? 1 : -1;  // 光跡在船的後面：出發（往下飛）在上面、回航（往上飛）在下面
+    const y0 = d < 0 ? Math.max(Hub.seq.y1, o.y - 30 - 320 * fk) : o.y + 30 + 320 * fk;
+    g.moveTo(o.x, y0).lineTo(o.x, o.y + 6 * d).stroke({ width: 12, color: 0x4cc9f0, alpha: 0.3 });
+    g.moveTo(o.x, (y0 + o.y) / 2).lineTo(o.x, o.y + 6 * d).stroke({ width: 4, color: 0xffffff, alpha: 0.85 });
+    this.glow(o.x, o.y + 12 * d, 46, 0x4cc9f0, 0.7);
   },
   // 背景的中子星（站體右上方的太空）：很亮的白核、一圈傾斜的吸積盤（暖色，上面幾個亮點繞著轉）、兩道慢慢掃過的脈衝光束、大片藍色光暈
   //   放在戰績室右邊、軍械庫上面那片空的太空；視差 SKY_PAR：鏡頭移動時它少動一點（看起來在站體後面、比較遠）；被站體擋住的部分在站體後面
