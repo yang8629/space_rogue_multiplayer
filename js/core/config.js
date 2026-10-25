@@ -42,7 +42,7 @@ const CFG = {
   //   chip、plug、part = 三選一的三張（只能選晶片；插件之後放進倉庫自己插）；ventR = 圍住飛船那圈的半徑（排熱 18 道射線，半徑 80 以內射線之間沒有空隙，110 時有 2 隻剛好落在空隙）；ventHp = 那圈的血（衝擊波熱度 25% 時約 17，一下打掉）
   //   row = 迴旋那幾步的隊形：前排 front 打不死（光束被它擋住），後面 n 隻一列，間隔 gap；hp = 看迴旋那步的後排血量、burnHp = 看燃燒那步的
   TUTORIAL: { skipHold: 1, ship: 'vanguard', weapon: 'laser', points: [[350, -200], [350, 200], [-350, 0]], pointR: 50, dashes: 3,
-    shootN: 5, ventN: 8, ventR: 80, ventHp: 10, chip: 'boomerang', plug: 'ignite', part: 'armor',
+    shootN: 3, ventN: 8, ventR: 80, ventHp: 10, chip: 'boomerang', plug: 'ignite', part: 'armor',
     row: { front: 'brute', dist: 240, n: 4, gap: 45, hp: 8, burnHp: 30 }, fight: ['swarmer', 'swarmer', 'swarmer', 'swarmer', 'swarmer', 'spitter', 'spitter'],
     elite: 'elite', eliteHp: 0.5, wait: 1, endT: 2.5 },
   TURRET: { t: 3, dmg: 0.5 },  // 哨兵號・砲台：衝刺起點留一座砲台 t 秒（每人同時一座），用那個人的整條電路朝射程內最近的敵人開火，傷害 ×dmg、射速跟飛船一樣

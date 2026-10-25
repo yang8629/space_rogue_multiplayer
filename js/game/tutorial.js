@@ -92,6 +92,7 @@ const Tutorial = {
     if (!TUTORIAL_PLAY[st.id].keep) Game.enemies = [];
     if (i === 0 || TUTORIAL[i - 1].sec !== st.sec) bannerFx(st.sec, '', 1.6);  // 新的一段
     TUTORIAL_PLAY[st.id].setup(this.S);
+    Events.emit('tutorialTip');  // 這一步一開始就有泡泡框（熱度條）：叫畫面畫
   },
   tick(dt) {
     if (this.holding && (this.hold += dt) >= CFG.TUTORIAL.skipHold) { this.holding = false; Game.quitRun(); return; }
@@ -126,7 +127,7 @@ const Tutorial = {
   },
   // 戰場上發生了要說明的事（迴旋刃打到後排、後排燒起來）：記下位置、停住戰場、叫畫面跳泡泡框
   cue(S, e) { S.cued = true; S.cueAt = { x: e.x, y: e.y, r: e.t.radius }; Events.emit('tutorialTip'); },
-  halted() { const t = this.tipNow(); return !!(t && t.cue); },
+  halted() { const t = this.tipNow(); return !!(t && (t.cue || t.at === 'hud')); },  // 戰鬥中跳泡泡框：戰場停住
   nextTip() { const t = this.tipNow(); if (t && !t.stay) this.S.tip = (this.S.tip || 0) + 1; },  // 點畫面：換下一個
   // 電路畫面底下提示列的字：這一步要做的事；在電路畫面裡就做到了（插好插件）= 叫玩家回戰鬥
   tip() {

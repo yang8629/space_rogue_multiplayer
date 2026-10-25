@@ -33,10 +33,13 @@ console.log('第一次開遊戲：', await p2.evaluate(() => `${Game.mode} / ${G
 await p2.evaluate(() => SFX.setMuted && SFX.setMuted(true));
 await shot2('7教學1移動');
 await p2.evaluate(() => Tutorial.go(1)); await wait(800); await shot2('7教學2射擊');
-await p2.evaluate(() => Tutorial.go(2)); await wait(800); await shot2('7教學3排熱_包圍');
+await p2.evaluate(() => Tutorial.go(2)); await wait(800); await shot2('7教學3排熱_熱度說明');
+await p2.click('.bb-cover'); await shot2('7教學3排熱_包圍');
 await p2.evaluate(() => { Game.player.hHeat = 0.3; Input.alt = true; }); await wait(250); await shot2('7教學3排熱_衝擊波');
 // 三選一：泡泡框依序（點畫面換下一個），最後指定選晶片
-await p2.evaluate(() => Tutorial.go(3)); await wait(1500); await shot2('7教學4三選一_1晶片');
+await p2.evaluate(() => Tutorial.go(3)); await p2.screenshot({ path: SHOTS + '開局_7教學4三選一_0翻卡中.png' });  // 卡片還在翻：泡泡框不能出來
+console.log('翻卡中泡泡框：', await p2.evaluate(() => document.querySelector('.bubble').classList.contains('hidden') ? '沒出來' : '出來了（錯）'));
+await wait(1500); await shot2('7教學4三選一_1晶片');
 for (const [k, name] of [[2, '插件'], [3, '零件'], [4, '選這張']]) { await p2.click('.bb-cover'); await shot2(`7教學4三選一_${k}${name}`); }
 await p2.evaluate(() => Game.takeReward(Game.reward.only)); await wait(1500);
 // 朝前排射，等到停下來說明（迴旋刃打到後排、後排燒起來）

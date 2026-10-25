@@ -374,6 +374,7 @@ function drawTreasureMarks() {
   }
 }
 const HUD_ROW = 14;  // 左上角狀態每一列的高度（11px 字＋行距）
+const HUD_AT = {};  // 左上角某幾列畫在哪（畫布座標）：新手教學的泡泡框指著它（ui/bubble.js）
 function drawHUD() {
   const p = Game.player, s = Game.stats, C = Game.combat, T = Input.touch;
   drawTreasureMarks();
@@ -403,7 +404,7 @@ function drawHUD() {
     const ar = 1 - clamp((p.altCd || 0) / A.cd, 0, 1), up = p.edgeT > 0;
     line(up ? 1 : ar, up ? '#ffffff' : ar >= 1 ? '#ff8fd8' : '#7a4a6a', `${A.name}${T ? '' : ' [右鍵]'}${up ? '　下一刀強化！' : ''}`, up ? '#ffffff' : '#ff8fd8');
   }
-  if (hb) line(hb.k, hb.color, hb.label, hb.color, 4);
+  if (hb) { ctx.font = '11px Microsoft JhengHei'; HUD_AT.heat = { x: 16, y: row - 4, w: 126 + ctx.measureText(hb.label).width, h: HUD_ROW + 2 }; line(hb.k, hb.color, hb.label, hb.color, 4); }
   let bx = T ? 180 : 250;  // 衝刺那一列右邊的小條：由左往右排（文字長短不一）
   ctx.font = '11px Microsoft JhengHei';
   bx = Math.max(bx, 136 + 12 + ctx.measureText(T ? '衝刺' : A ? '衝刺 [Space]' : '衝刺 [Space/右鍵]').width);

@@ -546,7 +546,7 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
-    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；打完回基地、記下看過`, M => {
+    ['新手教學', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；光圈和衝刺都要做；排熱一開始先停下來指熱度條、右鍵落空不算排熱、熱度剛好夠的排熱打掉整圈；迴旋刃打到後排、後排燒起來時戰場停下來說明，後排 30 秒內打得完；三選一晶片、插件、零件各一張，泡泡框依序說明、只能選晶片；打完回基地、記下看過`, M => {
       const flag = Save.raw('tutorial'), log = [];
       const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
       const at = () => (TUTORIAL[Tutorial.i] || { id: '結束' }).id, P = () => Game.player;
@@ -570,6 +570,8 @@ const MechCheck = {
         },
         shoot: killAll,
         vent: () => {
+          const t0 = Tutorial.tipNow(); if (!t0 || t0.at !== 'hud' || !Tutorial.halted()) log.push(`排熱開始時沒先停下來指熱度條（${t0 ? t0.title : '沒有泡泡框'}，錯）`);
+          Tutorial.nextTip();
           P().hHeat = 0; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);  // 熱度不夠：落空，不算
           tick(); if (at() !== 'vent') log.push('右鍵落空也算排熱（錯）');
           P().hHeat = HEAT.min + 0.01; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60); W_.step(30);  // 熱度剛好夠：衝擊波要一下打掉整圈
