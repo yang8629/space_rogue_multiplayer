@@ -32,10 +32,11 @@ const HUB_ROOMS = {
   deck: { label: '觀景台', en: 'OBSERVATION', color: '#9fb4ff' },
   records: { label: '戰績室', en: 'RECORDS', color: '#ffd166', console: { id: 'stats', label: '🏆 戰績', tab: 'stats' }, uncut: ['下右'] },  // uncut：不切的角（左右牆下段掛螢幕，一路到地板）
 };
-// 終端機：中央大廳的左右牆，左右輪流、同一邊往下排
+// 終端機：中央大廳的左右牆，左右輪流、同一邊往下排；desc = 靠近時說明卡寫的（按 E 做什麼在 Hub.TERM_ACT）
 const HUB_TERMS = [
-  { id: 'coop', label: '👥 多人連線', color: '#ff9dbd' },
-  { id: 'range', label: '🎯 靶場', color: '#9dff6b' },
+  { id: 'coop', label: '👥 多人連線', color: '#ff9dbd', desc: () => '開房間或加入朋友的房間' },
+  { id: 'range', label: '🎯 靶場', color: '#9dff6b', desc: () => `用${SHIPS[Hub.shipId].name}＋${WEAPONS[Hub.weaponId].name}進靶場` },
+  { id: 'tutorial', label: '📘 新手引導', color: '#ffd166', desc: () => `一次教一件事：${TUTORIAL_SECS.join('、')}` },
 ];
 // 照數量算配置：回傳 { W, H, rooms, doors（牆上的開口）, walk（飛船能待的矩形）, zones, spawn（進基地的位置 = 大廳正中）, targets（軍械庫的標靶機） }
 function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
@@ -91,8 +92,9 @@ function hubLayout(shipIds, weaponIds, terms = HUB_TERMS) {
   // 發射台：發射甲板上，跑道穿過甲板的下牆到太空
   zones.push({ id: 'launch', kind: 'launch', x: cx, y: R.bay.y + 140, r: C.LAUNCH_R, label: '🚀 發射台', color: '#4cc9f0' });
   // 終端機：大廳左右牆，左右輪流、同一邊往下排；第一台從 y + 180 開始（再上面是左上角地上的房名「中央大廳 CENTRAL HALL」，130 時終端機蓋住英文字）
+  //   第二排起放在左右牆中間的開口（通機庫、軍械庫）下面：照 180 + 170 排會擋在開口前
   terms.forEach((t, i) => { const side = i % 2, k = Math.floor(i / 2);
-    zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: hall.y + 180 + k * 170, r: C.TERM_R }); });
+    zones.push({ ...t, kind: 'term', side, x: side ? hall.x + hall.w - 56 : hall.x + 56, y: k ? my + D / 2 + C.TERM_R + 20 + (k - 1) * 170 : hall.y + 180, r: C.TERM_R }); });
   return { W: R.armory.x + armoryW + M, H: R.bay.y + R.bay.h + M, rooms, doors, walk: [...Object.values(rooms), ...doors], zones, spawn: { x: cx, y: hall.y + hall.h / 2 }, targets };
 }
 Object.assign(HUB, hubLayout(Object.keys(SHIPS), Object.keys(WEAPONS)));
@@ -304,6 +306,12 @@ const Hub = {
     rack: z => Hub.equip(z.weapon),
     console: z => Events.emit('hubPanel', z.tab),  // 打開面板（ui/base.js）
     launch: () => Events.emit('hubPanel', 'launch'),
-    term: z => { if (!Hub.coop()) { if (z.id === 'coop') Net.lobby(); else Game.newRun('range', Hub.shipId, Hub.weaponId); } },  // 靶場：用目前開的船、裝的武器
+    term: z => { if (!Hub.coop()) Hub.TERM_ACT[z.id](); },
+  },
+  // 終端機按 E：靶場用目前開的船、裝的武器；新手引導固定用 CFG.TUTORIAL 的船和武器
+  TERM_ACT: {
+    coop: () => Net.lobby(),
+    range: () => Game.newRun('range', Hub.shipId, Hub.weaponId),
+    tutorial: () => Tutorial.begin(),
   },
 };

@@ -277,6 +277,7 @@ const Editor = {
     Game.packChain();  // 空格集中到最後（共用的空位）
     Game.recalc();
     this.render();
+    if (Game.mode === 'tutorial') this.showDefaultInfo();  // 新手引導：做到了就換成「按 Tab 回到戰鬥」
   },
   // 同種晶片合成：d 拖到 arr[i] 上 → 等級相加、插座取大的（見 mergedChip）
   //   合成後放在電路上的那一格（兩片都不在電路上就放目標那格）；兩片的插件都移過去，插不下的退回倉庫（靶場直接拿掉）
@@ -454,7 +455,8 @@ const Editor = {
     this.dropAppend(d);
   },
   showDefaultInfo() {
-    this.infoEl.innerHTML = '武器打中敵人 → 觸發下一片<b style="color:#5ef2d0">晶片</b> → 它的產物再觸發下一片。' +
+    const tip = Game.mode === 'tutorial' ? Tutorial.tip() : '';  // 新手引導：這一步要做的事放最上面（電路畫面蓋住了戰鬥畫面上的目標框）
+    this.infoEl.innerHTML = (tip ? `<b style="color:#ffd166">📘 ${tip}</b><br>` : '') + '武器打中敵人 → 觸發下一片<b style="color:#5ef2d0">晶片</b> → 它的產物再觸發下一片。' +
       `<b style="color:${TYPE_META.comp.color}">插件</b>往後傳；同種晶片拖到一起＝<b style="color:#ffd166">合成</b>。`;
   },
   showInfo(id, slot = -1, J = null) {

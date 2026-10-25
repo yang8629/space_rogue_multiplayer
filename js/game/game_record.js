@@ -131,7 +131,8 @@ Object.assign(Game, {
   },
   quitRun() {
     this.pauseMenu = false;
-    if (this.freePlay()) { this.state = 'title'; this.inArena = false; this.view(); return; }  // 靶場、沙盒：沒有結算，直接回標題
+    if (this.mode === 'tutorial') Save.setFlag('tutorial', true);  // 新手引導：打完、跳過、從選單離開都算看過（之後不再自動進）
+    if (this.freePlay() || this.mode === 'tutorial') { this.state = 'title'; this.inArena = false; this.view(); return; }  // 靶場、沙盒、新手引導：沒有結算，直接回基地
     this.saveRecord('retired');
     this.state = 'ended'; this.endCleared = false; this.inArena = false;
     this.view();

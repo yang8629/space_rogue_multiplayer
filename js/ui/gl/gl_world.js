@@ -311,7 +311,7 @@ const GLWorld = {
     } else {
       g.circle(X.x, X.y, X.r * pulse).fill({ color: 0x2ee6a6, alpha: 0.15 }).stroke({ width: 4, color: 0x2ee6a6, alpha: 0.9 });
       for (let i = 0; i < 3; i++) { const a = t * 2 + i * TAU / 3; glArc(g, X.x, X.y, X.r * 0.6, a, a + 1.2); g.stroke({ width: 2, color: 0x2ee6a6, alpha: 0.9 }); }
-      label('出口', X.x, X.y - X.r - 4);
+      label(X.label || '出口', X.x, X.y - X.r - 4);
     }
     const p = Game.viewShip(), c = Game.cam;
     if (X.x > c.x && X.x < c.x + ZW && X.y > c.y && X.y < c.y + ZH) return;

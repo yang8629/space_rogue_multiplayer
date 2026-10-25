@@ -140,9 +140,9 @@ const Game = {
     // 先換上新的電路、倉庫、飛船，再計算數值（不能拿上一場的電路來算）
     // 遠征／雙人：開局三選一的起始晶片直接裝在電路上（武器右邊）；飛船不再自帶晶片
     this.chain = mode === 'sandbox' ? ['weapon', null, null, null]
-      : mode === 'range' ? ['weapon', null, null, null, null, null] : startChain(startChip);  // 靶場：6 格空電路
-    this.socks = mode === 'sandbox' ? [['amp']] : mode === 'range' ? [] : startSocks(startChip);
-    this.inventory = mode === 'sandbox' || mode === 'range' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 插武器（見 startSocks）
+      : mode === 'range' ? ['weapon', null, null, null, null, null] : mode === 'tutorial' ? ['weapon', null, null] : startChain(startChip);  // 靶場：6 格空電路；新手引導：晶片在引導中途給（game/tutorial.js）
+    this.socks = mode === 'sandbox' ? [['amp']] : mode === 'range' || mode === 'tutorial' ? [] : startSocks(startChip);
+    this.inventory = mode === 'sandbox' || mode === 'range' || mode === 'tutorial' ? Array(CFG.INV_SLOTS).fill(null) : startInv(startChip);  // 起始晶片是組件 → 插武器（見 startSocks）
     this.playKills = {}; this.unlockFresh = []; this.playDry = false; this.mechN = 0;  // mechN：這一局拿了幾個機體強化  // playDry：上一次三選一沒有玩法晶片（下一次保底）
     this.wSock = this.freePlay() ? CFG.WEAPON_SOCKETS : CFG.START_WSOCK;  // 武器插座：每打完一隻王 +1
     this.parts = { ...S.parts }; this.partSlots = S.partSlots; this.cap = S.cap;  // 機體成長線：開局零件、能量容量由飛船決定
@@ -150,7 +150,7 @@ const Game = {
     this.boons = cleanBoons(); this.sos = null;  // ？事件拿到的這一局效果（黑市、終焉護殼的次數，見 mechStats）；sos：下一場戰鬥變難（見 addSos）
     this.player = new Player(S);
     this.map = mode === 'run' || (mode === 'coop' && Net.role === 'host') ? genMap() : null;  // 雙人：星圖由房主產生後傳給隊友
-    if (this.freePlay()) this.chapterId = 1;  // 靶場、沙盒用不到章節（雙人的章號由 Net 在開局前設好）
+    if (this.freePlay() || mode === 'tutorial') this.chapterId = 1;  // 靶場、沙盒、新手引導用不到章節（雙人的章號由 Net 在開局前設好）
     this.node = null; this.visited = []; this.sector = this.chapter().sectors[0]; this.bossId = this.bossFor(this.sector);
     this.runStats = { dmg: Object.fromEntries(DMG_SOURCES.map(([k]) => [k, 0])), chips: {}, kills: 0, maxHit: 0, time: 0,
       bosses: [], bossIds: [], elites: 0, echoK: 0, started: Date.now(), recorded: false,  // bossIds、elites、echoK：解鎖進度用（打倒的旗艦、精英、回響擊殺）
@@ -171,6 +171,7 @@ const Game = {
     if (mode !== 'coop') { this.mates = []; Net.close(); }
     if (mode === 'sandbox') this.startCombat({ sandbox: true, level: 0 });
     else if (mode === 'range') { this.startCombat({ sandbox: true, range: true, level: 0 }); Range.reset('single'); }
+    else if (mode === 'tutorial') this.startCombat({ sandbox: true, tutorial: true, level: 0 });  // 每一步的敵人由 Tutorial 擺
     else if (mode === 'coop') return;  // 雙人：由 Net 建好隊友之後再開戰
     else this.showMap(`${this.chapter().name}：${this.chapter().intro}`);
   },
@@ -341,7 +342,8 @@ const Game = {
     if (this.isEndless()) dmg *= Math.pow(CFG.ENDLESS_DMG, this.sector - this.lastSector());  // 無盡：每過一個星區，受到的傷害 ×1.25（乘算）
     if (!this.freePlay()) dmg *= this.chapter().dmg;  // 章節：受到的傷害再 ×（第一章 1）
     if (T.thick) dmg = Math.min(dmg, p.maxHp * 0.2);  // 厚甲
-    if (this.mode === 'range' && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, '靶場：回滿', '#9dff6b', true); return; }  // 靶場實戰：不會死
+    const safe = { range: '靶場', tutorial: '引導' }[this.mode];  // 靶場實戰、新手引導：不會死
+    if (safe && p.hp - dmg <= 0) { p.hp = p.maxHp; p.iframe = 1; floatText(p.x, p.y - 26, `${safe}：回滿`, '#9dff6b', true); return; }
     p.hp -= dmg; p.iframe = Math.max(p.iframe, CFG.IFRAME + (T.deflect ? 0.8 : 0)); p.calm = 0;
     if (p.hp <= 0 && this.wardSave(p)) return;  // 終焉護殼（？事件）：免死一次
     if (dmg > 0) p.streak = 0;

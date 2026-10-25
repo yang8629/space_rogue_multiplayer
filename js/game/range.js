@@ -17,19 +17,21 @@ const Range = {
   SPAWN_LV: [1, 3, 6, 10, 17],
   spawnTypes() { return Object.keys(ENEMY_TYPES).filter(k => !ENEMY_TYPES[k].dummy && k !== 'splitling'); },
   // 在 (x, y) 生 n 隻（n > 1 時散在周圍 80 內）；不動 = 跟標靶一樣不移動也不攻擊；打不死 = 血量歸零自動補滿
-  spawn(n, x, y) {
-    const G = Game, type = this.spawnType, scale = enemyHpMul(this.spawnLv, 1);
+  //   o 可以蓋掉靶場按鈕列的設定：{ type, move, kill, lv }（新手引導用）
+  spawn(n, x, y, o = {}) {
+    const G = Game, type = o.type || this.spawnType, move = o.move != null ? o.move : this.spawnMove, kill = o.kill != null ? o.kill : this.spawnKill;
+    const scale = enemyHpMul(o.lv || this.spawnLv, 1);
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU), d = n > 1 ? rand(20, 80) : 0;
       const [ex, ey] = Arena.clampIn(x + Math.cos(a) * d, y + Math.sin(a) * d, ENEMY_TYPES[type].radius + 4);
       const e = new Enemy(type, ex, ey, scale);
       e.manual = true; e.spawnT = 0.3;
-      if (!this.spawnMove) {
+      if (!move) {
         e.t = { ...e.t, dmg: 0 }; e.frozen = true; e.hx = ex; e.hy = ey; e.cloak = 0;  // 不跑 AI（跟標靶一樣被打退會彈回原位）；潛伏者不隱形
       }
-      if (!this.spawnKill) e.immortal = true;
+      if (!kill) e.immortal = true;
       G.enemies.push(e);
-      if (this.spawnMove) for (const k of G.spawnParts(e)) { k.manual = true; k.immortal = e.immortal; }  // 編隊、雙子獵艦、守門者的砲塔：會動的才補齊整組
+      if (move) for (const k of G.spawnParts(e)) { k.manual = true; k.immortal = e.immortal; }  // 編隊、雙子獵艦、守門者的砲塔：會動的才補齊整組
     }
   },
   // 生成的位置：鍵盤 G = 滑鼠指的地方；按鈕（手機）= 飛船前方 300
@@ -53,11 +55,7 @@ const Range = {
       wide: [[0, -300], [120, -220], [200, -110], [230, 0], [200, 110], [120, 220], [0, 300], [-60, -120], [-60, 120], [60, 0]],
       flood: [[-140, -120], [-100, 60], [-180, 180], [-650, 100], [-680, -150], [-400, -260], [-320, 240], [-460, 220], [-20, -20], [-780, 0]],  // 圍在飛船四周（以前效能測試的位置）
     }[layout];
-    for (const [dx, dy] of pts) {
-      const e = new Enemy('dummy', cx + dx, cy + dy, 1);
-      e.hx = e.x; e.hy = e.y;
-      G.enemies.push(e);
-    }
+    for (const [dx, dy] of pts) this.dummy(cx + dx, cy + dy);
     if (layout === 'flood') {  // 爆量：產物多、連鎖長的配裝（看產物預算 CFG.PROD_CAP、效能）
       G.weapon = { id: 'laser', path: null, final: null }; G.refreshWeapon();
       G.chain = ['weapon', chipId('shard', 3), chipId('boomerang', 3), chipId('shard', 3), chipId('infect', 3), chipId('shard', 3)];
@@ -68,6 +66,8 @@ const Range = {
     }
     this.clearStats();
   },
+  // 標靶：打不死、被打退會彈回原位（hx、hy）
+  dummy(x, y) { const e = new Enemy('dummy', x, y, 1); e.hx = e.x; e.hy = e.y; Game.enemies.push(e); return e; },
   // 爆量重現：每 1.5 秒一圈 32 發從 500 外射向飛船（終焉核心的環形波，不扣血）
   tick(dt) {
     if (this.live || this.layout !== 'flood' || (this.ringT -= dt) > 0) return;

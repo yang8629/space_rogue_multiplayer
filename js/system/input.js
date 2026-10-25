@@ -32,7 +32,7 @@ addEventListener('keydown', e => {
   if (k === ' ') { e.preventDefault(); if (Input.piloting()) { Input.dash = true; Input.dashHeld = true; } return; }
   Input.keys.add(k);
   if (k === 'escape' && Game.state === 'editor') { Game.toggleEditor(); return; }
-  if (k === 'escape' && Game.state === 'play' && !e.repeat) { Game.togglePauseMenu(); return; }  // 戰鬥中：選單（繼續／離開遊戲）
+  if (k === 'escape' && Game.state === 'play' && !e.repeat) { if (Game.mode === 'tutorial') Tutorial.escDown(); else Game.togglePauseMenu(); return; }  // 戰鬥中：選單（繼續／離開遊戲）；新手引導：按住跳過，放開才開選單
   if (k === 'escape' && !e.repeat) {  // Esc：按下畫面上標了 data-back 的返回鍵（只有不會造成損失的返回，例如選武器 → 選飛船）
     const back = !Screen.el.classList.contains('hidden') && Screen.el.querySelector('[data-back]');
     if (back) { Screen.act(back); return; }
@@ -45,6 +45,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => {
   if (e.key === ' ') Input.dashHeld = false;
+  if (e.key === 'Escape' && Game.mode === 'tutorial') Tutorial.escUp();
   Input.keys.delete(e.key.toLowerCase());
 });
 addEventListener('blur', () => { Input.keys.clear(); Input.down = false; Input.dashHeld = false; });

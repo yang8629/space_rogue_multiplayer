@@ -220,6 +220,21 @@ function drawRangePanel() {
   }
 }
 
+// 新手引導：上方中間一個框（第幾段、這一步要做什麼、進度；完成時變綠）；右下角「按住 Esc 跳過」＋按住的進度條
+function drawTutorialPanel() {
+  const V = Tutorial.view();
+  if (!V) return;
+  ctx.font = 'bold 17px Microsoft JhengHei';
+  const w = Math.min(VW - 40, Math.max(360, ctx.measureText(V.goal).width + 48)), x = VW / 2 - w / 2, y = 22, col = V.done ? '#9dff6b' : '#ffd166';
+  hudFrame(x, y, w, 64, col);
+  ctx.textAlign = 'left'; hudText(V.sec, x + 14, y + 20, col, 'bold 12px Microsoft JhengHei');
+  ctx.textAlign = 'right'; if (V.prog || V.done) hudText(V.done ? '✓ 完成' : V.prog, x + w - 14, y + 20, col, 'bold 12px Microsoft JhengHei');
+  ctx.textAlign = 'center'; hudText(V.goal, VW / 2, y + 48, '#ffffff', 'bold 17px Microsoft JhengHei', w - 24);
+  if (Input.touch) return;  // 手機沒有 Esc：從「選單」離開
+  ctx.textAlign = 'right'; hudText('按住 Esc 跳過引導', VW - 20, VH - 40, V.hold > 0 ? '#ffffff' : '#6a79ad', '12px Microsoft JhengHei');
+  if (V.hold > 0) hudBar(VW - 128, VH - 32, 108, 5, V.hold, '#ffd166');
+}
+
 // 小地圖（畫面右上角，螢幕座標）：整張地圖、閘門、飛船
 function drawMinimap(x, y, maxW, maxH, left = false) {  // x = 右邊緣（left：左邊緣）
   if (Arena.rect || !Arena.path) return;
@@ -334,9 +349,9 @@ function hudMix(c, k) {
   return `rgb(${v[0]}, ${v[1]}, ${v[2]})`;
 }
 // HUD 的字：深色描邊（疊在場景上也看得清楚）
-function hudText(txt, x, y, col, font) {
+function hudText(txt, x, y, col, font, maxW) {  // maxW：超過就壓窄（不給 = 不限）
   ctx.font = font; ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#03050c';
-  ctx.strokeText(txt, x, y); ctx.fillStyle = col; ctx.fillText(txt, x, y);
+  ctx.strokeText(txt, x, y, maxW); ctx.fillStyle = col; ctx.fillText(txt, x, y, maxW);
 }
 
 // 寶藏無人機的位置：在畫面外就在邊緣畫金色箭頭指向它，旁邊寫還剩幾秒（modeT，隊友那邊也有）；在畫面內頭上寫秒數
@@ -415,11 +430,12 @@ function drawHUD() {
   });
 
   ctx.textAlign = 'right';
-  hudText(C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34, '#cfe8ff', `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`);
+  hudText(C.tutorial ? '📘 新手引導' : C.range ? `🎯 靶場 · ${Range.LAYOUTS[Range.layout]}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : Game.mode === 'range' ? `🎯 靶場 · 實戰 · WAVE ${C.wave}${Range.slow ? ' · 慢動作 ×0.25' : ''}` : C.sandbox ? `${Game.mode === 'coop' ? '多人' : '沙盒'} · WAVE ${C.wave}` : `${NODE_META[Game.node.type].label} · WAVE ${C.wave} / ${C.wavesTotal}`, VW - 20, 34, '#cfe8ff', `bold ${VW < 500 ? 13 : 16}px Microsoft JhengHei`);
   hudText(C.range ? `場上子彈 ${Game.bullets.length}` : `擊殺 ${Game.kills}　子彈 ${Game.bullets.length}`, VW - 20, 54, '#8fa3d9', '12px Microsoft JhengHei');
   // FPS（右上角最上面）：綠 ≥ 55、黃 ≥ 40、紅
   if (Settings.fps) { ctx.font = '11px Microsoft JhengHei'; ctx.fillStyle = FPS.v >= 55 ? '#9dff6b' : FPS.v >= 40 ? '#ffd166' : '#ff6b6b'; ctx.fillText(`FPS ${FPS.v}`, VW - 20, 14); }  // 設定頁可以關掉
   if (Game.mode === 'range') drawRangePanel();
+  if (Game.mode === 'tutorial') drawTutorialPanel();
   if (Game.mode === 'coop' && Net.active()) {  // 雙人：連線延遲（綠 < 80ms、黃 < 150ms、紅）
     ctx.font = `bold ${VW < 500 ? 13 : 15}px Microsoft JhengHei`; ctx.fillStyle = NetView.pingColor(Net.ping);
     ctx.fillText(Net.ping == null ? '連線延遲 測量中…' : `連線延遲 ${Net.ping} ms`, VW - 20, 76);

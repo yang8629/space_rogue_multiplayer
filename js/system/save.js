@@ -13,6 +13,7 @@ const Save = {
     unlockSeen: 'v2_unlock_seen',  // 基地「新」標記看過的：["種類:id", …]
     settings: 'v2_settings',       // 設定頁：音量、畫面震動、FPS、卡片說明
     lastPick: 'v2_lastPick',       // 上次選的飛船、武器：{ ship, weapon }
+    tutorial: 'v2_tutorial',       // 新手引導看過了：'1'（看過就不再自動進）
     muted: 'muted', music: 'music', autoFire: 'autoFire',  // 開關：'1'／'0'
   },
   raw(k) { try { return localStorage.getItem(this.KEYS[k]); } catch (e) { return null; } },  // 原始字串（沒有 = null）

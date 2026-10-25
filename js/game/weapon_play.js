@@ -91,7 +91,7 @@ const parkOf = (b, kind) => !b.dead && b.park && b.park.kind === kind && b.mode 
 const ownShots = (p, kind) => Game.bullets.filter(b => b.ownerP === p && parkOf(b, kind));
 const turretShots = (p, kind) => Game.bullets.filter(b => b.ownerP && b.ownerP.pl === p && parkOf(b, kind));
 // 右鍵沒東西可用：灰色光圈往內收，冷卻只扣一點
-const altMiss = p => { ringFx(p.x, p.y, 30, '#8a8fa8', true); p.altCd = 0.2; };
+const altMiss = p => { ringFx(p.x, p.y, 30, '#8a8fa8', true); p.altCd = 0.2; p.missN = (p.missN || 0) + 1; };  // missN：落空幾次（Player.tickAlt 算成功次數 altN）
 // 武器原型直接造成的傷害（不是子彈打的：撕扯、撞擊、電弧）算在武器上
 const WATT = () => ({ src: 'weapon', cr: null, owner: Game.shooter });  // owner：算在誰身上（隊友的配裝在 withLoadout 裡 = 他；以前寫死 null，隊友的撕扯、甩擊、扯都記到房主，2026-10-22 smoke.js 抓到）
 // 武器自己造成的傷害（右鍵、升級的撞擊、電弧、爆炸）也吃插在武器上的插件：傷害、大小照乘，元素照命中套（見 weaponWithPlugs、Game.hitFx）

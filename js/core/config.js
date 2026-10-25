@@ -37,6 +37,11 @@ const CFG = {
   GRAY: { share: 0.4, cap: 0.25, delay: 4, rate: 6 },  // 堡壘號・灰血：受傷的 40% 變成灰血（最多最大 HP 的 25%），4 秒沒被打開始回每秒 6；戰鬥結束時剩下的回滿
   DECOY: { t: 1.5, r: 400 },  // 幻影號・殘影：衝刺起點留殘影 1.5 秒，附近 400 內的敵人改打殘影
   UNLOCK_ALL: false,  // 局外成長（js/data/unlocks.js）：true = 全部開放（測試用，進度照樣記）；遊戲裡由設定頁「測試：全部解鎖」開關（Settings.unlockAll）；模擬預設 true，--locked 才上鎖（tests/load_game.js）
+  // 新手引導（game/tutorial.js）：第一次開遊戲自動進；skipHold = 按住 Esc 幾秒跳過；points = 移動要飛到的點（離場地中心）；
+  //   wait = 每一步完成後停幾秒才換下一步（看得到「完成」）；fight = 實戰那一波的敵人；eliteHp = 最後那隻精英的血量倍率
+  TUTORIAL: { skipHold: 1, ship: 'vanguard', weapon: 'laser', points: [[350, -200], [350, 200], [-350, 0]], pointR: 50, dashes: 3,
+    shootN: 5, ventN: 8, ventR: 110, chip: 'boomerang', plug: 'ignite', dummies: [[300, -60], [340, 60]], fight: ['swarmer', 'swarmer', 'swarmer', 'swarmer', 'swarmer', 'spitter', 'spitter'],
+    elite: 'elite', eliteHp: 0.5, wait: 1, endT: 2.5 },
   TURRET: { t: 3, dmg: 0.5 },  // 哨兵號・砲台：衝刺起點留一座砲台 t 秒（每人同時一座），用那個人的整條電路朝射程內最近的敵人開火，傷害 ×dmg、射速跟飛船一樣
   PHASE: { dist: 150, t: 0.05 },  // 先鋒號・相位跳躍：衝刺改成瞬移 dist（穿牆、穿小行星，不落在裡面、不跳到別區）；瞬移後停 t 秒（算衝刺中，衝刺結束的效果照常）；無敵時間跟一般衝刺一樣是 DASH_TIME（以前只有 t：電腦用衝刺躲子彈，第 2 星區多死，整局模擬 2026-10-18）
   WORM_FAST: 0.8,  // 列隊蟲越短越快：只剩頭時速度 ×(1 ＋ 0.8)

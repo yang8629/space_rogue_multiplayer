@@ -202,7 +202,7 @@ Object.assign(Game, {
   },
   updateWaves(dt) {
     const C = this.combat;
-    if (!C || C.range) return;  // 基地（沒有 combat）、靶場：沒有波次，標靶由 Hub／Range 管理
+    if (!C || C.range || C.tutorial) return;  // 基地（沒有 combat）、靶場、新手引導：沒有波次，標靶由 Hub／Range／Tutorial 管理
     if (C.cleared) {
       for (const c of this.pickups) c.vacuum = true;
       C.clearT -= dt;

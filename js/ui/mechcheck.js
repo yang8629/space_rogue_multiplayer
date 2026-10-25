@@ -546,6 +546,55 @@ const MechCheck = {
         return { ok: alt && !dash && recalled && idle, got: `基地開船按右鍵：${alt ? '武器技能' : dash ? '變成衝刺（錯）' : '沒反應（錯）'}${recalled ? '、飛輪召回了' : '、飛輪沒召回（錯）'}；沒開船時${idle ? '沒反應' : '有反應（錯）'}` };
       } finally { Game.state = st; Hub.driving = drv; Hub.weaponId = save; Input.alt = Input.dash = Input.dashHeld = false; }
     }],
+    ['新手引導', '每一步做到才換下一步', `照順序：${TUTORIAL.map(s => s.id).join(' → ')}；做到了停 ${CFG.TUTORIAL.wait} 秒換下一步，沒做到不換；右鍵落空不算排熱；打完回基地、記下看過`, M => {
+      const flag = Save.raw('tutorial'), log = [];
+      const tick = (t = CFG.TUTORIAL.wait + 0.1) => { for (let f = 0; f < Math.ceil(t * 60); f++) Tutorial.tick(1 / 60); };
+      const at = () => (TUTORIAL[Tutorial.i] || { id: '結束' }).id, P = () => Game.player;
+      const killAll = () => { for (const e of Game.enemies) e.dead = true; };
+      // 每一步：先不做事等一下（不能換），做到之後再等（要換到下一步）
+      const DO = {
+        move: () => { for (let k = 0; k < CFG.TUTORIAL.points.length; k++) { P().x = Game.exit.x; P().y = Game.exit.y; Tutorial.tick(1 / 60); } },
+        dash: () => { Game.runStats.dashes += CFG.TUTORIAL.dashes; },
+        shoot: killAll,
+        vent: () => {
+          P().hHeat = 0; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);  // 熱度不夠：落空，不算
+          tick(); if (at() !== 'vent') log.push('右鍵落空也算排熱（錯）');
+          P().hHeat = 0.6; P().altCd = 0; P().altQ = true; P().tickAlt(1 / 60);
+        },
+        chip: () => { const k = Game.inventory.findIndex(id => id && baseOf(id) === CFG.TUTORIAL.chip); Game.chain[1] = Game.inventory[k]; Game.inventory[k] = null; Game.recalc(); },
+        trigger: () => { const d = Game.enemies[0]; P().aim = Math.atan2(d.y - P().y, d.x - P().x); W_.step(600, true); },
+        plug: () => { const k = Game.inventory.indexOf(CFG.TUTORIAL.plug); Game.socks[1] = [CFG.TUTORIAL.plug]; Game.inventory[k] = null; Game.recalc(); },
+        fight: killAll,
+        elite: () => { const e = Game.enemies.find(q => q.t.elite); if (!e || Math.abs(e.maxHp - ENEMY_TYPES[CFG.TUTORIAL.elite].hp * CFG.TUTORIAL.eliteHp) > 1) log.push(`精英血量 ${e && Math.round(e.maxHp)}（錯）`); killAll(); },
+      };
+      try {
+        Save.remove('tutorial');
+        Tutorial.begin();
+        for (const st of TUTORIAL) {
+          if (at() !== st.id) { log.push(`該到 ${st.id}，現在是 ${at()}（錯）`); break; }
+          if (st.id !== 'move') { tick(); if (at() !== st.id) { log.push(`${st.id} 沒做就換了（錯）`); break; } }
+          DO[st.id](); tick();
+          if (at() === st.id) { log.push(`${st.id} 做到了沒換（錯）`); break; }
+        }
+        tick(CFG.TUTORIAL.endT + 0.1);
+        const home = Game.state === 'title' && Save.flag('tutorial', false);
+        if (!home) log.push(`打完：狀態 ${Game.state}、看過 ${Save.flag('tutorial', false)}（要回基地、記下看過）`);
+        return { ok: !log.length, got: log.length ? log.join('；') : `${TUTORIAL.length} 步都照順序換，打完回基地` };
+      } finally { if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
+    }],
+    ['新手引導', '按住 Esc 跳過', `按住 Esc ${CFG.TUTORIAL.skipHold} 秒跳過回基地；沒按滿就放開 = 打開選單、不跳過；第一次開遊戲才自動進`, M => {
+      const flag = Save.raw('tutorial');
+      try {
+        Save.remove('tutorial'); const first = Tutorial.firstRun() || (typeof navigator !== 'undefined' && navigator.webdriver);
+        Tutorial.begin();
+        Tutorial.escDown(); for (let f = 0; f < 30; f++) Tutorial.tick(1 / 60); Tutorial.escUp();
+        const menu = Game.pauseMenu && Game.mode === 'tutorial' && Game.state === 'play'; Game.togglePauseMenu(false);
+        Tutorial.escDown(); for (let f = 0; f < Math.ceil(CFG.TUTORIAL.skipHold * 60) + 2; f++) Tutorial.tick(1 / 60);
+        const skipped = Game.state === 'title' && Save.flag('tutorial', false), again = Tutorial.firstRun();
+        return { ok: menu && skipped && first && !again,
+          got: `按 0.5 秒放開：${menu ? '打開選單' : '沒打開選單（錯）'}；按住 ${CFG.TUTORIAL.skipHold} 秒：${skipped ? '回基地、記下看過' : `狀態 ${Game.state}（錯）`}；沒看過時${first ? '' : '不'}自動進、看過後${again ? '還會自動進（錯）' : '不再自動進'}` };
+      } finally { Game.pauseMenu = false; if (flag == null) Save.remove('tutorial'); else Save.setRaw('tutorial', flag); }
+    }],
     ['基地', '基地跑戰場那一套', '基地每幀呼叫 Game.step（跟戰鬥同一個函式：戰場加了東西基地就會有）；牽引鉤勾得走標靶機', M => {
       const save = Hub.weaponId; Hub.weaponId = 'railgun';
       try {
@@ -2591,7 +2640,7 @@ const MechCheck = {
           got: `基地上方${banner ? '是房間列（房號＋離開）' : '沒有房間列（錯誤）'}；發射台${launch ? '是準備' : '不對（錯誤）'}；準備${goOk ? '到起始晶片（多人）' : '不對（錯誤）'}；終端機${term ? '不能用' : '還能用（錯誤）'}` };
       } finally { Game.state = st; Net.chapter = ch; }
     }],
-    ['局外成長', '基地配置', '基地（分區太空站）照數量自動排（hubLayout）：每艘飛船、每把武器、每台終端機、每個操作台都有位置；互動點都在房間裡、開得到、互動範圍不重疊；每個房間都走得到，而且大廳有開口直接通到每間房。現在的數量和假的「8 艘飛船、7 把武器、3 台終端機」都要過', M => {
+    ['局外成長', '基地配置', '基地（分區太空站）照數量自動排（hubLayout）：每艘飛船、每把武器、每台終端機、每個操作台都有位置；互動點都在房間裡、開得到、互動範圍不重疊；每個房間都走得到，而且大廳有開口直接通到每間房。現在的數量和假的「8 艘飛船、7 把武器、終端機多一台」都要過', M => {
       const check = L => {
         const bad = [], Z = L.zones;
         const free = (x, y, r) => hubFree(L, x, y, r);
@@ -2614,11 +2663,11 @@ const MechCheck = {
       const ships = Object.keys(SHIPS), weapons = Object.keys(WEAPONS);
       const allNow = ships.every(id => HUB.zones.some(z => z.ship === id)) && weapons.every(id => HUB.zones.some(z => z.weapon === id)) && HUB_TERMS.every(t => Hub.zone(t.id)) && ['armory', 'chips', 'stats'].every(id => Hub.zone(id));
       const big = hubLayout(Array.from({ length: 8 }, (_, i) => ships[i] || 'ship' + i), Array.from({ length: 7 }, (_, i) => weapons[i] || 'wpn' + i), [...HUB_TERMS, { id: 't3', label: 'T3', color: '#fff' }]);
-      const allBig = big.zones.filter(z => z.kind === 'pad').length === 8 && big.zones.filter(z => z.kind === 'rack').length === 7 && big.zones.filter(z => z.kind === 'term').length === 3;
+      const allBig = big.zones.filter(z => z.kind === 'pad').length === 8 && big.zones.filter(z => z.kind === 'rack').length === 7 && big.zones.filter(z => z.kind === 'term').length === HUB_TERMS.length + 1;  // 終端機：現有的再多一台
       const b1 = check(HUB), b2 = check(big);
       return { ok: allNow && allBig && !b1.length && !b2.length,
         got: `現在 ${Math.round(HUB.W)}×${Math.round(HUB.H)}：${allNow ? '每樣都有位置' : '有東西沒位置（錯誤）'}${b1.length ? '；' + b1.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}；`
-          + `假的 8 艘／7 把／3 台：${Math.round(big.W)}×${Math.round(big.H)}${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}` };
+          + `假的 8 艘／7 把／${HUB_TERMS.length + 1} 台：${Math.round(big.W)}×${Math.round(big.H)}${allBig ? '' : '（數量不對，錯誤）'}${b2.length ? '；' + b2.slice(0, 4).join('、') + '（錯誤）' : '、開得到、走得到、不重疊'}` };
     }],
     ['局外成長', '記住上次的飛船和武器', '換船、換武器就存進瀏覽器（Save 的 lastPick）；重新整理後（記憶體裡沒有選擇）進基地，拿回存的那組', M => {
       const keep = localStorage.getItem(Save.KEYS.lastPick), g0 = [Game.shipId, Game.weapon, Hub.shipId, Hub.weaponId];
